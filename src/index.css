@@ -61,6 +61,16 @@
     --terminal-green: 142 76% 36%;
     --danger-red: 0 84% 60%;
     --warning-amber: 38 92% 50%;
+    
+    /* Red Team theme colors */
+    --red-team-primary: 0 85% 60%;
+    --red-team-primary-foreground: 0 0% 100%;
+    --red-team-secondary: 15 80% 50%;
+    --red-team-secondary-foreground: 0 0% 100%;
+    --red-team-accent: 5 90% 65%;
+    --red-team-muted: 0 20% 15%;
+    --red-team-border: 0 40% 25%;
+    --red-team-glow: 0 85% 60%;
 
     /* Glow effects */
     --glow-cyan: 0 0 20px hsl(180 100% 50% / 0.3);

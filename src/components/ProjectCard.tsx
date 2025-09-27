@@ -59,9 +59,12 @@ export function ProjectCard({ project, className }: ProjectCardProps) {
 
       <CardHeader className="pb-3">
         <CardTitle className="flex items-start justify-between gap-2">
-          <span className="text-lg font-bold text-foreground group-hover:text-primary transition-colors">
+          <Link 
+            to={`/projects/${project.id}`}
+            className="text-lg font-bold text-foreground group-hover:text-primary transition-colors hover:underline"
+          >
             {project.title}
-          </span>
+          </Link>
         </CardTitle>
         <CardDescription className="text-muted-foreground line-clamp-2">
           {project.description}

@@ -64,6 +64,17 @@ export default {
         'warning-amber': "hsl(var(--warning-amber))",
         'grid-color': "hsl(var(--grid-color))",
         'scanline-color': "hsl(var(--scanline-color))",
+        // Red Team theme colors
+        'red-team': {
+          primary: "hsl(var(--red-team-primary))",
+          'primary-foreground': "hsl(var(--red-team-primary-foreground))",
+          secondary: "hsl(var(--red-team-secondary))",
+          'secondary-foreground': "hsl(var(--red-team-secondary-foreground))",
+          accent: "hsl(var(--red-team-accent))",
+          muted: "hsl(var(--red-team-muted))",
+          border: "hsl(var(--red-team-border))",
+          glow: "hsl(var(--red-team-glow))",
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
