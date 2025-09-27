@@ -1,0 +1,134 @@
+[
+  {
+    "id": "powershell-infosec-automation",
+    "title": "Automating InfoSec Labs (PowerShell & Python)",
+    "description": "Comprehensive automation scripts for cybersecurity lab environments, including process monitoring, log parsing, and host hardening procedures.",
+    "category": "Automation",
+    "tech": ["PowerShell", "Python", "WMI", "Event Logs"],
+    "year": "2024",
+    "status": "completed",
+    "featured": true,
+    "keyResults": [
+      "Reduced manual security assessment time by 75%",
+      "Automated detection of 15+ common misconfigurations",
+      "Implemented real-time process monitoring with alerting"
+    ],
+    "links": {
+      "github": "https://github.com/vijaysingh-puwar/infosec-automation",
+      "writeup": "/writeups/powershell-automation",
+      "demo": null
+    },
+    "image": "/images/projects/powershell-automation.png",
+    "tags": ["PowerShell", "Automation", "Security", "Monitoring"]
+  },
+  {
+    "id": "ssrf-web-security-lab",
+    "title": "SSRF & Web Security Lab",
+    "description": "Comprehensive web application security testing lab focusing on Server-Side Request Forgery vulnerabilities and detection mechanisms.",
+    "category": "Red Team",
+    "tech": ["Burp Suite", "Python", "Docker", "OWASP"],
+    "year": "2024",
+    "status": "completed",
+    "featured": true,
+    "keyResults": [
+      "Identified 8 SSRF attack vectors in test applications",
+      "Developed custom Burp Suite extensions for automated detection",
+      "Created comprehensive remediation playbook"
+    ],
+    "links": {
+      "github": "https://github.com/vijaysingh-puwar/ssrf-lab",
+      "writeup": "/writeups/ssrf-security-lab",
+      "demo": "https://ssrf-lab.vijaysingh.dev"
+    },
+    "image": "/images/projects/ssrf-lab.png",
+    "tags": ["SSRF", "Web Security", "Burp Suite", "OWASP"]
+  },
+  {
+    "id": "splunk-rba-detection",
+    "title": "Risk-Based Alerting in Splunk",
+    "description": "Advanced SIEM engineering project implementing Risk-Based Alerting with MITRE ATT&CK framework integration and custom correlation rules.",
+    "category": "Blue Team",
+    "tech": ["Splunk", "SPL", "MITRE ATT&CK", "Python"],
+    "year": "2024",
+    "status": "completed",
+    "featured": true,
+    "keyResults": [
+      "Reduced false positive alerts by 60%",
+      "Implemented 25+ ATT&CK-mapped detection rules",
+      "Created automated risk scoring mechanism"
+    ],
+    "links": {
+      "github": "https://github.com/vijaysingh-puwar/splunk-rba",
+      "writeup": "/writeups/splunk-rba-engineering",
+      "demo": null
+    },
+    "image": "/images/projects/splunk-rba.png",
+    "tags": ["Splunk", "SIEM", "Risk-Based Alerting", "ATT&CK"]
+  },
+  {
+    "id": "cloud-iam-linter",
+    "title": "Cloud IAM Linter",
+    "description": "Multi-cloud security assessment tool for auditing IAM policies across AWS, Azure, and GCP environments with automated remediation suggestions.",
+    "category": "Cloud",
+    "tech": ["Python", "AWS SDK", "Azure SDK", "GCP SDK"],
+    "year": "2024",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "Scanned 500+ IAM policies across 3 cloud providers",
+      "Identified 45+ security misconfigurations",
+      "Generated automated compliance reports"
+    ],
+    "links": {
+      "github": "https://github.com/vijaysingh-puwar/cloud-iam-linter",
+      "writeup": "/writeups/cloud-iam-audit",
+      "demo": null
+    },
+    "image": "/images/projects/cloud-iam.png",
+    "tags": ["Cloud Security", "IAM", "AWS", "Azure", "GCP"]
+  },
+  {
+    "id": "osint-cloudflare-recon",
+    "title": "OSINT Case Study: Cloudflare Passive Recon",
+    "description": "Comprehensive OSINT investigation demonstrating passive reconnaissance techniques using DNS, WHOIS, and certificate transparency logs.",
+    "category": "OSINT",
+    "tech": ["Python", "DNS", "WHOIS", "Certificate Transparency"],
+    "year": "2024",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "Mapped 200+ subdomains using passive techniques",
+      "Discovered 15+ potential attack vectors",
+      "Created automated OSINT collection pipeline"
+    ],
+    "links": {
+      "github": "https://github.com/vijaysingh-puwar/osint-recon",
+      "writeup": "/writeups/osint-cloudflare-recon",
+      "demo": null
+    },
+    "image": "/images/projects/osint-recon.png",
+    "tags": ["OSINT", "Reconnaissance", "DNS", "Certificate Transparency"]
+  },
+  {
+    "id": "packet-tracer-vlan-lab",
+    "title": "Packet Tracer: VLAN/ROAS/EtherChannel Lab",
+    "description": "Network security lab demonstrating VLAN segmentation, Router-on-a-Stick configuration, and EtherChannel implementation for secure network design.",
+    "category": "Network Security",
+    "tech": ["Cisco Packet Tracer", "VLANs", "Routing", "Switching"],
+    "year": "2023",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "Designed secure multi-VLAN network topology",
+      "Implemented inter-VLAN routing with access controls",
+      "Configured redundant EtherChannel links"
+    ],
+    "links": {
+      "github": "https://github.com/vijaysingh-puwar/packet-tracer-labs",
+      "writeup": "/writeups/vlan-roas-etherchannel",
+      "demo": null
+    },
+    "image": "/images/projects/packet-tracer.png",
+    "tags": ["Network Security", "VLANs", "Cisco", "Network Design"]
+  }
+]

@@ -1,0 +1,68 @@
+[
+  {
+    "id": "powershell-t1059-defense",
+    "title": "Defending Against T1059: PowerShell Execution",
+    "slug": "powershell-t1059-defense",
+    "date": "2024-01-15",
+    "readingTime": "8 min read",
+    "summary": "Comprehensive analysis of PowerShell-based attacks mapped to MITRE ATT&CK T1059.001 and practical defense strategies for detection and prevention.",
+    "featured": true,
+    "tags": ["PowerShell", "MITRE ATT&CK", "T1059", "Defense", "Detection"],
+    "category": "Blue Team",
+    "author": "Vijaysingh Puwar",
+    "image": "/images/writeups/powershell-defense.png",
+    "content": "# Defending Against T1059: PowerShell Execution\n\nPowerShell execution (T1059.001) remains one of the most prevalent attack techniques...",
+    "tableOfContents": [
+      "Introduction to T1059.001",
+      "Common PowerShell Attack Vectors", 
+      "Detection Strategies",
+      "Prevention Techniques",
+      "Splunk Detection Rules",
+      "Conclusion"
+    ]
+  },
+  {
+    "id": "sigma-to-splunk-pipeline",
+    "title": "From Sigma to Splunk: A Mini Detection Pipeline",
+    "slug": "sigma-to-splunk-pipeline", 
+    "date": "2024-01-10",
+    "readingTime": "12 min read",
+    "summary": "Building an automated pipeline to convert Sigma detection rules into Splunk SPL queries with real-world implementation examples and best practices.",
+    "featured": true,
+    "tags": ["Sigma", "Splunk", "SIEM", "Detection Engineering", "Automation"],
+    "category": "Blue Team",
+    "author": "Vijaysingh Puwar",
+    "image": "/images/writeups/sigma-splunk.png",
+    "content": "# From Sigma to Splunk: A Mini Detection Pipeline\n\nSigma rules provide a standardized format for describing log events...",
+    "tableOfContents": [
+      "What is Sigma?",
+      "Sigma Rule Structure",
+      "Converting to Splunk SPL",
+      "Automation Pipeline",
+      "Testing and Validation",
+      "Implementation Examples"
+    ]
+  },
+  {
+    "id": "ssrf-triage-playbook",
+    "title": "SSRF Triage Playbook: From Burp to Patch",
+    "slug": "ssrf-triage-playbook",
+    "date": "2024-01-05", 
+    "readingTime": "15 min read",
+    "summary": "Complete incident response playbook for Server-Side Request Forgery vulnerabilities, from initial detection through remediation and prevention.",
+    "featured": true,
+    "tags": ["SSRF", "Incident Response", "Web Security", "Burp Suite", "Remediation"],
+    "category": "Red Team",
+    "author": "Vijaysingh Puwar", 
+    "image": "/images/writeups/ssrf-playbook.png",
+    "content": "# SSRF Triage Playbook: From Burp to Patch\n\nServer-Side Request Forgery (SSRF) vulnerabilities allow attackers to make requests...",
+    "tableOfContents": [
+      "SSRF Fundamentals",
+      "Detection Methods",
+      "Impact Assessment", 
+      "Triage Process",
+      "Remediation Steps",
+      "Prevention Strategies"
+    ]
+  }
+]
