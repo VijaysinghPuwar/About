@@ -5,8 +5,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TechBadge } from '@/components/TechBadge';
 import { Search, Calendar, Clock, ArrowRight, Star } from 'lucide-react';
-import { format } from 'date-fns';
 import writeupsData from '@/data/writeups.json';
+
+const dateFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: '2-digit',
+  year: 'numeric',
+});
+
+const formatWriteupDate = (value: string) => {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : dateFormatter.format(parsed);
+};
 
 const categories = ['All', 'Blue Team', 'Red Team', 'CTF', 'OSINT', 'SIEM'];
 
@@ -128,7 +138,7 @@ export default function Writeups() {
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
                     <div className="flex items-center gap-1">
                       <Calendar className="w-4 h-4" />
-                      {format(new Date(writeup.date), 'MMM dd, yyyy')}
+                      {formatWriteupDate(writeup.date)}
                     </div>
                     <div className="flex items-center gap-1">
                       <Clock className="w-4 h-4" />
@@ -201,7 +211,7 @@ export default function Writeups() {
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
                           <div className="flex items-center gap-1">
                             <Calendar className="w-4 h-4" />
-                            {format(new Date(writeup.date), 'MMM dd, yyyy')}
+                            {formatWriteupDate(writeup.date)}
                           </div>
                           <div className="flex items-center gap-1">
                             <Clock className="w-4 h-4" />
