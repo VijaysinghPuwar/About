@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { TechBadge } from '@/components/TechBadge';
 import { ProjectCard } from '@/components/ProjectCard';
-import { Shield, Terminal, Code, Database, ChevronRight, Star, ArrowRight, Github, ExternalLink, FileText } from 'lucide-react';
+import { Shield, Terminal, Code, Database, ChevronRight, Star, ArrowRight, Github, ExternalLink, FileText, Briefcase, Award, Calendar } from 'lucide-react';
 import { motion } from 'framer-motion';
 import projectsData from '@/data/projects.json';
 import writeupsData from '@/data/writeups.json';
@@ -16,13 +16,45 @@ const tools = [
   'Burp Suite', 'Metasploit', 'Python', 'PowerShell', 'Git', 'Docker'
 ];
 
-const certifications = [
+const certificationBadges = [
   { name: 'Security+', issuer: 'CompTIA' },
   { name: 'CySA+', issuer: 'CompTIA' },
   { name: 'CCNA', issuer: 'Cisco' },
   { name: 'AWS', issuer: 'Amazon' },
   { name: 'Azure', issuer: 'Microsoft' },
   { name: 'Python', issuer: 'Programming' }
+];
+
+const experience = [
+  {
+    title: "System Engineer",
+    company: "R. S. Infotech",
+    location: "India",
+    period: "February 2023 - August 2024",
+    highlights: [
+      "Managed and secured 150+ enterprise IT systems, reducing breaches by 20%",
+      "Implemented advanced security protocols, firewalls, and intrusion detection systems",
+      "Automated Active Directory hygiene with PowerShell",
+      "Engineered Python automation scripts for log analysis and uptime monitoring"
+    ]
+  },
+  {
+    title: "Systems Intern",
+    company: "L&T-Sargent & Lundy Limited",
+    location: "Vadodara, Gujarat, India",
+    period: "January 2023 - April 2023",
+    highlights: [
+      "Coordinated HVAC system design for power plants achieving 100% ASHRAE standards",
+      "Performed heat load calculations for critical infrastructure",
+      "Streamlined airflow management reducing operational costs by 10%"
+    ]
+  }
+];
+
+const certifications = [
+  { name: "CompTIA CySA+", issuer: "CompTIA", year: "2024", status: "active" },
+  { name: "CompTIA Security+", issuer: "CompTIA", year: "2024", status: "active" },
+  { name: "Cisco CCNA", issuer: "Cisco", year: "2024", status: "active" }
 ];
 
 const Index = () => {
@@ -82,7 +114,7 @@ const Index = () => {
             transition={{ duration: 0.8, delay: 0.2 }}
             className="flex flex-wrap justify-center gap-3"
           >
-            {certifications.map((cert, index) => (
+            {certificationBadges.map((cert, index) => (
               <TechBadge
                 key={cert.name}
                 tech={cert.name}
@@ -280,6 +312,113 @@ const Index = () => {
                 <ArrowRight className="w-5 h-5 ml-2" />
               </Link>
             </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Experience Section */}
+      <section className="py-20 bg-background">
+        <div className="container space-y-12">
+          <div className="text-center space-y-4">
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground">
+              Professional Experience
+            </h2>
+            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+              Building secure systems and protecting digital infrastructure across diverse environments
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-5xl mx-auto">
+            {experience.map((job, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                viewport={{ once: true }}
+              >
+                <Card className="border-border/50 bg-card/80 backdrop-blur-sm h-full hover:border-primary/30 hover:shadow-cyber transition-all duration-300">
+                  <CardHeader>
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <CardTitle className="text-xl font-bold text-foreground">
+                            {job.title}
+                          </CardTitle>
+                          <p className="text-primary font-medium mt-1">{job.company}</p>
+                        </div>
+                        <Briefcase className="w-5 h-5 text-primary flex-shrink-0" />
+                      </div>
+                      <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4" />
+                          {job.period}
+                        </div>
+                        <p>{job.location}</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2">
+                      {job.highlights.map((highlight, idx) => (
+                        <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
+                          <span className="text-primary mt-1.5">•</span>
+                          {highlight}
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Certifications Section */}
+      <section className="py-20 bg-card/20">
+        <div className="container space-y-12">
+          <div className="text-center space-y-4">
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground">
+              Certifications
+            </h2>
+            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+              Industry-recognized certifications validating expertise in cybersecurity and networking
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+            {certifications.map((cert, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                viewport={{ once: true }}
+              >
+                <Card className="border-border/50 bg-card/80 backdrop-blur-sm h-full hover:border-primary/30 hover:shadow-cyber transition-all duration-300 text-center">
+                  <CardHeader>
+                    <div className="flex justify-center mb-4">
+                      <div className="p-4 rounded-full bg-primary/10">
+                        <Award className="w-8 h-8 text-primary" />
+                      </div>
+                    </div>
+                    <CardTitle className="text-lg font-bold text-foreground">
+                      {cert.name}
+                    </CardTitle>
+                    <CardDescription className="text-muted-foreground">
+                      {cert.issuer} • {cert.year}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <TechBadge 
+                      tech={cert.status === 'active' ? 'Active' : 'Candidate'} 
+                      variant="status" 
+                    />
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
           </div>
         </div>
       </section>
