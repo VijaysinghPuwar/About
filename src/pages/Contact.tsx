@@ -24,7 +24,7 @@ const socialLinks = [
   },
   {
     name: 'GitHub',
-    url: 'https://github.com/vijaysingh-puwar',
+    url: 'https://github.com/vijaysinghpuwar',
     icon: Github,
     description: 'Open source projects & code',
     primary: false

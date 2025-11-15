@@ -219,7 +219,7 @@ export default function About() {
             </p>
             <div className="flex gap-3">
               <Button variant="outline" asChild className="border-primary/20 hover:border-primary/40">
-                <a href="https://github.com/vijaysingh-puwar" target="_blank" rel="noopener noreferrer">
+                <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="w-4 h-4 mr-2" />
                   GitHub Projects
                 </a>

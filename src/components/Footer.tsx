@@ -12,7 +12,7 @@ const quickLinks = [
 const socialLinks = [
   {
     name: 'GitHub',
-    url: 'https://github.com/vijaysingh-puwar',
+    url: 'https://github.com/vijaysinghpuwar',
     icon: Github,
   },
   {
@@ -98,7 +98,7 @@ export function Footer() {
                 Security Labs
               </Link>
               <a
-                href="https://github.com/vijaysingh-puwar"
+                href="https://github.com/vijaysinghpuwar"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block text-sm text-muted-foreground hover:text-primary transition-colors"
