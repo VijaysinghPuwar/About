@@ -123,7 +123,7 @@ const Index = () => {
               asChild
               className="border-primary/30 hover:border-primary/50 hover:bg-primary/5 text-lg px-8"
             >
-              <a href="https://github.com/vijaysingh-puwar" target="_blank" rel="noopener noreferrer">
+              <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer">
                 <Github className="w-5 h-5 mr-2" />
                 GitHub
               </a>

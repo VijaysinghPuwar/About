@@ -14,7 +14,7 @@
       "Implemented real-time process monitoring with alerting"
     ],
     "links": {
-      "github": "https://github.com/vijaysingh-puwar/infosec-automation",
+      "github": "https://github.com/vijaysinghpuwar/infosec-automation",
       "writeup": "/writeups/powershell-automation",
       "demo": null
     },
@@ -36,7 +36,7 @@
       "Created comprehensive remediation playbook"
     ],
     "links": {
-      "github": "https://github.com/vijaysingh-puwar/ssrf-lab",
+      "github": "https://github.com/vijaysinghpuwar/ssrf-lab",
       "writeup": "/writeups/ssrf-security-lab",
       "demo": "https://ssrf-lab.vijaysingh.dev"
     },
@@ -58,7 +58,7 @@
       "Created automated risk scoring mechanism"
     ],
     "links": {
-      "github": "https://github.com/vijaysingh-puwar/splunk-rba",
+      "github": "https://github.com/vijaysinghpuwar/splunk-rba",
       "writeup": "/writeups/splunk-rba-engineering",
       "demo": null
     },
@@ -80,7 +80,7 @@
       "Generated automated compliance reports"
     ],
     "links": {
-      "github": "https://github.com/vijaysingh-puwar/cloud-iam-linter",
+      "github": "https://github.com/vijaysinghpuwar/cloud-iam-linter",
       "writeup": "/writeups/cloud-iam-audit",
       "demo": null
     },
@@ -102,7 +102,7 @@
       "Created automated OSINT collection pipeline"
     ],
     "links": {
-      "github": "https://github.com/vijaysingh-puwar/osint-recon",
+      "github": "https://github.com/vijaysinghpuwar/osint-recon",
       "writeup": "/writeups/osint-cloudflare-recon",
       "demo": null
     },
@@ -124,7 +124,7 @@
       "Configured redundant EtherChannel links"
     ],
     "links": {
-      "github": "https://github.com/vijaysingh-puwar/packet-tracer-labs",
+      "github": "https://github.com/vijaysinghpuwar/packet-tracer-labs",
       "writeup": "/writeups/vlan-roas-etherchannel",
       "demo": null
     },
