@@ -9,58 +9,51 @@ const education = [
     school: "Pace University",
     location: "New York, NY",
     period: "2023 - Present",
-    details: ["Focus: Cloud Security & Threat Detection", "GPA: 3.8/4.0"]
-  },
-  {
-    degree: "Bachelor of Science in Information Technology",
-    school: "University Example",
-    location: "City, State",
-    period: "2019 - 2023",
-    details: ["Concentration: Network Security", "Summa Cum Laude"]
+    details: ["Focus: Cloud Security & Threat Detection", "Applied Computational Statistics", "Automating Information Security"]
   }
 ];
 
 const experience = [
   {
-    title: "Cybersecurity Engineering Intern",
-    company: "SecureTech Solutions",
-    location: "New York, NY",
-    period: "Summer 2024",
+    title: "System Engineer",
+    company: "R. S. Infotech",
+    location: "India",
+    period: "February 2023 - August 2024",
     responsibilities: [
-      "Developed automated threat detection rules using Splunk SPL and Python",
-      "Conducted vulnerability assessments on cloud infrastructure (AWS, Azure)",
-      "Implemented SIEM correlation rules reducing false positives by 40%",
-      "Collaborated on incident response procedures and playbook development"
+      "Managed and secured 150+ enterprise IT systems, reducing breaches by 20%",
+      "Implemented advanced security protocols, firewalls, and intrusion detection systems (IDS/IPS)",
+      "Automated Active Directory hygiene with PowerShell (Get-ADUser, Search-ADAccount) to disable inactive accounts and remediate stale objects",
+      "Engineered Python automation scripts for log analysis, uptime monitoring, and configuration management",
+      "Deployed AWS Cloud projects (IAM, VPC, EC2, S3) with encryption and least-privilege access",
+      "Achieved 15% increase in network speed and 30% reduction in downtime through security enhancements"
     ]
   },
   {
-    title: "IT Security Analyst",
-    company: "Regional Healthcare System",
-    location: "Remote",
-    period: "2023 - Present",
+    title: "Systems Intern",
+    company: "L&T-Sargent & Lundy Limited",
+    location: "Vadodara, Gujarat, India",
+    period: "January 2023 - April 2023",
     responsibilities: [
-      "Monitor security events using Splunk and Microsoft Sentinel",
-      "Perform risk assessments for medical device integrations",
-      "Maintain compliance with HIPAA and other healthcare regulations",
-      "Train staff on security awareness and best practices"
+      "Coordinated HVAC system design for power plants achieving 100% ASHRAE standards adherence",
+      "Performed heat load calculations for critical infrastructure enhancing thermal efficiency",
+      "Streamlined airflow management reducing operational costs by 10%"
     ]
   }
 ];
 
 const certifications = [
   { name: "CompTIA Security+", issuer: "CompTIA", year: "2024", status: "active" },
-  { name: "Cisco Certified Network Associate (CCNA)", issuer: "Cisco", year: "2024", status: "active" },
-  { name: "ISC2 Candidate", issuer: "ISC2", year: "2024", status: "candidate" },
-  { name: "Google AI Essentials", issuer: "Google", year: "2024", status: "active" }
+  { name: "CompTIA CySA+", issuer: "CompTIA", year: "2024", status: "active" },
+  { name: "Cisco Certified Network Associate (CCNA)", issuer: "Cisco", year: "2024", status: "active" }
 ];
 
 const skills = {
-  "SIEM & Detection": ["Splunk", "Microsoft Sentinel", "Sigma Rules", "SPL", "KQL"],
-  "Cloud Security": ["AWS Security", "Azure Security", "GCP Security", "CloudTrail", "IAM"],
-  "Programming": ["Python", "PowerShell", "Bash", "SQL", "JavaScript"],
-  "Security Tools": ["Burp Suite", "Nmap", "Wireshark", "Metasploit", "Nessus"],
-  "Frameworks": ["MITRE ATT&CK", "NIST CSF", "OWASP", "CIS Controls"],
-  "Operating Systems": ["Windows Server", "Linux", "macOS", "VMware"]
+  "Programming & Scripting": ["Python", "PowerShell", "Bash"],
+  "Security Operations": ["SIEM (Splunk)", "SOC Monitoring", "Threat Detection", "Incident Response"],
+  "Cloud Security": ["AWS (IAM, VPC, EC2, S3)", "Azure", "Google Cloud", "CloudWatch"],
+  "Penetration Testing": ["Wireshark", "Metasploit", "Burp Suite", "Nmap"],
+  "Version Control & Automation": ["Git", "Jenkins", "Docker"],
+  "Frameworks & Standards": ["NIST", "ISO 27001", "SOC 2", "MITRE ATT&CK"]
 };
 
 export default function Resume() {
@@ -87,7 +80,7 @@ export default function Resume() {
           </div>
           <div className="flex items-center gap-2 text-muted-foreground">
             <Shield className="w-4 h-4" />
-            <span>Security+ Certified</span>
+            <span>Security+ | CySA+ | CCNA</span>
           </div>
         </div>
 
@@ -126,10 +119,11 @@ export default function Resume() {
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground leading-relaxed">
-            Cybersecurity professional with expertise in cloud security, threat detection, and SIEM engineering. 
-            Currently pursuing Master's in Cybersecurity at Pace University while gaining hands-on experience 
-            in security operations and incident response. Passionate about automation, detection engineering, 
-            and building secure systems through code and configuration.
+            Cybersecurity Engineer focused on shielding organizations from digital threats. Expertise in network security, 
+            incident response, penetration testing, and cloud security with experience in threat analysis and meeting 
+            standards like NIST, ISO 27001, and SOC 2. Currently pursuing Master's in Cybersecurity at Pace University. 
+            Successfully configured and hardened 50+ systems, automated security operations with Python and PowerShell, 
+            and implemented IAM best practices including MFA and GPO hardening.
           </p>
         </CardContent>
       </Card>

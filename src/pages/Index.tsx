@@ -18,11 +18,11 @@ const tools = [
 
 const certifications = [
   { name: 'Security+', issuer: 'CompTIA' },
+  { name: 'CySA+', issuer: 'CompTIA' },
   { name: 'CCNA', issuer: 'Cisco' },
-  { name: 'AWS Cloud', issuer: 'Amazon' },
-  { name: 'Azure Security', issuer: 'Microsoft' },
-  { name: 'GCP Security', issuer: 'Google' },
-  { name: 'Splunk Core', issuer: 'Splunk' }
+  { name: 'AWS', issuer: 'Amazon' },
+  { name: 'Azure', issuer: 'Microsoft' },
+  { name: 'Python', issuer: 'Programming' }
 ];
 
 const Index = () => {
@@ -67,7 +67,7 @@ const Index = () => {
             </p>
             
             <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto">
-              Cloud Security • Application Security • Threat Detection
+              Network Security • Cloud Security • Incident Response
             </p>
             
             <p className="text-base md:text-lg text-foreground/80 max-w-4xl mx-auto">
