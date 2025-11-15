@@ -10,14 +10,14 @@ import { Mail, MessageSquare, Send, Github, Linkedin, Youtube, ExternalLink, Shi
 const socialLinks = [
   {
     name: 'Email',
-    url: 'mailto:vijaysingh.puwar@example.com',
+    url: 'mailto:vpuwar925@gmail.com',
     icon: Mail,
-    description: 'Direct email communication',
+    description: 'vpuwar925@gmail.com',
     primary: true
   },
   {
     name: 'LinkedIn',
-    url: 'https://linkedin.com/in/vijaysingh-puwar',
+    url: 'https://linkedin.com/in/vijaysinghpuwar',
     icon: Linkedin,
     description: 'Professional networking',
     primary: true

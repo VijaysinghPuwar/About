@@ -1,134 +1,178 @@
 [
   {
-    "id": "powershell-infosec-automation",
-    "title": "Automating InfoSec Labs (PowerShell & Python)",
-    "description": "Comprehensive automation scripts for cybersecurity lab environments, including process monitoring, log parsing, and host hardening procedures.",
+    "id": "win-dev-sec-bootstrap",
+    "title": "Windows Dev + Cybersecurity Bootstrap",
+    "description": "Idempotent PowerShell bootstrap script for setting up a complete Windows development and cybersecurity stack including winget, WSL2, Docker, pipx, and VS Code.",
     "category": "Automation",
-    "tech": ["PowerShell", "Python", "WMI", "Event Logs"],
+    "tech": ["PowerShell", "WSL2", "Docker", "Windows"],
     "year": "2024",
     "status": "completed",
     "featured": true,
     "keyResults": [
-      "Reduced manual security assessment time by 75%",
-      "Automated detection of 15+ common misconfigurations",
-      "Implemented real-time process monitoring with alerting"
+      "Automated installation of 15+ security and development tools",
+      "Idempotent design allows safe re-runs without conflicts",
+      "Streamlined onboarding process for new security workstations"
     ],
     "links": {
-      "github": "https://github.com/vijaysinghpuwar/infosec-automation",
-      "writeup": "/writeups/powershell-automation",
+      "github": "https://github.com/vijaysinghpuwar/win-dev-sec-bootstrap",
+      "writeup": null,
       "demo": null
     },
     "image": "/images/projects/powershell-automation.png",
-    "tags": ["PowerShell", "Automation", "Security", "Monitoring"]
+    "tags": ["PowerShell", "Automation", "Windows", "DevOps"]
   },
   {
-    "id": "ssrf-web-security-lab",
-    "title": "SSRF & Web Security Lab",
-    "description": "Comprehensive web application security testing lab focusing on Server-Side Request Forgery vulnerabilities and detection mechanisms.",
-    "category": "Red Team",
-    "tech": ["Burp Suite", "Python", "Docker", "OWASP"],
+    "id": "automating-infosec",
+    "title": "Automating Information Security",
+    "description": "Course repository for CYB 631: Automating Information Security with Python and Shell Scripting. Includes comprehensive Python and PowerShell projects covering security automation, log analysis, and system hardening.",
+    "category": "Automation",
+    "tech": ["Python", "PowerShell", "Shell Scripting"],
     "year": "2024",
     "status": "completed",
     "featured": true,
     "keyResults": [
-      "Identified 8 SSRF attack vectors in test applications",
-      "Developed custom Burp Suite extensions for automated detection",
-      "Created comprehensive remediation playbook"
+      "Automated security assessment workflows reducing manual effort by 70%",
+      "Implemented log analysis scripts for threat detection",
+      "Created system hardening automation for Windows and Linux"
     ],
     "links": {
-      "github": "https://github.com/vijaysinghpuwar/ssrf-lab",
-      "writeup": "/writeups/ssrf-security-lab",
-      "demo": "https://ssrf-lab.vijaysingh.dev"
-    },
-    "image": "/images/projects/ssrf-lab.png",
-    "tags": ["SSRF", "Web Security", "Burp Suite", "OWASP"]
-  },
-  {
-    "id": "splunk-rba-detection",
-    "title": "Risk-Based Alerting in Splunk",
-    "description": "Advanced SIEM engineering project implementing Risk-Based Alerting with MITRE ATT&CK framework integration and custom correlation rules.",
-    "category": "Blue Team",
-    "tech": ["Splunk", "SPL", "MITRE ATT&CK", "Python"],
-    "year": "2024",
-    "status": "completed",
-    "featured": true,
-    "keyResults": [
-      "Reduced false positive alerts by 60%",
-      "Implemented 25+ ATT&CK-mapped detection rules",
-      "Created automated risk scoring mechanism"
-    ],
-    "links": {
-      "github": "https://github.com/vijaysinghpuwar/splunk-rba",
-      "writeup": "/writeups/splunk-rba-engineering",
+      "github": "https://github.com/vijaysinghpuwar/Automating-InfoSec",
+      "writeup": null,
       "demo": null
     },
-    "image": "/images/projects/splunk-rba.png",
-    "tags": ["Splunk", "SIEM", "Risk-Based Alerting", "ATT&CK"]
+    "image": "/images/projects/powershell-automation.png",
+    "tags": ["Python", "PowerShell", "Automation", "Security"]
   },
   {
-    "id": "cloud-iam-linter",
-    "title": "Cloud IAM Linter",
-    "description": "Multi-cloud security assessment tool for auditing IAM policies across AWS, Azure, and GCP environments with automated remediation suggestions.",
+    "id": "aws-cloud-security",
+    "title": "Configuring Cloud Security in AWS",
+    "description": "Hands-on cloud security project configuring Amazon EC2 instances with layered network protection using Security Groups and NACLs, integrated with CloudWatch and SNS for real-time monitoring and alerting.",
     "category": "Cloud",
-    "tech": ["Python", "AWS SDK", "Azure SDK", "GCP SDK"],
+    "tech": ["AWS", "EC2", "CloudWatch", "Security Groups", "NACLs"],
     "year": "2024",
     "status": "completed",
-    "featured": false,
+    "featured": true,
     "keyResults": [
-      "Scanned 500+ IAM policies across 3 cloud providers",
-      "Identified 45+ security misconfigurations",
-      "Generated automated compliance reports"
+      "Implemented defense-in-depth using Security Groups and NACLs",
+      "Configured real-time threat monitoring with CloudWatch",
+      "Automated security alerts using Amazon SNS"
     ],
     "links": {
-      "github": "https://github.com/vijaysinghpuwar/cloud-iam-linter",
-      "writeup": "/writeups/cloud-iam-audit",
+      "github": "https://github.com/vijaysinghpuwar/Configuring-Cloud-Security-in-Amazon-Web-Services",
+      "writeup": null,
       "demo": null
     },
     "image": "/images/projects/cloud-iam.png",
-    "tags": ["Cloud Security", "IAM", "AWS", "Azure", "GCP"]
+    "tags": ["AWS", "Cloud Security", "Monitoring", "Network Security"]
   },
   {
-    "id": "osint-cloudflare-recon",
-    "title": "OSINT Case Study: Cloudflare Passive Recon",
-    "description": "Comprehensive OSINT investigation demonstrating passive reconnaissance techniques using DNS, WHOIS, and certificate transparency logs.",
-    "category": "OSINT",
-    "tech": ["Python", "DNS", "WHOIS", "Certificate Transparency"],
+    "id": "cs601c-capstone",
+    "title": "Cybersecurity Cost Modeling Analytics",
+    "description": "Reproducible analytics pipeline for CS601C graduate capstone in Applied Computational Statistics. Comprehensive 64-page PDF report covering cybersecurity cost modeling, statistical analysis, and predictive modeling.",
+    "category": "Research",
+    "tech": ["Python", "R", "Statistics", "Data Analysis"],
+    "year": "2024",
+    "status": "completed",
+    "featured": true,
+    "keyResults": [
+      "Built reproducible statistical analysis pipeline",
+      "Analyzed cybersecurity cost patterns and trends",
+      "Created predictive models for security budget forecasting"
+    ],
+    "links": {
+      "github": "https://github.com/vijaysinghpuwar/cs601c-final-project",
+      "writeup": null,
+      "demo": null
+    },
+    "image": "/images/projects/splunk-rba.png",
+    "tags": ["Data Science", "Statistics", "Python", "Research"]
+  },
+  {
+    "id": "rapid-pvst-campus-lab",
+    "title": "Cisco Rapid-PVST Campus Network Lab",
+    "description": "Advanced Cisco Packet Tracer lab implementing Rapid-PVST with dual-homed access, per-VLAN root load-balancing, PortFast, BPDU Guard, and Root Guard for enterprise campus network security.",
+    "category": "Network Security",
+    "tech": ["Cisco", "Packet Tracer", "VLANs", "Spanning Tree"],
     "year": "2024",
     "status": "completed",
     "featured": false,
     "keyResults": [
-      "Mapped 200+ subdomains using passive techniques",
-      "Discovered 15+ potential attack vectors",
-      "Created automated OSINT collection pipeline"
+      "Designed secure multi-switch campus topology",
+      "Implemented per-VLAN root bridge load balancing",
+      "Configured Layer 2 security features (BPDU Guard, Root Guard)"
     ],
     "links": {
-      "github": "https://github.com/vijaysinghpuwar/osint-recon",
-      "writeup": "/writeups/osint-cloudflare-recon",
-      "demo": null
-    },
-    "image": "/images/projects/osint-recon.png",
-    "tags": ["OSINT", "Reconnaissance", "DNS", "Certificate Transparency"]
-  },
-  {
-    "id": "packet-tracer-vlan-lab",
-    "title": "Packet Tracer: VLAN/ROAS/EtherChannel Lab",
-    "description": "Network security lab demonstrating VLAN segmentation, Router-on-a-Stick configuration, and EtherChannel implementation for secure network design.",
-    "category": "Network Security",
-    "tech": ["Cisco Packet Tracer", "VLANs", "Routing", "Switching"],
-    "year": "2023",
-    "status": "completed",
-    "featured": false,
-    "keyResults": [
-      "Designed secure multi-VLAN network topology",
-      "Implemented inter-VLAN routing with access controls",
-      "Configured redundant EtherChannel links"
-    ],
-    "links": {
-      "github": "https://github.com/vijaysinghpuwar/packet-tracer-labs",
-      "writeup": "/writeups/vlan-roas-etherchannel",
+      "github": "https://github.com/vijaysinghpuwar/rapid-pvst-campus-lab",
+      "writeup": null,
       "demo": null
     },
     "image": "/images/projects/packet-tracer.png",
-    "tags": ["Network Security", "VLANs", "Cisco", "Network Design"]
+    "tags": ["Cisco", "Network Security", "VLANs", "Spanning Tree"]
+  },
+  {
+    "id": "inter-vlan-roas-lab",
+    "title": "Inter-VLAN Routing with ROAS",
+    "description": "Hands-on Packet Tracer exercise demonstrating Router-on-a-Stick (ROAS) configuration for inter-VLAN routing. Foundation lab for advanced network segmentation projects.",
+    "category": "Network Security",
+    "tech": ["Cisco", "Packet Tracer", "VLANs", "Routing"],
+    "year": "2024",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "Configured trunk links and subinterfaces",
+      "Implemented inter-VLAN routing with single router",
+      "Validated network segmentation and routing policies"
+    ],
+    "links": {
+      "github": "https://github.com/vijaysinghpuwar/inter-vlan-roas-lab",
+      "writeup": null,
+      "demo": null
+    },
+    "image": "/images/projects/packet-tracer.png",
+    "tags": ["Cisco", "VLANs", "Routing", "Network Design"]
+  },
+  {
+    "id": "x86-64-assembly-lab",
+    "title": "x86-64 Assembly Programming Lab",
+    "description": "Hands-on lab for NASM on Ubuntu 24.04 (WSL 2) containing three beginner x86-64 programs with detailed PDF report, Makefile, and comprehensive setup documentation.",
+    "category": "Low-Level Security",
+    "tech": ["Assembly", "NASM", "Linux", "WSL2"],
+    "year": "2024",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "Developed three x86-64 assembly programs from scratch",
+      "Documented assembly fundamentals for security research",
+      "Created reusable Makefile for assembly workflows"
+    ],
+    "links": {
+      "github": "https://github.com/vijaysinghpuwar/x86-64-assembly-intro-lab",
+      "writeup": null,
+      "demo": null
+    },
+    "image": "/images/projects/osint-recon.png",
+    "tags": ["Assembly", "Low-Level", "Linux", "Security Research"]
+  },
+  {
+    "id": "vaultsnake",
+    "title": "VaultSnake - Secure Login with Game",
+    "description": "Secure login GUI using Tkinter with encrypted credentials storage and a classic Snake game reward for authenticated users. Includes user-based score tracking and session management.",
+    "category": "Application Security",
+    "tech": ["Python", "Tkinter", "Encryption", "Authentication"],
+    "year": "2024",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "Implemented secure credential storage with encryption",
+      "Built user authentication system from scratch",
+      "Created gamified security training tool"
+    ],
+    "links": {
+      "github": "https://github.com/vijaysinghpuwar/VAULTSNAKE",
+      "writeup": null,
+      "demo": null
+    },
+    "image": "/images/projects/ssrf-lab.png",
+    "tags": ["Python", "Security", "Encryption", "GUI"]
   }
 ]

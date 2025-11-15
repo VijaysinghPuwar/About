@@ -6,50 +6,44 @@ import { Shield, GraduationCap, Target, Users, Award, MapPin, Calendar, External
 const timeline = [
   {
     year: "2024",
-    title: "Cybersecurity Engineering Focus",
-    description: "Specialized in SIEM engineering, cloud security assessments, and automated threat detection while pursuing graduate studies.",
+    title: "System Engineer at R. S. Infotech",
+    description: "Managed and secured 150+ enterprise IT systems, implemented IDS/IPS reducing breaches by 20%, and automated security operations with Python and PowerShell.",
     type: "career"
   },
   {
     year: "2023",
     title: "Started Master's Program",
-    description: "Began Master of Science in Cybersecurity at Pace University, focusing on cloud security and threat intelligence.",
+    description: "Began Master of Science in Cybersecurity at Pace University, focusing on cloud security, threat detection, and applied computational statistics.",
     type: "education"
   },
   {
     year: "2023",
-    title: "Security Operations Role",
-    description: "Joined healthcare organization as IT Security Analyst, managing SIEM operations and compliance programs.",
+    title: "Systems Intern at L&T-Sargent & Lundy",
+    description: "Coordinated HVAC system design for power plants, performed heat load calculations, and streamlined operations reducing costs by 10%.",
     type: "career"
-  },
-  {
-    year: "2023", 
-    title: "Bachelor's Graduation",
-    description: "Graduated Summa Cum Laude with BS in Information Technology, concentration in Network Security.",
-    type: "education"
   }
 ];
 
 const interests = [
   {
     icon: Shield,
-    title: "Cloud Security",
-    description: "AWS, Azure, and GCP security architecture, IAM policies, and compliance frameworks."
+    title: "Network Security",
+    description: "Firewall configuration, IDS/IPS deployment, network segmentation, and defense-in-depth strategies."
   },
   {
     icon: Target,
-    title: "Application Security",
-    description: "Web application penetration testing, SAST/DAST tools, and secure development practices."
+    title: "Cloud Security",
+    description: "AWS, Azure, and GCP security architecture, IAM policies, encryption, and monitoring with CloudWatch."
   },
   {
     icon: Users,
-    title: "Threat Intelligence",
-    description: "OSINT techniques, threat hunting, and cyber threat landscape analysis."
+    title: "Security Automation",
+    description: "Python and PowerShell scripting for log analysis, threat detection, and system hardening automation."
   },
   {
     icon: Award,
-    title: "CTF Competitions",
-    description: "Active participant in Capture The Flag events and cybersecurity challenge platforms."
+    title: "SOC Operations",
+    description: "SIEM monitoring with Splunk, threat hunting, detection rule development, and incident response."
   }
 ];
 
@@ -86,7 +80,7 @@ export default function About() {
           </div>
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4" />
-            <span>Security+ Certified</span>
+            <span>Security+ | CySA+ | CCNA</span>
           </div>
         </div>
       </div>
@@ -100,20 +94,22 @@ export default function About() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-muted-foreground leading-relaxed">
-            I'm a cybersecurity engineer with a passion for building secure, resilient systems through 
-            code, configuration, and continuous monitoring. Currently pursuing my Master's in Cybersecurity 
-            at Pace University while working in security operations for a healthcare organization.
+          <p className="text-muted-foreground leading-relaxed mb-4">
+            I'm a Cybersecurity Engineer based in New York City, focused on shielding organizations from 
+            digital threats. Currently pursuing my Master's in Cybersecurity at Pace University, I specialize 
+            in network security, incident response, penetration testing, and cloud security.
+          </p>
+          <p className="text-muted-foreground leading-relaxed mb-4">
+            Throughout my career, I've configured and hardened 50+ systems using firewalls, endpoint protection, 
+            and secure baselines. I write Python and PowerShell scripts to automate log analysis, Splunk alert 
+            enrichment, and account audits. My experience includes supporting SOC monitoring by building detection 
+            rules and performing threat hunting on live data, as well as implementing IAM best practices including 
+            MFA, GPO hardening, and access lifecycle reviews.
           </p>
           <p className="text-muted-foreground leading-relaxed">
-            My expertise spans cloud security architecture, SIEM engineering, and threat detection. 
-            I enjoy automating security processes with PowerShell and Python, building detection rules 
-            that matter, and sharing knowledge through writeups and open-source projects.
-          </p>
-          <p className="text-muted-foreground leading-relaxed">
-            When I'm not knee-deep in logs or building security tools, you'll find me at cybersecurity 
-            conferences, participating in CTF competitions, or contributing to the security community 
-            through research and mentorship.
+            Beyond professional work, I attend cybersecurity conferences and participate in Capture the Flag (CTF) 
+            events. I also contribute to open-source security tools and mentor new engineers on best practices. 
+            My goal is to keep security clear, simple, and accessible so everyone can coordinate seamlessly.
           </p>
         </CardContent>
       </Card>
