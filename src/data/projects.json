@@ -2,7 +2,7 @@
   {
     "id": "win-dev-sec-bootstrap",
     "title": "Windows Dev + Cybersecurity Bootstrap",
-    "description": "Idempotent PowerShell bootstrap script for setting up a complete Windows development and cybersecurity stack including winget, WSL2, Docker, pipx, and VS Code.",
+    "description": "Idempotent PowerShell bootstrap for setting up a complete Windows development and cybersecurity stack including winget, WSL2, Docker, pipx, and VS Code. Automated installation of 15+ security and development tools with safe re-run capability.",
     "category": "Automation",
     "tech": ["PowerShell", "WSL2", "Docker", "Windows"],
     "year": "2024",
@@ -24,7 +24,7 @@
   {
     "id": "automating-infosec",
     "title": "Automating Information Security",
-    "description": "Course repository for CYB 631: Automating Information Security with Python and Shell Scripting. Includes comprehensive Python and PowerShell projects covering security automation, log analysis, and system hardening.",
+    "description": "Course repository for CYB 631: Automating Information Security with Python and Shell Scripting. Comprehensive Python and PowerShell projects covering security automation, log analysis, and system hardening.",
     "category": "Automation",
     "tech": ["Python", "PowerShell", "Shell Scripting"],
     "year": "2024",
@@ -47,7 +47,7 @@
     "id": "aws-cloud-security",
     "title": "Configuring Cloud Security in AWS",
     "description": "Hands-on cloud security project configuring Amazon EC2 instances with layered network protection using Security Groups and NACLs, integrated with CloudWatch and SNS for real-time monitoring and alerting.",
-    "category": "Cloud",
+    "category": "Cloud Security",
     "tech": ["AWS", "EC2", "CloudWatch", "Security Groups", "NACLs"],
     "year": "2024",
     "status": "completed",
@@ -174,5 +174,49 @@
     },
     "image": "/images/projects/ssrf-lab.png",
     "tags": ["Python", "Security", "Encryption", "GUI"]
+  },
+  {
+    "id": "kokorotts",
+    "title": "KokoroTTS - Offline Text-to-Speech",
+    "description": "Desktop app for offline Kokoro TTS (ONNX). Includes 4 voices (2F, 2M), speed control, play/stop, and WAV export. Windows-ready with one-click installers.",
+    "category": "Application Development",
+    "tech": ["Python", "ONNX", "TTS", "Windows"],
+    "year": "2024",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "Built offline TTS application with 4 voice options",
+      "Implemented speed control and audio export features",
+      "Created user-friendly Windows installation workflow"
+    ],
+    "links": {
+      "github": "https://github.com/vijaysinghpuwar/KokoroTTS",
+      "writeup": null,
+      "demo": null
+    },
+    "image": "/images/projects/powershell-automation.png",
+    "tags": ["Python", "TTS", "Desktop App", "Windows"]
+  },
+  {
+    "id": "toc-extractor",
+    "title": "TOC Extractor - Web Scraping Tool",
+    "description": "GUI tool to extract chapter pages from a Table of Contents using Playwright + Tkinter. Provides URL and CSS selector inputs with headful browser support for authentication.",
+    "category": "Automation",
+    "tech": ["Python", "Playwright", "Tkinter", "Web Scraping"],
+    "year": "2024",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "Automated TOC extraction from web pages",
+      "Built user-friendly GUI with Tkinter",
+      "Implemented polite delays and authentication support"
+    ],
+    "links": {
+      "github": "https://github.com/vijaysinghpuwar/TOC_Extractor",
+      "writeup": null,
+      "demo": null
+    },
+    "image": "/images/projects/powershell-automation.png",
+    "tags": ["Python", "Automation", "Web Scraping", "GUI"]
   }
 ]
