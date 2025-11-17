@@ -27,15 +27,15 @@ const certificationBadges = [
 
 const experience = [
   {
-    title: "System Engineer",
+    title: "Cybersecurity & Systems Engineer",
     company: "R. S. Infotech",
     location: "India",
     period: "February 2023 - August 2024",
     highlights: [
-      "Managed and secured 150+ enterprise IT systems, reducing breaches by 20%",
-      "Implemented advanced security protocols, firewalls, and intrusion detection systems",
-      "Automated Active Directory hygiene with PowerShell",
-      "Engineered Python automation scripts for log analysis and uptime monitoring"
+      "Secured and maintained 150+ Windows and Linux endpoints and servers",
+      "Performed Active Directory hygiene using PowerShell to identify inactive accounts",
+      "Supported SOC-style monitoring and incident triage with log correlation",
+      "Deployed and secured AWS resources with CloudWatch alerts"
     ]
   },
   {
@@ -44,9 +44,9 @@ const experience = [
     location: "Vadodara, Gujarat, India",
     period: "January 2023 - April 2023",
     highlights: [
-      "Coordinated HVAC system design for power plants achieving 100% ASHRAE standards",
-      "Performed heat load calculations for critical infrastructure",
-      "Streamlined airflow management reducing operational costs by 10%"
+      "Authored SOPs/runbooks for troubleshooting workflows",
+      "Practiced disciplined documentation aligned with regulatory requirements",
+      "Coordinated HVAC system design for power plants"
     ]
   }
 ];
