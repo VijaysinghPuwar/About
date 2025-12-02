@@ -5,21 +5,21 @@ import { Shield, GraduationCap, Target, Users, Award, MapPin, Calendar, External
 
 const timeline = [
   {
-    year: "2024",
-    title: "System Engineer at R. S. Infotech",
-    description: "Managed and secured 150+ enterprise IT systems, implemented IDS/IPS reducing breaches by 20%, and automated security operations with Python and PowerShell.",
-    type: "career"
+    year: "2025",
+    title: "CompTIA CySA+ & Cisco CCNA Certified",
+    description: "Earned industry certifications: CompTIA CySA+ (Nov 2025) and Cisco CCNA (Aug 2025), validating expertise in cybersecurity analysis and networking.",
+    type: "certification"
   },
   {
-    year: "2023",
-    title: "Started Master's Program",
-    description: "Began Master of Science in Cybersecurity at Pace University, focusing on cloud security, threat detection, and applied computational statistics.",
+    year: "2024",
+    title: "Started Master's Program at Pace University",
+    description: "Began Master of Science in Cybersecurity at Pace University Seidenberg School, focusing on IAM, cloud security, and security automation. GPA: 4.00",
     type: "education"
   },
   {
-    year: "2023",
-    title: "Systems Intern at L&T-Sargent & Lundy",
-    description: "Coordinated HVAC system design for power plants, performed heat load calculations, and streamlined operations reducing costs by 10%.",
+    year: "2023-2024",
+    title: "Cybersecurity & Systems Engineer at R.S. Infotech",
+    description: "Secured 150+ Windows/Linux endpoints, performed AD identity hygiene, supported IAM operations, and deployed AWS cloud security with CloudWatch alerts.",
     type: "career"
   }
 ];
@@ -27,23 +27,23 @@ const timeline = [
 const interests = [
   {
     icon: Shield,
-    title: "Network Security",
-    description: "Firewall configuration, IDS/IPS deployment, network segmentation, and defense-in-depth strategies."
+    title: "Identity & Access Management",
+    description: "Active Directory hygiene, MFA enforcement, least-privilege access, user lifecycle management, and privileged access reviews."
   },
   {
     icon: Target,
     title: "Cloud Security",
-    description: "AWS, Azure, and GCP security architecture, IAM policies, encryption, and monitoring with CloudWatch."
+    description: "AWS IAM, VPC, Security Groups, NACLs, CloudWatch monitoring, and SNS alerting for security events."
   },
   {
     icon: Users,
     title: "Security Automation",
-    description: "Python and PowerShell scripting for log analysis, threat detection, and system hardening automation."
+    description: "Python and PowerShell scripting for log parsing, account audits, configuration checks, and automated security workflows."
   },
   {
     icon: Award,
-    title: "SOC Operations",
-    description: "SIEM monitoring with Splunk, threat hunting, detection rule development, and incident response."
+    title: "Network Security",
+    description: "TCP/IP, VLANs, ACLs, firewalls, Wireshark analysis, IDS/IPS, and routing/switching protocols."
   }
 ];
 
@@ -64,8 +64,8 @@ export default function About() {
             About Me
           </h1>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-            NYC-based cybersecurity engineer passionate about building secure systems, 
-            detecting threats, and contributing to the security community through research and education.
+            NYC-based cybersecurity engineer with hands-on experience in identity & access management, 
+            network security, and cloud security.
           </p>
         </div>
 
@@ -80,7 +80,7 @@ export default function About() {
           </div>
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4" />
-            <span>Security+ | CySA+ | CCNA</span>
+            <span>CySA+ | Security+ | CCNA</span>
           </div>
         </div>
       </div>
@@ -95,21 +95,21 @@ export default function About() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-muted-foreground leading-relaxed mb-4">
-            I'm a Cybersecurity Engineer based in New York City, focused on shielding organizations from 
-            digital threats. Currently pursuing my Master's in Cybersecurity at Pace University, I specialize 
-            in network security, incident response, penetration testing, and cloud security.
+            Mid-level Cybersecurity Engineer with hands-on experience across identity & access management (IAM), 
+            network security, and cloud security in Windows, Active Directory, and AWS environments. I've hardened 
+            150+ endpoints and servers, enforced MFA and least-privilege access, and used Python/PowerShell to 
+            automate account hygiene and log-based audits.
           </p>
           <p className="text-muted-foreground leading-relaxed mb-4">
-            Throughout my career, I've configured and hardened 50+ systems using firewalls, endpoint protection, 
-            and secure baselines. I write Python and PowerShell scripts to automate log analysis, Splunk alert 
-            enrichment, and account audits. My experience includes supporting SOC monitoring by building detection 
-            rules and performing threat hunting on live data, as well as implementing IAM best practices including 
-            MFA, GPO hardening, and access lifecycle reviews.
+            Currently pursuing my Master's in Cybersecurity at Pace University with a 4.00 GPA, focusing on 
+            automating information security, network security & defense, ethical hacking, and cyber intelligence. 
+            My coursework emphasizes practical, auditable security controls that translate directly to real-world 
+            security operations.
           </p>
           <p className="text-muted-foreground leading-relaxed">
-            Beyond professional work, I attend cybersecurity conferences and participate in Capture the Flag (CTF) 
-            events. I also contribute to open-source security tools and mentor new engineers on best practices. 
-            My goal is to keep security clear, simple, and accessible so everyone can coordinate seamlessly.
+            My approach to cybersecurity centers on practical implementation: from performing Active Directory 
+            identity hygiene using PowerShell to deploying AWS resources with proper IAM policies and CloudWatch 
+            monitoring. I believe in building security that's auditable, automated, and aligned with compliance requirements.
           </p>
         </CardContent>
       </Card>
@@ -158,7 +158,8 @@ export default function About() {
               <div key={index} className="flex gap-4">
                 <div className="flex flex-col items-center">
                   <div className={`w-3 h-3 rounded-full ${
-                    event.type === 'career' ? 'bg-primary' : 'bg-secondary'
+                    event.type === 'career' ? 'bg-primary' : 
+                    event.type === 'certification' ? 'bg-green-500' : 'bg-secondary'
                   }`} />
                   {index < timeline.length - 1 && (
                     <div className="w-px h-12 bg-border/50 mt-2" />
@@ -189,6 +190,16 @@ export default function About() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div>
+            <h3 className="font-semibold text-foreground mb-4">Leadership & Mentorship</h3>
+            <p className="text-muted-foreground mb-4">
+              Informal Mentor & Study Group Lead for cybersecurity peers (2024 – Present). I guide classmates 
+              and junior peers through labs in networking, security automation, and cloud security, helping them 
+              interpret logs, design fixes, and structure incident-style reports. I share scripts, lab notes, and 
+              troubleshooting guides to foster a collaborative learning environment.
+            </p>
+          </div>
+
+          <div>
             <h3 className="font-semibold text-foreground mb-4">Conferences & Events</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {conferences.map((conf, index) => (
@@ -209,21 +220,27 @@ export default function About() {
           <div>
             <h3 className="font-semibold text-foreground mb-4">Open Source & Sharing</h3>
             <p className="text-muted-foreground mb-4">
-              I believe in giving back to the cybersecurity community through open-source contributions, 
-              educational content, and mentorship. All my security tools and research are shared publicly 
-              to help others learn and improve their security posture.
+              I believe in giving back to the cybersecurity community through open-source contributions 
+              and educational content. All my security tools, lab configurations, and automation scripts 
+              are shared publicly to help others learn and improve their security posture.
             </p>
             <div className="flex gap-3">
               <Button variant="outline" asChild className="border-primary/20 hover:border-primary/40">
-                <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer">
+                <a href="https://github.com/VijaysinghPuwar" target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="w-4 h-4 mr-2" />
                   GitHub Projects
                 </a>
               </Button>
               <Button variant="outline" asChild className="border-primary/20 hover:border-primary/40">
-                <a href="https://linkedin.com/in/vijaysingh-puwar" target="_blank" rel="noopener noreferrer">
+                <a href="https://linkedin.com/in/vijaysinghpuwar" target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="w-4 h-4 mr-2" />
                   Professional Network
+                </a>
+              </Button>
+              <Button variant="outline" asChild className="border-primary/20 hover:border-primary/40">
+                <a href="https://tryhackme.com/p/VoidHex" target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  TryHackMe
                 </a>
               </Button>
             </div>

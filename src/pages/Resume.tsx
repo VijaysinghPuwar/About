@@ -1,60 +1,110 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TechBadge } from '@/components/TechBadge';
-import { Download, ExternalLink, Calendar, MapPin, GraduationCap, Briefcase, Award, Code, Shield } from 'lucide-react';
+import { Download, ExternalLink, Calendar, MapPin, GraduationCap, Briefcase, Award, Code, Shield, Mail, Phone } from 'lucide-react';
+import ccnaCert from '@/assets/certifications/ccna.jpeg';
+import cysaCert from '@/assets/certifications/cysa.jpeg';
 
 const education = [
   {
     degree: "Master of Science in Cybersecurity",
-    school: "Pace University",
-    location: "New York, NY",
-    period: "2023 - Present",
-    details: ["Focus: Cloud Security & Threat Detection", "Applied Computational Statistics", "Automating Information Security"]
+    school: "Pace University - Seidenberg School of CSIS",
+    location: "New York City, NY",
+    period: "2024 - 2026 (Expected)",
+    gpa: "4.00",
+    details: [
+      "Automating Information Security (Python & Shell)",
+      "Network Security & Defense",
+      "Ethical Hacking & Penetration Testing",
+      "Cyber Intelligence Analysis & Modeling",
+      "Operating Systems Theory & Administration"
+    ]
   }
 ];
 
 const experience = [
   {
-    title: "System Engineer",
-    company: "R. S. Infotech",
+    title: "Cybersecurity & Systems Engineer",
+    company: "R.S. Infotech",
     location: "India",
     period: "February 2023 - August 2024",
     responsibilities: [
-      "Managed and secured 150+ enterprise IT systems, reducing breaches by 20%",
-      "Implemented advanced security protocols, firewalls, and intrusion detection systems (IDS/IPS)",
-      "Automated Active Directory hygiene with PowerShell (Get-ADUser, Search-ADAccount) to disable inactive accounts and remediate stale objects",
-      "Engineered Python automation scripts for log analysis, uptime monitoring, and configuration management",
-      "Deployed AWS Cloud projects (IAM, VPC, EC2, S3) with encryption and least-privilege access",
-      "Achieved 15% increase in network speed and 30% reduction in downtime through security enhancements"
-    ]
-  },
-  {
-    title: "Systems Intern",
-    company: "L&T-Sargent & Lundy Limited",
-    location: "Vadodara, Gujarat, India",
-    period: "January 2023 - April 2023",
-    responsibilities: [
-      "Coordinated HVAC system design for power plants achieving 100% ASHRAE standards adherence",
-      "Performed heat load calculations for critical infrastructure enhancing thermal efficiency",
-      "Streamlined airflow management reducing operational costs by 10%"
+      "Secured and maintained 150+ Windows and Linux endpoints and servers by enforcing baseline controls (patches, AV, BitLocker, host firewalls) to reduce exploitable attack surface",
+      "Performed Active Directory identity hygiene using ADUC, GPMC, Event Viewer, and PowerShell (Get-ADUser, Search-ADAccount, lastLogon attributes) to identify inactive, orphaned, and high-risk accounts",
+      "Supported IAM operations by assisting user onboarding/offboarding, adjusting group memberships and access rights based on role changes, and validating privileged groups against least-privilege expectations",
+      "Assisted with MFA and password policy enforcement through Group Policy and identity controls, reducing account takeover risk for remote-access and admin accounts",
+      "Used Python/PowerShell to automate log parsing, account and permission audits, and configuration checks, cutting triage time for recurring identity-related alerts",
+      "Deployed and secured AWS resources (IAM, VPC, EC2, S3, Security Groups, NACLs) and integrated CloudWatch + SNS alerts to surface suspicious activity and misconfigurations"
     ]
   }
 ];
 
 const certifications = [
-  { name: "CompTIA Security+", issuer: "CompTIA", year: "2024", status: "active" },
-  { name: "CompTIA CySA+", issuer: "CompTIA", year: "2024", status: "active" },
-  { name: "Cisco Certified Network Associate (CCNA)", issuer: "Cisco", year: "2024", status: "active" }
+  { 
+    name: "CompTIA CySA+", 
+    issuer: "CompTIA", 
+    date: "November 7, 2025",
+    expires: "November 7, 2028",
+    code: "4d190052eac6477196e2a5e0f4e6bf4a",
+    image: cysaCert,
+    status: "active" 
+  },
+  { 
+    name: "CompTIA Security+", 
+    issuer: "CompTIA", 
+    date: "2024",
+    status: "active" 
+  },
+  { 
+    name: "Cisco CCNA", 
+    issuer: "Cisco", 
+    date: "August 18, 2025",
+    expires: "August 18, 2028",
+    credentialId: "CSCO14790731",
+    image: ccnaCert,
+    status: "active" 
+  }
 ];
 
 const skills = {
   "Programming & Scripting": ["Python", "PowerShell", "Bash"],
-  "Security Operations": ["SIEM (Splunk)", "SOC Monitoring", "Threat Detection", "Incident Response"],
-  "Cloud Security": ["AWS (IAM, VPC, EC2, S3)", "Azure", "Google Cloud", "CloudWatch"],
-  "Penetration Testing": ["Wireshark", "Metasploit", "Burp Suite", "Nmap"],
-  "Version Control & Automation": ["Git", "Jenkins", "Docker"],
-  "Frameworks & Standards": ["NIST", "ISO 27001", "SOC 2", "MITRE ATT&CK"]
+  "Ethical Hacking & Penetration Testing": ["Nmap", "Burp Suite", "Metasploit", "Password/Brute-force Testing", "Web App Assessments"],
+  "Application Security": ["Authentication/Authorization", "Secure Credential Handling", "OWASP", "Logging & Monitoring"],
+  "Network Security": ["TCP/IP", "VLANs", "ACLs", "VPN", "DNS/DHCP", "Firewalls", "Wireshark", "IDS/IPS"],
+  "Routing & Switching": ["Inter-VLAN Routing (ROAS)", "Rapid-PVST", "RIPv2", "Trunking", "STP Protections (PortFast, BPDU Guard, Root Guard)"],
+  "Cloud & IAM": ["AWS IAM", "VPC", "EC2", "S3", "Security Groups", "NACLs", "CloudWatch", "SNS", "MFA", "Least-Privilege Design"],
+  "Tools & Platforms": ["Windows 10/11", "Linux CLI", "Active Directory", "Group Policy", "Docker", "VirtualBox/VMware", "Git/GitHub", "ServiceNow/Jira"]
 };
+
+const academicProjects = [
+  {
+    name: "Automating-InfoSec",
+    description: "Security Automation Labs (CYB 631)",
+    year: "2024",
+    details: [
+      "Developed Python/PowerShell scripts to parse logs, summarize events, and automate common security checks",
+      "Turned manual SOC/IAM tasks into repeatable, auditable workflows for incident triage and compliance"
+    ]
+  },
+  {
+    name: "Configuring Cloud Security in AWS",
+    description: "IAM & Network Hardening",
+    year: "2024",
+    details: [
+      "Designed secure EC2 environment with IAM users/roles, least-privilege policies, and tightly scoped Security Groups/NACLs",
+      "Integrated CloudWatch metrics and SNS alerts for identity- and configuration-related event monitoring"
+    ]
+  },
+  {
+    name: "Network Security & Campus Labs",
+    description: "Routing & Switching Labs",
+    year: "2024",
+    details: [
+      "Built Rapid-PVST and ROAS labs for inter-VLAN routing and Layer 2 best practices",
+      "Implemented spanning-tree protections and ACL filtering in simulated enterprise environments"
+    ]
+  }
+];
 
 export default function Resume() {
   return (
@@ -66,22 +116,28 @@ export default function Resume() {
             Vijaysingh Puwar
           </h1>
           <p className="text-xl text-primary font-medium">
-            Cybersecurity Engineer
-          </p>
-          <p className="text-lg text-muted-foreground">
-            Cloud Security • Application Security • Threat Detection
+            Cybersecurity Engineer | Identity & Access Management | Network & Cloud Security
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <div className="flex items-center gap-2 text-muted-foreground">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
             <MapPin className="w-4 h-4" />
-            <span>New York, NY</span>
+            <span>NYC</span>
           </div>
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Shield className="w-4 h-4" />
-            <span>Security+ | CySA+ | CCNA</span>
+          <div className="flex items-center gap-2">
+            <Mail className="w-4 h-4" />
+            <span>vpuwar77@gmail.com</span>
           </div>
+          <div className="flex items-center gap-2">
+            <Phone className="w-4 h-4" />
+            <span>+1-929-400-2052</span>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-center gap-2 text-muted-foreground">
+          <Shield className="w-4 h-4" />
+          <span>CompTIA CySA+ | CompTIA Security+ | Cisco CCNA</span>
         </div>
 
         <div className="flex flex-wrap justify-center gap-3">
@@ -95,15 +151,21 @@ export default function Resume() {
             </a>
           </Button>
           <Button variant="outline" asChild className="border-primary/20 hover:border-primary/40">
-            <a href="https://linkedin.com/in/vijaysingh-puwar" target="_blank" rel="noopener noreferrer">
+            <a href="https://linkedin.com/in/vijaysinghpuwar" target="_blank" rel="noopener noreferrer">
               <ExternalLink className="w-4 h-4 mr-2" />
               LinkedIn
             </a>
           </Button>
           <Button variant="outline" asChild className="border-primary/20 hover:border-primary/40">
-            <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer">
+            <a href="https://github.com/VijaysinghPuwar" target="_blank" rel="noopener noreferrer">
               <ExternalLink className="w-4 h-4 mr-2" />
               GitHub
+            </a>
+          </Button>
+          <Button variant="outline" asChild className="border-primary/20 hover:border-primary/40">
+            <a href="https://tryhackme.com/p/VoidHex" target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="w-4 h-4 mr-2" />
+              TryHackMe
             </a>
           </Button>
         </div>
@@ -114,16 +176,17 @@ export default function Resume() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-primary" />
-            Professional Summary
+            Profile
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground leading-relaxed">
-            Cybersecurity Engineer focused on shielding organizations from digital threats. Expertise in network security, 
-            incident response, penetration testing, and cloud security with experience in threat analysis and meeting 
-            standards like NIST, ISO 27001, and SOC 2. Currently pursuing Master's in Cybersecurity at Pace University. 
-            Successfully configured and hardened 50+ systems, automated security operations with Python and PowerShell, 
-            and implemented IAM best practices including MFA and GPO hardening.
+            Mid-level Cybersecurity Engineer with hands-on experience across identity & access management (IAM), 
+            network security, and cloud security in Windows, Active Directory, and AWS environments. Hardened 150+ 
+            endpoints and servers, enforced MFA and least-privilege access, and used Python/PowerShell to automate 
+            account hygiene and log-based audits. Graduate-level training in automating information security, network 
+            security & defense, ethical hacking, and cyber intelligence, with a strong focus on practical, auditable 
+            security controls.
           </p>
         </CardContent>
       </Card>
@@ -138,7 +201,7 @@ export default function Resume() {
         </CardHeader>
         <CardContent className="space-y-6">
           {education.map((edu, index) => (
-            <div key={index} className="space-y-2">
+            <div key={index} className="space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <h3 className="font-semibold text-foreground">{edu.degree}</h3>
                 <div className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -146,10 +209,16 @@ export default function Resume() {
                   {edu.period}
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-muted-foreground">
                 <span className="font-medium">{edu.school}</span>
-                <span>•</span>
+                <span className="hidden sm:block">•</span>
                 <span>{edu.location}</span>
+                {edu.gpa && (
+                  <>
+                    <span className="hidden sm:block">•</span>
+                    <span className="text-primary font-medium">GPA: {edu.gpa}</span>
+                  </>
+                )}
               </div>
               <ul className="space-y-1">
                 {edu.details.map((detail, idx) => (
@@ -169,7 +238,7 @@ export default function Resume() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Briefcase className="w-5 h-5 text-primary" />
-            Professional Experience
+            Relevant Experience
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-8">
@@ -209,20 +278,47 @@ export default function Resume() {
             Certifications
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {certifications.map((cert, index) => (
-              <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-muted/20 border border-border/30">
-                <div>
-                  <h4 className="font-medium text-foreground">{cert.name}</h4>
-                  <p className="text-sm text-muted-foreground">{cert.issuer} • {cert.year}</p>
+              <div key={index} className="p-4 rounded-lg bg-muted/20 border border-border/30 space-y-2">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h4 className="font-medium text-foreground">{cert.name}</h4>
+                    <p className="text-sm text-muted-foreground">{cert.issuer}</p>
+                  </div>
+                  <TechBadge 
+                    tech="Active" 
+                    variant="status" 
+                  />
                 </div>
-                <TechBadge 
-                  tech={cert.status === 'active' ? 'Active' : 'Candidate'} 
-                  variant={cert.status === 'active' ? 'status' : 'category'} 
-                />
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p>Issued: {cert.date}</p>
+                  {cert.expires && <p>Expires: {cert.expires}</p>}
+                  {cert.credentialId && <p>ID: {cert.credentialId}</p>}
+                </div>
               </div>
             ))}
+          </div>
+          
+          {/* Certificate Images */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            <div className="space-y-2">
+              <h4 className="font-medium text-foreground text-center">Cisco CCNA</h4>
+              <img 
+                src={ccnaCert} 
+                alt="Cisco CCNA Certificate - Vijaysingh Puwar" 
+                className="w-full rounded-lg border border-border/30"
+              />
+            </div>
+            <div className="space-y-2">
+              <h4 className="font-medium text-foreground text-center">CompTIA CySA+</h4>
+              <img 
+                src={cysaCert} 
+                alt="CompTIA CySA+ Certificate - Vijaysingh Puwar" 
+                className="w-full rounded-lg border border-border/30"
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -244,6 +340,37 @@ export default function Resume() {
                   <TechBadge key={skill} tech={skill} variant="tech" />
                 ))}
               </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Academic Projects */}
+      <Card className="border-border/50 bg-card/80 backdrop-blur-sm animate-fade-in">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Code className="w-5 h-5 text-primary" />
+            Academic Projects & Labs
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {academicProjects.map((project, index) => (
+            <div key={index} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-semibold text-foreground">{project.name}</h4>
+                  <p className="text-sm text-muted-foreground">{project.description}</p>
+                </div>
+                <TechBadge tech={project.year} variant="year" />
+              </div>
+              <ul className="space-y-1">
+                {project.details.map((detail, idx) => (
+                  <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
+                    <span className="text-primary mt-1.5">•</span>
+                    {detail}
+                  </li>
+                ))}
+              </ul>
             </div>
           ))}
         </CardContent>
