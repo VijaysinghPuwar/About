@@ -1,5 +1,3 @@
-// Update this page (the content is just a fallback if you fail to update the page)
-
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,49 +10,38 @@ import writeupsData from '@/data/writeups.json';
 import heroImage from '@/assets/hero-bg.jpg';
 
 const tools = [
-  'Splunk', 'Sigma', 'Suricata', 'Zeek', 'Nmap', 'Wireshark', 
-  'Burp Suite', 'Metasploit', 'Python', 'PowerShell', 'Git', 'Docker'
+  'Nmap', 'Wireshark', 'Burp Suite', 'Metasploit', 'Python', 'PowerShell', 
+  'Bash', 'AWS', 'Active Directory', 'Docker', 'Git', 'CloudWatch'
 ];
 
 const certificationBadges = [
-  { name: 'Security+', issuer: 'CompTIA' },
   { name: 'CySA+', issuer: 'CompTIA' },
+  { name: 'Security+', issuer: 'CompTIA' },
   { name: 'CCNA', issuer: 'Cisco' },
-  { name: 'AWS', issuer: 'Amazon' },
-  { name: 'Azure', issuer: 'Microsoft' },
-  { name: 'Python', issuer: 'Programming' }
+  { name: 'AWS IAM', issuer: 'Amazon' },
+  { name: 'Python', issuer: 'Scripting' },
+  { name: 'PowerShell', issuer: 'Automation' }
 ];
 
 const experience = [
   {
     title: "Cybersecurity & Systems Engineer",
-    company: "R. S. Infotech",
+    company: "R.S. Infotech",
     location: "India",
     period: "February 2023 - August 2024",
     highlights: [
       "Secured and maintained 150+ Windows and Linux endpoints and servers",
-      "Performed Active Directory hygiene using PowerShell to identify inactive accounts",
-      "Supported SOC-style monitoring and incident triage with log correlation",
-      "Deployed and secured AWS resources with CloudWatch alerts"
-    ]
-  },
-  {
-    title: "Systems Intern",
-    company: "L&T-Sargent & Lundy Limited",
-    location: "Vadodara, Gujarat, India",
-    period: "January 2023 - April 2023",
-    highlights: [
-      "Authored SOPs/runbooks for troubleshooting workflows",
-      "Practiced disciplined documentation aligned with regulatory requirements",
-      "Coordinated HVAC system design for power plants"
+      "Performed Active Directory identity hygiene using PowerShell to identify inactive accounts",
+      "Supported IAM operations and enforced MFA/least-privilege access controls",
+      "Deployed and secured AWS resources with CloudWatch + SNS alerts"
     ]
   }
 ];
 
 const certifications = [
-  { name: "CompTIA CySA+", issuer: "CompTIA", year: "2024", status: "active" },
-  { name: "CompTIA Security+", issuer: "CompTIA", year: "2024", status: "active" },
-  { name: "Cisco CCNA", issuer: "Cisco", year: "2024", status: "active" }
+  { name: "CompTIA CySA+", issuer: "CompTIA", date: "Nov 2025", expires: "Nov 2028", status: "active" },
+  { name: "CompTIA Security+", issuer: "CompTIA", date: "2024", status: "active" },
+  { name: "Cisco CCNA", issuer: "Cisco", date: "Aug 2025", expires: "Aug 2028", status: "active" }
 ];
 
 const Index = () => {
@@ -99,11 +86,11 @@ const Index = () => {
             </p>
             
             <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto">
-              Network Security • Cloud Security • Incident Response
+              Identity & Access Management • Network Security • Cloud Security
             </p>
             
             <p className="text-base md:text-lg text-foreground/80 max-w-4xl mx-auto">
-              Building secure systems with code, detections, and hands-on labs.
+              Building secure systems with Python, PowerShell, and hands-on security controls.
             </p>
           </motion.div>
 
@@ -155,7 +142,7 @@ const Index = () => {
               asChild
               className="border-primary/30 hover:border-primary/50 hover:bg-primary/5 text-lg px-8"
             >
-              <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer">
+              <a href="https://github.com/VijaysinghPuwar" target="_blank" rel="noopener noreferrer">
                 <Github className="w-5 h-5 mr-2" />
                 GitHub
               </a>
@@ -328,7 +315,7 @@ const Index = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-5xl mx-auto">
+          <div className="max-w-3xl mx-auto">
             {experience.map((job, index) => (
               <motion.div
                 key={index}
@@ -407,12 +394,17 @@ const Index = () => {
                       {cert.name}
                     </CardTitle>
                     <CardDescription className="text-muted-foreground">
-                      {cert.issuer} • {cert.year}
+                      {cert.issuer} • {cert.date}
                     </CardDescription>
+                    {cert.expires && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Expires: {cert.expires}
+                      </p>
+                    )}
                   </CardHeader>
                   <CardContent>
                     <TechBadge 
-                      tech={cert.status === 'active' ? 'Active' : 'Candidate'} 
+                      tech="Active" 
                       variant="status" 
                     />
                   </CardContent>
@@ -434,35 +426,42 @@ const Index = () => {
             className="space-y-4"
           >
             <h2 className="text-3xl md:text-4xl font-bold text-foreground">
-              Let's Build Secure Systems Together
+              Let's Work Together
             </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Whether you're looking to collaborate on security projects, discuss threat detection strategies, 
-              or explore career opportunities, I'd love to connect.
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+              Looking for a cybersecurity professional who can secure your infrastructure, 
+              automate security operations, and implement identity & access management best practices?
             </p>
           </motion.div>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            viewport={{ once: true }}
+            className="flex flex-wrap justify-center gap-4"
+          >
+            <Button 
               size="lg"
               asChild
               className="bg-primary hover:bg-primary/90 shadow-glow-cyan text-lg px-8"
             >
               <Link to="/contact">
-                Start a Conversation
+                Get In Touch
+                <ArrowRight className="w-5 h-5 ml-2" />
               </Link>
             </Button>
-            <Button
+            <Button 
               size="lg"
               variant="outline"
               asChild
               className="border-primary/30 hover:border-primary/50 hover:bg-primary/5 text-lg px-8"
             >
-              <Link to="/about">
-                Learn More About Me
+              <Link to="/projects">
+                View Projects
               </Link>
             </Button>
-          </div>
+          </motion.div>
         </div>
       </section>
     </div>

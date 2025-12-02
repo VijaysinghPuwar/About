@@ -5,14 +5,21 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, MessageSquare, Send, Github, Linkedin, Youtube, ExternalLink, Shield } from 'lucide-react';
+import { Mail, MessageSquare, Send, Github, Linkedin, Phone, ExternalLink, Shield, MapPin } from 'lucide-react';
 
 const socialLinks = [
   {
     name: 'Email',
-    url: 'mailto:vpuwar925@gmail.com',
+    url: 'mailto:vpuwar77@gmail.com',
     icon: Mail,
-    description: 'vpuwar925@gmail.com',
+    description: 'vpuwar77@gmail.com',
+    primary: true
+  },
+  {
+    name: 'Phone',
+    url: 'tel:+19294002052',
+    icon: Phone,
+    description: '+1-929-400-2052',
     primary: true
   },
   {
@@ -24,16 +31,9 @@ const socialLinks = [
   },
   {
     name: 'GitHub',
-    url: 'https://github.com/vijaysinghpuwar',
+    url: 'https://github.com/VijaysinghPuwar',
     icon: Github,
     description: 'Open source projects & code',
-    primary: false
-  },
-  {
-    name: 'YouTube',
-    url: 'https://youtube.com/@vijaysingh-puwar',
-    icon: Youtube,
-    description: 'Security tutorials & content',
     primary: false
   }
 ];
@@ -61,8 +61,6 @@ export default function Contact() {
     setIsSubmitting(true);
 
     try {
-      // In a real implementation, you would integrate with Formspree or similar service
-      // For now, we'll simulate the form submission
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       toast({
@@ -93,6 +91,10 @@ export default function Contact() {
           Let's discuss cybersecurity, collaboration opportunities, or share knowledge. 
           Always happy to connect with fellow security professionals and enthusiasts.
         </p>
+        <div className="flex items-center justify-center gap-2 text-muted-foreground">
+          <MapPin className="w-4 h-4" />
+          <span>NYC, United States</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -290,7 +292,7 @@ export default function Contact() {
           <div className="space-y-2">
             <h3 className="font-semibold text-primary">Career Opportunities</h3>
             <p className="text-sm text-muted-foreground">
-              Full-time roles in cybersecurity engineering, SIEM/SOC positions, and cloud security roles.
+              Full-time roles in cybersecurity engineering, IAM, SOC, and cloud security positions.
             </p>
           </div>
           <div className="space-y-2">
