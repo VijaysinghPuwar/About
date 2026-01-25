@@ -2,8 +2,8 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { TechBadge } from '@/components/TechBadge';
-import { ProjectCard } from '@/components/ProjectCard';
-import { Shield, Terminal, Code, Database, ChevronRight, Star, ArrowRight, Github, ExternalLink, FileText, Briefcase, Award, Calendar } from 'lucide-react';
+import { ServiceCard } from '@/components/ServiceCard';
+import { Shield, Terminal, Code, Database, ChevronRight, Star, ArrowRight, Github, ExternalLink, FileText, Briefcase, Award, Calendar, Zap, Cloud, Network } from 'lucide-react';
 import { motion } from 'framer-motion';
 import projectsData from '@/data/projects.json';
 import writeupsData from '@/data/writeups.json';
@@ -180,30 +180,51 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Featured Projects */}
+      {/* Featured Solutions */}
       <section className="py-20">
         <div className="container space-y-12">
           <div className="text-center space-y-4">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm font-medium mx-auto">
+              <Shield className="w-4 h-4" />
+              Security Solutions
+            </div>
             <h2 className="text-3xl md:text-4xl font-bold text-foreground">
-              Featured Security Projects
+              Featured Solutions & Tools
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Hands-on cybersecurity labs, automation scripts, and research projects 
-              with real-world applications and measurable results.
+              Enterprise-grade security automation, cloud protection, and network security 
+              solutions built with modern tools and best practices.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {featuredProjects.map((project, index) => (
+          {/* Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-3xl mx-auto">
+            {[
+              { label: 'Solutions', value: projectsData.length, icon: Shield },
+              { label: 'Technologies', value: '15+', icon: Code },
+              { label: 'Automations', value: projectsData.filter(p => p.category === 'Automation').length, icon: Zap },
+              { label: 'Categories', value: '5', icon: Network },
+            ].map((stat, i) => (
               <motion.div
-                key={project.id}
-                initial={{ opacity: 0, y: 30 }}
+                key={stat.label}
+                initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
                 viewport={{ once: true }}
+                transition={{ delay: i * 0.1 }}
+                className="text-center p-4 rounded-xl bg-card/30 border border-border/30"
               >
-                <ProjectCard project={project} />
+                <div className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 mb-2">
+                  <stat.icon className="w-5 h-5 text-primary" />
+                </div>
+                <div className="text-xl font-bold text-foreground">{stat.value}</div>
+                <div className="text-xs text-muted-foreground">{stat.label}</div>
               </motion.div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {featuredProjects.map((project, index) => (
+              <ServiceCard key={project.id} project={project} index={index} />
             ))}
           </div>
 
@@ -214,7 +235,7 @@ const Index = () => {
               className="bg-primary hover:bg-primary/90 shadow-glow-cyan"
             >
               <Link to="/projects">
-                View All Projects
+                Explore All Solutions
                 <ArrowRight className="w-5 h-5 ml-2" />
               </Link>
             </Button>
