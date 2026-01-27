@@ -1,11 +1,15 @@
 import { useParams, Navigate, Link } from 'react-router-dom';
-import { ArrowLeft, Github, ExternalLink, FileText, Calendar, Tag, CheckCircle2, Zap, Shield, Cloud, Network, Code, Terminal, ArrowRight } from 'lucide-react';
+import { ArrowLeft, Github, ExternalLink, FileText, Tag, CheckCircle2, Zap, Shield, Cloud, Network, Code, Terminal, Lock, LogIn, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { useProject, Project } from '@/hooks/useProjects';
+import { useAuth } from '@/hooks/useAuth';
+import { AccessBadge } from '@/components/AccessBadge';
 import projectsData from '@/data/projects.json';
 
-interface Project {
+// Fallback interface for JSON data
+interface JSONProject {
   id: string;
   title: string;
   description: string;
@@ -44,14 +48,99 @@ const getCategoryIcon = (category: string) => {
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
-  const project = projectsData.find((p: Project) => p.id === id) as Project | undefined;
-  const currentIndex = projectsData.findIndex((p: Project) => p.id === id);
+  const { project: dbProject, loading, error } = useProject(id);
+  const { user, isAdmin } = useAuth();
+  
+  // Fallback to JSON data if database is empty
+  const jsonProject = projectsData.find((p: JSONProject) => p.id === id) as JSONProject | undefined;
+  
+  // Normalize project data
+  const project = dbProject ? {
+    id: dbProject.id,
+    title: dbProject.title,
+    description: dbProject.description || '',
+    category: dbProject.category || '',
+    tech: dbProject.tech,
+    year: dbProject.year || '',
+    status: dbProject.status || 'completed',
+    featured: dbProject.featured || false,
+    keyResults: dbProject.key_results,
+    links: {
+      github: dbProject.github_link,
+      writeup: dbProject.writeup_link,
+      demo: dbProject.demo_link,
+    },
+    image: dbProject.image || '',
+    tags: dbProject.tags,
+    access_level: dbProject.access_level,
+  } : jsonProject ? {
+    ...jsonProject,
+    access_level: 'public' as const,
+  } : null;
+
+  // Get related projects from JSON for now
   const relatedProjects = projectsData
-    .filter((p: Project) => p.id !== id && p.category === project?.category)
+    .filter((p: JSONProject) => p.id !== id && p.category === project?.category)
     .slice(0, 3);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   if (!project) {
     return <Navigate to="/projects" replace />;
+  }
+
+  // Check access for protected projects
+  const accessLevel = project.access_level || 'public';
+  const hasAccess = accessLevel === 'public' || 
+    (accessLevel === 'basic' && user) || 
+    (accessLevel === 'admin' && isAdmin);
+
+  if (!hasAccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center py-12 px-4">
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent" />
+        <div className="absolute inset-0 cyber-grid opacity-20" />
+        
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative text-center max-w-md"
+        >
+          <div className="w-20 h-20 rounded-2xl bg-warning/10 border border-warning/20 flex items-center justify-center mx-auto mb-6">
+            <Lock className="w-10 h-10 text-warning" />
+          </div>
+          <h1 className="text-2xl font-bold text-foreground mb-2">Access Restricted</h1>
+          <p className="text-muted-foreground mb-6">
+            {accessLevel === 'admin' 
+              ? 'This solution is only available to administrators.'
+              : 'You need to sign in to view this solution.'}
+          </p>
+          <AccessBadge level={accessLevel} className="mb-6" />
+          <div className="flex flex-col gap-3">
+            {!user && (
+              <Button asChild className="bg-primary hover:bg-primary/90">
+                <Link to="/auth">
+                  <LogIn className="w-4 h-4 mr-2" />
+                  Sign In to View
+                </Link>
+              </Button>
+            )}
+            <Button variant="outline" asChild>
+              <Link to="/projects">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Solutions
+              </Link>
+            </Button>
+          </div>
+        </motion.div>
+      </div>
+    );
   }
 
   const CategoryIcon = getCategoryIcon(project.category);
@@ -100,6 +189,9 @@ export default function ProjectDetail() {
                   <span className="px-3 py-1 text-xs font-semibold rounded-full bg-secondary/20 text-secondary border border-secondary/30">
                     Featured
                   </span>
+                )}
+                {accessLevel !== 'public' && (
+                  <AccessBadge level={accessLevel} />
                 )}
               </div>
               
@@ -316,6 +408,10 @@ export default function ProjectDetail() {
                     <span className="text-muted-foreground">Technologies</span>
                     <span className="font-medium text-foreground">{project.tech.length} tools</span>
                   </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Access</span>
+                    <AccessBadge level={accessLevel} />
+                  </div>
                 </div>
               </motion.div>
 
@@ -407,23 +503,19 @@ export default function ProjectDetail() {
                     >
                       <div className="rounded-2xl border border-border/50 bg-card/50 p-6 transition-all duration-300 hover:border-primary/30 hover:bg-card/80 hover:-translate-y-1 hover:shadow-cyber">
                         <div className="flex items-center gap-4 mb-4">
-                          <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+                          <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center group-hover:scale-110 transition-transform">
                             <RelatedIcon className="w-6 h-6 text-primary" />
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <span className="text-xs text-muted-foreground uppercase tracking-wider">{related.category}</span>
-                            <h3 className="font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+                          <div>
+                            <span className="text-xs text-muted-foreground">{related.category}</span>
+                            <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
                               {related.title}
                             </h3>
                           </div>
                         </div>
-                        <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
+                        <p className="text-sm text-muted-foreground line-clamp-2">
                           {related.description}
                         </p>
-                        <div className="flex items-center text-primary text-sm font-medium">
-                          Learn more
-                          <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
-                        </div>
                       </div>
                     </Link>
                   </motion.div>
@@ -434,33 +526,28 @@ export default function ProjectDetail() {
         </section>
       )}
 
-      {/* CTA Section */}
-      <section className="py-16 md:py-24 bg-gradient-to-b from-transparent via-card/30 to-transparent">
+      {/* CTA */}
+      <section className="py-16 md:py-24">
         <div className="container">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="relative rounded-3xl border border-border/50 bg-gradient-to-br from-card via-card/80 to-card/50 p-8 md:p-12 overflow-hidden"
+            className="text-center"
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-secondary/5" />
-            <div className="absolute inset-0 cyber-grid opacity-10" />
-            
-            <div className="relative text-center max-w-2xl mx-auto">
-              <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-4">
-                Interested in Similar Solutions?
-              </h2>
-              <p className="text-muted-foreground mb-8">
-                Let's discuss how I can help build custom security tools for your specific needs.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Button size="lg" asChild className="bg-primary hover:bg-primary/90 shadow-glow-cyan">
-                  <Link to="/contact">Get in Touch</Link>
-                </Button>
-                <Button size="lg" variant="outline" asChild className="border-border hover:border-primary/50">
-                  <Link to="/projects">View All Solutions</Link>
-                </Button>
-              </div>
+            <h2 className="text-2xl font-bold text-foreground mb-4">
+              Interested in this solution?
+            </h2>
+            <p className="text-muted-foreground mb-8">
+              Let's discuss how it can be adapted for your security needs.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Button size="lg" asChild className="bg-primary hover:bg-primary/90 shadow-glow-cyan">
+                <Link to="/contact">Get in Touch</Link>
+              </Button>
+              <Button size="lg" variant="outline" asChild>
+                <Link to="/projects">View All Solutions</Link>
+              </Button>
             </div>
           </motion.div>
         </div>

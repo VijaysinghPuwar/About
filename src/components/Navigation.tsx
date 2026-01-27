@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, X, Shield, Terminal, FileText, User, Mail, Briefcase } from 'lucide-react';
+import { Menu, Shield, Terminal, FileText, User, Mail, Briefcase, LogIn, LogOut, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 
 const navItems = [
   { name: 'Home', path: '/', icon: Terminal },
@@ -17,12 +18,18 @@ const navItems = [
 export function Navigation() {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
+  const { user, isAdmin, signOut } = useAuth();
 
   const isActive = (path: string) => {
     if (path === '/') {
       return location.pathname === '/';
     }
     return location.pathname.startsWith(path);
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    setIsOpen(false);
   };
 
   const NavLink = ({ item, mobile = false }: { item: typeof navItems[0]; mobile?: boolean }) => {
@@ -68,29 +75,64 @@ export function Navigation() {
           {navItems.map((item) => (
             <NavLink key={item.path} item={item} />
           ))}
+          {isAdmin && (
+            <Link
+              to="/admin"
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                "hover:bg-card-elevated hover:text-secondary",
+                isActive('/admin')
+                  ? "bg-secondary/10 text-secondary border border-secondary/20"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Settings className="w-4 h-4" />
+              Admin
+            </Link>
+          )}
         </div>
 
         {/* CTA Buttons - Desktop */}
         <div className="hidden md:flex items-center gap-3">
-          <Button 
-            variant="outline" 
-            size="sm"
-            asChild
-            className="border-primary/20 hover:border-primary/40 hover:bg-primary/5"
-          >
-            <a href="/resume.pdf" target="_blank" rel="noopener noreferrer">
-              View Resume
-            </a>
-          </Button>
-          <Button 
-            size="sm"
-            asChild
-            className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-glow-cyan"
-          >
-            <Link to="/contact">
-              Get In Touch
-            </Link>
-          </Button>
+          {user ? (
+            <>
+              <span className="text-sm text-muted-foreground truncate max-w-32">
+                {user.email}
+              </span>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleSignOut}
+                className="border-border/50 hover:border-destructive/50 hover:bg-destructive/5 hover:text-destructive"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Sign Out
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button 
+                variant="outline" 
+                size="sm"
+                asChild
+                className="border-primary/20 hover:border-primary/40 hover:bg-primary/5"
+              >
+                <Link to="/auth">
+                  <LogIn className="w-4 h-4 mr-2" />
+                  Sign In
+                </Link>
+              </Button>
+              <Button 
+                size="sm"
+                asChild
+                className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-glow-cyan"
+              >
+                <Link to="/contact">
+                  Get In Touch
+                </Link>
+              </Button>
+            </>
+          )}
         </div>
 
         {/* Mobile Menu */}
@@ -113,33 +155,72 @@ export function Navigation() {
                   </div>
                 </div>
 
+                {/* User Info */}
+                {user && (
+                  <div className="px-3 py-2 rounded-lg bg-muted/50 border border-border/50">
+                    <p className="text-sm text-muted-foreground">Signed in as</p>
+                    <p className="text-sm font-medium text-foreground truncate">{user.email}</p>
+                  </div>
+                )}
+
                 {/* Navigation Links */}
                 <div className="flex flex-col gap-2">
                   {navItems.map((item) => (
                     <NavLink key={item.path} item={item} mobile />
                   ))}
+                  {isAdmin && (
+                    <Link
+                      to="/admin"
+                      onClick={() => setIsOpen(false)}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 w-full justify-start",
+                        "hover:bg-card-elevated hover:text-secondary",
+                        isActive('/admin')
+                          ? "bg-secondary/10 text-secondary border border-secondary/20"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <Settings className="w-4 h-4" />
+                      Admin
+                    </Link>
+                  )}
                 </div>
 
                 {/* Mobile CTA Buttons */}
                 <div className="flex flex-col gap-3 pt-4 border-t border-border">
-                  <Button 
-                    variant="outline" 
-                    className="w-full border-primary/20 hover:border-primary/40"
-                    asChild
-                  >
-                    <a href="/resume.pdf" target="_blank" rel="noopener noreferrer">
-                      View Resume (PDF)
-                    </a>
-                  </Button>
-                  <Button 
-                    className="w-full bg-primary hover:bg-primary/90"
-                    asChild
-                    onClick={() => setIsOpen(false)}
-                  >
-                    <Link to="/contact">
-                      Get In Touch
-                    </Link>
-                  </Button>
+                  {user ? (
+                    <Button 
+                      variant="outline" 
+                      className="w-full border-destructive/20 hover:border-destructive/40 text-destructive"
+                      onClick={handleSignOut}
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Sign Out
+                    </Button>
+                  ) : (
+                    <>
+                      <Button 
+                        variant="outline" 
+                        className="w-full border-primary/20 hover:border-primary/40"
+                        asChild
+                        onClick={() => setIsOpen(false)}
+                      >
+                        <Link to="/auth">
+                          <LogIn className="w-4 h-4 mr-2" />
+                          Sign In
+                        </Link>
+                      </Button>
+                      <Button 
+                        className="w-full bg-primary hover:bg-primary/90"
+                        asChild
+                        onClick={() => setIsOpen(false)}
+                      >
+                        <Link to="/contact">
+                          Get In Touch
+                        </Link>
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             </SheetContent>
