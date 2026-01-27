@@ -1,10 +1,14 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ServiceCard } from '@/components/ServiceCard';
 import { FeaturedService } from '@/components/FeaturedService';
+import { AccessBadge } from '@/components/AccessBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, Zap, Shield, Cloud, Network, Code, Terminal, ChevronDown } from 'lucide-react';
+import { Search, Zap, Shield, Cloud, Network, Code, Terminal, ChevronDown, Loader2, Lock, LogIn } from 'lucide-react';
+import { useProjects } from '@/hooks/useProjects';
+import { useAuth } from '@/hooks/useAuth';
 import projectsData from '@/data/projects.json';
 
 const categories = [
@@ -16,22 +20,48 @@ const categories = [
   { id: 'research', label: 'Research', icon: Terminal },
 ];
 
+// Transform JSON data to match database structure for fallback
+const fallbackProjects = projectsData.map(p => ({
+  id: p.id,
+  title: p.title,
+  description: p.description,
+  category: p.category,
+  tech: p.tech,
+  year: p.year,
+  status: p.status,
+  featured: p.featured,
+  key_results: p.keyResults,
+  github_link: p.links.github,
+  writeup_link: p.links.writeup,
+  demo_link: p.links.demo,
+  image: p.image,
+  tags: p.tags,
+  access_level: 'public' as const,
+  created_at: '',
+  updated_at: '',
+}));
+
 export default function Projects() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showAll, setShowAll] = useState(false);
+  const { projects: dbProjects, loading, error } = useProjects();
+  const { user } = useAuth();
 
-  const filteredProjects = projectsData.filter(project => {
+  // Use database projects if available, otherwise fallback to JSON
+  const allProjects = dbProjects.length > 0 ? dbProjects : fallbackProjects;
+
+  const filteredProjects = allProjects.filter(project => {
     const matchesSearch = project.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (project.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       project.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
     
     let matchesCategory = selectedCategory === 'all';
-    if (selectedCategory === 'automation') matchesCategory = project.category.toLowerCase() === 'automation';
-    if (selectedCategory === 'cloud-security') matchesCategory = project.category.toLowerCase().includes('cloud');
-    if (selectedCategory === 'network-security') matchesCategory = project.category.toLowerCase().includes('network');
-    if (selectedCategory === 'application') matchesCategory = project.category.toLowerCase().includes('application');
-    if (selectedCategory === 'research') matchesCategory = project.category.toLowerCase() === 'research' || project.category.toLowerCase().includes('low-level');
+    if (selectedCategory === 'automation') matchesCategory = (project.category || '').toLowerCase() === 'automation';
+    if (selectedCategory === 'cloud-security') matchesCategory = (project.category || '').toLowerCase().includes('cloud');
+    if (selectedCategory === 'network-security') matchesCategory = (project.category || '').toLowerCase().includes('network');
+    if (selectedCategory === 'application') matchesCategory = (project.category || '').toLowerCase().includes('application');
+    if (selectedCategory === 'research') matchesCategory = (project.category || '').toLowerCase() === 'research' || (project.category || '').toLowerCase().includes('low-level');
 
     return matchesSearch && matchesCategory;
   });
@@ -39,6 +69,27 @@ export default function Projects() {
   const featuredProjects = filteredProjects.filter(p => p.featured);
   const regularProjects = filteredProjects.filter(p => !p.featured);
   const displayedProjects = showAll ? regularProjects : regularProjects.slice(0, 6);
+
+  // Transform for component compatibility
+  const transformForComponent = (project: typeof allProjects[0]) => ({
+    id: project.id,
+    title: project.title,
+    description: project.description || '',
+    category: project.category || '',
+    tech: project.tech,
+    year: project.year || '',
+    status: project.status || 'completed',
+    featured: project.featured || false,
+    keyResults: project.key_results,
+    links: {
+      github: project.github_link,
+      writeup: project.writeup_link,
+      demo: project.demo_link,
+    },
+    image: project.image || '',
+    tags: project.tags,
+    access_level: project.access_level,
+  });
 
   return (
     <div className="min-h-screen">
@@ -71,6 +122,27 @@ export default function Projects() {
               Enterprise-grade security automation, cloud infrastructure protection, 
               and network security solutions built with modern tools and best practices.
             </p>
+
+            {/* Login prompt for protected content */}
+            {!user && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="inline-flex items-center gap-3 px-4 py-3 rounded-xl bg-warning/10 border border-warning/20"
+              >
+                <Lock className="w-5 h-5 text-warning" />
+                <span className="text-sm text-warning">
+                  Some solutions require authentication to view
+                </span>
+                <Button size="sm" variant="outline" asChild className="border-warning/30 hover:bg-warning/10">
+                  <Link to="/auth">
+                    <LogIn className="w-4 h-4 mr-2" />
+                    Sign In
+                  </Link>
+                </Button>
+              </motion.div>
+            )}
 
             {/* Search */}
             <div className="max-w-md mx-auto pt-4">
@@ -116,37 +188,48 @@ export default function Projects() {
         </div>
       </section>
 
-      {/* Stats Bar */}
-      <section className="py-12 border-b border-border/30">
-        <div className="container">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
-            {[
-              { label: 'Total Solutions', value: projectsData.length, icon: Shield },
-              { label: 'Featured', value: projectsData.filter(p => p.featured).length, icon: Zap },
-              { label: 'Technologies', value: '15+', icon: Code },
-              { label: 'Categories', value: '5', icon: Network },
-            ].map((stat, i) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                className="text-center"
-              >
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 mb-3">
-                  <stat.icon className="w-5 h-5 text-primary" />
-                </div>
-                <div className="text-2xl md:text-3xl font-bold text-foreground">{stat.value}</div>
-                <div className="text-sm text-muted-foreground">{stat.label}</div>
-              </motion.div>
-            ))}
+      {/* Loading State */}
+      {loading && (
+        <section className="py-24">
+          <div className="container flex justify-center">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
-        </div>
-      </section>
+        </section>
+      )}
+
+      {/* Stats Bar */}
+      {!loading && (
+        <section className="py-12 border-b border-border/30">
+          <div className="container">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
+              {[
+                { label: 'Total Solutions', value: allProjects.length, icon: Shield },
+                { label: 'Featured', value: allProjects.filter(p => p.featured).length, icon: Zap },
+                { label: 'Technologies', value: '15+', icon: Code },
+                { label: 'Categories', value: '5', icon: Network },
+              ].map((stat, i) => (
+                <motion.div
+                  key={stat.label}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.1 }}
+                  className="text-center"
+                >
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 mb-3">
+                    <stat.icon className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="text-2xl md:text-3xl font-bold text-foreground">{stat.value}</div>
+                  <div className="text-sm text-muted-foreground">{stat.label}</div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Featured Solutions */}
-      {featuredProjects.length > 0 && (
+      {!loading && featuredProjects.length > 0 && (
         <section className="py-16 md:py-24">
           <div className="container">
             <motion.div
@@ -166,12 +249,18 @@ export default function Projects() {
 
             <div className="space-y-16 md:space-y-24">
               {featuredProjects.map((project, index) => (
-                <FeaturedService 
-                  key={project.id} 
-                  project={project} 
-                  index={index}
-                  reversed={index % 2 === 1}
-                />
+                <div key={project.id} className="relative">
+                  {project.access_level !== 'public' && (
+                    <div className="absolute top-4 right-4 z-10">
+                      <AccessBadge level={project.access_level} />
+                    </div>
+                  )}
+                  <FeaturedService 
+                    project={transformForComponent(project)} 
+                    index={index}
+                    reversed={index % 2 === 1}
+                  />
+                </div>
               ))}
             </div>
           </div>
@@ -179,7 +268,7 @@ export default function Projects() {
       )}
 
       {/* All Solutions Grid */}
-      {regularProjects.length > 0 && (
+      {!loading && regularProjects.length > 0 && (
         <section className="py-16 md:py-24 bg-gradient-to-b from-transparent via-card/30 to-transparent">
           <div className="container">
             <motion.div
@@ -200,11 +289,17 @@ export default function Projects() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
               {displayedProjects.map((project, index) => (
-                <ServiceCard 
-                  key={project.id} 
-                  project={project} 
-                  index={index}
-                />
+                <div key={project.id} className="relative">
+                  {project.access_level !== 'public' && (
+                    <div className="absolute top-4 right-4 z-10">
+                      <AccessBadge level={project.access_level} showLabel={false} />
+                    </div>
+                  )}
+                  <ServiceCard 
+                    project={transformForComponent(project)} 
+                    index={index}
+                  />
+                </div>
               ))}
             </div>
 
@@ -232,7 +327,7 @@ export default function Projects() {
       )}
 
       {/* Empty State */}
-      {filteredProjects.length === 0 && (
+      {!loading && filteredProjects.length === 0 && (
         <section className="py-24">
           <div className="container">
             <div className="text-center">
