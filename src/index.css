@@ -7,35 +7,36 @@
 
 /* Cybersecurity Portfolio Design System */
 @layer base {
-  :root {
-    /* Core Dark Theme - Cybersecurity Aesthetic */
-    --background: 222 84% 4.9%; /* #0f172a - Deep slate */
-    --foreground: 0 0% 98%; /* #fafafa - Near white */
+  /* Blue Theme (Default) */
+  :root, .theme-blue {
+    /* Core Dark Theme */
+    --background: 222 84% 4.9%;
+    --foreground: 0 0% 98%;
 
-    /* Card system with subtle elevation */
-    --card: 222 84% 6.5%; /* Slightly lighter than background */
+    /* Card system */
+    --card: 222 84% 6.5%;
     --card-foreground: 0 0% 95%;
-    --card-elevated: 222 84% 8.5%; /* For hover states */
+    --card-elevated: 222 84% 8.5%;
 
-    /* Popover system */
+    /* Popover */
     --popover: 222 84% 5.5%;
     --popover-foreground: 0 0% 95%;
 
-    /* Neon Accent System */
-    --primary: 180 100% 50%; /* #00f7ff - Cyan glow */
+    /* Blue Accent System */
+    --primary: 210 100% 50%;
     --primary-foreground: 222 84% 4.9%;
-    --primary-glow: 180 100% 70%; /* Lighter cyan for glows */
+    --primary-glow: 210 100% 70%;
 
-    /* Secondary violet system */
-    --secondary: 258 90% 66%; /* #a78bfa - Violet */
+    /* Secondary */
+    --secondary: 258 90% 66%;
     --secondary-foreground: 222 84% 4.9%;
     --secondary-glow: 258 90% 80%;
 
-    /* Muted system for less prominent elements */
-    --muted: 215 28% 17%; /* Dark blue-gray */
+    /* Muted */
+    --muted: 215 28% 17%;
     --muted-foreground: 215 20% 65%;
 
-    /* Accent system */
+    /* Accent */
     --accent: 215 28% 17%;
     --accent-foreground: 0 0% 95%;
 
@@ -47,34 +48,81 @@
     --warning: 38 92% 50%;
     --warning-foreground: 222 84% 4.9%;
 
-    /* Interactive elements */
+    /* Interactive */
     --border: 215 28% 17%;
     --input: 215 28% 17%;
-    --ring: 180 100% 50%; /* Cyan ring for focus states */
+    --ring: 210 100% 50%;
 
-    /* Border radius */
     --radius: 0.5rem;
 
-    /* Custom cybersecurity elements */
+    /* Custom elements */
     --grid-color: 215 28% 17%;
-    --scanline-color: 180 100% 50%;
+    --scanline-color: 210 100% 50%;
     --terminal-green: 142 76% 36%;
     --danger-red: 0 84% 60%;
     --warning-amber: 38 92% 50%;
-    
-    /* Red Team theme colors */
-    --red-team-primary: 0 85% 60%;
-    --red-team-primary-foreground: 0 0% 100%;
-    --red-team-secondary: 15 80% 50%;
-    --red-team-secondary-foreground: 0 0% 100%;
-    --red-team-accent: 5 90% 65%;
-    --red-team-muted: 0 20% 15%;
-    --red-team-border: 0 40% 25%;
-    --red-team-glow: 0 85% 60%;
 
     /* Glow effects */
-    --glow-cyan: 0 0 20px hsl(180 100% 50% / 0.3);
+    --glow-cyan: 0 0 20px hsl(210 100% 50% / 0.3);
     --glow-violet: 0 0 20px hsl(258 90% 66% / 0.3);
+    --glow-success: 0 0 20px hsl(142 76% 36% / 0.3);
+  }
+
+  /* Red Theme */
+  .theme-red {
+    --background: 0 20% 5%;
+    --foreground: 0 0% 98%;
+
+    /* Card system */
+    --card: 0 20% 7%;
+    --card-foreground: 0 0% 95%;
+    --card-elevated: 0 20% 10%;
+
+    /* Popover */
+    --popover: 0 20% 6%;
+    --popover-foreground: 0 0% 95%;
+
+    /* Red Accent System */
+    --primary: 0 85% 55%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 0 85% 70%;
+
+    /* Secondary - Orange accent */
+    --secondary: 25 95% 55%;
+    --secondary-foreground: 0 0% 100%;
+    --secondary-glow: 25 95% 70%;
+
+    /* Muted */
+    --muted: 0 15% 15%;
+    --muted-foreground: 0 10% 60%;
+
+    /* Accent */
+    --accent: 0 15% 15%;
+    --accent-foreground: 0 0% 95%;
+
+    /* Status colors */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 20% 5%;
+
+    /* Interactive */
+    --border: 0 20% 20%;
+    --input: 0 20% 20%;
+    --ring: 0 85% 55%;
+
+    /* Custom elements */
+    --grid-color: 0 20% 20%;
+    --scanline-color: 0 85% 55%;
+    --terminal-green: 142 76% 36%;
+    --danger-red: 0 84% 60%;
+    --warning-amber: 38 92% 50%;
+
+    /* Glow effects */
+    --glow-cyan: 0 0 20px hsl(0 85% 55% / 0.3);
+    --glow-violet: 0 0 20px hsl(25 95% 55% / 0.3);
     --glow-success: 0 0 20px hsl(142 76% 36% / 0.3);
   }
 }

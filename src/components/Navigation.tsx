@@ -5,6 +5,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Menu, Shield, Terminal, FileText, User, Mail, Briefcase, LogIn, LogOut, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const navItems = [
   { name: 'Home', path: '/', icon: Terminal },
@@ -92,8 +93,9 @@ export function Navigation() {
           )}
         </div>
 
-        {/* CTA Buttons - Desktop */}
-        <div className="hidden md:flex items-center gap-3">
+        {/* Theme Toggle + CTA Buttons - Desktop */}
+        <div className="hidden md:flex items-center gap-2">
+          <ThemeToggle />
           {user ? (
             <>
               <span className="text-sm text-muted-foreground truncate max-w-32">
