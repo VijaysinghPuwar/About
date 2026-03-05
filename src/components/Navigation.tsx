@@ -95,7 +95,7 @@ export function Navigation() {
 
         {/* Theme Toggle + CTA Buttons - Desktop */}
         <div className="hidden md:flex items-center gap-2">
-          <ThemeToggle />
+          <ThemeToggle showLabel />
           {user ? (
             <>
               <span className="text-sm text-muted-foreground truncate max-w-32">
@@ -186,6 +186,11 @@ export function Navigation() {
                       Admin
                     </Link>
                   )}
+                </div>
+
+                {/* Pentest Mode Toggle - Mobile */}
+                <div className="pt-2">
+                  <ThemeToggle showLabel />
                 </div>
 
                 {/* Mobile CTA Buttons */}

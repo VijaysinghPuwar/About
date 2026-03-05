@@ -68,9 +68,9 @@
     --glow-success: 0 0 20px hsl(142 76% 36% / 0.3);
   }
 
-  /* Red Theme */
-  .theme-red {
-    --background: 0 20% 5%;
+  /* Pentest Mode - Full Red Theme */
+  .theme-pentest {
+    --background: 0 20% 4.5%;
     --foreground: 0 0% 98%;
 
     /* Card system */
@@ -87,49 +87,50 @@
     --primary-foreground: 0 0% 100%;
     --primary-glow: 0 85% 70%;
 
-    /* Secondary - Orange accent */
-    --secondary: 25 95% 55%;
+    /* Secondary - Darker red/crimson */
+    --secondary: 15 80% 50%;
     --secondary-foreground: 0 0% 100%;
-    --secondary-glow: 25 95% 70%;
+    --secondary-glow: 15 80% 65%;
 
     /* Muted */
     --muted: 0 15% 15%;
-    --muted-foreground: 0 10% 60%;
+    --muted-foreground: 0 10% 63%;
 
     /* Accent */
-    --accent: 0 15% 15%;
+    --accent: 0 20% 14%;
     --accent-foreground: 0 0% 95%;
 
     /* Status colors */
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    --success: 142 76% 36%;
+    --success: 0 70% 50%;
     --success-foreground: 0 0% 98%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 20% 5%;
+    --warning: 15 90% 55%;
+    --warning-foreground: 0 0% 100%;
 
     /* Interactive */
-    --border: 0 20% 20%;
-    --input: 0 20% 20%;
+    --border: 0 20% 18%;
+    --input: 0 20% 18%;
     --ring: 0 85% 55%;
 
     /* Custom elements */
-    --grid-color: 0 20% 20%;
+    --grid-color: 0 20% 18%;
     --scanline-color: 0 85% 55%;
-    --terminal-green: 142 76% 36%;
+    --terminal-green: 0 85% 55%;
     --danger-red: 0 84% 60%;
-    --warning-amber: 38 92% 50%;
+    --warning-amber: 15 90% 55%;
 
-    /* Glow effects */
+    /* Glow effects - all red */
     --glow-cyan: 0 0 20px hsl(0 85% 55% / 0.3);
-    --glow-violet: 0 0 20px hsl(25 95% 55% / 0.3);
-    --glow-success: 0 0 20px hsl(142 76% 36% / 0.3);
+    --glow-violet: 0 0 20px hsl(15 80% 50% / 0.3);
+    --glow-success: 0 0 20px hsl(0 70% 50% / 0.3);
   }
 }
 
 @layer base {
   * {
     @apply border-border;
+    transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
   }
 
   body {
