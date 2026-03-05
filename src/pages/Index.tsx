@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 import projectsData from '@/data/projects.json';
 import writeupsData from '@/data/writeups.json';
 import heroImage from '@/assets/hero-bg.jpg';
+import profilePhoto from '@/assets/profile-photo.jpg';
 
 const tools = [
   'Nmap', 'Wireshark', 'Burp Suite', 'Metasploit', 'Python', 'PowerShell', 
@@ -72,8 +73,18 @@ const Index = () => {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
-            className="space-y-6"
+            className="space-y-6 flex flex-col items-center"
           >
+            {/* Profile Photo */}
+            <div className="relative">
+              <img
+                src={profilePhoto}
+                alt="Vijaysingh Puwar profile photo"
+                className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-primary object-cover ring-4 ring-primary/30 shadow-lg"
+              />
+              <div className="absolute inset-0 w-32 h-32 md:w-40 md:h-40 rounded-full ring-4 ring-primary/20 animate-glow-pulse" />
+            </div>
+
             <h1 className="text-5xl md:text-7xl font-bold">
               <span className="text-foreground">Vijaysingh</span>{' '}
               <span className="bg-gradient-to-r from-primary via-secondary to-primary bg-clip-text text-transparent">
@@ -85,11 +96,11 @@ const Index = () => {
               Cybersecurity Engineer
             </p>
             
-            <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto">
+            <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
               Identity & Access Management • Network Security • Cloud Security
             </p>
             
-            <p className="text-base md:text-lg text-foreground/80 max-w-4xl mx-auto">
+            <p className="text-base md:text-lg text-foreground/80 max-w-4xl mx-auto leading-relaxed">
               Building secure systems with Python, PowerShell, and hands-on security controls.
             </p>
           </motion.div>

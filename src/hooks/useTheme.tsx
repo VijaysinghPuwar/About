@@ -1,11 +1,12 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-type Theme = 'blue' | 'red';
+type Theme = 'default' | 'pentest';
 
 interface ThemeContextType {
   theme: Theme;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
+  isPentest: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -13,24 +14,24 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window !== 'undefined') {
-      return (localStorage.getItem('theme') as Theme) || 'blue';
+      return (localStorage.getItem('pentest-mode') as Theme) || 'default';
     }
-    return 'blue';
+    return 'default';
   });
 
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.remove('theme-blue', 'theme-red');
+    root.classList.remove('theme-default', 'theme-pentest');
     root.classList.add(`theme-${theme}`);
-    localStorage.setItem('theme', theme);
+    localStorage.setItem('pentest-mode', theme);
   }, [theme]);
 
   const toggleTheme = () => {
-    setTheme(theme === 'blue' ? 'red' : 'blue');
+    setTheme(theme === 'default' ? 'pentest' : 'default');
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme, isPentest: theme === 'pentest' }}>
       {children}
     </ThemeContext.Provider>
   );
