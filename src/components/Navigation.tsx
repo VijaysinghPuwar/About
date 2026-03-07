@@ -1,11 +1,21 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, Shield, Terminal, FileText, User, Mail, Briefcase, LogIn, LogOut, Settings } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Menu, Shield, Terminal, FileText, User, Mail, Briefcase, LogIn, LogOut, Settings, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { supabase } from '@/integrations/supabase/client';
 
 const navItems = [
   { name: 'Home', path: '/', icon: Terminal },
@@ -18,14 +28,27 @@ const navItems = [
 
 export function Navigation() {
   const [isOpen, setIsOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const location = useLocation();
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, profile, isAdmin, signOut } = useAuth();
 
   const isActive = (path: string) => {
-    if (path === '/') {
-      return location.pathname === '/';
-    }
+    if (path === '/') return location.pathname === '/';
     return location.pathname.startsWith(path);
+  };
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetchUnreadCount();
+    }
+  }, [isAdmin]);
+
+  const fetchUnreadCount = async () => {
+    const { count } = await supabase
+      .from('admin_notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('read', false);
+    setUnreadCount(count || 0);
   };
 
   const handleSignOut = async () => {
@@ -33,10 +56,13 @@ export function Navigation() {
     setIsOpen(false);
   };
 
+  const userInitials = profile?.full_name
+    ? profile.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    : user?.email?.[0]?.toUpperCase() || '?';
+
   const NavLink = ({ item, mobile = false }: { item: typeof navItems[0]; mobile?: boolean }) => {
     const active = isActive(item.path);
     const Icon = item.icon;
-    
     return (
       <Link
         to={item.path}
@@ -44,8 +70,8 @@ export function Navigation() {
         className={cn(
           "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
           "hover:bg-card-elevated hover:text-primary",
-          active 
-            ? "bg-primary/10 text-primary border border-primary/20 glow-cyan" 
+          active
+            ? "bg-primary/10 text-primary border border-primary/20 glow-cyan"
             : "text-muted-foreground hover:text-foreground",
           mobile && "w-full justify-start"
         )}
@@ -55,6 +81,55 @@ export function Navigation() {
       </Link>
     );
   };
+
+  const UserMenu = () => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
+          <Avatar className="h-9 w-9 border border-border/50">
+            <AvatarImage src={profile?.avatar_url || undefined} alt={profile?.full_name || ''} />
+            <AvatarFallback className="bg-primary/10 text-primary text-xs">{userInitials}</AvatarFallback>
+          </Avatar>
+          {profile?.status === 'pending' && (
+            <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-warning border-2 border-background" />
+          )}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56 bg-card border-border">
+        <div className="px-3 py-2">
+          <p className="text-sm font-medium text-foreground truncate">{profile?.full_name || 'User'}</p>
+          <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+          {profile?.status === 'pending' && (
+            <Badge variant="outline" className="mt-1 text-warning border-warning/30 text-xs">Pending</Badge>
+          )}
+        </div>
+        <DropdownMenuSeparator />
+        {isAdmin && (
+          <>
+            <DropdownMenuItem asChild>
+              <Link to="/admin" className="flex items-center gap-2 cursor-pointer">
+                <Settings className="w-4 h-4" />
+                Admin Dashboard
+                {unreadCount > 0 && (
+                  <Badge className="ml-auto bg-destructive text-destructive-foreground text-xs h-5 min-w-5 flex items-center justify-center">
+                    {unreadCount}
+                  </Badge>
+                )}
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
+        <DropdownMenuItem
+          onClick={handleSignOut}
+          className="text-destructive focus:text-destructive cursor-pointer"
+        >
+          <LogOut className="w-4 h-4 mr-2" />
+          Sign Out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -76,69 +151,30 @@ export function Navigation() {
           {navItems.map((item) => (
             <NavLink key={item.path} item={item} />
           ))}
-          {isAdmin && (
-            <Link
-              to="/admin"
-              className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
-                "hover:bg-card-elevated hover:text-secondary",
-                isActive('/admin')
-                  ? "bg-secondary/10 text-secondary border border-secondary/20"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Settings className="w-4 h-4" />
-              Admin
-            </Link>
-          )}
         </div>
 
-        {/* Theme Toggle + CTA Buttons - Desktop */}
+        {/* Theme Toggle + Auth - Desktop */}
         <div className="hidden md:flex items-center gap-2">
           <ThemeToggle showLabel />
           {user ? (
-            <>
-              <span className="text-sm text-muted-foreground truncate max-w-32">
-                {user.email}
-              </span>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={handleSignOut}
-                className="border-border/50 hover:border-destructive/50 hover:bg-destructive/5 hover:text-destructive"
-              >
-                <LogOut className="w-4 h-4 mr-2" />
-                Sign Out
-              </Button>
-            </>
+            <UserMenu />
           ) : (
-            <>
-              <Button 
-                variant="outline" 
-                size="sm"
-                asChild
-                className="border-primary/20 hover:border-primary/40 hover:bg-primary/5"
-              >
-                <Link to="/auth">
-                  <LogIn className="w-4 h-4 mr-2" />
-                  Sign In
-                </Link>
-              </Button>
-              <Button 
-                size="sm"
-                asChild
-                className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-glow-cyan"
-              >
-                <Link to="/contact">
-                  Get In Touch
-                </Link>
-              </Button>
-            </>
+            <Button
+              size="sm"
+              asChild
+              className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-glow-cyan"
+            >
+              <Link to="/login">
+                <LogIn className="w-4 h-4 mr-2" />
+                Sign In
+              </Link>
+            </Button>
           )}
         </div>
 
         {/* Mobile Menu */}
-        <div className="md:hidden">
+        <div className="md:hidden flex items-center gap-2">
+          {user && <UserMenu />}
           <Sheet open={isOpen} onOpenChange={setIsOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="sm" className="w-9 px-0">
@@ -148,7 +184,6 @@ export function Navigation() {
             </SheetTrigger>
             <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-card border-border">
               <div className="flex flex-col gap-6 mt-6">
-                {/* Mobile Logo */}
                 <div className="flex items-center gap-2 pb-4 border-b border-border">
                   <Shield className="w-6 h-6 text-primary" />
                   <div>
@@ -157,76 +192,28 @@ export function Navigation() {
                   </div>
                 </div>
 
-                {/* User Info */}
-                {user && (
-                  <div className="px-3 py-2 rounded-lg bg-muted/50 border border-border/50">
-                    <p className="text-sm text-muted-foreground">Signed in as</p>
-                    <p className="text-sm font-medium text-foreground truncate">{user.email}</p>
-                  </div>
-                )}
-
-                {/* Navigation Links */}
                 <div className="flex flex-col gap-2">
                   {navItems.map((item) => (
                     <NavLink key={item.path} item={item} mobile />
                   ))}
-                  {isAdmin && (
-                    <Link
-                      to="/admin"
-                      onClick={() => setIsOpen(false)}
-                      className={cn(
-                        "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 w-full justify-start",
-                        "hover:bg-card-elevated hover:text-secondary",
-                        isActive('/admin')
-                          ? "bg-secondary/10 text-secondary border border-secondary/20"
-                          : "text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      <Settings className="w-4 h-4" />
-                      Admin
-                    </Link>
-                  )}
                 </div>
 
-                {/* Pentest Mode Toggle - Mobile */}
                 <div className="pt-2">
                   <ThemeToggle showLabel />
                 </div>
 
-                {/* Mobile CTA Buttons */}
                 <div className="flex flex-col gap-3 pt-4 border-t border-border">
-                  {user ? (
-                    <Button 
-                      variant="outline" 
-                      className="w-full border-destructive/20 hover:border-destructive/40 text-destructive"
-                      onClick={handleSignOut}
+                  {!user && (
+                    <Button
+                      className="w-full bg-primary hover:bg-primary/90"
+                      asChild
+                      onClick={() => setIsOpen(false)}
                     >
-                      <LogOut className="w-4 h-4 mr-2" />
-                      Sign Out
+                      <Link to="/login">
+                        <LogIn className="w-4 h-4 mr-2" />
+                        Sign In
+                      </Link>
                     </Button>
-                  ) : (
-                    <>
-                      <Button 
-                        variant="outline" 
-                        className="w-full border-primary/20 hover:border-primary/40"
-                        asChild
-                        onClick={() => setIsOpen(false)}
-                      >
-                        <Link to="/auth">
-                          <LogIn className="w-4 h-4 mr-2" />
-                          Sign In
-                        </Link>
-                      </Button>
-                      <Button 
-                        className="w-full bg-primary hover:bg-primary/90"
-                        asChild
-                        onClick={() => setIsOpen(false)}
-                      >
-                        <Link to="/contact">
-                          Get In Touch
-                        </Link>
-                      </Button>
-                    </>
                   )}
                 </div>
               </div>
