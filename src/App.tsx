@@ -7,6 +7,7 @@ import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 // Pages
 import Index from "./pages/Index";
@@ -16,7 +17,9 @@ import Resume from "./pages/Resume";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
 import ProjectDetail from "./pages/ProjectDetail";
-import Auth from "./pages/Auth";
+import Login from "./pages/Login";
+import Pending from "./pages/Pending";
+import Blocked from "./pages/Blocked";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
@@ -34,15 +37,23 @@ const App = () => (
               <Navigation />
               <main className="relative">
                 <Routes>
+                  {/* Public routes */}
                   <Route path="/" element={<Index />} />
-                  <Route path="/projects" element={<Projects />} />
-                  <Route path="/projects/:id" element={<ProjectDetail />} />
-                  <Route path="/writeups" element={<Writeups />} />
-                  <Route path="/resume" element={<Resume />} />
                   <Route path="/about" element={<About />} />
                   <Route path="/contact" element={<Contact />} />
-                  <Route path="/auth" element={<Auth />} />
-                  <Route path="/admin" element={<Admin />} />
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/pending" element={<Pending />} />
+                  <Route path="/blocked" element={<Blocked />} />
+
+                  {/* Protected routes */}
+                  <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
+                  <Route path="/projects/:id" element={<ProtectedRoute><ProjectDetail /></ProtectedRoute>} />
+                  <Route path="/writeups" element={<ProtectedRoute><Writeups /></ProtectedRoute>} />
+                  <Route path="/resume" element={<ProtectedRoute><Resume /></ProtectedRoute>} />
+
+                  {/* Admin route */}
+                  <Route path="/admin" element={<ProtectedRoute requireAdmin><Admin /></ProtectedRoute>} />
+
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>
