@@ -1,25 +1,39 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { Mail, Github, Linkedin, Loader2, CheckCircle2 } from 'lucide-react';
+import { Mail, Github, Linkedin, Loader2, CheckCircle2, User } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function Contact() {
+  const { user, profile } = useAuth();
   const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const { toast } = useToast();
 
+  // Pre-fill name from profile when available
+  useEffect(() => {
+    if (profile?.full_name) {
+      setFormData(prev => ({ ...prev, name: profile.full_name || '' }));
+    }
+  }, [profile]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.functions.invoke('send-contact-email', { body: formData });
+      // For logged-in users, don't send email — backend extracts it from JWT
+      const body = user
+        ? { name: formData.name, subject: formData.subject, message: formData.message }
+        : { name: formData.name, email: formData.email, subject: formData.subject, message: formData.message };
+
+      const { error } = await supabase.functions.invoke('send-contact-email', { body });
       if (error) throw error;
       setSubmitted(true);
       setFormData({ name: '', email: '', subject: '', message: '' });
@@ -81,16 +95,24 @@ export default function Contact() {
             ) : (
               <Card className="border-border/40 bg-card">
                 <CardContent className="pt-6">
+                  {user && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4 pb-4 border-b border-border/40">
+                      <User className="w-4 h-4 text-primary" />
+                      <span>Signed in as <span className="text-foreground font-medium">{user.email}</span></span>
+                    </div>
+                  )}
                   <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid sm:grid-cols-2 gap-4">
+                    <div className={user ? '' : 'grid sm:grid-cols-2 gap-4'}>
                       <div>
                         <Label htmlFor="name" className="text-sm">Name</Label>
                         <Input id="name" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="bg-background border-border/40 mt-1" />
                       </div>
-                      <div>
-                        <Label htmlFor="email" className="text-sm">Email</Label>
-                        <Input id="email" type="email" required value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} className="bg-background border-border/40 mt-1" />
-                      </div>
+                      {!user && (
+                        <div>
+                          <Label htmlFor="email" className="text-sm">Email</Label>
+                          <Input id="email" type="email" required value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} className="bg-background border-border/40 mt-1" />
+                        </div>
+                      )}
                     </div>
                     <div>
                       <Label htmlFor="subject" className="text-sm">Subject</Label>
