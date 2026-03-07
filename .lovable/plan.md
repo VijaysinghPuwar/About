@@ -1,55 +1,48 @@
 
 
-## Plan: Pentest Mode, UX Improvements, and Profile Photo
+## Plan: Smart Contact Form for Logged-in Users
 
-### 1. Fix Build Error + Refactor Theme System
+### Overview
+Pre-fill the contact form with authenticated user data, hide the email field for logged-in users, and pass `user_id` to the backend for authenticated submissions. The edge function will extract the email server-side from the JWT for authenticated users.
 
-The current build error is likely from the `ThemeProvider` and App.tsx setup. The existing theme system uses `blue`/`red` string types but is incomplete.
+---
 
-**Refactor `src/hooks/useTheme.tsx`:**
-- Rename theme values to `'default' | 'pentest'` (Pentest Mode branding)
-- Apply class `theme-pentest` on `<html>` when active, remove it when default
-- Persist to `localStorage` key `pentest-mode`
+### 1. Frontend — `src/pages/Contact.tsx`
 
-**Update `src/index.css`:**
-- Keep `:root` as the blue/default theme (already defined)
-- Rename `.theme-red` to `.theme-pentest` and ensure ALL CSS variables are overridden with red palette:
-  - `--primary`, `--secondary`, `--ring`, `--border`, `--glow-cyan` (rename glow vars)
-  - `--scanline-color`, `--grid-color` all shift red
-- Add a global `transition: background-color 200ms, color 200ms, border-color 200ms` to `*` for smooth theme switching
+- Import `useAuth` hook to get `user`, `profile`
+- **Logged-in state:**
+  - Show "Signed in as user@email.com" helper text above the form
+  - Hide the email input field entirely
+  - Pre-fill `name` from `profile.full_name` if available (still editable)
+  - On submit: send `{ name, subject, message }` — no email field. Pass the auth token via the standard Supabase invoke (already included automatically)
+- **Logged-out state:**
+  - Show full form as-is (name + email + subject + message)
 
-**Update `src/components/ThemeToggle.tsx`:**
-- Label: show "Pentest Mode" text on desktop, icon-only on mobile
-- Use a `Shield` or `Crosshair` icon for pentest, `Waves` for default
-- Style the toggle with a red glow when pentest is active
+### 2. Backend — `supabase/functions/send-contact-email/index.ts`
 
-### 2. Update Navigation (`src/components/Navigation.tsx`)
-- Add `ThemeToggle` back (it was removed when the Navigation was rewritten)
-- Keep it in both desktop and mobile menu sections
-- Ensure `shadow-glow-cyan` class references work with theme (they use CSS vars, so they'll auto-switch)
+- Extract the `Authorization` header from the request
+- If a valid JWT is present:
+  - Decode it via `supabase.auth.getUser(token)` to get `user.email` and `user.id`
+  - Use the **server-verified email** (ignore any client-sent email)
+  - Save `user_id` in the `contact_messages` insert
+- If no JWT / anonymous:
+  - Require `email` in the request body (current behavior)
+  - `user_id` = null
+- Include `authenticated: true/false` and `user_id` in the stored record
 
-### 3. Profile Photo in Hero (`src/pages/Index.tsx`)
-- Add a circular avatar image above/left of the name in the hero section
-- Image URL: the LinkedIn photo URL provided
-- Style: `w-32 h-32 rounded-full border-4` with `border-primary` (auto-switches with theme)
-- Add `ring-4 ring-primary/30` glow effect
-- Alt text: "Vijaysingh Puwar profile photo"
-- On mobile: centered above name; on desktop: inline-left of name
+### 3. Database Migration
 
-### 4. UX Improvements
-- **Hero section**: Increase `leading-relaxed` on subtitle text, reduce visual clutter by simplifying cert badges area
-- **Smooth scroll**: Already using `react-router-dom` for navigation between pages (not single-page scroll anchors), so this is already handled
-- **Card hover**: Already has `hover:-translate-y-1` — ensure consistent across all cards
-- **Theme transition**: Add CSS `transition` on `background-color`, `color`, `border-color` globally (200ms)
+Add `user_id` column to `contact_messages`:
+```sql
+ALTER TABLE public.contact_messages 
+  ADD COLUMN user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL;
+```
 
-### 5. Tailwind Config (`tailwind.config.ts`)
-- Remove the unused `red-team` color references that reference undefined CSS variables (likely causing the build error)
+### Files to Modify
 
-### Files to modify:
-1. `src/index.css` — Rename `.theme-red` to `.theme-pentest`, add transition
-2. `src/hooks/useTheme.tsx` — Update types to `'default' | 'pentest'`
-3. `src/components/ThemeToggle.tsx` — Update labels and icons
-4. `src/components/Navigation.tsx` — Re-add ThemeToggle import and usage
-5. `src/pages/Index.tsx` — Add profile photo to hero
-6. `tailwind.config.ts` — Remove undefined `red-team` CSS var references
+| File | Action |
+|------|--------|
+| `src/pages/Contact.tsx` | Add useAuth, conditional form fields, prefill logic |
+| `supabase/functions/send-contact-email/index.ts` | Extract JWT user, use server-side email for auth'd users, save user_id |
+| DB migration | Add `user_id` column to `contact_messages` |
 
