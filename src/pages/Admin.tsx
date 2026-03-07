@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { 
   Shield, Plus, Trash2, Users, FolderLock, Settings, 
   Loader2, Lock, Unlock, Eye, UserPlus, X, Search,
-  CheckCircle, Ban, Clock, Bell
+  CheckCircle, Ban, Clock, Bell, Mail, AlertTriangle, MessageSquare
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,6 +56,29 @@ interface Notification {
   created_at: string;
 }
 
+interface ContactMessage {
+  id: string;
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  read: boolean;
+  created_at: string;
+}
+
+interface AuthEvent {
+  id: string;
+  user_id: string | null;
+  email: string | null;
+  event_type: string;
+  ip_address: string | null;
+  user_agent: string | null;
+  risk_level: string | null;
+  flagged_suspicious: boolean;
+  metadata: any;
+  created_at: string;
+}
+
 const projectSchema = z.object({
   id: z.string().min(1, 'Project ID required').max(100).regex(/^[a-z0-9-]+$/, 'Use lowercase letters, numbers, and hyphens only'),
   title: z.string().min(1, 'Title required').max(200),
@@ -72,12 +95,15 @@ export default function Admin() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
+  const [authEvents, setAuthEvents] = useState<AuthEvent[]>([]);
   const [projectAccess, setProjectAccess] = useState<Record<string, ProjectAccess[]>>({});
   const [loading, setLoading] = useState(true);
   const [isAddingProject, setIsAddingProject] = useState(false);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [searchUser, setSearchUser] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [showSuspiciousOnly, setShowSuspiciousOnly] = useState(false);
   const { user, isAdmin, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -101,11 +127,13 @@ export default function Admin() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [projectsRes, usersRes, accessRes, notifRes] = await Promise.all([
+      const [projectsRes, usersRes, accessRes, notifRes, contactRes, authEventsRes] = await Promise.all([
         supabase.from('projects').select('id, title, access_level').order('created_at', { ascending: false }),
         supabase.from('profiles').select('*'),
         supabase.from('project_access').select('*'),
         supabase.from('admin_notifications').select('*').order('created_at', { ascending: false }).limit(50),
+        supabase.from('contact_messages').select('*').order('created_at', { ascending: false }).limit(50),
+        supabase.from('auth_events').select('*').order('created_at', { ascending: false }).limit(100),
       ]);
 
       if (projectsRes.error) throw projectsRes.error;
@@ -115,6 +143,8 @@ export default function Admin() {
       setProjects(projectsRes.data as Project[] || []);
       setUsers(usersRes.data as UserProfile[] || []);
       setNotifications(notifRes.data as Notification[] || []);
+      setContactMessages(contactRes.data as ContactMessage[] || []);
+      setAuthEvents(authEventsRes.data as AuthEvent[] || []);
 
       const accessByProject: Record<string, ProjectAccess[]> = {};
       for (const access of accessRes.data || []) {
@@ -156,6 +186,11 @@ export default function Admin() {
       await supabase.from('admin_notifications').update({ read: true }).eq('id', n.id);
     }
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
+  const markContactRead = async (id: string) => {
+    await supabase.from('contact_messages').update({ read: true }).eq('id', id);
+    setContactMessages(prev => prev.map(m => m.id === id ? { ...m, read: true } : m));
   };
 
   const handleAddProject = async (data: ProjectFormData) => {
@@ -235,6 +270,9 @@ export default function Admin() {
   const pendingUsers = users.filter(u => u.status === 'pending');
   const approvedUsers = users.filter(u => u.status === 'approved');
   const blockedUsers = users.filter(u => u.status === 'blocked');
+  const unreadMessages = contactMessages.filter(m => !m.read).length;
+  const suspiciousEvents = authEvents.filter(e => e.flagged_suspicious);
+  const displayedAuthEvents = showSuspiciousOnly ? suspiciousEvents : authEvents;
 
   if (authLoading || loading) {
     return (
@@ -285,39 +323,22 @@ export default function Admin() {
             {getStatusBadge(u.status)}
             <div className="flex gap-1">
               {u.status !== 'approved' && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs border-success/30 text-success hover:bg-success/10"
-                  disabled={updatingStatus === u.user_id}
-                  onClick={() => handleUpdateUserStatus(u.user_id, 'approved')}
-                >
+                <Button size="sm" variant="outline" className="h-7 text-xs border-success/30 text-success hover:bg-success/10"
+                  disabled={updatingStatus === u.user_id} onClick={() => handleUpdateUserStatus(u.user_id, 'approved')}>
                   {updatingStatus === u.user_id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3 mr-1" />}
                   Approve
                 </Button>
               )}
               {u.status !== 'blocked' && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive/10"
-                  disabled={updatingStatus === u.user_id}
-                  onClick={() => handleUpdateUserStatus(u.user_id, 'blocked')}
-                >
-                  <Ban className="w-3 h-3 mr-1" />
-                  Block
+                <Button size="sm" variant="outline" className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive/10"
+                  disabled={updatingStatus === u.user_id} onClick={() => handleUpdateUserStatus(u.user_id, 'blocked')}>
+                  <Ban className="w-3 h-3 mr-1" />Block
                 </Button>
               )}
               {u.status !== 'pending' && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  disabled={updatingStatus === u.user_id}
-                  onClick={() => handleUpdateUserStatus(u.user_id, 'pending')}
-                >
-                  <Clock className="w-3 h-3 mr-1" />
-                  Revoke
+                <Button size="sm" variant="outline" className="h-7 text-xs"
+                  disabled={updatingStatus === u.user_id} onClick={() => handleUpdateUserStatus(u.user_id, 'pending')}>
+                  <Clock className="w-3 h-3 mr-1" />Revoke
                 </Button>
               )}
             </div>
@@ -340,7 +361,7 @@ export default function Admin() {
             </div>
             <h1 className="text-3xl font-bold text-foreground">Admin Dashboard</h1>
           </div>
-          <p className="text-muted-foreground">Manage users, projects, and access</p>
+          <p className="text-muted-foreground">Manage users, projects, messages, and security</p>
         </motion.div>
 
         <Tabs defaultValue="users" className="space-y-6">
@@ -356,11 +377,19 @@ export default function Admin() {
             <TabsTrigger value="projects" className="flex items-center gap-2">
               <FolderLock className="w-4 h-4" /> Projects
             </TabsTrigger>
-            <TabsTrigger value="notifications" className="flex items-center gap-2">
-              <Bell className="w-4 h-4" /> Notifications
-              {notifications.filter(n => !n.read).length > 0 && (
+            <TabsTrigger value="messages" className="flex items-center gap-2">
+              <MessageSquare className="w-4 h-4" /> Messages
+              {unreadMessages > 0 && (
+                <Badge className="bg-primary text-primary-foreground text-xs h-5 min-w-5 flex items-center justify-center">
+                  {unreadMessages}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="security" className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" /> Security
+              {suspiciousEvents.length > 0 && (
                 <Badge className="bg-destructive text-destructive-foreground text-xs h-5 min-w-5 flex items-center justify-center">
-                  {notifications.filter(n => !n.read).length}
+                  {suspiciousEvents.length}
                 </Badge>
               )}
             </TabsTrigger>
@@ -369,13 +398,12 @@ export default function Admin() {
           {/* Users Tab */}
           <TabsContent value="users">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-              {/* Pending Users */}
               {pendingUsers.length > 0 && (
                 <div className="rounded-2xl border border-warning/30 bg-card/50 backdrop-blur-sm overflow-hidden">
                   <div className="p-4 border-b border-warning/20 bg-warning/5">
                     <div className="flex items-center gap-2">
                       <Clock className="w-5 h-5 text-warning" />
-                      <h3 className="font-semibold text-foreground">Pending Approval ({pendingUsers.length})</h3>
+                      <h3 className="font-semibold text-foreground">Pending ({pendingUsers.length})</h3>
                     </div>
                   </div>
                   <div className="divide-y divide-border/50">
@@ -384,7 +412,6 @@ export default function Admin() {
                 </div>
               )}
 
-              {/* Approved Users */}
               <div className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
                 <div className="p-4 border-b border-border/50">
                   <div className="flex items-center gap-2">
@@ -399,7 +426,6 @@ export default function Admin() {
                 </div>
               </div>
 
-              {/* Blocked Users */}
               {blockedUsers.length > 0 && (
                 <div className="rounded-2xl border border-destructive/30 bg-card/50 backdrop-blur-sm overflow-hidden">
                   <div className="p-4 border-b border-destructive/20">
@@ -537,7 +563,6 @@ export default function Admin() {
                 </motion.div>
               </div>
 
-              {/* Users sidebar for project tab */}
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
                 className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
                 <div className="p-6 border-b border-border/50">
@@ -567,32 +592,87 @@ export default function Admin() {
             </div>
           </TabsContent>
 
-          {/* Notifications Tab */}
-          <TabsContent value="notifications">
+          {/* Contact Messages Tab */}
+          <TabsContent value="messages">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
               <div className="p-4 border-b border-border/50 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Bell className="w-5 h-5 text-primary" />
-                  <h3 className="font-semibold text-foreground">Notifications</h3>
+                  <MessageSquare className="w-5 h-5 text-primary" />
+                  <h3 className="font-semibold text-foreground">Contact Messages ({contactMessages.length})</h3>
                 </div>
-                {notifications.some(n => !n.read) && (
-                  <Button size="sm" variant="outline" onClick={markNotificationsRead}>
-                    Mark all read
-                  </Button>
-                )}
               </div>
               <div className="divide-y divide-border/50">
-                {notifications.length === 0 ? (
-                  <div className="p-8 text-center text-muted-foreground">No notifications yet.</div>
-                ) : notifications.map((n) => (
-                  <div key={n.id} className={cn("p-4 transition-colors", !n.read && "bg-primary/5")}>
-                    <div className="flex items-start gap-3">
-                      <div className={cn("w-2 h-2 rounded-full mt-2 flex-shrink-0", n.read ? "bg-muted" : "bg-primary")} />
-                      <div>
-                        <p className="text-sm text-foreground">{n.message}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{new Date(n.created_at).toLocaleString()}</p>
+                {contactMessages.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground">No messages yet.</div>
+                ) : contactMessages.map((msg) => (
+                  <div key={msg.id} className={cn("p-4 transition-colors", !msg.read && "bg-primary/5")} onClick={() => !msg.read && markContactRead(msg.id)}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-center gap-2">
+                          {!msg.read && <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />}
+                          <p className="font-medium text-foreground text-sm">{msg.subject}</p>
+                        </div>
+                        <p className="text-xs text-muted-foreground">From: {msg.name} ({msg.email})</p>
+                        <p className="text-sm text-muted-foreground line-clamp-2">{msg.message}</p>
                       </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <p className="text-xs text-muted-foreground">{new Date(msg.created_at).toLocaleString()}</p>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
+                          <a href={`mailto:${msg.email}?subject=Re: ${encodeURIComponent(msg.subject)}`}>
+                            <Mail className="w-3 h-3 mr-1" />Reply
+                          </a>
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </TabsContent>
+
+          {/* Security / Auth Events Tab */}
+          <TabsContent value="security">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
+              <div className="p-4 border-b border-border/50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-primary" />
+                  <h3 className="font-semibold text-foreground">Auth Events</h3>
+                </div>
+                <Button size="sm" variant={showSuspiciousOnly ? "default" : "outline"}
+                  onClick={() => setShowSuspiciousOnly(!showSuspiciousOnly)}>
+                  <AlertTriangle className="w-3 h-3 mr-1" />
+                  {showSuspiciousOnly ? 'Showing Suspicious Only' : 'Show Suspicious Only'}
+                </Button>
+              </div>
+              <div className="divide-y divide-border/50">
+                {displayedAuthEvents.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground">
+                    {showSuspiciousOnly ? 'No suspicious events detected.' : 'No auth events logged yet.'}
+                  </div>
+                ) : displayedAuthEvents.map((event) => (
+                  <div key={event.id} className={cn("p-4 transition-colors", event.flagged_suspicious && "bg-destructive/5 border-l-2 border-l-destructive")}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-center gap-2">
+                          {event.flagged_suspicious && <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />}
+                          <p className="font-medium text-foreground text-sm">{event.email}</p>
+                          <Badge variant="outline" className={cn("text-xs",
+                            event.risk_level === 'high' && "text-destructive border-destructive/30",
+                            event.risk_level === 'medium' && "text-warning border-warning/30",
+                            event.risk_level === 'normal' && "text-muted-foreground"
+                          )}>
+                            {event.risk_level}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">Type: {event.event_type} · IP: {event.ip_address || 'unknown'}</p>
+                        {event.user_agent && <p className="text-xs text-muted-foreground truncate">UA: {event.user_agent}</p>}
+                        {event.metadata?.reasons?.length > 0 && (
+                          <p className="text-xs text-destructive">Reason: {event.metadata.reasons.join(', ')}</p>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground flex-shrink-0">{new Date(event.created_at).toLocaleString()}</p>
                     </div>
                   </div>
                 ))}
