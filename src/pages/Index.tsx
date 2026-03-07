@@ -1,444 +1,326 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { TechBadge } from '@/components/TechBadge';
-import { ServiceCard } from '@/components/ServiceCard';
-import { Shield, Terminal, Code, Database, ChevronRight, Star, ArrowRight, Github, ExternalLink, FileText, Briefcase, Award, Calendar, Zap, Cloud, Network } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Github, Linkedin, Mail, ArrowRight, Shield, Terminal, Cloud, GraduationCap, Award } from 'lucide-react';
 import { motion } from 'framer-motion';
+import profilePhoto from '@/assets/profile-photo.jpg';
 import projectsData from '@/data/projects.json';
 import writeupsData from '@/data/writeups.json';
-import heroImage from '@/assets/hero-bg.jpg';
-import profilePhoto from '@/assets/profile-photo.jpg';
 
-const tools = [
-  'Nmap', 'Wireshark', 'Burp Suite', 'Metasploit', 'Python', 'PowerShell', 
-  'Bash', 'AWS', 'Active Directory', 'Docker', 'Git', 'CloudWatch'
-];
+const fadeUp = {
+  hidden: { opacity: 0, y: 20 },
+  visible: (i: number) => ({
+    opacity: 1, y: 0,
+    transition: { delay: i * 0.1, duration: 0.5 }
+  })
+};
 
-const certificationBadges = [
-  { name: 'CySA+', issuer: 'CompTIA' },
-  { name: 'Security+', issuer: 'CompTIA' },
-  { name: 'CCNA', issuer: 'Cisco' },
-  { name: 'AWS IAM', issuer: 'Amazon' },
-  { name: 'Python', issuer: 'Scripting' },
-  { name: 'PowerShell', issuer: 'Automation' }
+const highlights = [
+  {
+    icon: Shield,
+    title: "Security Operations & IAM",
+    description: "Active Directory hygiene, MFA enforcement, endpoint hardening, and incident response across 150+ enterprise systems."
+  },
+  {
+    icon: Terminal,
+    title: "Automation",
+    description: "Python and PowerShell scripting for log analysis, security assessments, system hardening, and operational workflows."
+  },
+  {
+    icon: Cloud,
+    title: "Cloud & Network Security",
+    description: "AWS security configurations, VPC architecture, firewall management, IDS/IPS, and Cisco network defense."
+  },
 ];
 
 const experience = [
   {
-    title: "Cybersecurity & Systems Engineer",
     company: "R.S. Infotech",
-    location: "India",
-    period: "February 2023 - August 2024",
-    highlights: [
-      "Secured and maintained 150+ Windows and Linux endpoints and servers",
-      "Performed Active Directory identity hygiene using PowerShell to identify inactive accounts",
-      "Supported IAM operations and enforced MFA/least-privilege access controls",
-      "Deployed and secured AWS resources with CloudWatch + SNS alerts"
-    ]
-  }
+    role: "System Engineer",
+    period: "Feb 2023 – Aug 2024",
+    bullets: [
+      "Secured 150+ enterprise endpoints with group policies, antivirus, and patch management",
+      "Managed Active Directory identity hygiene and enforced MFA via PowerShell automation",
+      "Automated log analysis and reporting with Python, reducing manual effort by 70%",
+      "Maintained firewalls, IDS/IPS, reducing security breaches by 20%",
+    ],
+  },
+  {
+    company: "L&T-Sargent & Lundy",
+    role: "Systems Intern",
+    period: "Jan 2023 – Apr 2023",
+    bullets: [
+      "Designed and optimized HVAC systems with 100% adherence to ASHRAE standards",
+    ],
+  },
+  {
+    company: "Elecon Engineering",
+    role: "Design Intern",
+    period: "Jan 2022 – Jun 2022",
+    bullets: [
+      "CAD modeling and engineering documentation for industrial systems",
+    ],
+  },
+];
+
+const education = [
+  {
+    school: "Pace University",
+    degree: "M.S. Cybersecurity",
+    location: "New York, NY",
+    gpa: "GPA: 4.00",
+    status: "Expected Dec 2026",
+    coursework: [
+      "Computational Statistics",
+      "Introduction to Cybersecurity",
+      "Information Security Management",
+      "Network Security & Defense",
+      "Ethical Hacking & Penetration Testing",
+      "Automating InfoSec with Python & Shell",
+      "Cyber Intelligence Analysis & Modeling",
+      "Operating Systems Theory & Administration",
+    ],
+  },
+  {
+    school: "G.H. Patel College of Engineering & Technology",
+    degree: "B.E. Mechanical Engineering",
+    location: "Gujarat, India",
+    gpa: "CGPA: 7.11",
+    status: "Completed Aug 2023",
+    coursework: [],
+  },
 ];
 
 const certifications = [
-  { name: "CompTIA CySA+", issuer: "CompTIA", date: "Nov 2025", expires: "Nov 2028", status: "active" },
-  { name: "CompTIA Security+", issuer: "CompTIA", date: "2024", status: "active" },
-  { name: "Cisco CCNA", issuer: "Cisco", date: "Aug 2025", expires: "Aug 2028", status: "active" }
+  "CompTIA Security+",
+  "CompTIA CySA+",
+  "Cisco CCNA",
+  "ISC2 Candidate",
+  "Google AI Essentials",
 ];
 
-const Index = () => {
-  const featuredProjects = projectsData.filter(p => p.featured).slice(0, 3);
-  const latestWriteups = writeupsData.slice(0, 3);
+const featuredProjects = projectsData.filter(p => p.featured).slice(0, 3);
+const recentWriteups = writeupsData.slice(0, 3);
 
+export default function Index() {
   return (
-    <div className="space-y-0">
-      {/* Hero Section */}
-      <section 
-        className="relative min-h-screen flex items-center justify-center overflow-hidden"
-        style={{
-          backgroundImage: `url(${heroImage})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundAttachment: 'fixed'
-        }}
-      >
-        {/* Overlay */}
-        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
-        
-        {/* Animated grid overlay */}
-        <div className="absolute inset-0 cyber-grid opacity-30" />
-        
-        {/* Content */}
-        <div className="relative container text-center space-y-8 animate-fade-in">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="space-y-6 flex flex-col items-center"
-          >
-            {/* Profile Photo */}
-            <div className="relative">
-              <img
-                src={profilePhoto}
-                alt="Vijaysingh Puwar profile photo"
-                className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-primary object-cover ring-4 ring-primary/30 shadow-lg"
-              />
-              <div className="absolute inset-0 w-32 h-32 md:w-40 md:h-40 rounded-full ring-4 ring-primary/20 animate-glow-pulse" />
-            </div>
-
-            <h1 className="text-5xl md:text-7xl font-bold">
-              <span className="text-foreground">Vijaysingh</span>{' '}
-              <span className="bg-gradient-to-r from-primary via-secondary to-primary bg-clip-text text-transparent">
-                Puwar
-              </span>
-            </h1>
-            
-            <p className="text-xl md:text-2xl text-primary font-semibold">
-              Cybersecurity Engineer
-            </p>
-            
-            <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-              Identity & Access Management • Network Security • Cloud Security
-            </p>
-            
-            <p className="text-base md:text-lg text-foreground/80 max-w-4xl mx-auto leading-relaxed">
-              Building secure systems with Python, PowerShell, and hands-on security controls.
-            </p>
+    <div className="min-h-screen">
+      {/* ===== HERO ===== */}
+      <section className="relative py-24 md:py-32">
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] to-transparent" />
+        <div className="container relative max-w-4xl mx-auto text-center">
+          <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={0}>
+            <img
+              src={profilePhoto}
+              alt="Vijaysingh Puwar"
+              className="w-28 h-28 rounded-full mx-auto mb-6 border-2 border-border object-cover"
+            />
           </motion.div>
-
-          {/* Certification badges */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-            className="flex flex-wrap justify-center gap-3"
+          <motion.h1 initial="hidden" animate="visible" variants={fadeUp} custom={1}
+            className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground mb-3"
           >
-            {certificationBadges.map((cert, index) => (
-              <TechBadge
-                key={cert.name}
-                tech={cert.name}
-                variant="status"
-                className="animate-fade-in"
-              />
-            ))}
-          </motion.div>
-
-          {/* CTA Buttons */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.4 }}
-            className="flex flex-col sm:flex-row gap-4 justify-center"
+            Vijaysingh Puwar
+          </motion.h1>
+          <motion.p initial="hidden" animate="visible" variants={fadeUp} custom={2}
+            className="text-xl md:text-2xl text-primary font-medium mb-4"
           >
-            <Button 
-              size="lg"
-              asChild
-              className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-glow-cyan text-lg px-8"
-            >
-              <a href="/resume.pdf" target="_blank" rel="noopener noreferrer">
-                View Resume (PDF)
-              </a>
+            Cybersecurity Engineer
+          </motion.p>
+          <motion.p initial="hidden" animate="visible" variants={fadeUp} custom={3}
+            className="text-muted-foreground text-lg max-w-2xl mx-auto mb-8"
+          >
+            Securing infrastructure, automating defense, and building practical cloud and network security solutions.
+          </motion.p>
+          <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={4}
+            className="flex flex-col sm:flex-row gap-3 justify-center mb-8"
+          >
+            <Button size="lg" asChild>
+              <Link to="/resume">View Resume</Link>
             </Button>
-            <Button 
-              size="lg"
-              asChild
-              className="bg-secondary hover:bg-secondary/90 text-secondary-foreground shadow-glow-violet text-lg px-8"
-            >
-              <Link to="/contact">
-                Get In Touch
-              </Link>
-            </Button>
-            <Button 
-              variant="outline"
-              size="lg"
-              asChild
-              className="border-primary/30 hover:border-primary/50 hover:bg-primary/5 text-lg px-8"
-            >
-              <a href="https://github.com/VijaysinghPuwar" target="_blank" rel="noopener noreferrer">
-                <Github className="w-5 h-5 mr-2" />
-                GitHub
-              </a>
+            <Button size="lg" variant="outline" asChild>
+              <Link to="/contact">Contact Me</Link>
             </Button>
           </motion.div>
-        </div>
-
-        {/* Scroll indicator */}
-        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 animate-bounce">
-          <ChevronRight className="w-6 h-6 text-primary rotate-90" />
+          <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={5}
+            className="flex gap-4 justify-center"
+          >
+            <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground transition-colors">
+              <Github className="w-5 h-5" />
+            </a>
+            <a href="https://linkedin.com/in/vijaysinghpuwar" target="_blank" rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground transition-colors">
+              <Linkedin className="w-5 h-5" />
+            </a>
+            <a href="mailto:contact@vijaysinghpuwar.com"
+              className="text-muted-foreground hover:text-foreground transition-colors">
+              <Mail className="w-5 h-5" />
+            </a>
+          </motion.div>
         </div>
       </section>
 
-      {/* Tools Marquee */}
-      <section className="py-12 bg-card/30 border-y border-border/30">
-        <div className="container">
-          <div className="text-center mb-8">
-            <h2 className="text-2xl font-bold text-foreground mb-2">Security Toolbox</h2>
-            <p className="text-muted-foreground">Technologies and tools I work with daily</p>
+      {/* ===== ABOUT SNAPSHOT ===== */}
+      <section className="py-20 border-t border-border/40">
+        <div className="container max-w-5xl mx-auto">
+          <div className="text-center mb-12">
+            <p className="section-heading">What I Do</p>
+            <h2 className="section-title">Core Competencies</h2>
           </div>
-          
-          <div className="relative overflow-hidden">
-            <div className="flex animate-marquee gap-8 py-4">
-              {[...tools, ...tools].map((tool, index) => (
-                <div
-                  key={`${tool}-${index}`}
-                  className="flex items-center gap-2 px-4 py-2 bg-muted/20 rounded-lg border border-border/30 whitespace-nowrap"
-                >
-                  <Terminal className="w-4 h-4 text-primary" />
-                  <span className="text-foreground font-mono text-sm">{tool}</span>
-                </div>
+          <div className="grid md:grid-cols-3 gap-6">
+            {highlights.map((item, i) => (
+              <motion.div key={item.title} initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={i}>
+                <Card className="h-full border-border/40 bg-card hover:border-primary/20 transition-colors">
+                  <CardContent className="pt-6">
+                    <item.icon className="w-8 h-8 text-primary mb-4" />
+                    <h3 className="font-semibold text-foreground mb-2">{item.title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{item.description}</p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ===== FEATURED PROJECTS ===== */}
+      <section className="py-20 border-t border-border/40">
+        <div className="container max-w-5xl mx-auto">
+          <div className="text-center mb-12">
+            <p className="section-heading">Portfolio</p>
+            <h2 className="section-title">Featured Projects</h2>
+          </div>
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
+            {featuredProjects.map((project, i) => (
+              <motion.div key={project.id} initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={i}>
+                <Card className="h-full border-border/40 bg-card hover:border-primary/20 transition-colors group">
+                  <CardContent className="pt-6 flex flex-col h-full">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Badge variant="outline" className="text-xs text-primary border-primary/20">{project.category}</Badge>
+                      <span className="text-xs text-muted-foreground">{project.year}</span>
+                    </div>
+                    <h3 className="font-semibold text-foreground mb-2 group-hover:text-primary transition-colors">
+                      <Link to={`/projects/${project.id}`}>{project.title}</Link>
+                    </h3>
+                    <p className="text-sm text-muted-foreground mb-4 line-clamp-2 flex-1">{project.description}</p>
+                    <div className="flex flex-wrap gap-1.5 mb-4">
+                      {project.tech.slice(0, 3).map(t => (
+                        <Badge key={t} variant="secondary" className="text-xs bg-muted text-muted-foreground border-0">{t}</Badge>
+                      ))}
+                    </div>
+                    {project.links.github && (
+                      <a href={project.links.github} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center text-sm text-primary hover:underline">
+                        <Github className="w-4 h-4 mr-1.5" /> View on GitHub
+                      </a>
+                    )}
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+          <div className="text-center">
+            <Button variant="outline" asChild>
+              <Link to="/projects">View All Projects <ArrowRight className="w-4 h-4 ml-2" /></Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== WRITEUPS ===== */}
+      {recentWriteups.length > 0 && (
+        <section className="py-20 border-t border-border/40">
+          <div className="container max-w-5xl mx-auto">
+            <div className="text-center mb-12">
+              <p className="section-heading">Research</p>
+              <h2 className="section-title">Recent Writeups</h2>
+            </div>
+            <div className="grid md:grid-cols-3 gap-6 mb-8">
+              {recentWriteups.map((writeup: any, i: number) => (
+                <motion.div key={writeup.id || i} initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={i}>
+                  <Card className="h-full border-border/40 bg-card hover:border-primary/20 transition-colors">
+                    <CardContent className="pt-6">
+                      <Badge variant="outline" className="text-xs mb-3 text-primary border-primary/20">{writeup.category}</Badge>
+                      <h3 className="font-semibold text-foreground mb-2">{writeup.title}</h3>
+                      <p className="text-sm text-muted-foreground line-clamp-2 mb-4">{writeup.summary || writeup.description}</p>
+                      <Link to="/writeups" className="text-sm text-primary hover:underline">Read More →</Link>
+                    </CardContent>
+                  </Card>
+                </motion.div>
               ))}
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Featured Solutions */}
-      <section className="py-20">
-        <div className="container space-y-12">
-          <div className="text-center space-y-4">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm font-medium mx-auto">
-              <Shield className="w-4 h-4" />
-              Security Solutions
+            <div className="text-center">
+              <Button variant="outline" asChild>
+                <Link to="/writeups">View All Writeups <ArrowRight className="w-4 h-4 ml-2" /></Link>
+              </Button>
             </div>
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground">
-              Featured Solutions & Tools
-            </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Enterprise-grade security automation, cloud protection, and network security 
-              solutions built with modern tools and best practices.
-            </p>
           </div>
+        </section>
+      )}
 
-          {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-3xl mx-auto">
-            {[
-              { label: 'Solutions', value: projectsData.length, icon: Shield },
-              { label: 'Technologies', value: '15+', icon: Code },
-              { label: 'Automations', value: projectsData.filter(p => p.category === 'Automation').length, icon: Zap },
-              { label: 'Categories', value: '5', icon: Network },
-            ].map((stat, i) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                className="text-center p-4 rounded-xl bg-card/30 border border-border/30"
+      {/* ===== EXPERIENCE ===== */}
+      <section className="py-20 border-t border-border/40">
+        <div className="container max-w-3xl mx-auto">
+          <div className="text-center mb-12">
+            <p className="section-heading">Career</p>
+            <h2 className="section-title">Experience</h2>
+          </div>
+          <div className="space-y-8">
+            {experience.map((job, i) => (
+              <motion.div key={job.company} initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={i}
+                className="relative pl-6 border-l-2 border-border/60"
               >
-                <div className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 mb-2">
-                  <stat.icon className="w-5 h-5 text-primary" />
+                <div className="absolute -left-[7px] top-1.5 w-3 h-3 rounded-full bg-primary" />
+                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mb-2">
+                  <h3 className="font-semibold text-foreground">{job.company}</h3>
+                  <span className="text-sm text-muted-foreground">— {job.role}</span>
                 </div>
-                <div className="text-xl font-bold text-foreground">{stat.value}</div>
-                <div className="text-xs text-muted-foreground">{stat.label}</div>
+                <p className="text-xs text-muted-foreground mb-3">{job.period}</p>
+                <ul className="space-y-1.5">
+                  {job.bullets.map((b, j) => (
+                    <li key={j} className="text-sm text-muted-foreground flex items-start gap-2">
+                      <span className="mt-1.5 w-1 h-1 rounded-full bg-primary flex-shrink-0" />
+                      {b}
+                    </li>
+                  ))}
+                </ul>
               </motion.div>
             ))}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {featuredProjects.map((project, index) => (
-              <ServiceCard key={project.id} project={project} index={index} />
-            ))}
-          </div>
-
-          <div className="text-center">
-            <Button
-              size="lg"
-              asChild
-              className="bg-primary hover:bg-primary/90 shadow-glow-cyan"
-            >
-              <Link to="/projects">
-                Explore All Solutions
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </Link>
-            </Button>
           </div>
         </div>
       </section>
 
-      {/* Latest Writeups */}
-      <section className="py-20 bg-card/20">
-        <div className="container space-y-12">
-          <div className="text-center space-y-4">
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground">
-              Latest Security Writeups
-            </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              In-depth analysis of CTF challenges, detection engineering, 
-              and cybersecurity research with practical insights.
-            </p>
+      {/* ===== EDUCATION ===== */}
+      <section className="py-20 border-t border-border/40">
+        <div className="container max-w-5xl mx-auto">
+          <div className="text-center mb-12">
+            <p className="section-heading">Education</p>
+            <h2 className="section-title">Academic Background</h2>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {latestWriteups.map((writeup, index) => (
-              <motion.div
-                key={writeup.id}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                viewport={{ once: true }}
-              >
-                <Card className="group border-border/50 bg-card/80 backdrop-blur-sm transition-all duration-300 hover:border-primary/30 hover:bg-card-elevated hover:shadow-cyber cyber-hover h-full">
-                  <div className="aspect-video w-full bg-gradient-to-br from-secondary/10 via-primary/5 to-secondary/5 relative overflow-hidden">
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <FileText className="w-12 h-12 text-primary/20" />
+          <div className="grid md:grid-cols-2 gap-6">
+            {education.map((edu, i) => (
+              <motion.div key={edu.school} initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={i}>
+                <Card className="h-full border-border/40 bg-card">
+                  <CardContent className="pt-6">
+                    <GraduationCap className="w-6 h-6 text-primary mb-3" />
+                    <h3 className="font-semibold text-foreground mb-1">{edu.degree}</h3>
+                    <p className="text-sm text-muted-foreground mb-1">{edu.school}</p>
+                    <p className="text-sm text-muted-foreground">{edu.location}</p>
+                    <div className="flex gap-3 mt-3 mb-3">
+                      <Badge variant="outline" className="text-xs">{edu.gpa}</Badge>
+                      <Badge variant="outline" className="text-xs">{edu.status}</Badge>
                     </div>
-                    <div className="absolute top-4 left-4">
-                      <TechBadge tech={writeup.category} variant="category" />
-                    </div>
-                  </div>
-                  
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg font-bold text-foreground group-hover:text-primary transition-colors line-clamp-2">
-                      {writeup.title}
-                    </CardTitle>
-                    <CardDescription className="text-muted-foreground line-clamp-2">
-                      {writeup.summary}
-                    </CardDescription>
-                  </CardHeader>
-
-                  <CardContent className="space-y-4">
-                    <div className="flex flex-wrap gap-1.5">
-                      {writeup.tags.slice(0, 3).map((tag) => (
-                        <TechBadge key={tag} tech={tag} variant="tech" />
-                      ))}
-                    </div>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      asChild
-                      className="w-full border-primary/20 hover:border-primary/40 hover:bg-primary/5"
-                    >
-                      <Link to={`/writeups/${writeup.slug}`}>
-                        Read More
-                        <ArrowRight className="w-4 h-4 ml-2" />
-                      </Link>
-                    </Button>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
-
-          <div className="text-center">
-            <Button
-              size="lg"
-              variant="outline"
-              asChild
-              className="border-primary/30 hover:border-primary/50 hover:bg-primary/5"
-            >
-              <Link to="/writeups">
-                View All Writeups
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* Experience Section */}
-      <section className="py-20 bg-background">
-        <div className="container space-y-12">
-          <div className="text-center space-y-4">
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground">
-              Professional Experience
-            </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Building secure systems and protecting digital infrastructure across diverse environments
-            </p>
-          </div>
-
-          <div className="max-w-3xl mx-auto">
-            {experience.map((job, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                viewport={{ once: true }}
-              >
-                <Card className="border-border/50 bg-card/80 backdrop-blur-sm h-full hover:border-primary/30 hover:shadow-cyber transition-all duration-300">
-                  <CardHeader>
-                    <div className="space-y-2">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <CardTitle className="text-xl font-bold text-foreground">
-                            {job.title}
-                          </CardTitle>
-                          <p className="text-primary font-medium mt-1">{job.company}</p>
+                    {edu.coursework.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-foreground mb-2">Selected Coursework</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {edu.coursework.map(c => (
+                            <Badge key={c} variant="secondary" className="text-xs bg-muted text-muted-foreground border-0">{c}</Badge>
+                          ))}
                         </div>
-                        <Briefcase className="w-5 h-5 text-primary flex-shrink-0" />
                       </div>
-                      <div className="flex flex-col gap-1 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4" />
-                          {job.period}
-                        </div>
-                        <p>{job.location}</p>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <ul className="space-y-2">
-                      {job.highlights.map((highlight, idx) => (
-                        <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
-                          <span className="text-primary mt-1.5">•</span>
-                          {highlight}
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Certifications Section */}
-      <section className="py-20 bg-card/20">
-        <div className="container space-y-12">
-          <div className="text-center space-y-4">
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground">
-              Certifications
-            </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Industry-recognized certifications validating expertise in cybersecurity and networking
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-            {certifications.map((cert, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                viewport={{ once: true }}
-              >
-                <Card className="border-border/50 bg-card/80 backdrop-blur-sm h-full hover:border-primary/30 hover:shadow-cyber transition-all duration-300 text-center">
-                  <CardHeader>
-                    <div className="flex justify-center mb-4">
-                      <div className="p-4 rounded-full bg-primary/10">
-                        <Award className="w-8 h-8 text-primary" />
-                      </div>
-                    </div>
-                    <CardTitle className="text-lg font-bold text-foreground">
-                      {cert.name}
-                    </CardTitle>
-                    <CardDescription className="text-muted-foreground">
-                      {cert.issuer} • {cert.date}
-                    </CardDescription>
-                    {cert.expires && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Expires: {cert.expires}
-                      </p>
                     )}
-                  </CardHeader>
-                  <CardContent>
-                    <TechBadge 
-                      tech="Active" 
-                      variant="status" 
-                    />
                   </CardContent>
                 </Card>
               </motion.div>
@@ -447,57 +329,41 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Call to Action */}
-      <section className="py-20 bg-gradient-to-r from-primary/5 via-secondary/5 to-primary/5">
-        <div className="container text-center space-y-8">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            viewport={{ once: true }}
-            className="space-y-4"
-          >
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground">
-              Let's Work Together
-            </h2>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Looking for a cybersecurity professional who can secure your infrastructure, 
-              automate security operations, and implement identity & access management best practices?
-            </p>
-          </motion.div>
+      {/* ===== CERTIFICATIONS ===== */}
+      <section className="py-16 border-t border-border/40">
+        <div className="container max-w-4xl mx-auto text-center">
+          <p className="section-heading">Credentials</p>
+          <h2 className="section-title mb-8">Certifications</h2>
+          <div className="flex flex-wrap justify-center gap-3">
+            {certifications.map(cert => (
+              <Badge key={cert} variant="outline" className="px-4 py-2 text-sm text-foreground border-border/60">
+                <Award className="w-4 h-4 mr-2 text-primary" />{cert}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      </section>
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-            viewport={{ once: true }}
-            className="flex flex-wrap justify-center gap-4"
-          >
-            <Button 
-              size="lg"
-              asChild
-              className="bg-primary hover:bg-primary/90 shadow-glow-cyan text-lg px-8"
-            >
-              <Link to="/contact">
-                Get In Touch
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </Link>
+      {/* ===== CONTACT CTA ===== */}
+      <section className="py-20 border-t border-border/40">
+        <div className="container max-w-2xl mx-auto text-center">
+          <p className="section-heading">Get in Touch</p>
+          <h2 className="section-title mb-4">Let's Connect</h2>
+          <p className="text-muted-foreground mb-8">
+            Open to opportunities in cybersecurity engineering, security operations, and cloud security roles.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Button size="lg" asChild>
+              <Link to="/contact">Contact Me</Link>
             </Button>
-            <Button 
-              size="lg"
-              variant="outline"
-              asChild
-              className="border-primary/30 hover:border-primary/50 hover:bg-primary/5 text-lg px-8"
-            >
-              <Link to="/projects">
-                View Projects
-              </Link>
+            <Button size="lg" variant="outline" asChild>
+              <a href="mailto:contact@vijaysinghpuwar.com">
+                <Mail className="w-4 h-4 mr-2" /> contact@vijaysinghpuwar.com
+              </a>
             </Button>
-          </motion.div>
+          </div>
         </div>
       </section>
     </div>
   );
-};
-
-export default Index;
+}

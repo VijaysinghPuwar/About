@@ -1,9 +1,53 @@
 [
   {
+    "id": "secure-ubuntu-fleet",
+    "title": "Secure Ubuntu Fleet Hardening",
+    "description": "Automated Ubuntu server hardening toolkit for fleet-wide security baseline enforcement. Covers SSH hardening, firewall configuration, user access controls, and system auditing.",
+    "category": "Security Automation",
+    "tech": ["Bash", "Linux", "SSH", "UFW", "Ansible"],
+    "year": "2024",
+    "status": "completed",
+    "featured": true,
+    "keyResults": [
+      "Automated hardening across multiple Ubuntu servers",
+      "Standardized security baselines for production environments",
+      "Reduced manual configuration time by 80%"
+    ],
+    "links": {
+      "github": "https://github.com/vijaysinghpuwar/secure-ubuntu-fleet",
+      "writeup": null,
+      "demo": null
+    },
+    "image": "",
+    "tags": ["Linux", "Hardening", "Automation", "Fleet Security"]
+  },
+  {
+    "id": "http-hardening-nmap-nse",
+    "title": "HTTP Hardening with Nmap NSE",
+    "description": "Custom Nmap NSE scripts for automated HTTP security header analysis and hardening verification. Checks for missing security headers, weak configurations, and compliance gaps.",
+    "category": "Security Automation",
+    "tech": ["Nmap", "NSE", "Lua", "HTTP", "Linux"],
+    "year": "2024",
+    "status": "completed",
+    "featured": true,
+    "keyResults": [
+      "Automated HTTP security header verification",
+      "Custom NSE scripts for compliance checking",
+      "Identified misconfigurations across web infrastructure"
+    ],
+    "links": {
+      "github": "https://github.com/vijaysinghpuwar/http-hardening-nmap-nse",
+      "writeup": null,
+      "demo": null
+    },
+    "image": "",
+    "tags": ["Nmap", "HTTP", "Security Headers", "Automation"]
+  },
+  {
     "id": "win-dev-sec-bootstrap",
     "title": "Windows Dev + Cybersecurity Bootstrap",
-    "description": "Idempotent PowerShell bootstrap for setting up a complete Windows development and cybersecurity stack including winget, WSL2, Docker, pipx, and VS Code. Automated installation of 15+ security and development tools with safe re-run capability.",
-    "category": "Automation",
+    "description": "Idempotent PowerShell bootstrap for setting up a complete Windows development and cybersecurity stack including winget, WSL2, Docker, pipx, and VS Code.",
+    "category": "Security Automation",
     "tech": ["PowerShell", "WSL2", "Docker", "Windows"],
     "year": "2024",
     "status": "completed",
@@ -18,18 +62,18 @@
       "writeup": null,
       "demo": null
     },
-    "image": "/images/projects/powershell-automation.png",
+    "image": "",
     "tags": ["PowerShell", "Automation", "Windows", "DevOps"]
   },
   {
     "id": "automating-infosec",
     "title": "Automating Information Security",
-    "description": "Course repository for CYB 631: Automating Information Security with Python and Shell Scripting. Comprehensive Python and PowerShell projects covering security automation, log analysis, and system hardening.",
-    "category": "Automation",
+    "description": "Comprehensive Python and PowerShell projects covering security automation, log analysis, and system hardening for CYB 631 coursework.",
+    "category": "Security Automation",
     "tech": ["Python", "PowerShell", "Shell Scripting"],
     "year": "2024",
     "status": "completed",
-    "featured": true,
+    "featured": false,
     "keyResults": [
       "Automated security assessment workflows reducing manual effort by 70%",
       "Implemented log analysis scripts for threat detection",
@@ -40,18 +84,18 @@
       "writeup": null,
       "demo": null
     },
-    "image": "/images/projects/powershell-automation.png",
+    "image": "",
     "tags": ["Python", "PowerShell", "Automation", "Security"]
   },
   {
     "id": "aws-cloud-security",
     "title": "Configuring Cloud Security in AWS",
-    "description": "Hands-on cloud security project configuring Amazon EC2 instances with layered network protection using Security Groups and NACLs, integrated with CloudWatch and SNS for real-time monitoring and alerting.",
+    "description": "Hands-on cloud security project configuring Amazon EC2 instances with layered network protection using Security Groups and NACLs, integrated with CloudWatch and SNS.",
     "category": "Cloud Security",
     "tech": ["AWS", "EC2", "CloudWatch", "Security Groups", "NACLs"],
     "year": "2024",
     "status": "completed",
-    "featured": true,
+    "featured": false,
     "keyResults": [
       "Implemented defense-in-depth using Security Groups and NACLs",
       "Configured real-time threat monitoring with CloudWatch",
@@ -62,18 +106,18 @@
       "writeup": null,
       "demo": null
     },
-    "image": "/images/projects/cloud-iam.png",
+    "image": "",
     "tags": ["AWS", "Cloud Security", "Monitoring", "Network Security"]
   },
   {
     "id": "cs601c-capstone",
     "title": "Cybersecurity Cost Modeling Analytics",
-    "description": "Reproducible analytics pipeline for CS601C graduate capstone in Applied Computational Statistics. Comprehensive 64-page PDF report covering cybersecurity cost modeling, statistical analysis, and predictive modeling.",
+    "description": "Reproducible analytics pipeline for graduate capstone covering cybersecurity cost modeling, statistical analysis, and predictive modeling.",
     "category": "Research",
     "tech": ["Python", "R", "Statistics", "Data Analysis"],
     "year": "2024",
     "status": "completed",
-    "featured": true,
+    "featured": false,
     "keyResults": [
       "Built reproducible statistical analysis pipeline",
       "Analyzed cybersecurity cost patterns and trends",
@@ -84,13 +128,13 @@
       "writeup": null,
       "demo": null
     },
-    "image": "/images/projects/splunk-rba.png",
+    "image": "",
     "tags": ["Data Science", "Statistics", "Python", "Research"]
   },
   {
     "id": "rapid-pvst-campus-lab",
     "title": "Cisco Rapid-PVST Campus Network Lab",
-    "description": "Advanced Cisco Packet Tracer lab implementing Rapid-PVST with dual-homed access, per-VLAN root load-balancing, PortFast, BPDU Guard, and Root Guard for enterprise campus network security.",
+    "description": "Advanced Cisco Packet Tracer lab implementing Rapid-PVST with dual-homed access, per-VLAN root load-balancing, PortFast, BPDU Guard, and Root Guard.",
     "category": "Network Security",
     "tech": ["Cisco", "Packet Tracer", "VLANs", "Spanning Tree"],
     "year": "2024",
@@ -106,13 +150,13 @@
       "writeup": null,
       "demo": null
     },
-    "image": "/images/projects/packet-tracer.png",
+    "image": "",
     "tags": ["Cisco", "Network Security", "VLANs", "Spanning Tree"]
   },
   {
     "id": "inter-vlan-roas-lab",
     "title": "Inter-VLAN Routing with ROAS",
-    "description": "Hands-on Packet Tracer exercise demonstrating Router-on-a-Stick (ROAS) configuration for inter-VLAN routing. Foundation lab for advanced network segmentation projects.",
+    "description": "Packet Tracer exercise demonstrating Router-on-a-Stick configuration for inter-VLAN routing and network segmentation.",
     "category": "Network Security",
     "tech": ["Cisco", "Packet Tracer", "VLANs", "Routing"],
     "year": "2024",
@@ -128,14 +172,14 @@
       "writeup": null,
       "demo": null
     },
-    "image": "/images/projects/packet-tracer.png",
+    "image": "",
     "tags": ["Cisco", "VLANs", "Routing", "Network Design"]
   },
   {
     "id": "x86-64-assembly-lab",
     "title": "x86-64 Assembly Programming Lab",
-    "description": "Hands-on lab for NASM on Ubuntu 24.04 (WSL 2) containing three beginner x86-64 programs with detailed PDF report, Makefile, and comprehensive setup documentation.",
-    "category": "Low-Level Security",
+    "description": "Hands-on lab for NASM on Ubuntu 24.04 containing three beginner x86-64 programs with detailed documentation and Makefile.",
+    "category": "Research",
     "tech": ["Assembly", "NASM", "Linux", "WSL2"],
     "year": "2024",
     "status": "completed",
@@ -150,14 +194,14 @@
       "writeup": null,
       "demo": null
     },
-    "image": "/images/projects/osint-recon.png",
+    "image": "",
     "tags": ["Assembly", "Low-Level", "Linux", "Security Research"]
   },
   {
     "id": "vaultsnake",
     "title": "VaultSnake - Secure Login with Game",
-    "description": "Secure login GUI using Tkinter with encrypted credentials storage and a classic Snake game reward for authenticated users. Includes user-based score tracking and session management.",
-    "category": "Application Security",
+    "description": "Secure login GUI using Tkinter with encrypted credentials storage and a classic Snake game reward for authenticated users.",
+    "category": "Python Tools",
     "tech": ["Python", "Tkinter", "Encryption", "Authentication"],
     "year": "2024",
     "status": "completed",
@@ -172,14 +216,14 @@
       "writeup": null,
       "demo": null
     },
-    "image": "/images/projects/ssrf-lab.png",
+    "image": "",
     "tags": ["Python", "Security", "Encryption", "GUI"]
   },
   {
     "id": "kokorotts",
     "title": "KokoroTTS - Offline Text-to-Speech",
-    "description": "Desktop app for offline Kokoro TTS (ONNX). Includes 4 voices (2F, 2M), speed control, play/stop, and WAV export. Windows-ready with one-click installers.",
-    "category": "Application Development",
+    "description": "Desktop app for offline Kokoro TTS (ONNX) with 4 voices, speed control, play/stop, and WAV export. Windows-ready with one-click installers.",
+    "category": "Python Tools",
     "tech": ["Python", "ONNX", "TTS", "Windows"],
     "year": "2024",
     "status": "completed",
@@ -194,14 +238,14 @@
       "writeup": null,
       "demo": null
     },
-    "image": "/images/projects/powershell-automation.png",
+    "image": "",
     "tags": ["Python", "TTS", "Desktop App", "Windows"]
   },
   {
     "id": "toc-extractor",
     "title": "TOC Extractor - Web Scraping Tool",
-    "description": "GUI tool to extract chapter pages from a Table of Contents using Playwright + Tkinter. Provides URL and CSS selector inputs with headful browser support for authentication.",
-    "category": "Automation",
+    "description": "GUI tool to extract chapter pages from a Table of Contents using Playwright + Tkinter with headful browser support for authentication.",
+    "category": "Python Tools",
     "tech": ["Python", "Playwright", "Tkinter", "Web Scraping"],
     "year": "2024",
     "status": "completed",
@@ -216,7 +260,7 @@
       "writeup": null,
       "demo": null
     },
-    "image": "/images/projects/powershell-automation.png",
+    "image": "",
     "tags": ["Python", "Automation", "Web Scraping", "GUI"]
   }
 ]

@@ -2,268 +2,139 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Import Google Fonts */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
 
-/* Cybersecurity Portfolio Design System */
 @layer base {
   /* Blue Theme (Default) */
   :root, .theme-blue {
-    /* Core Dark Theme */
-    --background: 222 84% 4.9%;
-    --foreground: 0 0% 98%;
+    --background: 222 47% 6%;
+    --foreground: 210 20% 95%;
 
-    /* Card system */
-    --card: 222 84% 6.5%;
-    --card-foreground: 0 0% 95%;
-    --card-elevated: 222 84% 8.5%;
+    --card: 222 47% 8%;
+    --card-foreground: 210 20% 93%;
+    --card-elevated: 222 47% 10%;
 
-    /* Popover */
-    --popover: 222 84% 5.5%;
-    --popover-foreground: 0 0% 95%;
+    --popover: 222 47% 7%;
+    --popover-foreground: 210 20% 93%;
 
-    /* Blue Accent System */
-    --primary: 210 100% 50%;
-    --primary-foreground: 222 84% 4.9%;
+    --primary: 210 100% 52%;
+    --primary-foreground: 0 0% 100%;
     --primary-glow: 210 100% 70%;
 
-    /* Secondary */
-    --secondary: 258 90% 66%;
-    --secondary-foreground: 222 84% 4.9%;
-    --secondary-glow: 258 90% 80%;
+    --secondary: 258 60% 58%;
+    --secondary-foreground: 0 0% 100%;
+    --secondary-glow: 258 60% 72%;
 
-    /* Muted */
-    --muted: 215 28% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 215 20% 14%;
+    --muted-foreground: 215 15% 55%;
 
-    /* Accent */
-    --accent: 215 28% 17%;
-    --accent-foreground: 0 0% 95%;
+    --accent: 215 20% 14%;
+    --accent-foreground: 210 20% 93%;
 
-    /* Status colors */
-    --destructive: 0 84% 60%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 98%;
-    --success: 142 76% 36%;
+    --success: 142 60% 40%;
     --success-foreground: 0 0% 98%;
     --warning: 38 92% 50%;
-    --warning-foreground: 222 84% 4.9%;
+    --warning-foreground: 222 47% 6%;
 
-    /* Interactive */
-    --border: 215 28% 17%;
-    --input: 215 28% 17%;
-    --ring: 210 100% 50%;
+    --border: 215 20% 16%;
+    --input: 215 20% 16%;
+    --ring: 210 100% 52%;
 
     --radius: 0.5rem;
 
-    /* Custom elements */
-    --grid-color: 215 28% 17%;
-    --scanline-color: 210 100% 50%;
-    --terminal-green: 142 76% 36%;
-    --danger-red: 0 84% 60%;
+    --grid-color: 215 20% 14%;
+    --scanline-color: 210 100% 52%;
+    --terminal-green: 142 60% 40%;
+    --danger-red: 0 72% 51%;
     --warning-amber: 38 92% 50%;
-
-    /* Glow effects */
-    --glow-cyan: 0 0 20px hsl(210 100% 50% / 0.3);
-    --glow-violet: 0 0 20px hsl(258 90% 66% / 0.3);
-    --glow-success: 0 0 20px hsl(142 76% 36% / 0.3);
   }
 
-  /* Pentest Mode - Full Red Theme */
+  /* Pentest Mode */
   .theme-pentest {
-    --background: 0 20% 4.5%;
-    --foreground: 0 0% 98%;
+    --background: 0 15% 5%;
+    --foreground: 0 0% 95%;
 
-    /* Card system */
-    --card: 0 20% 7%;
-    --card-foreground: 0 0% 95%;
-    --card-elevated: 0 20% 10%;
+    --card: 0 15% 8%;
+    --card-foreground: 0 0% 93%;
+    --card-elevated: 0 15% 11%;
 
-    /* Popover */
-    --popover: 0 20% 6%;
-    --popover-foreground: 0 0% 95%;
+    --popover: 0 15% 7%;
+    --popover-foreground: 0 0% 93%;
 
-    /* Red Accent System */
-    --primary: 0 85% 55%;
+    --primary: 0 72% 51%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 0 85% 70%;
+    --primary-glow: 0 72% 65%;
 
-    /* Secondary - Darker red/crimson */
-    --secondary: 15 80% 50%;
+    --secondary: 15 60% 45%;
     --secondary-foreground: 0 0% 100%;
-    --secondary-glow: 15 80% 65%;
+    --secondary-glow: 15 60% 60%;
 
-    /* Muted */
-    --muted: 0 15% 15%;
-    --muted-foreground: 0 10% 63%;
+    --muted: 0 10% 14%;
+    --muted-foreground: 0 8% 50%;
 
-    /* Accent */
-    --accent: 0 20% 14%;
-    --accent-foreground: 0 0% 95%;
+    --accent: 0 15% 14%;
+    --accent-foreground: 0 0% 93%;
 
-    /* Status colors */
-    --destructive: 0 84% 60%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 98%;
-    --success: 0 70% 50%;
+    --success: 0 60% 45%;
     --success-foreground: 0 0% 98%;
-    --warning: 15 90% 55%;
+    --warning: 15 80% 50%;
     --warning-foreground: 0 0% 100%;
 
-    /* Interactive */
-    --border: 0 20% 18%;
-    --input: 0 20% 18%;
-    --ring: 0 85% 55%;
+    --border: 0 12% 16%;
+    --input: 0 12% 16%;
+    --ring: 0 72% 51%;
 
-    /* Custom elements */
-    --grid-color: 0 20% 18%;
-    --scanline-color: 0 85% 55%;
-    --terminal-green: 0 85% 55%;
-    --danger-red: 0 84% 60%;
-    --warning-amber: 15 90% 55%;
-
-    /* Glow effects - all red */
-    --glow-cyan: 0 0 20px hsl(0 85% 55% / 0.3);
-    --glow-violet: 0 0 20px hsl(15 80% 50% / 0.3);
-    --glow-success: 0 0 20px hsl(0 70% 50% / 0.3);
+    --grid-color: 0 12% 14%;
+    --scanline-color: 0 72% 51%;
+    --terminal-green: 0 72% 51%;
+    --danger-red: 0 72% 51%;
+    --warning-amber: 15 80% 50%;
   }
 }
 
 @layer base {
   * {
     @apply border-border;
-    transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
   }
 
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground;
     font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Code elements use mono font */
   code, pre, .font-mono {
     font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
   }
 
-  /* Custom scrollbar */
   ::-webkit-scrollbar {
-    width: 8px;
+    width: 6px;
   }
   
   ::-webkit-scrollbar-track {
-    @apply bg-muted;
+    background: transparent;
   }
   
   ::-webkit-scrollbar-thumb {
-    @apply bg-primary/30 rounded-full;
+    @apply bg-border rounded-full;
   }
   
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-primary/50;
+    @apply bg-muted-foreground/30;
   }
 }
 
 @layer components {
-  /* Cybersecurity Grid Background */
-  .cyber-grid {
-    background-image: 
-      linear-gradient(hsl(var(--grid-color) / 0.1) 1px, transparent 1px),
-      linear-gradient(90deg, hsl(var(--grid-color) / 0.1) 1px, transparent 1px);
-    background-size: 50px 50px;
+  .section-heading {
+    @apply text-sm font-semibold uppercase tracking-widest text-primary mb-3;
   }
 
-  /* Neon glow effects */
-  .glow-cyan {
-    box-shadow: var(--glow-cyan);
-  }
-  
-  .glow-violet {
-    box-shadow: var(--glow-violet);
-  }
-  
-  .glow-success {
-    box-shadow: var(--glow-success);
-  }
-
-  /* Scanline animation effect */
-  .scanlines::before {
-    @apply absolute inset-0 pointer-events-none;
-    content: '';
-    background: linear-gradient(
-      transparent 50%, 
-      hsl(var(--scanline-color) / 0.03) 50%, 
-      hsl(var(--scanline-color) / 0.03) 52%, 
-      transparent 52%
-    );
-    background-size: 100% 4px;
-    animation: scanline 2s linear infinite;
-  }
-
-  @keyframes scanline {
-    0% { transform: translateY(-100%); }
-    100% { transform: translateY(100vh); }
-  }
-
-  /* Terminal-style text effects */
-  .terminal-text {
-    @apply font-mono text-terminal-green;
-    text-shadow: 0 0 10px hsl(var(--terminal-green) / 0.5);
-  }
-
-  /* Cybersecurity status badges */
-  .status-secure {
-    @apply bg-success/20 text-success border-success/30;
-  }
-  
-  .status-warning {
-    @apply bg-warning/20 text-warning border-warning/30;
-  }
-  
-  .status-danger {
-    @apply bg-destructive/20 text-destructive border-destructive/30;
-  }
-
-  /* Animated gradient borders */
-  .gradient-border {
-    position: relative;
-    background: hsl(var(--card));
-    border-radius: var(--radius);
-  }
-  
-  .gradient-border::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    padding: 1px;
-    background: linear-gradient(
-      45deg,
-      hsl(var(--primary) / 0.5),
-      hsl(var(--secondary) / 0.5),
-      hsl(var(--primary) / 0.5)
-    );
-    border-radius: inherit;
-    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    mask-composite: xor;
-    -webkit-mask-composite: xor;
-  }
-
-  /* Hover effects for interactive elements */
-  .cyber-hover {
-    @apply transition-all duration-300 ease-out;
-  }
-  
-  .cyber-hover:hover {
-    @apply transform scale-105;
-    box-shadow: 
-      0 0 20px hsl(var(--primary) / 0.3),
-      0 10px 40px hsl(var(--primary) / 0.1);
-  }
-
-  /* Code block styling */
-  .code-block {
-    @apply bg-muted/50 border border-border rounded-lg p-4 font-mono text-sm;
-    background: linear-gradient(
-      135deg,
-      hsl(var(--muted) / 0.5),
-      hsl(var(--muted) / 0.3)
-    );
+  .section-title {
+    @apply text-3xl md:text-4xl font-bold text-foreground;
   }
 }

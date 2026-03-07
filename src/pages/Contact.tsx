@@ -1,313 +1,112 @@
 import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Card, CardContent } from '@/components/ui/card';
+import { Mail, Github, Linkedin, Loader2, CheckCircle2 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, MessageSquare, Send, Github, Linkedin, Phone, ExternalLink, Shield, MapPin } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
-const CONTACT_EMAIL = 'contact@vijaysinghpuwar.com';
-
-const socialLinks = [
-  {
-    name: 'Email',
-    url: `mailto:${CONTACT_EMAIL}`,
-    icon: Mail,
-    description: CONTACT_EMAIL,
-    primary: true
-  },
-  {
-    name: 'Phone',
-    url: 'tel:+19294002052',
-    icon: Phone,
-    description: '+1-929-400-2052',
-    primary: true
-  },
-  {
-    name: 'LinkedIn',
-    url: 'https://linkedin.com/in/vijaysinghpuwar',
-    icon: Linkedin,
-    description: 'Professional networking',
-    primary: true
-  },
-  {
-    name: 'GitHub',
-    url: 'https://github.com/VijaysinghPuwar',
-    icon: Github,
-    description: 'Open source projects & code',
-    primary: false
-  }
-];
-
 export default function Contact() {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    subject: '',
-    message: ''
-  });
+  const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const { toast } = useToast();
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-
     try {
-      const { data, error } = await supabase.functions.invoke('send-contact-email', {
-        body: formData,
-      });
-
+      const { error } = await supabase.functions.invoke('send-contact-email', { body: formData });
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      toast({
-        title: "Message sent!",
-        description: "Thank you for reaching out. I'll get back to you soon.",
-      });
-      
+      setSubmitted(true);
       setFormData({ name: '', email: '', subject: '', message: '' });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to send message. Please try again or use direct email.",
-        variant: "destructive",
-      });
+      toast({ title: 'Message sent', description: "Thank you — I'll get back to you soon." });
+    } catch {
+      toast({ title: 'Failed to send', description: 'Please try again or email me directly.', variant: 'destructive' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="container py-12 max-w-4xl space-y-12">
-      {/* Header */}
-      <div className="text-center space-y-4 animate-fade-in">
-        <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-primary via-secondary to-primary bg-clip-text text-transparent">
-          Get In Touch
-        </h1>
-        <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-          Let's discuss cybersecurity, collaboration opportunities, or share knowledge. 
-          Always happy to connect with fellow security professionals and enthusiasts.
-        </p>
-        <div className="flex items-center justify-center gap-2 text-muted-foreground">
-          <MapPin className="w-4 h-4" />
-          <span>NYC, United States</span>
+    <div className="min-h-screen py-20">
+      <div className="container max-w-4xl mx-auto">
+        <div className="text-center mb-12">
+          <p className="section-heading">Contact</p>
+          <h1 className="section-title mb-4">Get in Touch</h1>
+          <p className="text-muted-foreground max-w-lg mx-auto">
+            Open to cybersecurity roles, collaborations, and security consulting opportunities.
+          </p>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Contact Form */}
-        <Card className="border-border/50 bg-card/80 backdrop-blur-sm animate-fade-in">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-primary" />
-              Send a Message
-            </CardTitle>
-            <CardDescription>
-              Fill out the form below and I'll get back to you as soon as possible.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Name *</Label>
-                  <Input
-                    id="name"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    required
-                    maxLength={100}
-                    className="bg-background/50 border-border/50 focus:border-primary/30"
-                    placeholder="Your full name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email *</Label>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    required
-                    maxLength={255}
-                    className="bg-background/50 border-border/50 focus:border-primary/30"
-                    placeholder="your.email@example.com"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="subject">Subject *</Label>
-                <Input
-                  id="subject"
-                  name="subject"
-                  value={formData.subject}
-                  onChange={handleInputChange}
-                  required
-                  maxLength={200}
-                  className="bg-background/50 border-border/50 focus:border-primary/30"
-                  placeholder="What would you like to discuss?"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="message">Message *</Label>
-                <Textarea
-                  id="message"
-                  name="message"
-                  value={formData.message}
-                  onChange={handleInputChange}
-                  required
-                  rows={6}
-                  maxLength={5000}
-                  className="bg-background/50 border-border/50 focus:border-primary/30 resize-none"
-                  placeholder="Your message here..."
-                />
-              </div>
-
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full bg-primary hover:bg-primary/90 shadow-glow-cyan"
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin mr-2" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4 mr-2" />
-                    Send Message
-                  </>
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        {/* Contact Information & Social Links */}
-        <div className="space-y-6">
-          <Card className="border-border/50 bg-card/80 backdrop-blur-sm animate-fade-in">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-primary" />
-                Quick Contact
-              </CardTitle>
-              <CardDescription>
-                Prefer direct communication? Use these channels.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {socialLinks.filter(link => link.primary).map((social) => {
-                const Icon = social.icon;
-                return (
-                  <div key={social.name} className="flex items-center gap-4 p-3 rounded-lg bg-muted/20 border border-border/30 hover:bg-muted/30 transition-colors">
-                    <div className="p-2 rounded-lg bg-primary/10 border border-primary/20">
-                      <Icon className="w-5 h-5 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-medium text-foreground">{social.name}</h3>
-                      <p className="text-sm text-muted-foreground">{social.description}</p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      asChild
-                      className="hover:bg-primary/10 hover:text-primary"
-                    >
-                      <a href={social.url} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                    </Button>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50 bg-card/80 backdrop-blur-sm animate-fade-in">
-            <CardHeader>
-              <CardTitle>Connect Online</CardTitle>
-              <CardDescription>
-                Follow my work and stay updated with the latest security content.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {socialLinks.filter(link => !link.primary).map((social) => {
-                const Icon = social.icon;
-                return (
-                  <div key={social.name} className="flex items-center gap-4 p-3 rounded-lg bg-muted/20 border border-border/30 hover:bg-muted/30 transition-colors">
-                    <div className="p-2 rounded-lg bg-secondary/10 border border-secondary/20">
-                      <Icon className="w-5 h-5 text-secondary" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-medium text-foreground">{social.name}</h3>
-                      <p className="text-sm text-muted-foreground">{social.description}</p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      asChild
-                      className="hover:bg-secondary/10 hover:text-secondary"
-                    >
-                      <a href={social.url} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                    </Button>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50 bg-card/80 backdrop-blur-sm animate-fade-in">
-            <CardContent className="pt-6">
-              <div className="text-center space-y-2">
-                <h3 className="font-semibold text-foreground">Response Time</h3>
-                <p className="text-sm text-muted-foreground">
-                  I typically respond to messages within 24-48 hours. 
-                  For urgent security matters, please use direct email.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      <div className="text-center space-y-4 animate-fade-in">
-        <h2 className="text-2xl font-bold text-foreground">What I'm Looking For</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-          <div className="space-y-2">
-            <h3 className="font-semibold text-primary">Collaboration</h3>
-            <p className="text-sm text-muted-foreground">
-              Open source security projects, research partnerships, and knowledge sharing initiatives.
-            </p>
+        <div className="grid md:grid-cols-3 gap-8">
+          <div className="space-y-4">
+            <Card className="border-border/40 bg-card">
+              <CardContent className="pt-6 space-y-4">
+                <a href="mailto:contact@vijaysinghpuwar.com" className="flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <Mail className="w-4 h-4 text-primary" /> contact@vijaysinghpuwar.com
+                </a>
+                <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <Github className="w-4 h-4 text-primary" /> github.com/vijaysinghpuwar
+                </a>
+                <a href="https://linkedin.com/in/vijaysinghpuwar" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <Linkedin className="w-4 h-4 text-primary" /> linkedin.com/in/vijaysinghpuwar
+                </a>
+              </CardContent>
+            </Card>
+            <Card className="border-border/40 bg-card">
+              <CardContent className="pt-6">
+                <h3 className="font-semibold text-foreground mb-2 text-sm">What I'm Looking For</h3>
+                <ul className="text-sm text-muted-foreground space-y-1.5">
+                  <li>• Cybersecurity engineering roles</li>
+                  <li>• Security operations positions</li>
+                  <li>• Cloud security opportunities</li>
+                  <li>• Security automation projects</li>
+                </ul>
+              </CardContent>
+            </Card>
           </div>
-          <div className="space-y-2">
-            <h3 className="font-semibold text-primary">Career Opportunities</h3>
-            <p className="text-sm text-muted-foreground">
-              Full-time roles in cybersecurity engineering, IAM, SOC, and cloud security positions.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <h3 className="font-semibold text-primary">Community</h3>
-            <p className="text-sm text-muted-foreground">
-              Speaking opportunities, mentorship, and connecting with cybersecurity professionals.
-            </p>
+
+          <div className="md:col-span-2">
+            {submitted ? (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16">
+                <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-foreground mb-2">Message Sent</h3>
+                <p className="text-muted-foreground mb-4">Thanks for reaching out. I'll respond within 24–48 hours.</p>
+                <Button variant="outline" onClick={() => setSubmitted(false)}>Send Another</Button>
+              </motion.div>
+            ) : (
+              <Card className="border-border/40 bg-card">
+                <CardContent className="pt-6">
+                  <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="name" className="text-sm">Name</Label>
+                        <Input id="name" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="bg-background border-border/40 mt-1" />
+                      </div>
+                      <div>
+                        <Label htmlFor="email" className="text-sm">Email</Label>
+                        <Input id="email" type="email" required value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} className="bg-background border-border/40 mt-1" />
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="subject" className="text-sm">Subject</Label>
+                      <Input id="subject" required value={formData.subject} onChange={e => setFormData({ ...formData, subject: e.target.value })} className="bg-background border-border/40 mt-1" />
+                    </div>
+                    <div>
+                      <Label htmlFor="message" className="text-sm">Message</Label>
+                      <Textarea id="message" required rows={5} value={formData.message} onChange={e => setFormData({ ...formData, message: e.target.value })} className="bg-background border-border/40 mt-1" />
+                    </div>
+                    <Button type="submit" disabled={isSubmitting} className="w-full">
+                      {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending...</> : 'Send Message'}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </div>

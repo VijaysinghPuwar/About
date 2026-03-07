@@ -9,7 +9,6 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 
-// Pages
 import Index from "./pages/Index";
 import Projects from "./pages/Projects";
 import Writeups from "./pages/Writeups";
@@ -32,7 +31,7 @@ const App = () => (
         <AuthProvider>
           <Toaster />
           <Sonner />
-          <div className="min-h-screen bg-background cyber-grid">
+          <div className="min-h-screen bg-background">
             <BrowserRouter>
               <Navigation />
               <main className="relative">
@@ -44,17 +43,14 @@ const App = () => (
                   <Route path="/login" element={<Login />} />
                   <Route path="/pending" element={<Pending />} />
                   <Route path="/blocked" element={<Blocked />} />
-
-                  {/* Protected routes */}
-                  <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
-                  <Route path="/projects/:id" element={<ProtectedRoute><ProjectDetail /></ProtectedRoute>} />
-                  <Route path="/writeups" element={<ProtectedRoute><Writeups /></ProtectedRoute>} />
-                  <Route path="/resume" element={<ProtectedRoute><Resume /></ProtectedRoute>} />
+                  <Route path="/projects" element={<Projects />} />
+                  <Route path="/projects/:id" element={<ProjectDetail />} />
+                  <Route path="/writeups" element={<Writeups />} />
+                  <Route path="/resume" element={<Resume />} />
 
                   {/* Admin route */}
                   <Route path="/admin" element={<ProtectedRoute requireAdmin><Admin /></ProtectedRoute>} />
 
-                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </main>
