@@ -27,7 +27,7 @@ const socialLinks = [
   },
   {
     name: 'Email',
-    url: 'mailto:vijaysingh.puwar@example.com',
+    url: 'mailto:contact@vijaysinghpuwar.com',
     icon: Mail,
   },
 ];

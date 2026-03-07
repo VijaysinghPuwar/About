@@ -127,7 +127,7 @@ export default function Resume() {
           </div>
           <div className="flex items-center gap-2">
             <Mail className="w-4 h-4" />
-            <span>vpuwar77@gmail.com</span>
+            <span>contact@vijaysinghpuwar.com</span>
           </div>
           <div className="flex items-center gap-2">
             <Phone className="w-4 h-4" />

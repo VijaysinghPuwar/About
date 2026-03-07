@@ -6,13 +6,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Mail, MessageSquare, Send, Github, Linkedin, Phone, ExternalLink, Shield, MapPin } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+
+const CONTACT_EMAIL = 'contact@vijaysinghpuwar.com';
 
 const socialLinks = [
   {
     name: 'Email',
-    url: 'mailto:vpuwar77@gmail.com',
+    url: `mailto:${CONTACT_EMAIL}`,
     icon: Mail,
-    description: 'vpuwar77@gmail.com',
+    description: CONTACT_EMAIL,
     primary: true
   },
   {
@@ -61,18 +64,23 @@ export default function Contact() {
     setIsSubmitting(true);
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+      const { data, error } = await supabase.functions.invoke('send-contact-email', {
+        body: formData,
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
       toast({
         title: "Message sent!",
         description: "Thank you for reaching out. I'll get back to you soon.",
       });
       
       setFormData({ name: '', email: '', subject: '', message: '' });
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to send message. Please try again or use direct email.",
+        description: error.message || "Failed to send message. Please try again or use direct email.",
         variant: "destructive",
       });
     } finally {
@@ -120,6 +128,7 @@ export default function Contact() {
                     value={formData.name}
                     onChange={handleInputChange}
                     required
+                    maxLength={100}
                     className="bg-background/50 border-border/50 focus:border-primary/30"
                     placeholder="Your full name"
                   />
@@ -133,6 +142,7 @@ export default function Contact() {
                     value={formData.email}
                     onChange={handleInputChange}
                     required
+                    maxLength={255}
                     className="bg-background/50 border-border/50 focus:border-primary/30"
                     placeholder="your.email@example.com"
                   />
@@ -147,6 +157,7 @@ export default function Contact() {
                   value={formData.subject}
                   onChange={handleInputChange}
                   required
+                  maxLength={200}
                   className="bg-background/50 border-border/50 focus:border-primary/30"
                   placeholder="What would you like to discuss?"
                 />
@@ -161,6 +172,7 @@ export default function Contact() {
                   onChange={handleInputChange}
                   required
                   rows={6}
+                  maxLength={5000}
                   className="bg-background/50 border-border/50 focus:border-primary/30 resize-none"
                   placeholder="Your message here..."
                 />
@@ -189,7 +201,6 @@ export default function Contact() {
 
         {/* Contact Information & Social Links */}
         <div className="space-y-6">
-          {/* Quick Contact */}
           <Card className="border-border/50 bg-card/80 backdrop-blur-sm animate-fade-in">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -228,7 +239,6 @@ export default function Contact() {
             </CardContent>
           </Card>
 
-          {/* Social Media */}
           <Card className="border-border/50 bg-card/80 backdrop-blur-sm animate-fade-in">
             <CardHeader>
               <CardTitle>Connect Online</CardTitle>
@@ -264,7 +274,6 @@ export default function Contact() {
             </CardContent>
           </Card>
 
-          {/* Response Time */}
           <Card className="border-border/50 bg-card/80 backdrop-blur-sm animate-fade-in">
             <CardContent className="pt-6">
               <div className="text-center space-y-2">
@@ -279,7 +288,6 @@ export default function Contact() {
         </div>
       </div>
 
-      {/* Additional Info */}
       <div className="text-center space-y-4 animate-fade-in">
         <h2 className="text-2xl font-bold text-foreground">What I'm Looking For</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
