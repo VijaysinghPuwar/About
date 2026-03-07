@@ -35,7 +35,7 @@ export default function Pending() {
           <div className="space-y-2">
             <h1 className="text-2xl font-bold text-foreground">Access Pending</h1>
             <p className="text-muted-foreground">
-              Your access request is pending approval. You'll be able to access protected content once an admin approves your account.
+              Your account is currently pending review. Please check back shortly or contact <a href="mailto:contact@vijaysinghpuwar.com" className="text-primary hover:underline">contact@vijaysinghpuwar.com</a> for assistance.
             </p>
           </div>
 

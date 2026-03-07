@@ -106,7 +106,7 @@ export default function Login() {
           </Button>
 
           <p className="text-center text-xs text-muted-foreground">
-            New users will need admin approval before accessing protected content.
+            Sign in to access projects, writeups, and more.
           </p>
         </div>
       </motion.div>

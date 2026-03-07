@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setTimeout(() => {
             fetchProfile(session.user.id);
             checkAdminRole(session.user.id);
-            updateLastLogin(session.user.id);
+            updateLastLogin(session.user.id, session.user.email || '');
           }, 0);
         } else {
           setProfile(null);
@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session?.user) {
         fetchProfile(session.user.id);
         checkAdminRole(session.user.id);
-        updateLastLogin(session.user.id);
+        updateLastLogin(session.user.id, session.user.email || '');
       } else {
         setLoading(false);
       }
@@ -103,14 +103,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateLastLogin = async (userId: string) => {
+  const updateLastLogin = async (userId: string, email: string) => {
     try {
       await supabase
         .from('profiles')
         .update({ last_login_at: new Date().toISOString() })
         .eq('user_id', userId);
+
+      // Log auth event for suspicious login detection
+      await supabase.functions.invoke('log-auth-event', {
+        body: {
+          user_id: userId,
+          email,
+          event_type: 'login',
+          user_agent: navigator.userAgent,
+        },
+      });
     } catch {
-      // silent fail
+      // silent fail — don't block login
     }
   };
 
