@@ -1,0 +1,1 @@
+ALTER TABLE public.contact_messages ADD COLUMN user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL;
