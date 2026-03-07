@@ -6,13 +6,17 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { 
   Shield, Plus, Trash2, Users, FolderLock, Settings, 
-  Loader2, Lock, Unlock, Eye, UserPlus, X, Search
+  Loader2, Lock, Unlock, Eye, UserPlus, X, Search,
+  CheckCircle, Ban, Clock, Bell
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -29,6 +33,10 @@ interface UserProfile {
   user_id: string;
   email: string;
   full_name: string | null;
+  avatar_url: string | null;
+  status: string;
+  created_at: string;
+  last_login_at: string | null;
 }
 
 interface ProjectAccess {
@@ -36,6 +44,16 @@ interface ProjectAccess {
   project_id: string;
   user_id: string;
   profiles?: UserProfile;
+}
+
+interface Notification {
+  id: string;
+  type: string;
+  user_email: string | null;
+  user_name: string | null;
+  message: string | null;
+  read: boolean;
+  created_at: string;
 }
 
 const projectSchema = z.object({
@@ -53,11 +71,13 @@ type ProjectFormData = z.infer<typeof projectSchema>;
 export default function Admin() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [projectAccess, setProjectAccess] = useState<Record<string, ProjectAccess[]>>({});
   const [loading, setLoading] = useState(true);
   const [isAddingProject, setIsAddingProject] = useState(false);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [searchUser, setSearchUser] = useState('');
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const { user, isAdmin, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -65,114 +85,93 @@ export default function Admin() {
   const form = useForm<ProjectFormData>({
     resolver: zodResolver(projectSchema),
     defaultValues: {
-      id: '',
-      title: '',
-      description: '',
-      category: '',
-      access_level: 'public',
-      github_link: '',
-      featured: false,
+      id: '', title: '', description: '', category: '',
+      access_level: 'public', github_link: '', featured: false,
     },
   });
 
   useEffect(() => {
-    if (!authLoading && (!user || !isAdmin)) {
-      navigate('/');
-    }
+    if (!authLoading && (!user || !isAdmin)) navigate('/');
   }, [user, isAdmin, authLoading, navigate]);
 
   useEffect(() => {
-    if (isAdmin) {
-      fetchData();
-    }
+    if (isAdmin) fetchData();
   }, [isAdmin]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      
-      // Fetch projects
-      const { data: projectsData, error: projectsError } = await supabase
-        .from('projects')
-        .select('id, title, access_level')
-        .order('created_at', { ascending: false });
+      const [projectsRes, usersRes, accessRes, notifRes] = await Promise.all([
+        supabase.from('projects').select('id, title, access_level').order('created_at', { ascending: false }),
+        supabase.from('profiles').select('*'),
+        supabase.from('project_access').select('*'),
+        supabase.from('admin_notifications').select('*').order('created_at', { ascending: false }).limit(50),
+      ]);
 
-      if (projectsError) throw projectsError;
-      setProjects(projectsData as Project[] || []);
+      if (projectsRes.error) throw projectsRes.error;
+      if (usersRes.error) throw usersRes.error;
+      if (accessRes.error) throw accessRes.error;
 
-      // Fetch users
-      const { data: usersData, error: usersError } = await supabase
-        .from('profiles')
-        .select('*');
+      setProjects(projectsRes.data as Project[] || []);
+      setUsers(usersRes.data as UserProfile[] || []);
+      setNotifications(notifRes.data as Notification[] || []);
 
-      if (usersError) throw usersError;
-      setUsers(usersData as UserProfile[] || []);
-
-      // Fetch project access
-      const { data: accessData, error: accessError } = await supabase
-        .from('project_access')
-        .select('*');
-
-      if (accessError) throw accessError;
-      
-      // Now fetch profiles for access entries
       const accessByProject: Record<string, ProjectAccess[]> = {};
-      for (const access of accessData || []) {
-        const profile = usersData?.find((u: UserProfile) => u.user_id === access.user_id);
-        const enrichedAccess: ProjectAccess = {
-          ...access,
-          profiles: profile,
-        };
-        if (!accessByProject[access.project_id]) {
-          accessByProject[access.project_id] = [];
-        }
-        accessByProject[access.project_id].push(enrichedAccess);
+      for (const access of accessRes.data || []) {
+        const profile = usersRes.data?.find((u: UserProfile) => u.user_id === access.user_id);
+        const enriched: ProjectAccess = { ...access, profiles: profile as UserProfile };
+        if (!accessByProject[access.project_id]) accessByProject[access.project_id] = [];
+        accessByProject[access.project_id].push(enriched);
       }
       setProjectAccess(accessByProject);
-      
     } catch (err) {
       console.error('Error fetching data:', err);
-      toast({
-        title: 'Error',
-        description: 'Failed to load admin data',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Failed to load admin data', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
   };
 
+  const handleUpdateUserStatus = async (userId: string, newStatus: string) => {
+    setUpdatingStatus(userId);
+    try {
+      const { error } = await supabase.rpc('update_profile_status', {
+        target_user_id: userId,
+        new_status: newStatus,
+      });
+      if (error) throw error;
+      toast({ title: 'Status Updated', description: `User status changed to ${newStatus}` });
+      fetchData();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to update status', variant: 'destructive' });
+    } finally {
+      setUpdatingStatus(null);
+    }
+  };
+
+  const markNotificationsRead = async () => {
+    const unread = notifications.filter(n => !n.read);
+    if (unread.length === 0) return;
+    for (const n of unread) {
+      await supabase.from('admin_notifications').update({ read: true }).eq('id', n.id);
+    }
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
   const handleAddProject = async (data: ProjectFormData) => {
     try {
       setIsAddingProject(true);
-      
-      const { error } = await supabase
-        .from('projects')
-        .insert({
-          id: data.id,
-          title: data.title,
-          description: data.description || null,
-          category: data.category || null,
-          access_level: data.access_level,
-          github_link: data.github_link || null,
-          featured: data.featured || false,
-        });
-
-      if (error) throw error;
-
-      toast({
-        title: 'Project Created',
-        description: `${data.title} has been added.`,
+      const { error } = await supabase.from('projects').insert({
+        id: data.id, title: data.title, description: data.description || null,
+        category: data.category || null, access_level: data.access_level,
+        github_link: data.github_link || null, featured: data.featured || false,
       });
-      
+      if (error) throw error;
+      toast({ title: 'Project Created', description: `${data.title} has been added.` });
       form.reset();
       fetchData();
     } catch (err: any) {
-      toast({
-        title: 'Error',
-        description: err.message || 'Failed to create project',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: err.message || 'Failed to create project', variant: 'destructive' });
     } finally {
       setIsAddingProject(false);
     }
@@ -180,120 +179,62 @@ export default function Admin() {
 
   const handleUpdateAccessLevel = async (projectId: string, newLevel: 'public' | 'basic' | 'admin') => {
     try {
-      const { error } = await supabase
-        .from('projects')
-        .update({ access_level: newLevel })
-        .eq('id', projectId);
-
+      const { error } = await supabase.from('projects').update({ access_level: newLevel }).eq('id', projectId);
       if (error) throw error;
-
-      setProjects(projects.map(p => 
-        p.id === projectId ? { ...p, access_level: newLevel } : p
-      ));
-
-      toast({
-        title: 'Access Updated',
-        description: `Project access level changed to ${newLevel}`,
-      });
+      setProjects(projects.map(p => p.id === projectId ? { ...p, access_level: newLevel } : p));
+      toast({ title: 'Access Updated', description: `Project access level changed to ${newLevel}` });
     } catch (err: any) {
-      toast({
-        title: 'Error',
-        description: err.message || 'Failed to update access level',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
     }
   };
 
   const handleGrantAccess = async (projectId: string, userId: string) => {
     try {
-      const { error } = await supabase
-        .from('project_access')
-        .insert({
-          project_id: projectId,
-          user_id: userId,
-          granted_by: user?.id,
-        });
-
+      const { error } = await supabase.from('project_access').insert({
+        project_id: projectId, user_id: userId, granted_by: user?.id,
+      });
       if (error) {
-        if (error.code === '23505') {
-          toast({
-            title: 'Already Granted',
-            description: 'This user already has access to this project',
-          });
-          return;
-        }
+        if (error.code === '23505') { toast({ title: 'Already Granted' }); return; }
         throw error;
       }
-
-      toast({
-        title: 'Access Granted',
-        description: 'User can now access this project',
-      });
-      
+      toast({ title: 'Access Granted' });
       fetchData();
     } catch (err: any) {
-      toast({
-        title: 'Error',
-        description: err.message || 'Failed to grant access',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
     }
   };
 
   const handleRevokeAccess = async (accessId: string) => {
     try {
-      const { error } = await supabase
-        .from('project_access')
-        .delete()
-        .eq('id', accessId);
-
+      const { error } = await supabase.from('project_access').delete().eq('id', accessId);
       if (error) throw error;
-
-      toast({
-        title: 'Access Revoked',
-        description: 'User access has been removed',
-      });
-      
+      toast({ title: 'Access Revoked' });
       fetchData();
     } catch (err: any) {
-      toast({
-        title: 'Error',
-        description: err.message || 'Failed to revoke access',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
     }
   };
 
   const handleDeleteProject = async (projectId: string) => {
     if (!confirm('Are you sure you want to delete this project?')) return;
-
     try {
-      const { error } = await supabase
-        .from('projects')
-        .delete()
-        .eq('id', projectId);
-
+      const { error } = await supabase.from('projects').delete().eq('id', projectId);
       if (error) throw error;
-
-      toast({
-        title: 'Project Deleted',
-        description: 'The project has been removed',
-      });
-      
+      toast({ title: 'Project Deleted' });
       fetchData();
     } catch (err: any) {
-      toast({
-        title: 'Error',
-        description: err.message || 'Failed to delete project',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
     }
   };
 
-  const filteredUsers = users.filter(u => 
+  const filteredUsers = users.filter(u =>
     u.email.toLowerCase().includes(searchUser.toLowerCase()) ||
     (u.full_name && u.full_name.toLowerCase().includes(searchUser.toLowerCase()))
   );
+
+  const pendingUsers = users.filter(u => u.status === 'pending');
+  const approvedUsers = users.filter(u => u.status === 'approved');
+  const blockedUsers = users.filter(u => u.status === 'blocked');
 
   if (authLoading || loading) {
     return (
@@ -303,9 +244,7 @@ export default function Admin() {
     );
   }
 
-  if (!isAdmin) {
-    return null;
-  }
+  if (!isAdmin) return null;
 
   const getAccessIcon = (level: string) => {
     switch (level) {
@@ -316,263 +255,351 @@ export default function Admin() {
     }
   };
 
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'pending': return <Badge variant="outline" className="text-warning border-warning/30"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
+      case 'approved': return <Badge variant="outline" className="text-success border-success/30"><CheckCircle className="w-3 h-3 mr-1" />Approved</Badge>;
+      case 'blocked': return <Badge variant="outline" className="text-destructive border-destructive/30"><Ban className="w-3 h-3 mr-1" />Blocked</Badge>;
+      default: return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const UserCard = ({ u }: { u: UserProfile }) => {
+    const initials = u.full_name
+      ? u.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+      : u.email[0].toUpperCase();
+
+    return (
+      <div className="p-4 hover:bg-muted/30 transition-colors">
+        <div className="flex items-center gap-3">
+          <Avatar className="h-10 w-10 border border-border/50">
+            <AvatarImage src={u.avatar_url || undefined} />
+            <AvatarFallback className="bg-primary/10 text-primary text-xs">{initials}</AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-foreground text-sm truncate">{u.full_name || u.email}</p>
+            <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+            <p className="text-xs text-muted-foreground">Joined {new Date(u.created_at).toLocaleDateString()}</p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {getStatusBadge(u.status)}
+            <div className="flex gap-1">
+              {u.status !== 'approved' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs border-success/30 text-success hover:bg-success/10"
+                  disabled={updatingStatus === u.user_id}
+                  onClick={() => handleUpdateUserStatus(u.user_id, 'approved')}
+                >
+                  {updatingStatus === u.user_id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3 mr-1" />}
+                  Approve
+                </Button>
+              )}
+              {u.status !== 'blocked' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive/10"
+                  disabled={updatingStatus === u.user_id}
+                  onClick={() => handleUpdateUserStatus(u.user_id, 'blocked')}
+                >
+                  <Ban className="w-3 h-3 mr-1" />
+                  Block
+                </Button>
+              )}
+              {u.status !== 'pending' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  disabled={updatingStatus === u.user_id}
+                  onClick={() => handleUpdateUserStatus(u.user_id, 'pending')}
+                >
+                  <Clock className="w-3 h-3 mr-1" />
+                  Revoke
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen py-12">
       <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent" />
       <div className="absolute inset-0 cyber-grid opacity-20" />
-      
+
       <div className="container relative max-w-6xl">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
               <Settings className="w-5 h-5 text-primary" />
             </div>
             <h1 className="text-3xl font-bold text-foreground">Admin Dashboard</h1>
           </div>
-          <p className="text-muted-foreground">Manage projects and user access</p>
+          <p className="text-muted-foreground">Manage users, projects, and access</p>
         </motion.div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Projects Panel */}
-          <div className="lg:col-span-2 space-y-6">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden"
-            >
-              <div className="p-6 border-b border-border/50 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <FolderLock className="w-5 h-5 text-primary" />
-                  <h2 className="text-xl font-semibold">Projects ({projects.length})</h2>
+        <Tabs defaultValue="users" className="space-y-6">
+          <TabsList className="bg-card border border-border/50">
+            <TabsTrigger value="users" className="flex items-center gap-2">
+              <Users className="w-4 h-4" /> Users
+              {pendingUsers.length > 0 && (
+                <Badge className="bg-warning text-warning-foreground text-xs h-5 min-w-5 flex items-center justify-center">
+                  {pendingUsers.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="projects" className="flex items-center gap-2">
+              <FolderLock className="w-4 h-4" /> Projects
+            </TabsTrigger>
+            <TabsTrigger value="notifications" className="flex items-center gap-2">
+              <Bell className="w-4 h-4" /> Notifications
+              {notifications.filter(n => !n.read).length > 0 && (
+                <Badge className="bg-destructive text-destructive-foreground text-xs h-5 min-w-5 flex items-center justify-center">
+                  {notifications.filter(n => !n.read).length}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Users Tab */}
+          <TabsContent value="users">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+              {/* Pending Users */}
+              {pendingUsers.length > 0 && (
+                <div className="rounded-2xl border border-warning/30 bg-card/50 backdrop-blur-sm overflow-hidden">
+                  <div className="p-4 border-b border-warning/20 bg-warning/5">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-5 h-5 text-warning" />
+                      <h3 className="font-semibold text-foreground">Pending Approval ({pendingUsers.length})</h3>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-border/50">
+                    {pendingUsers.map(u => <UserCard key={u.user_id} u={u} />)}
+                  </div>
                 </div>
-                
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button size="sm" className="bg-primary hover:bg-primary/90">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Project
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>Add New Project</DialogTitle>
-                    </DialogHeader>
-                    <Form {...form}>
-                      <form onSubmit={form.handleSubmit(handleAddProject)} className="space-y-4">
-                        <FormField
-                          control={form.control}
-                          name="id"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Project ID (URL slug)</FormLabel>
-                              <FormControl>
-                                <Input placeholder="my-project" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name="title"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Title</FormLabel>
-                              <FormControl>
-                                <Input placeholder="My Project" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name="access_level"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Access Level</FormLabel>
-                              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="public">Public</SelectItem>
-                                  <SelectItem value="basic">Basic (Login Required)</SelectItem>
-                                  <SelectItem value="admin">Admin Only</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <Button type="submit" className="w-full" disabled={isAddingProject}>
-                          {isAddingProject ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            'Create Project'
-                          )}
-                        </Button>
-                      </form>
-                    </Form>
-                  </DialogContent>
-                </Dialog>
+              )}
+
+              {/* Approved Users */}
+              <div className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
+                <div className="p-4 border-b border-border/50">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-success" />
+                    <h3 className="font-semibold text-foreground">Approved ({approvedUsers.length})</h3>
+                  </div>
+                </div>
+                <div className="divide-y divide-border/50">
+                  {approvedUsers.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground">No approved users yet.</div>
+                  ) : approvedUsers.map(u => <UserCard key={u.user_id} u={u} />)}
+                </div>
               </div>
 
-              <div className="divide-y divide-border/50">
-                {projects.length === 0 ? (
-                  <div className="p-8 text-center text-muted-foreground">
-                    No projects yet. Add your first project above.
+              {/* Blocked Users */}
+              {blockedUsers.length > 0 && (
+                <div className="rounded-2xl border border-destructive/30 bg-card/50 backdrop-blur-sm overflow-hidden">
+                  <div className="p-4 border-b border-destructive/20">
+                    <div className="flex items-center gap-2">
+                      <Ban className="w-5 h-5 text-destructive" />
+                      <h3 className="font-semibold text-foreground">Blocked ({blockedUsers.length})</h3>
+                    </div>
                   </div>
-                ) : (
-                  projects.map((project) => (
-                    <div key={project.id} className="p-4 hover:bg-muted/30 transition-colors">
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3 min-w-0">
-                          {getAccessIcon(project.access_level)}
-                          <div className="min-w-0">
-                            <p className="font-medium text-foreground truncate">{project.title}</p>
-                            <p className="text-sm text-muted-foreground truncate">{project.id}</p>
+                  <div className="divide-y divide-border/50">
+                    {blockedUsers.map(u => <UserCard key={u.user_id} u={u} />)}
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </TabsContent>
+
+          {/* Projects Tab */}
+          <TabsContent value="projects">
+            <div className="grid lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 space-y-6">
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
+                  <div className="p-6 border-b border-border/50 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <FolderLock className="w-5 h-5 text-primary" />
+                      <h2 className="text-xl font-semibold">Projects ({projects.length})</h2>
+                    </div>
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button size="sm" className="bg-primary hover:bg-primary/90">
+                          <Plus className="w-4 h-4 mr-2" /> Add Project
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-md">
+                        <DialogHeader><DialogTitle>Add New Project</DialogTitle></DialogHeader>
+                        <Form {...form}>
+                          <form onSubmit={form.handleSubmit(handleAddProject)} className="space-y-4">
+                            <FormField control={form.control} name="id" render={({ field }) => (
+                              <FormItem><FormLabel>Project ID (URL slug)</FormLabel><FormControl><Input placeholder="my-project" {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                            <FormField control={form.control} name="title" render={({ field }) => (
+                              <FormItem><FormLabel>Title</FormLabel><FormControl><Input placeholder="My Project" {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                            <FormField control={form.control} name="access_level" render={({ field }) => (
+                              <FormItem><FormLabel>Access Level</FormLabel>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                  <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="public">Public</SelectItem>
+                                    <SelectItem value="basic">Basic (Login Required)</SelectItem>
+                                    <SelectItem value="admin">Admin Only</SelectItem>
+                                  </SelectContent>
+                                </Select><FormMessage />
+                              </FormItem>
+                            )} />
+                            <Button type="submit" className="w-full" disabled={isAddingProject}>
+                              {isAddingProject ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create Project'}
+                            </Button>
+                          </form>
+                        </Form>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                  <div className="divide-y divide-border/50">
+                    {projects.length === 0 ? (
+                      <div className="p-8 text-center text-muted-foreground">No projects yet.</div>
+                    ) : projects.map((project) => (
+                      <div key={project.id} className="p-4 hover:bg-muted/30 transition-colors">
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3 min-w-0">
+                            {getAccessIcon(project.access_level)}
+                            <div className="min-w-0">
+                              <p className="font-medium text-foreground truncate">{project.title}</p>
+                              <p className="text-sm text-muted-foreground truncate">{project.id}</p>
+                            </div>
                           </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-2">
-                          <Select
-                            value={project.access_level}
-                            onValueChange={(val) => handleUpdateAccessLevel(project.id, val as any)}
-                          >
-                            <SelectTrigger className="w-32 h-8 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="public">Public</SelectItem>
-                              <SelectItem value="basic">Basic</SelectItem>
-                              <SelectItem value="admin">Admin</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => setSelectedProject(project.id)}
-                              >
-                                <UserPlus className="w-4 h-4" />
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>Manage Access: {project.title}</DialogTitle>
-                              </DialogHeader>
-                              
-                              <div className="space-y-4">
-                                {/* Current Access */}
-                                <div>
-                                  <h4 className="text-sm font-medium mb-2">Users with Access</h4>
-                                  {projectAccess[project.id]?.length > 0 ? (
-                                    <div className="space-y-2">
-                                      {projectAccess[project.id].map((access) => (
-                                        <div key={access.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                                          <span className="text-sm">{access.profiles?.email}</span>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => handleRevokeAccess(access.id)}
-                                          >
-                                            <X className="w-4 h-4 text-destructive" />
-                                          </Button>
-                                        </div>
+                          <div className="flex items-center gap-2">
+                            <Select value={project.access_level} onValueChange={(val) => handleUpdateAccessLevel(project.id, val as any)}>
+                              <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="public">Public</SelectItem>
+                                <SelectItem value="basic">Basic</SelectItem>
+                                <SelectItem value="admin">Admin</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button variant="outline" size="sm" onClick={() => setSelectedProject(project.id)}>
+                                  <UserPlus className="w-4 h-4" />
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader><DialogTitle>Manage Access: {project.title}</DialogTitle></DialogHeader>
+                                <div className="space-y-4">
+                                  <div>
+                                    <h4 className="text-sm font-medium mb-2">Users with Access</h4>
+                                    {projectAccess[project.id]?.length > 0 ? (
+                                      <div className="space-y-2">
+                                        {projectAccess[project.id].map((access) => (
+                                          <div key={access.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                                            <span className="text-sm">{access.profiles?.email}</span>
+                                            <Button variant="ghost" size="sm" onClick={() => handleRevokeAccess(access.id)}>
+                                              <X className="w-4 h-4 text-destructive" />
+                                            </Button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : <p className="text-sm text-muted-foreground">No specific users granted access</p>}
+                                  </div>
+                                  <div>
+                                    <h4 className="text-sm font-medium mb-2">Grant Access</h4>
+                                    <div className="relative mb-3">
+                                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                      <Input placeholder="Search users..." value={searchUser} onChange={(e) => setSearchUser(e.target.value)} className="pl-9" />
+                                    </div>
+                                    <div className="max-h-40 overflow-y-auto space-y-1">
+                                      {filteredUsers.slice(0, 10).map((u) => (
+                                        <button key={u.user_id} onClick={() => handleGrantAccess(project.id, u.user_id)}
+                                          className="w-full text-left p-2 rounded-lg hover:bg-muted/50 text-sm transition-colors">
+                                          {u.email} {u.full_name && `(${u.full_name})`}
+                                        </button>
                                       ))}
                                     </div>
-                                  ) : (
-                                    <p className="text-sm text-muted-foreground">No specific users granted access</p>
-                                  )}
-                                </div>
-
-                                {/* Add User */}
-                                <div>
-                                  <h4 className="text-sm font-medium mb-2">Grant Access</h4>
-                                  <div className="relative mb-3">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                    <Input
-                                      placeholder="Search users..."
-                                      value={searchUser}
-                                      onChange={(e) => setSearchUser(e.target.value)}
-                                      className="pl-9"
-                                    />
-                                  </div>
-                                  <div className="max-h-40 overflow-y-auto space-y-1">
-                                    {filteredUsers.slice(0, 10).map((u) => (
-                                      <button
-                                        key={u.user_id}
-                                        onClick={() => handleGrantAccess(project.id, u.user_id)}
-                                        className="w-full text-left p-2 rounded-lg hover:bg-muted/50 text-sm transition-colors"
-                                      >
-                                        {u.email} {u.full_name && `(${u.full_name})`}
-                                      </button>
-                                    ))}
                                   </div>
                                 </div>
-                              </div>
-                            </DialogContent>
-                          </Dialog>
-                          
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteProject(project.id)}
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
+                              </DialogContent>
+                            </Dialog>
+                            <Button variant="ghost" size="sm" onClick={() => handleDeleteProject(project.id)}>
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
+                    ))}
+                  </div>
+                </motion.div>
+              </div>
+
+              {/* Users sidebar for project tab */}
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+                className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
+                <div className="p-6 border-b border-border/50">
+                  <div className="flex items-center gap-3">
+                    <Users className="w-5 h-5 text-secondary" />
+                    <h2 className="text-xl font-semibold">Users ({users.length})</h2>
+                  </div>
+                </div>
+                <div className="max-h-96 overflow-y-auto divide-y divide-border/50">
+                  {users.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground">No users yet.</div>
+                  ) : users.map((u) => (
+                    <div key={u.user_id} className="p-4 flex items-center gap-3">
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={u.avatar_url || undefined} />
+                        <AvatarFallback className="bg-primary/10 text-primary text-xs">{u.email[0].toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-foreground text-sm truncate">{u.email}</p>
+                        {u.full_name && <p className="text-xs text-muted-foreground truncate">{u.full_name}</p>}
+                      </div>
+                      {getStatusBadge(u.status)}
                     </div>
-                  ))
+                  ))}
+                </div>
+              </motion.div>
+            </div>
+          </TabsContent>
+
+          {/* Notifications Tab */}
+          <TabsContent value="notifications">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
+              <div className="p-4 border-b border-border/50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-primary" />
+                  <h3 className="font-semibold text-foreground">Notifications</h3>
+                </div>
+                {notifications.some(n => !n.read) && (
+                  <Button size="sm" variant="outline" onClick={markNotificationsRead}>
+                    Mark all read
+                  </Button>
                 )}
               </div>
-            </motion.div>
-          </div>
-
-          {/* Users Panel */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden"
-          >
-            <div className="p-6 border-b border-border/50">
-              <div className="flex items-center gap-3">
-                <Users className="w-5 h-5 text-secondary" />
-                <h2 className="text-xl font-semibold">Users ({users.length})</h2>
-              </div>
-            </div>
-
-            <div className="max-h-96 overflow-y-auto divide-y divide-border/50">
-              {users.length === 0 ? (
-                <div className="p-8 text-center text-muted-foreground">
-                  No users registered yet.
-                </div>
-              ) : (
-                users.map((u) => (
-                  <div key={u.user_id} className="p-4">
-                    <p className="font-medium text-foreground text-sm truncate">{u.email}</p>
-                    {u.full_name && (
-                      <p className="text-xs text-muted-foreground truncate">{u.full_name}</p>
-                    )}
+              <div className="divide-y divide-border/50">
+                {notifications.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground">No notifications yet.</div>
+                ) : notifications.map((n) => (
+                  <div key={n.id} className={cn("p-4 transition-colors", !n.read && "bg-primary/5")}>
+                    <div className="flex items-start gap-3">
+                      <div className={cn("w-2 h-2 rounded-full mt-2 flex-shrink-0", n.read ? "bg-muted" : "bg-primary")} />
+                      <div>
+                        <p className="text-sm text-foreground">{n.message}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{new Date(n.created_at).toLocaleString()}</p>
+                      </div>
+                    </div>
                   </div>
-                ))
-              )}
-            </div>
-          </motion.div>
-        </div>
+                ))}
+              </div>
+            </motion.div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
