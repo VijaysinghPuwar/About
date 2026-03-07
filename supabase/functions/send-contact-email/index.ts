@@ -12,34 +12,58 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { name, email, subject, message } = await req.json();
-
-    // Validate inputs
-    if (!name || !email || !subject || !message) {
-      return new Response(
-        JSON.stringify({ error: "All fields are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (name.length > 100 || email.length > 255 || subject.length > 200 || message.length > 5000) {
-      return new Response(
-        JSON.stringify({ error: "Input too long" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const { name, email: clientEmail, subject, message } = await req.json();
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // Check for authenticated user via JWT
+    let authenticatedEmail: string | null = null;
+    let userId: string | null = null;
+
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.replace("Bearer ", "");
+      const { data: userData, error: authError } = await supabase.auth.getUser(token);
+      if (!authError && userData?.user) {
+        authenticatedEmail = userData.user.email || null;
+        userId = userData.user.id;
+      }
+    }
+
+    // Determine the email to use
+    const senderEmail = authenticatedEmail || clientEmail;
+
+    // Validate inputs
+    if (!name || !subject || !message) {
+      return new Response(
+        JSON.stringify({ error: "Name, subject, and message are required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!senderEmail) {
+      return new Response(
+        JSON.stringify({ error: "Email is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (name.length > 100 || senderEmail.length > 255 || subject.length > 200 || message.length > 5000) {
+      return new Response(
+        JSON.stringify({ error: "Input too long" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Rate limiting: max 3 submissions per hour from same email
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const { count } = await supabase
       .from("contact_messages")
       .select("*", { count: "exact", head: true })
-      .eq("email", email)
+      .eq("email", senderEmail)
       .gte("created_at", oneHourAgo);
 
     if ((count || 0) >= 3) {
@@ -49,10 +73,20 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Save to database
+    // Save to database with optional user_id
+    const insertData: Record<string, unknown> = {
+      name,
+      email: senderEmail,
+      subject,
+      message,
+    };
+    if (userId) {
+      insertData.user_id = userId;
+    }
+
     const { error: insertError } = await supabase
       .from("contact_messages")
-      .insert({ name, email, subject, message });
+      .insert(insertData);
 
     if (insertError) {
       console.error("Insert error:", insertError);
