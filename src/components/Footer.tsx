@@ -3,7 +3,7 @@ import { Github, Linkedin, Mail } from 'lucide-react';
 export function Footer() {
   return (
     <footer className="border-t border-border/40 py-8">
-      <div className="container max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div className="container max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="text-sm text-muted-foreground">
           © {new Date().getFullYear()} Vijaysingh Puwar · Cybersecurity Engineer
         </div>

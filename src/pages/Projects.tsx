@@ -43,7 +43,7 @@ export default function Projects() {
 
   return (
     <div className="min-h-screen py-20">
-      <div className="container max-w-5xl mx-auto">
+      <div className="container max-w-6xl mx-auto">
         <div className="text-center mb-12">
           <p className="section-heading">Portfolio</p>
           <h1 className="section-title mb-4">Projects</h1>

@@ -109,12 +109,12 @@ export default function Index() {
       {/* ===== HERO ===== */}
       <section className="relative py-24 md:py-32">
         <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] to-transparent" />
-        <div className="container relative max-w-4xl mx-auto text-center">
+        <div className="container relative max-w-6xl mx-auto text-center">
           <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={0}>
             <img
               src={profilePhoto}
               alt="Vijaysingh Puwar"
-              className="w-28 h-28 rounded-full mx-auto mb-6 border-2 border-border object-cover"
+              className="w-44 h-44 rounded-full mx-auto mb-8 border-2 border-primary/60 shadow-[0_0_30px_hsl(var(--primary)/0.2)] object-cover"
             />
           </motion.div>
           <motion.h1 initial="hidden" animate="visible" variants={fadeUp} custom={1}
@@ -128,7 +128,7 @@ export default function Index() {
             Cybersecurity Engineer
           </motion.p>
           <motion.p initial="hidden" animate="visible" variants={fadeUp} custom={3}
-            className="text-muted-foreground text-lg max-w-2xl mx-auto mb-8"
+            className="text-muted-foreground text-lg max-w-3xl mx-auto mb-8"
           >
             Securing infrastructure, automating defense, and building practical cloud and network security solutions.
           </motion.p>
@@ -136,7 +136,7 @@ export default function Index() {
             className="flex flex-col sm:flex-row gap-3 justify-center mb-8"
           >
             <Button size="lg" asChild>
-              <Link to="/resume">View Resume</Link>
+              <Link to="/about">View Resume</Link>
             </Button>
             <Button size="lg" variant="outline" asChild>
               <Link to="/contact">Contact Me</Link>
@@ -161,9 +161,9 @@ export default function Index() {
         </div>
       </section>
 
-      {/* ===== ABOUT SNAPSHOT ===== */}
-      <section className="py-20 border-t border-border/40">
-        <div className="container max-w-5xl mx-auto">
+      {/* ===== CORE COMPETENCIES ===== */}
+      <section className="py-16 border-t border-border/40">
+        <div className="container max-w-6xl mx-auto">
           <div className="text-center mb-12">
             <p className="section-heading">What I Do</p>
             <h2 className="section-title">Core Competencies</h2>
@@ -185,8 +185,8 @@ export default function Index() {
       </section>
 
       {/* ===== FEATURED PROJECTS ===== */}
-      <section className="py-20 border-t border-border/40">
-        <div className="container max-w-5xl mx-auto">
+      <section className="py-16 border-t border-border/40">
+        <div className="container max-w-6xl mx-auto">
           <div className="text-center mb-12">
             <p className="section-heading">Portfolio</p>
             <h2 className="section-title">Featured Projects</h2>
@@ -230,8 +230,8 @@ export default function Index() {
 
       {/* ===== WRITEUPS ===== */}
       {recentWriteups.length > 0 && (
-        <section className="py-20 border-t border-border/40">
-          <div className="container max-w-5xl mx-auto">
+        <section className="py-16 border-t border-border/40">
+          <div className="container max-w-6xl mx-auto">
             <div className="text-center mb-12">
               <p className="section-heading">Research</p>
               <h2 className="section-title">Recent Writeups</h2>
@@ -260,8 +260,8 @@ export default function Index() {
       )}
 
       {/* ===== EXPERIENCE ===== */}
-      <section className="py-20 border-t border-border/40">
-        <div className="container max-w-3xl mx-auto">
+      <section className="py-16 border-t border-border/40">
+        <div className="container max-w-5xl mx-auto">
           <div className="text-center mb-12">
             <p className="section-heading">Career</p>
             <h2 className="section-title">Experience</h2>
@@ -292,8 +292,8 @@ export default function Index() {
       </section>
 
       {/* ===== EDUCATION ===== */}
-      <section className="py-20 border-t border-border/40">
-        <div className="container max-w-5xl mx-auto">
+      <section className="py-16 border-t border-border/40">
+        <div className="container max-w-6xl mx-auto">
           <div className="text-center mb-12">
             <p className="section-heading">Education</p>
             <h2 className="section-title">Academic Background</h2>
@@ -331,22 +331,22 @@ export default function Index() {
 
       {/* ===== CERTIFICATIONS ===== */}
       <section className="py-16 border-t border-border/40">
-        <div className="container max-w-4xl mx-auto text-center">
+        <div className="container max-w-6xl mx-auto text-center">
           <p className="section-heading">Credentials</p>
           <h2 className="section-title mb-8">Certifications</h2>
-          <div className="flex flex-wrap justify-center gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
             {certifications.map(cert => (
-              <Badge key={cert} variant="outline" className="px-4 py-2 text-sm text-foreground border-border/60">
-                <Award className="w-4 h-4 mr-2 text-primary" />{cert}
-              </Badge>
+              <div key={cert} className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-border/60 bg-card text-sm text-foreground">
+                <Award className="w-4 h-4 text-primary flex-shrink-0" />{cert}
+              </div>
             ))}
           </div>
         </div>
       </section>
 
       {/* ===== CONTACT CTA ===== */}
-      <section className="py-20 border-t border-border/40">
-        <div className="container max-w-2xl mx-auto text-center">
+      <section className="py-16 border-t border-border/40">
+        <div className="container max-w-4xl mx-auto text-center">
           <p className="section-heading">Get in Touch</p>
           <h2 className="section-title mb-4">Let's Connect</h2>
           <p className="text-muted-foreground mb-8">
