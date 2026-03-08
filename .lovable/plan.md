@@ -1,55 +1,114 @@
 
 
-## Plan: Pentest Mode, UX Improvements, and Profile Photo
+## Plan: Full-Width Layout Redesign + Merge Resume into About
 
-### 1. Fix Build Error + Refactor Theme System
+This plan covers widening the global layout, reducing dead space, merging Resume into About, and redesigning the Contact section into a two-column layout.
 
-The current build error is likely from the `ThemeProvider` and App.tsx setup. The existing theme system uses `blue`/`red` string types but is incomplete.
+---
 
-**Refactor `src/hooks/useTheme.tsx`:**
-- Rename theme values to `'default' | 'pentest'` (Pentest Mode branding)
-- Apply class `theme-pentest` on `<html>` when active, remove it when default
-- Persist to `localStorage` key `pentest-mode`
+### 1. Global Container Width (`tailwind.config.ts`)
 
-**Update `src/index.css`:**
-- Keep `:root` as the blue/default theme (already defined)
-- Rename `.theme-red` to `.theme-pentest` and ensure ALL CSS variables are overridden with red palette:
-  - `--primary`, `--secondary`, `--ring`, `--border`, `--glow-cyan` (rename glow vars)
-  - `--scanline-color`, `--grid-color` all shift red
-- Add a global `transition: background-color 200ms, color 200ms, border-color 200ms` to `*` for smooth theme switching
+Change the container `2xl` screen from `1400px` to `1440px` and reduce padding from `2rem` to `1.5rem` on large screens:
 
-**Update `src/components/ThemeToggle.tsx`:**
-- Label: show "Pentest Mode" text on desktop, icon-only on mobile
-- Use a `Shield` or `Crosshair` icon for pentest, `Waves` for default
-- Style the toggle with a red glow when pentest is active
+```ts
+container: {
+  center: true,
+  padding: {
+    DEFAULT: "1rem",
+    sm: "1.5rem",
+    lg: "2rem",
+  },
+  screens: {
+    "2xl": "1440px",
+  },
+},
+```
 
-### 2. Update Navigation (`src/components/Navigation.tsx`)
-- Add `ThemeToggle` back (it was removed when the Navigation was rewritten)
-- Keep it in both desktop and mobile menu sections
-- Ensure `shadow-glow-cyan` class references work with theme (they use CSS vars, so they'll auto-switch)
+### 2. Homepage (`src/pages/Index.tsx`) — Widen All Sections
 
-### 3. Profile Photo in Hero (`src/pages/Index.tsx`)
-- Add a circular avatar image above/left of the name in the hero section
-- Image URL: the LinkedIn photo URL provided
-- Style: `w-32 h-32 rounded-full border-4` with `border-primary` (auto-switches with theme)
-- Add `ring-4 ring-primary/30` glow effect
-- Alt text: "Vijaysingh Puwar profile photo"
-- On mobile: centered above name; on desktop: inline-left of name
+- **Hero**: Change `max-w-4xl` → `max-w-6xl`, increase profile image from `w-28 h-28` → `w-44 h-44`, widen summary `max-w-2xl` → `max-w-3xl`
+- **Competencies**: `max-w-5xl` → `max-w-6xl`
+- **Featured Projects**: `max-w-5xl` → `max-w-6xl`
+- **Writeups**: `max-w-5xl` → `max-w-6xl`
+- **Experience**: `max-w-3xl` → `max-w-5xl` (was too narrow)
+- **Education**: `max-w-5xl` → `max-w-6xl`
+- **Certifications**: `max-w-4xl` → `max-w-6xl`, use grid layout instead of flex-wrap
+- **Contact CTA**: `max-w-2xl` → `max-w-4xl`
+- **Section spacing**: Reduce `py-20` → `py-16` across all sections; hero keeps `py-24 md:py-32`
+- **Hero CTA**: Change "View Resume" link from `/resume` → `/about`
 
-### 4. UX Improvements
-- **Hero section**: Increase `leading-relaxed` on subtitle text, reduce visual clutter by simplifying cert badges area
-- **Smooth scroll**: Already using `react-router-dom` for navigation between pages (not single-page scroll anchors), so this is already handled
-- **Card hover**: Already has `hover:-translate-y-1` — ensure consistent across all cards
-- **Theme transition**: Add CSS `transition` on `background-color`, `color`, `border-color` globally (200ms)
+### 3. Merge Resume into About (`src/pages/About.tsx`) — Major Rewrite
 
-### 5. Tailwind Config (`tailwind.config.ts`)
-- Remove the unused `red-team` color references that reference undefined CSS variables (likely causing the build error)
+The About page will absorb all Resume content. New structure:
 
-### Files to modify:
-1. `src/index.css` — Rename `.theme-red` to `.theme-pentest`, add transition
-2. `src/hooks/useTheme.tsx` — Update types to `'default' | 'pentest'`
-3. `src/components/ThemeToggle.tsx` — Update labels and icons
-4. `src/components/Navigation.tsx` — Re-add ThemeToggle import and usage
-5. `src/pages/Index.tsx` — Add profile photo to hero
-6. `tailwind.config.ts` — Remove undefined `red-team` CSS var references
+**Section 1 — Profile intro** (existing split layout, widened to `max-w-6xl`):
+- Profile image `w-44 h-44` (increased from 160px)
+- Name, title, role tags, summary, highlights, social links
+- Stats bar below
+
+**Section 2 — Skills** (from Resume):
+- 4-column grid of skill categories (Security, Automation, Cloud & Network, Tools)
+- Wider layout
+
+**Section 3 — Experience** (from Resume):
+- Timeline layout, widened container `max-w-5xl`
+- All 3 roles with bullets
+
+**Section 4 — Education** (from Resume):
+- 2-column cards, wider
+- Coursework tags on M.S. card
+
+**Section 5 — Certifications** (from Resume):
+- Grid/pill layout
+
+**Section 6 — Resume Download**:
+- Small "Download Resume PDF" button at bottom
+
+**CTA** at the very end.
+
+### 4. Remove Resume Route (`src/App.tsx`)
+
+- Remove the `/resume` route
+- Keep the `Resume` import for now (or remove entirely)
+
+### 5. Update Navigation (`src/components/Navigation.tsx`)
+
+- Remove "Resume" from `navItems`
+- Nav becomes: Home, Projects, Writeups, About, Contact
+
+### 6. Contact Page (`src/pages/Contact.tsx`) — Two-Column Layout
+
+Change from current 3-column (1 sidebar + 2 form) to a proper two-column split:
+
+- Widen to `max-w-6xl`
+- **Left column**: "Let's Connect" headline, intro text, contact links (email, GitHub, LinkedIn), availability list
+- **Right column**: Full contact form (keeps smart auth behavior)
+
+### 7. Projects Page (`src/pages/Projects.tsx`) — Widen
+
+- `max-w-5xl` → `max-w-6xl`
+
+### 8. Writeups Page (`src/pages/Writeups.tsx`) — Widen
+
+- `max-w-5xl` → `max-w-6xl`
+
+### 9. Footer (`src/components/Footer.tsx`) — Widen
+
+- `max-w-5xl` → `max-w-6xl`
+
+---
+
+### Files to Modify
+
+| File | Change |
+|------|--------|
+| `tailwind.config.ts` | Widen container, responsive padding |
+| `src/pages/Index.tsx` | Widen all sections, enlarge hero image, reduce vertical gaps, link to `/about` instead of `/resume` |
+| `src/pages/About.tsx` | Full rewrite — merge Resume content (skills, experience, education, certs, download button) |
+| `src/App.tsx` | Remove `/resume` route |
+| `src/components/Navigation.tsx` | Remove "Resume" nav item |
+| `src/pages/Contact.tsx` | Widen to `max-w-6xl`, two-column layout |
+| `src/pages/Projects.tsx` | Widen to `max-w-6xl` |
+| `src/pages/Writeups.tsx` | Widen to `max-w-6xl` |
+| `src/components/Footer.tsx` | Widen to `max-w-6xl` |
 
