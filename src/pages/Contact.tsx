@@ -17,7 +17,6 @@ export default function Contact() {
   const [submitted, setSubmitted] = useState(false);
   const { toast } = useToast();
 
-  // Pre-fill name from profile when available
   useEffect(() => {
     if (profile?.full_name) {
       setFormData(prev => ({ ...prev, name: profile.full_name || '' }));
@@ -28,7 +27,6 @@ export default function Contact() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      // For logged-in users, don't send email — backend extracts it from JWT
       const body = user
         ? { name: formData.name, subject: formData.subject, message: formData.message }
         : { name: formData.name, email: formData.email, subject: formData.subject, message: formData.message };
@@ -47,17 +45,25 @@ export default function Contact() {
 
   return (
     <div className="min-h-screen py-20">
-      <div className="container max-w-4xl mx-auto">
+      <div className="container max-w-6xl mx-auto">
         <div className="text-center mb-12">
           <p className="section-heading">Contact</p>
           <h1 className="section-title mb-4">Get in Touch</h1>
-          <p className="text-muted-foreground max-w-lg mx-auto">
+          <p className="text-muted-foreground max-w-2xl mx-auto">
             Open to cybersecurity roles, collaborations, and security consulting opportunities.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8">
-          <div className="space-y-4">
+        <div className="grid md:grid-cols-2 gap-8">
+          {/* Left column — info */}
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-bold text-foreground mb-2">Let's Connect</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Whether you're looking for a cybersecurity engineer, need help with a security project, or want to discuss opportunities — I'd love to hear from you.
+              </p>
+            </div>
+
             <Card className="border-border/40 bg-card">
               <CardContent className="pt-6 space-y-4">
                 <a href="mailto:contact@vijaysinghpuwar.com" className="flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -71,20 +77,34 @@ export default function Contact() {
                 </a>
               </CardContent>
             </Card>
+
             <Card className="border-border/40 bg-card">
               <CardContent className="pt-6">
-                <h3 className="font-semibold text-foreground mb-2 text-sm">What I'm Looking For</h3>
-                <ul className="text-sm text-muted-foreground space-y-1.5">
-                  <li>• Cybersecurity engineering roles</li>
-                  <li>• Security operations positions</li>
-                  <li>• Cloud security opportunities</li>
-                  <li>• Security automation projects</li>
+                <h3 className="font-semibold text-foreground mb-3 text-sm">Availability</h3>
+                <ul className="text-sm text-muted-foreground space-y-2">
+                  <li className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
+                    Open to cybersecurity engineering roles
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
+                    Open to security operations positions
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
+                    Open to cloud security opportunities
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
+                    Open to collaborations & consulting
+                  </li>
                 </ul>
               </CardContent>
             </Card>
           </div>
 
-          <div className="md:col-span-2">
+          {/* Right column — form */}
+          <div>
             {submitted ? (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16">
                 <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-4" />
@@ -120,7 +140,7 @@ export default function Contact() {
                     </div>
                     <div>
                       <Label htmlFor="message" className="text-sm">Message</Label>
-                      <Textarea id="message" required rows={5} value={formData.message} onChange={e => setFormData({ ...formData, message: e.target.value })} className="bg-background border-border/40 mt-1" />
+                      <Textarea id="message" required rows={6} value={formData.message} onChange={e => setFormData({ ...formData, message: e.target.value })} className="bg-background border-border/40 mt-1" />
                     </div>
                     <Button type="submit" disabled={isSubmitting} className="w-full">
                       {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending...</> : 'Send Message'}

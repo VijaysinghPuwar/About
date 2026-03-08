@@ -12,7 +12,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Projects from "./pages/Projects";
 import Writeups from "./pages/Writeups";
-import Resume from "./pages/Resume";
+// Resume merged into About
 import About from "./pages/About";
 import Contact from "./pages/Contact";
 import ProjectDetail from "./pages/ProjectDetail";
@@ -46,7 +46,7 @@ const App = () => (
                   <Route path="/projects" element={<Projects />} />
                   <Route path="/projects/:id" element={<ProjectDetail />} />
                   <Route path="/writeups" element={<Writeups />} />
-                  <Route path="/resume" element={<Resume />} />
+                  {/* Resume merged into About */}
 
                   {/* Admin route */}
                   <Route path="/admin" element={<ProtectedRoute requireAdmin><Admin /></ProtectedRoute>} />
