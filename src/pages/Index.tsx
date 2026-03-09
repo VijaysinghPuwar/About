@@ -163,17 +163,19 @@ export default function Index() {
               transition={{ duration: 0.7, delay: 0.2 }}
               className="order-1 lg:order-2 relative flex justify-center lg:justify-end"
             >
-              <div className="relative w-64 h-80 sm:w-72 sm:h-96 lg:w-full lg:h-[420px] rounded-2xl overflow-hidden shadow-[0_0_40px_hsl(var(--primary)/0.15)]">
+              <div className="relative w-full h-72 sm:h-80 lg:h-[480px] overflow-hidden">
                 <img
                   src={profilePhoto}
                   alt="Vijaysingh Puwar"
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover object-top"
                 />
-                {/* Gradient overlays */}
-                <div className="absolute inset-0 bg-gradient-to-l from-transparent via-transparent to-background/80" />
-                <div className="absolute inset-0 bg-gradient-to-t from-background/60 via-transparent to-transparent" />
-                {/* Glow accent */}
-                <div className="absolute inset-0 border border-primary/10 rounded-2xl" />
+                {/* Edge-blending gradient overlays */}
+                <div className="absolute inset-0 bg-gradient-to-l from-transparent via-transparent to-background" />
+                <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-b from-background/30 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent to-background/40" />
+                {/* Subtle cyber tint */}
+                <div className="absolute inset-0 bg-primary/[0.03]" />
               </div>
             </motion.div>
           </div>
