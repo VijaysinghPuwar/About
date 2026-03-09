@@ -107,57 +107,76 @@ export default function Index() {
   return (
     <div className="min-h-screen">
       {/* ===== HERO ===== */}
-      <section className="relative py-24 md:py-32">
+      <section className="relative py-20 md:py-28 lg:py-32 overflow-hidden hero-grid-bg">
         <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] to-transparent" />
-        <div className="container relative max-w-6xl mx-auto text-center">
-          <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={0}>
-            <img
-              src={profilePhoto}
-              alt="Vijaysingh Puwar"
-              className="w-44 h-44 rounded-full mx-auto mb-8 border-2 border-primary/60 shadow-[0_0_30px_hsl(var(--primary)/0.2)] object-cover"
-            />
-          </motion.div>
-          <motion.h1 initial="hidden" animate="visible" variants={fadeUp} custom={1}
-            className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground mb-3"
-          >
-            Vijaysingh Puwar
-          </motion.h1>
-          <motion.p initial="hidden" animate="visible" variants={fadeUp} custom={2}
-            className="text-xl md:text-2xl text-primary font-medium mb-4"
-          >
-            Cybersecurity Engineer
-          </motion.p>
-          <motion.p initial="hidden" animate="visible" variants={fadeUp} custom={3}
-            className="text-muted-foreground text-lg max-w-3xl mx-auto mb-8"
-          >
-            Securing infrastructure, automating defense, and building practical cloud and network security solutions.
-          </motion.p>
-          <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={4}
-            className="flex flex-col sm:flex-row gap-3 justify-center mb-8"
-          >
-            <Button size="lg" asChild>
-              <Link to="/about">View Resume</Link>
-            </Button>
-            <Button size="lg" variant="outline" asChild>
-              <Link to="/contact">Contact Me</Link>
-            </Button>
-          </motion.div>
-          <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={5}
-            className="flex gap-4 justify-center"
-          >
-            <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-foreground transition-colors">
-              <Github className="w-5 h-5" />
-            </a>
-            <a href="https://linkedin.com/in/vijaysinghpuwar" target="_blank" rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-foreground transition-colors">
-              <Linkedin className="w-5 h-5" />
-            </a>
-            <a href="mailto:contact@vijaysinghpuwar.com"
-              className="text-muted-foreground hover:text-foreground transition-colors">
-              <Mail className="w-5 h-5" />
-            </a>
-          </motion.div>
+        <div className="container relative max-w-6xl mx-auto">
+          <div className="grid lg:grid-cols-[1fr_0.8fr] gap-12 lg:gap-16 items-center">
+            {/* Left — Text */}
+            <div className="order-2 lg:order-1">
+              <motion.p initial="hidden" animate="visible" variants={fadeUp} custom={0}
+                className="font-mono text-xs tracking-[0.25em] uppercase text-primary mb-4"
+              >
+                Cybersecurity Engineer
+              </motion.p>
+              <motion.h1 initial="hidden" animate="visible" variants={fadeUp} custom={1}
+                className="text-4xl sm:text-5xl lg:text-7xl font-bold text-foreground mb-4 leading-[1.1]"
+              >
+                Vijaysingh Puwar
+              </motion.h1>
+              <motion.p initial="hidden" animate="visible" variants={fadeUp} custom={2}
+                className="text-lg md:text-xl text-muted-foreground max-w-xl mb-8 leading-relaxed"
+              >
+                Securing infrastructure, automating defense, and building practical cloud and network security solutions.
+              </motion.p>
+              <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3}
+                className="flex flex-col sm:flex-row gap-3 mb-8"
+              >
+                <Button size="lg" asChild className="shadow-[0_0_15px_hsl(var(--primary)/0.3)] hover:shadow-[0_0_25px_hsl(var(--primary)/0.5)] transition-shadow">
+                  <Link to="/about">View Resume</Link>
+                </Button>
+                <Button size="lg" variant="outline" asChild>
+                  <Link to="/contact">Contact Me</Link>
+                </Button>
+              </motion.div>
+              <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={4}
+                className="flex gap-5"
+              >
+                <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-primary transition-colors">
+                  <Github className="w-5 h-5" />
+                </a>
+                <a href="https://linkedin.com/in/vijaysinghpuwar" target="_blank" rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-primary transition-colors">
+                  <Linkedin className="w-5 h-5" />
+                </a>
+                <a href="mailto:contact@vijaysinghpuwar.com"
+                  className="text-muted-foreground hover:text-primary transition-colors">
+                  <Mail className="w-5 h-5" />
+                </a>
+              </motion.div>
+            </div>
+
+            {/* Right — Portrait */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.7, delay: 0.2 }}
+              className="order-1 lg:order-2 relative flex justify-center lg:justify-end"
+            >
+              <div className="relative w-64 h-80 sm:w-72 sm:h-96 lg:w-full lg:h-[420px] rounded-2xl overflow-hidden shadow-[0_0_40px_hsl(var(--primary)/0.15)]">
+                <img
+                  src={profilePhoto}
+                  alt="Vijaysingh Puwar"
+                  className="w-full h-full object-cover"
+                />
+                {/* Gradient overlays */}
+                <div className="absolute inset-0 bg-gradient-to-l from-transparent via-transparent to-background/80" />
+                <div className="absolute inset-0 bg-gradient-to-t from-background/60 via-transparent to-transparent" />
+                {/* Glow accent */}
+                <div className="absolute inset-0 border border-primary/10 rounded-2xl" />
+              </div>
+            </motion.div>
+          </div>
         </div>
       </section>
 
