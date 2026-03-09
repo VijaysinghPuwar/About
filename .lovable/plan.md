@@ -1,58 +1,55 @@
 
 
-## Plan: Full-Width Split-Hero Homepage Redesign
+## Plan: Pentest Mode, UX Improvements, and Profile Photo
 
-### Overview
-Redesign the homepage hero into a split-screen layout (text left, large portrait right) with subtle cyber-themed visual effects. Widen all remaining sections and add an animated grid background for the hacker aesthetic.
+### 1. Fix Build Error + Refactor Theme System
 
----
+The current build error is likely from the `ThemeProvider` and App.tsx setup. The existing theme system uses `blue`/`red` string types but is incomplete.
 
-### 1. Hero Section — Split Layout (`src/pages/Index.tsx`)
+**Refactor `src/hooks/useTheme.tsx`:**
+- Rename theme values to `'default' | 'pentest'` (Pentest Mode branding)
+- Apply class `theme-pentest` on `<html>` when active, remove it when default
+- Persist to `localStorage` key `pentest-mode`
 
-Replace the centered hero with a two-column split:
+**Update `src/index.css`:**
+- Keep `:root` as the blue/default theme (already defined)
+- Rename `.theme-red` to `.theme-pentest` and ensure ALL CSS variables are overridden with red palette:
+  - `--primary`, `--secondary`, `--ring`, `--border`, `--glow-cyan` (rename glow vars)
+  - `--scanline-color`, `--grid-color` all shift red
+- Add a global `transition: background-color 200ms, color 200ms, border-color 200ms` to `*` for smooth theme switching
 
-**Left column (~55%):**
-- Small mono label: `CYBERSECURITY ENGINEER`
-- Large name heading (`text-5xl lg:text-7xl`)
-- Title line
-- Summary paragraph
-- CTA buttons row
-- Social icons row
-- All left-aligned
+**Update `src/components/ThemeToggle.tsx`:**
+- Label: show "Pentest Mode" text on desktop, icon-only on mobile
+- Use a `Shield` or `Crosshair` icon for pentest, `Waves` for default
+- Style the toggle with a red glow when pentest is active
 
-**Right column (~45%):**
-- Large portrait image filling the column height (~400px)
-- Rounded corners, not circular
-- Gradient overlay fading left into the background
-- Subtle glow/shadow effect
-- `object-cover` to fill space
+### 2. Update Navigation (`src/components/Navigation.tsx`)
+- Add `ThemeToggle` back (it was removed when the Navigation was rewritten)
+- Keep it in both desktop and mobile menu sections
+- Ensure `shadow-glow-cyan` class references work with theme (they use CSS vars, so they'll auto-switch)
 
-**Mobile:** Stack vertically — text first, image below (or hidden on very small screens).
+### 3. Profile Photo in Hero (`src/pages/Index.tsx`)
+- Add a circular avatar image above/left of the name in the hero section
+- Image URL: the LinkedIn photo URL provided
+- Style: `w-32 h-32 rounded-full border-4` with `border-primary` (auto-switches with theme)
+- Add `ring-4 ring-primary/30` glow effect
+- Alt text: "Vijaysingh Puwar profile photo"
+- On mobile: centered above name; on desktop: inline-left of name
 
-### 2. Cyber Background Effects (`src/index.css`)
+### 4. UX Improvements
+- **Hero section**: Increase `leading-relaxed` on subtitle text, reduce visual clutter by simplifying cert badges area
+- **Smooth scroll**: Already using `react-router-dom` for navigation between pages (not single-page scroll anchors), so this is already handled
+- **Card hover**: Already has `hover:-translate-y-1` — ensure consistent across all cards
+- **Theme transition**: Add CSS `transition` on `background-color`, `color`, `border-color` globally (200ms)
 
-Add a subtle animated grid background to the hero section using the existing `bg-cyber-grid` utility and `--grid-color` variable. Add a CSS class `.hero-grid-bg` with the grid pattern at `40px` intervals, very low opacity.
+### 5. Tailwind Config (`tailwind.config.ts`)
+- Remove the unused `red-team` color references that reference undefined CSS variables (likely causing the build error)
 
-### 3. Button Glow Effects
-
-Add a subtle `shadow-[0_0_15px_hsl(var(--primary)/0.3)]` on CTA buttons and `hover:shadow-[0_0_25px_hsl(var(--primary)/0.5)]` for the cyber glow feel.
-
-### 4. All Other Sections — Already `max-w-6xl`
-
-The remaining sections (Competencies, Projects, Writeups, Experience, Education, Certifications, Contact CTA) are already at `max-w-6xl`. No width changes needed.
-
-### 5. Section Title Sizing
-
-Increase `.section-title` from `text-3xl md:text-4xl` to `text-3xl md:text-4xl lg:text-5xl` in `src/index.css`.
-
----
-
-### Files to Modify
-
-| File | Change |
-|------|--------|
-| `src/pages/Index.tsx` | Rewrite hero to split layout; larger image; left-aligned text; glow buttons |
-| `src/index.css` | Add `.hero-grid-bg` class; increase `.section-title` size |
-
-No other files need changes — navigation, About merge, Contact layout, and container widths are already done from previous iterations.
+### Files to modify:
+1. `src/index.css` — Rename `.theme-red` to `.theme-pentest`, add transition
+2. `src/hooks/useTheme.tsx` — Update types to `'default' | 'pentest'`
+3. `src/components/ThemeToggle.tsx` — Update labels and icons
+4. `src/components/Navigation.tsx` — Re-add ThemeToggle import and usage
+5. `src/pages/Index.tsx` — Add profile photo to hero
+6. `tailwind.config.ts` — Remove undefined `red-team` CSS var references
 
