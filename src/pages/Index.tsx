@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Github, Linkedin, Mail, ArrowRight, Shield, Terminal, Cloud, GraduationCap, Award } from 'lucide-react';
 import { motion } from 'framer-motion';
-import profilePhoto from '@/assets/profile-photo.jpg';
+import profilePhoto from '@/assets/profile-portrait.png';
 import projectsData from '@/data/projects.json';
 import writeupsData from '@/data/writeups.json';
 
