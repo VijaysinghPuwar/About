@@ -163,19 +163,23 @@ export default function Index() {
               transition={{ duration: 0.7, delay: 0.2 }}
               className="order-1 lg:order-2 relative flex justify-center lg:justify-end"
             >
-              <div className="relative w-full h-72 sm:h-80 lg:h-[480px] overflow-hidden">
+              <div className="relative w-full h-80 sm:h-[400px] lg:h-[560px] overflow-visible">
+                {/* Soft background glow behind portrait */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="w-[70%] h-[70%] rounded-full bg-primary/[0.06] blur-[80px]" />
+                </div>
                 <img
                   src={profilePhoto}
                   alt="Vijaysingh Puwar"
-                  className="w-full h-full object-cover object-top"
+                  className="relative w-full h-full object-contain object-bottom drop-shadow-[0_0_40px_hsl(var(--primary)/0.15)]"
                 />
                 {/* Edge-blending gradient overlays */}
-                <div className="absolute inset-0 bg-gradient-to-l from-transparent via-transparent to-background" />
-                <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
-                <div className="absolute inset-0 bg-gradient-to-b from-background/30 to-transparent" />
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent to-background/40" />
+                <div className="absolute inset-0 bg-gradient-to-l from-transparent via-transparent to-background pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-b from-background/20 to-transparent pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-background/30 pointer-events-none" />
                 {/* Subtle cyber tint */}
-                <div className="absolute inset-0 bg-primary/[0.03]" />
+                <div className="absolute inset-0 bg-primary/[0.02] pointer-events-none" />
               </div>
             </motion.div>
           </div>
