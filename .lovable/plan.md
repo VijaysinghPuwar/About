@@ -1,55 +1,31 @@
 
 
-## Plan: Pentest Mode, UX Improvements, and Profile Photo
+## Plan: Remove Boxed Look — Rebuild Hero Portrait Composition
 
-### 1. Fix Build Error + Refactor Theme System
+### Problem
+The `overflow-hidden` on line 166's container (`div.relative.w-full.h-80...overflow-hidden`) clips the radial glow to a rectangle, creating the visible dark panel behind the portrait. The glow is constrained inside a box-shaped container.
 
-The current build error is likely from the `ThemeProvider` and App.tsx setup. The existing theme system uses `blue`/`red` string types but is incomplete.
+### Solution
 
-**Refactor `src/hooks/useTheme.tsx`:**
-- Rename theme values to `'default' | 'pentest'` (Pentest Mode branding)
-- Apply class `theme-pentest` on `<html>` when active, remove it when default
-- Persist to `localStorage` key `pentest-mode`
+**File: `src/pages/Index.tsx`** — Lines 159-181
 
-**Update `src/index.css`:**
-- Keep `:root` as the blue/default theme (already defined)
-- Rename `.theme-red` to `.theme-pentest` and ensure ALL CSS variables are overridden with red palette:
-  - `--primary`, `--secondary`, `--ring`, `--border`, `--glow-cyan` (rename glow vars)
-  - `--scanline-color`, `--grid-color` all shift red
-- Add a global `transition: background-color 200ms, color 200ms, border-color 200ms` to `*` for smooth theme switching
+1. **Remove `overflow-hidden`** from the image container div (line 166). This is the primary cause — it clips the radial glow into a visible rectangle.
 
-**Update `src/components/ThemeToggle.tsx`:**
-- Label: show "Pentest Mode" text on desktop, icon-only on mobile
-- Use a `Shield` or `Crosshair` icon for pentest, `Waves` for default
-- Style the toggle with a red glow when pentest is active
+2. **Move the radial glow outside the image container** and position it as an unconstrained element within the hero section. Make it larger (`w-[500px] h-[500px]`) with heavier blur (`blur-[120px]`) and use `rounded-full` so it remains organic/circular, not rectangular.
 
-### 2. Update Navigation (`src/components/Navigation.tsx`)
-- Add `ThemeToggle` back (it was removed when the Navigation was rewritten)
-- Keep it in both desktop and mobile menu sections
-- Ensure `shadow-glow-cyan` class references work with theme (they use CSS vars, so they'll auto-switch)
+3. **Remove the left-fade and bottom-fade gradient divs** (lines 176-179). These rectangular overlays contribute to the boxed perception. Instead, use CSS `mask-image` directly on the `<img>` element with a radial gradient mask that keeps the face/center sharp and fades the outer edges organically:
+   ```
+   style={{ maskImage: 'radial-gradient(ellipse 70% 80% at 50% 40%, black 50%, transparent 90%)' }}
+   ```
 
-### 3. Profile Photo in Hero (`src/pages/Index.tsx`)
-- Add a circular avatar image above/left of the name in the hero section
-- Image URL: the LinkedIn photo URL provided
-- Style: `w-32 h-32 rounded-full border-4` with `border-primary` (auto-switches with theme)
-- Add `ring-4 ring-primary/30` glow effect
-- Alt text: "Vijaysingh Puwar profile photo"
-- On mobile: centered above name; on desktop: inline-left of name
+4. **Result**: The portrait fades at its edges via a non-rectangular mask, the glow behind it is unconstrained and circular, and no clipping container creates a visible box.
 
-### 4. UX Improvements
-- **Hero section**: Increase `leading-relaxed` on subtitle text, reduce visual clutter by simplifying cert badges area
-- **Smooth scroll**: Already using `react-router-dom` for navigation between pages (not single-page scroll anchors), so this is already handled
-- **Card hover**: Already has `hover:-translate-y-1` — ensure consistent across all cards
-- **Theme transition**: Add CSS `transition` on `background-color`, `color`, `border-color` globally (200ms)
+### Also: Replace portrait asset
+Copy the new uploaded image (`Adobe_Express_-_file-2.png`) to `src/assets/profile-portrait.png`, replacing the previous version.
 
-### 5. Tailwind Config (`tailwind.config.ts`)
-- Remove the unused `red-team` color references that reference undefined CSS variables (likely causing the build error)
-
-### Files to modify:
-1. `src/index.css` — Rename `.theme-red` to `.theme-pentest`, add transition
-2. `src/hooks/useTheme.tsx` — Update types to `'default' | 'pentest'`
-3. `src/components/ThemeToggle.tsx` — Update labels and icons
-4. `src/components/Navigation.tsx` — Re-add ThemeToggle import and usage
-5. `src/pages/Index.tsx` — Add profile photo to hero
-6. `tailwind.config.ts` — Remove undefined `red-team` CSS var references
+### Files to modify
+| File | Change |
+|------|--------|
+| `src/assets/profile-portrait.png` | Replace with new uploaded image |
+| `src/pages/Index.tsx` | Remove overflow-hidden, use radial mask-image on img, move glow outside container, remove rectangular gradient overlays |
 
