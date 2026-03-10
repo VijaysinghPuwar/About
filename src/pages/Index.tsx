@@ -107,10 +107,10 @@ export default function Index() {
   return (
     <div className="min-h-screen">
       {/* ===== HERO ===== */}
-      <section className="relative py-20 md:py-28 lg:py-32 overflow-hidden hero-grid-bg">
+      <section className="relative pt-20 md:pt-28 lg:pt-32 pb-0 overflow-hidden hero-grid-bg">
         <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] to-transparent" />
         <div className="container relative max-w-6xl mx-auto">
-          <div className="grid lg:grid-cols-[1fr_0.8fr] gap-12 lg:gap-16 items-center">
+          <div className="grid lg:grid-cols-[1fr_1fr] gap-12 lg:gap-8 items-center">
             {/* Left — Text */}
             <div className="order-2 lg:order-1">
               <motion.p initial="hidden" animate="visible" variants={fadeUp} custom={0}
