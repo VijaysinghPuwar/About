@@ -107,10 +107,10 @@ export default function Index() {
   return (
     <div className="min-h-screen">
       {/* ===== HERO ===== */}
-      <section className="relative py-20 md:py-28 lg:py-32 overflow-hidden hero-grid-bg">
+      <section className="relative pt-20 md:pt-28 lg:pt-32 pb-0 overflow-hidden hero-grid-bg">
         <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] to-transparent" />
         <div className="container relative max-w-6xl mx-auto">
-          <div className="grid lg:grid-cols-[1fr_0.8fr] gap-12 lg:gap-16 items-center">
+          <div className="grid lg:grid-cols-[1fr_1fr] gap-12 lg:gap-8 items-center">
             {/* Left — Text */}
             <div className="order-2 lg:order-1">
               <motion.p initial="hidden" animate="visible" variants={fadeUp} custom={0}
@@ -163,23 +163,20 @@ export default function Index() {
               transition={{ duration: 0.7, delay: 0.2 }}
               className="order-1 lg:order-2 relative flex justify-center lg:justify-end"
             >
-              <div className="relative w-full h-80 sm:h-[400px] lg:h-[560px] overflow-visible">
+              <div className="relative w-full h-80 sm:h-[420px] lg:h-[600px] overflow-hidden">
                 {/* Soft background glow behind portrait */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-[70%] h-[70%] rounded-full bg-primary/[0.06] blur-[80px]" />
+                  <div className="w-[80%] h-[80%] rounded-full bg-primary/[0.06] blur-[80px]" />
                 </div>
                 <img
                   src={profilePhoto}
                   alt="Vijaysingh Puwar"
-                  className="relative w-full h-full object-contain object-bottom drop-shadow-[0_0_40px_hsl(var(--primary)/0.15)]"
+                  className="relative w-full h-full object-contain object-bottom drop-shadow-[0_0_40px_hsl(var(--primary)/0.15)] brightness-110"
                 />
-                {/* Edge-blending gradient overlays */}
-                <div className="absolute inset-0 bg-gradient-to-l from-transparent via-transparent to-background pointer-events-none" />
-                <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent pointer-events-none" />
-                <div className="absolute inset-0 bg-gradient-to-b from-background/20 to-transparent pointer-events-none" />
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-background/30 pointer-events-none" />
-                {/* Subtle cyber tint */}
-                <div className="absolute inset-0 bg-primary/[0.02] pointer-events-none" />
+                {/* Left fade — narrow, targeted */}
+                <div className="absolute left-0 top-0 w-1/3 h-full bg-gradient-to-r from-background to-transparent pointer-events-none" />
+                {/* Bottom fade — short */}
+                <div className="absolute bottom-0 left-0 w-full h-1/3 bg-gradient-to-t from-background to-transparent pointer-events-none" />
               </div>
             </motion.div>
           </div>
