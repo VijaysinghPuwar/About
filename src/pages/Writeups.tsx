@@ -31,8 +31,8 @@ export default function Writeups() {
     <div className="min-h-screen py-20">
       <div className="container max-w-6xl mx-auto">
         <div className="text-center mb-12">
-          <p className="section-heading">Research</p>
-          <h1 className="section-title mb-4">Writeups & Labs</h1>
+          <p className="section-heading">Security Analysis</p>
+          <h1 className="section-title mb-4">Technical Writeups</h1>
           <p className="text-muted-foreground max-w-xl mx-auto">
             Technical writeups, lab exercises, and security case studies.
           </p>
@@ -55,7 +55,7 @@ export default function Writeups() {
           {filtered.map((writeup: any, i: number) => (
             <motion.div key={writeup.id || i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
               <Card className="h-full border-border/40 bg-card hover:border-primary/20 transition-colors">
-                <CardContent className="pt-6">
+                <CardContent className="p-6">
                   <Badge variant="outline" className="text-xs mb-3 text-primary border-primary/20">{writeup.category}</Badge>
                   <h3 className="font-semibold text-foreground mb-2">{writeup.title}</h3>
                   <p className="text-sm text-muted-foreground line-clamp-3 mb-3">{writeup.summary || writeup.description}</p>

@@ -1,103 +1,55 @@
 
 
-# Premium Cybersecurity Portfolio Redesign
+## Plan: Pentest Mode, UX Improvements, and Profile Photo
 
-This is a comprehensive redesign touching nearly every page and component. To keep it manageable and avoid breaking changes, I recommend splitting it into **3 phases**. Here is Phase 1 — the highest-impact changes.
+### 1. Fix Build Error + Refactor Theme System
 
----
+The current build error is likely from the `ThemeProvider` and App.tsx setup. The existing theme system uses `blue`/`red` string types but is incomplete.
 
-## Phase 1: Core Visual System + Hero + Critical Fixes
+**Refactor `src/hooks/useTheme.tsx`:**
+- Rename theme values to `'default' | 'pentest'` (Pentest Mode branding)
+- Apply class `theme-pentest` on `<html>` when active, remove it when default
+- Persist to `localStorage` key `pentest-mode`
 
-### 1. Typography Upgrade (`src/index.css`)
-- Replace Inter with **Space Grotesk** (headings) + **Inter** (body, kept for readability)
-- Add Space Grotesk import from Google Fonts
-- Update heading styles: `.section-title` gets `font-family: 'Space Grotesk'` with tighter letter-spacing
-- Hero h1 gets extra bold weight (700-800) for stronger presence
+**Update `src/index.css`:**
+- Keep `:root` as the blue/default theme (already defined)
+- Rename `.theme-red` to `.theme-pentest` and ensure ALL CSS variables are overridden with red palette:
+  - `--primary`, `--secondary`, `--ring`, `--border`, `--glow-cyan` (rename glow vars)
+  - `--scanline-color`, `--grid-color` all shift red
+- Add a global `transition: background-color 200ms, color 200ms, border-color 200ms` to `*` for smooth theme switching
 
-### 2. Hero Section Redesign (`src/pages/Index.tsx`)
-**Content changes:**
-- Reorder: Name first, then "Cybersecurity Engineer" label below
-- Replace summary with stronger copy: *"Specializing in identity security, security automation, and cloud infrastructure defense. Building practical detection pipelines, endpoint hardening systems, and scalable security tooling."*
-- Change CTAs to: **Download Resume** (primary, links to `/resume.pdf` download) + **View Projects** (outline, links to `/projects`)
-- Add small "Contact Me" text link below CTAs
+**Update `src/components/ThemeToggle.tsx`:**
+- Label: show "Pentest Mode" text on desktop, icon-only on mobile
+- Use a `Shield` or `Crosshair` icon for pentest, `Waves` for default
+- Style the toggle with a red glow when pentest is active
 
-**Add Security Stack chip row** below the hero (or as a sub-section):
-- Horizontal scrollable badge row: Python, PowerShell, AWS, Active Directory, Splunk, Docker, Linux, Ansible, IAM, SIEM, Nmap, Wireshark
-- Styled as small monospace chips with subtle border
+### 2. Update Navigation (`src/components/Navigation.tsx`)
+- Add `ThemeToggle` back (it was removed when the Navigation was rewritten)
+- Keep it in both desktop and mobile menu sections
+- Ensure `shadow-glow-cyan` class references work with theme (they use CSS vars, so they'll auto-switch)
 
-### 3. Fix mailto Links (Global)
-- Hero social icons: already correct (`mailto:contact@vijaysinghpuwar.com` on line 152) — verify working
-- Footer (`src/components/Footer.tsx`): already uses `mailto:` — verify
-- Contact page: already has mailto link — verify
-- Ensure no `onClick` handlers are intercepting the `<a>` tags
+### 3. Profile Photo in Hero (`src/pages/Index.tsx`)
+- Add a circular avatar image above/left of the name in the hero section
+- Image URL: the LinkedIn photo URL provided
+- Style: `w-32 h-32 rounded-full border-4` with `border-primary` (auto-switches with theme)
+- Add `ring-4 ring-primary/30` glow effect
+- Alt text: "Vijaysingh Puwar profile photo"
+- On mobile: centered above name; on desktop: inline-left of name
 
-### 4. Writeups Section — Honest Labeling (`src/pages/Index.tsx`, `src/pages/Writeups.tsx`)
-- Change section heading from "Research" → **"Security Analysis"**
-- Change title from "Recent Writeups" → **"Technical Writeups"**
-- Change card CTA from "Read More →" → **"View Analysis →"**
-- On Writeups page: change "Research" heading → "Security Analysis", subtitle "Writeups & Labs" → "Technical Writeups"
+### 4. UX Improvements
+- **Hero section**: Increase `leading-relaxed` on subtitle text, reduce visual clutter by simplifying cert badges area
+- **Smooth scroll**: Already using `react-router-dom` for navigation between pages (not single-page scroll anchors), so this is already handled
+- **Card hover**: Already has `hover:-translate-y-1` — ensure consistent across all cards
+- **Theme transition**: Add CSS `transition` on `background-color`, `color`, `border-color` globally (200ms)
 
-### 5. Core Competencies Upgrade (`src/pages/Index.tsx`)
-- Add 4th card: **Detection & Monitoring** — "SIEM monitoring with Splunk, log analysis, threat detection rules, and security alerting pipelines."
-- Use `Radar` icon from lucide for the 4th card
-- Switch grid to `md:grid-cols-2 lg:grid-cols-4`
-- Slightly increase card padding and icon size
+### 5. Tailwind Config (`tailwind.config.ts`)
+- Remove the unused `red-team` color references that reference undefined CSS variables (likely causing the build error)
 
-### 6. Experience Section Polish (`src/pages/Index.tsx`)
-- Bold key metrics in bullet text using `<strong>` tags: "**150+** enterprise endpoints", "**70%** reduction", "**20%** reduction"
-- Increase spacing between entries (`space-y-10` instead of `space-y-8`)
-- Make role title more prominent: company in bold, role as primary-colored text
-
-### 7. Education Balance (`src/pages/Index.tsx`)
-- Add coursework/highlights to the B.E. card:
-  - "Engineering Design & Analysis"
-  - "Manufacturing Systems"
-  - "Thermodynamics & Fluid Mechanics"
-  - "Technical Documentation"
-- This balances the two cards visually
-
-### 8. Certifications Polish (`src/pages/Index.tsx`)
-- Increase padding on cert items
-- Add subtle hover effect
-- Use slightly stronger border styling
-
-### 9. "Open To" Recruiter Section (`src/pages/Index.tsx`)
-- Add new section before the Contact CTA
-- Title: **"Open To"**
-- Grid of role chips: Cybersecurity Engineering, Security Operations, Cloud Security, Security Automation, IAM / Identity Security
-- Subtle card or badge-row layout
-
-### 10. Footer Polish (`src/components/Footer.tsx`)
-- Tighten layout, ensure icons are properly aligned
-- Add subtle separator styling
-- Verify all links work (mailto, GitHub, LinkedIn)
-
-### 11. Contact Page — No changes needed
-- mailto links already work
-- Authenticated flow already hides email field
-- Form is functional
-
----
-
-## Files to Modify
-
-| File | Changes |
-|------|---------|
-| `src/index.css` | Add Space Grotesk font, update heading styles |
-| `src/pages/Index.tsx` | Hero content/CTAs, security stack row, competencies 4-col, experience bold metrics, education B.E. coursework, writeups relabeling, "Open To" section, cert polish |
-| `src/pages/Writeups.tsx` | Relabel "Research" → "Security Analysis" |
-| `src/components/Footer.tsx` | Minor spacing/alignment polish |
-
----
-
-## Phase 2 (next iteration)
-- Project cards redesign with stronger descriptions and GitHub metadata
-- GitHub credibility strip
-- ProjectCard component upgrade
-
-## Phase 3 (next iteration)
-- About page alignment with new design system
-- Contact page visual refinements
-- Navigation polish
-- Responsive fine-tuning across all pages
+### Files to modify:
+1. `src/index.css` — Rename `.theme-red` to `.theme-pentest`, add transition
+2. `src/hooks/useTheme.tsx` — Update types to `'default' | 'pentest'`
+3. `src/components/ThemeToggle.tsx` — Update labels and icons
+4. `src/components/Navigation.tsx` — Re-add ThemeToggle import and usage
+5. `src/pages/Index.tsx` — Add profile photo to hero
+6. `tailwind.config.ts` — Remove undefined `red-team` CSS var references
 
