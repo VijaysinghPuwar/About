@@ -1,106 +1,55 @@
 
 
-# Premium Cybersecurity Portfolio Redesign — Full Plan
+## Plan: Pentest Mode, UX Improvements, and Profile Photo
 
-This is a large redesign covering content removal, access control gating, and visual polish across the entire site.
+### 1. Fix Build Error + Refactor Theme System
 
----
+The current build error is likely from the `ThemeProvider` and App.tsx setup. The existing theme system uses `blue`/`red` string types but is incomplete.
 
-## 1. Remove Writeups Section Entirely
+**Refactor `src/hooks/useTheme.tsx`:**
+- Rename theme values to `'default' | 'pentest'` (Pentest Mode branding)
+- Apply class `theme-pentest` on `<html>` when active, remove it when default
+- Persist to `localStorage` key `pentest-mode`
 
-**Files affected:** `src/pages/Index.tsx`, `src/components/Navigation.tsx`, `src/App.tsx`, `src/pages/Writeups.tsx`
+**Update `src/index.css`:**
+- Keep `:root` as the blue/default theme (already defined)
+- Rename `.theme-red` to `.theme-pentest` and ensure ALL CSS variables are overridden with red palette:
+  - `--primary`, `--secondary`, `--ring`, `--border`, `--glow-cyan` (rename glow vars)
+  - `--scanline-color`, `--grid-color` all shift red
+- Add a global `transition: background-color 200ms, color 200ms, border-color 200ms` to `*` for smooth theme switching
 
-- Delete the "Technical Writeups" section (lines 292-321) from `Index.tsx`
-- Remove `writeupsData` import and `recentWriteups` variable
-- Remove "Writeups" from `navItems` array in `Navigation.tsx` (line 21)
-- Remove the `/writeups` route from `App.tsx`
-- Delete `src/pages/Writeups.tsx`
-- Update Login.tsx line 109: remove "writeups" from sign-in description text
+**Update `src/components/ThemeToggle.tsx`:**
+- Label: show "Pentest Mode" text on desktop, icon-only on mobile
+- Use a `Shield` or `Crosshair` icon for pentest, `Waves` for default
+- Style the toggle with a red glow when pentest is active
 
----
+### 2. Update Navigation (`src/components/Navigation.tsx`)
+- Add `ThemeToggle` back (it was removed when the Navigation was rewritten)
+- Keep it in both desktop and mobile menu sections
+- Ensure `shadow-glow-cyan` class references work with theme (they use CSS vars, so they'll auto-switch)
 
-## 2. Access Control — Gate Projects & Resume Behind Google Sign-In
+### 3. Profile Photo in Hero (`src/pages/Index.tsx`)
+- Add a circular avatar image above/left of the name in the hero section
+- Image URL: the LinkedIn photo URL provided
+- Style: `w-32 h-32 rounded-full border-4` with `border-primary` (auto-switches with theme)
+- Add `ring-4 ring-primary/30` glow effect
+- Alt text: "Vijaysingh Puwar profile photo"
+- On mobile: centered above name; on desktop: inline-left of name
 
-**Files affected:** `src/pages/Index.tsx`, `src/pages/Projects.tsx`, `src/pages/ProjectDetail.tsx`, `src/components/Navigation.tsx`, `src/components/ProjectCard.tsx`
+### 4. UX Improvements
+- **Hero section**: Increase `leading-relaxed` on subtitle text, reduce visual clutter by simplifying cert badges area
+- **Smooth scroll**: Already using `react-router-dom` for navigation between pages (not single-page scroll anchors), so this is already handled
+- **Card hover**: Already has `hover:-translate-y-1` — ensure consistent across all cards
+- **Theme transition**: Add CSS `transition` on `background-color`, `color`, `border-color` globally (200ms)
 
-### Approach
-Use the existing `useAuth` hook. No new database tables needed — the gating is purely client-side UI visibility.
+### 5. Tailwind Config (`tailwind.config.ts`)
+- Remove the unused `red-team` color references that reference undefined CSS variables (likely causing the build error)
 
-### Hero CTA gating (`Index.tsx`)
-- **Download Resume**: If not authenticated, instead of linking to `/resume.pdf`, show a sign-in prompt dialog or redirect to `/login`. If authenticated, allow download.
-- **View Projects**: If not authenticated, redirect to `/login` with a return URL. If authenticated, navigate to `/projects`.
-
-### Featured Projects section on homepage (`Index.tsx`)
-- If user is NOT signed in: show a single placeholder card: "Sign in with Google to view projects and resume" with a sign-in button. Hide actual project cards.
-- If user IS signed in: show project cards as normal.
-
-### Projects page (`Projects.tsx`)
-- Wrap the entire page content in an auth check.
-- If not authenticated: show a centered card with "Sign in with Google to access the full project portfolio" + Google sign-in button.
-- If authenticated: show existing project list.
-
-### ProjectDetail page (`ProjectDetail.tsx`)
-- Same pattern: if not authenticated, show sign-in prompt instead of project details.
-
-### Navigation (`Navigation.tsx`)
-- Keep "Projects" in nav but add a lock icon (`Lock` from lucide) next to it when user is not signed in.
-- Remove "Writeups" entirely.
-
----
-
-## 3. GitHub Credibility Strip
-
-**File:** `src/pages/Index.tsx`
-
-Add a compact section between Featured Projects and Experience showing:
-- GitHub profile link with icon
-- Text: "10+ public repositories · Security Automation · Python · PowerShell · Bash"
-- Simple horizontal layout, monospace font, subtle styling
-- This is static content (no API calls to GitHub).
-- Only visible to authenticated users (same gating as projects).
-
----
-
-## 4. Visual Polish & Typography (already partially done in Phase 1)
-
-**File:** `src/index.css`
-- Fonts are already set (Space Grotesk + Inter). Verify they're loading.
-- No further font changes needed.
-
-**File:** `src/pages/Index.tsx`
-- Experience section: already has bolded metrics — no change needed.
-- Education: already has B.E. coursework — no change needed.
-- Open To section: already exists — no change needed.
-- Certifications: already polished — no change needed.
-
----
-
-## 5. Footer & Contact — Verify mailto Links
-
-**Files:** `src/components/Footer.tsx`, `src/pages/Contact.tsx`, `src/pages/Index.tsx`
-
-- All mailto links already point to `contact@vijaysinghpuwar.com` — verify no onClick interceptors.
-- Footer already has working icons — minor spacing refinement only.
-
----
-
-## 6. Login Page Copy Update
-
-**File:** `src/pages/Login.tsx`
-- Change description from "Sign in to access projects, writeups, and more." to "Sign in with Google to access the full project portfolio and resume."
-
----
-
-## Summary of File Changes
-
-| File | Action |
-|------|--------|
-| `src/pages/Index.tsx` | Remove writeups section, gate projects/resume behind auth, add GitHub credibility strip |
-| `src/components/Navigation.tsx` | Remove Writeups nav item, add lock icon to Projects for guests |
-| `src/App.tsx` | Remove `/writeups` route |
-| `src/pages/Writeups.tsx` | Delete file |
-| `src/pages/Projects.tsx` | Add auth gate — show sign-in prompt for guests |
-| `src/pages/ProjectDetail.tsx` | Add auth gate — show sign-in prompt for guests |
-| `src/pages/Login.tsx` | Update copy |
-| `src/components/Footer.tsx` | Minor spacing polish |
+### Files to modify:
+1. `src/index.css` — Rename `.theme-red` to `.theme-pentest`, add transition
+2. `src/hooks/useTheme.tsx` — Update types to `'default' | 'pentest'`
+3. `src/components/ThemeToggle.tsx` — Update labels and icons
+4. `src/components/Navigation.tsx` — Re-add ThemeToggle import and usage
+5. `src/pages/Index.tsx` — Add profile photo to hero
+6. `tailwind.config.ts` — Remove undefined `red-team` CSS var references
 

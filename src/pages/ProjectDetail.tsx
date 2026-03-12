@@ -1,10 +1,11 @@
 import { useParams, Navigate, Link } from 'react-router-dom';
-import { ArrowLeft, Github, ExternalLink, FileText, Tag, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Github, ExternalLink, FileText, Tag, CheckCircle2, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { motion } from 'framer-motion';
 import { useProject } from '@/hooks/useProjects';
+import { useAuth } from '@/hooks/useAuth';
 import projectsData from '@/data/projects.json';
 
 interface JSONProject {
@@ -25,6 +26,26 @@ interface JSONProject {
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const { project: dbProject, loading } = useProject(id);
+  const { user } = useAuth();
+
+  if (!user) {
+    return (
+      <div className="min-h-screen py-20 flex items-center justify-center">
+        <Card className="border-border/40 bg-card max-w-lg w-full mx-4">
+          <CardContent className="p-8 text-center">
+            <Lock className="w-10 h-10 text-primary mx-auto mb-4" />
+            <h2 className="font-semibold text-foreground text-xl mb-2">Portfolio Access Required</h2>
+            <p className="text-sm text-muted-foreground mb-6">
+              Sign in with Google to view project details.
+            </p>
+            <Button asChild>
+              <Link to="/login">Sign In with Google</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const jsonProject = projectsData.find((p: JSONProject) => p.id === id) as JSONProject | undefined;
 
@@ -55,7 +76,6 @@ export default function ProjectDetail() {
         </Button>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          {/* Header */}
           <div className="flex items-center gap-2 mb-4 flex-wrap">
             <Badge variant="outline" className="text-primary border-primary/20">{project.category}</Badge>
             <span className="text-sm text-muted-foreground">{project.year}</span>
@@ -77,7 +97,6 @@ export default function ProjectDetail() {
             )}
           </div>
 
-          {/* Key Results */}
           {project.keyResults.length > 0 && (
             <section className="mb-8">
               <h2 className="text-xl font-bold text-foreground mb-4">Key Results</h2>
@@ -92,7 +111,6 @@ export default function ProjectDetail() {
             </section>
           )}
 
-          {/* Tech */}
           <section className="mb-8">
             <h2 className="text-xl font-bold text-foreground mb-4">Technologies</h2>
             <div className="flex flex-wrap gap-2">
@@ -102,7 +120,6 @@ export default function ProjectDetail() {
             </div>
           </section>
 
-          {/* Tags */}
           {project.tags.length > 0 && (
             <section className="mb-12">
               <h3 className="text-lg font-semibold text-foreground mb-3">Tags</h3>
@@ -117,7 +134,6 @@ export default function ProjectDetail() {
           )}
         </motion.div>
 
-        {/* Related */}
         {relatedProjects.length > 0 && (
           <section>
             <h2 className="text-xl font-bold text-foreground mb-6">Related Projects</h2>

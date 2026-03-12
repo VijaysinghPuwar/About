@@ -11,7 +11,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 import Index from "./pages/Index";
 import Projects from "./pages/Projects";
-import Writeups from "./pages/Writeups";
+// Writeups removed
 // Resume merged into About
 import About from "./pages/About";
 import Contact from "./pages/Contact";
@@ -45,7 +45,7 @@ const App = () => (
                   <Route path="/blocked" element={<Blocked />} />
                   <Route path="/projects" element={<Projects />} />
                   <Route path="/projects/:id" element={<ProjectDetail />} />
-                  <Route path="/writeups" element={<Writeups />} />
+                  
                   {/* Resume merged into About */}
 
                   {/* Admin route */}
