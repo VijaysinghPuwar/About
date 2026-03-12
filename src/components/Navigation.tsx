@@ -10,15 +10,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Menu, Shield, LogIn, LogOut, Settings } from 'lucide-react';
+import { Menu, Shield, LogIn, LogOut, Settings, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
 const navItems = [
   { name: 'Home', path: '/' },
-  { name: 'Projects', path: '/projects' },
-  { name: 'Writeups', path: '/writeups' },
+  { name: 'Projects', path: '/projects', gated: true },
   { name: 'About', path: '/about' },
   { name: 'Contact', path: '/contact' },
 ];
@@ -67,15 +66,16 @@ export function Navigation() {
           {navItems.map((item) => (
             <Link
               key={item.path}
-              to={item.path}
+              to={item.gated && !user ? '/login' : item.path}
               className={cn(
-                "px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+                "px-3 py-1.5 rounded-md text-sm font-medium transition-colors inline-flex items-center gap-1.5",
                 isActive(item.path)
                   ? "text-primary"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
               {item.name}
+              {item.gated && !user && <Lock className="w-3 h-3 text-muted-foreground" />}
             </Link>
           ))}
         </div>
@@ -135,14 +135,15 @@ export function Navigation() {
                 {navItems.map((item) => (
                   <Link
                     key={item.path}
-                    to={item.path}
+                    to={item.gated && !user ? '/login' : item.path}
                     onClick={() => setIsOpen(false)}
                     className={cn(
-                      "px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                      "px-3 py-2 rounded-md text-sm font-medium transition-colors inline-flex items-center gap-1.5",
                       isActive(item.path) ? "text-primary bg-primary/5" : "text-muted-foreground hover:text-foreground"
                     )}
                   >
                     {item.name}
+                    {item.gated && !user && <Lock className="w-3 h-3 text-muted-foreground" />}
                   </Link>
                 ))}
                 <div className="pt-3 border-t border-border">

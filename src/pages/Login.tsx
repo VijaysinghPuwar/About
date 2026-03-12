@@ -106,7 +106,7 @@ export default function Login() {
           </Button>
 
           <p className="text-center text-xs text-muted-foreground">
-            Sign in to access projects, writeups, and more.
+            Sign in with Google to access the full project portfolio and resume.
           </p>
         </div>
       </motion.div>

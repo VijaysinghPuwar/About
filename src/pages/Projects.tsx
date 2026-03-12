@@ -1,16 +1,20 @@
 import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Search, Lock } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ProjectCard } from '@/components/ProjectCard';
 import { useProjects } from '@/hooks/useProjects';
+import { useAuth } from '@/hooks/useAuth';
 import projectsData from '@/data/projects.json';
 
 export default function Projects() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const { projects: dbProjects, loading } = useProjects();
+  const { user } = useAuth();
 
   const allProjects = useMemo(() => {
     const dbIds = new Set((dbProjects || []).map(p => p.id));
@@ -40,6 +44,25 @@ export default function Projects() {
       return matchSearch && matchCat;
     });
   }, [allProjects, search, selectedCategory]);
+
+  if (!user) {
+    return (
+      <div className="min-h-screen py-20 flex items-center justify-center">
+        <Card className="border-border/40 bg-card max-w-lg w-full mx-4">
+          <CardContent className="p-8 text-center">
+            <Lock className="w-10 h-10 text-primary mx-auto mb-4" />
+            <h2 className="font-semibold text-foreground text-xl mb-2">Portfolio Access Required</h2>
+            <p className="text-sm text-muted-foreground mb-6">
+              Sign in with Google to access the full project portfolio, GitHub repositories, and detailed project breakdowns.
+            </p>
+            <Button asChild>
+              <Link to="/login">Sign In with Google</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen py-20">

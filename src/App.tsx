@@ -45,7 +45,7 @@ const App = () => (
                   <Route path="/blocked" element={<Blocked />} />
                   <Route path="/projects" element={<Projects />} />
                   <Route path="/projects/:id" element={<ProjectDetail />} />
-                  <Route path="/writeups" element={<Writeups />} />
+                  
                   {/* Resume merged into About */}
 
                   {/* Admin route */}

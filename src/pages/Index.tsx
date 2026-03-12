@@ -1,12 +1,12 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Github, Linkedin, Mail, ArrowRight, Shield, Terminal, Cloud, GraduationCap, Award, Radar, Download, Briefcase } from 'lucide-react';
+import { Github, Linkedin, Mail, ArrowRight, Shield, Terminal, Cloud, GraduationCap, Award, Radar, Download, Briefcase, Lock } from 'lucide-react';
 import { motion } from 'framer-motion';
 import profilePhoto from '@/assets/profile-portrait.png';
 import projectsData from '@/data/projects.json';
-import writeupsData from '@/data/writeups.json';
+import { useAuth } from '@/hooks/useAuth';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -124,9 +124,20 @@ const openToRoles = [
 ];
 
 const featuredProjects = projectsData.filter(p => p.featured).slice(0, 3);
-const recentWriteups = writeupsData.slice(0, 3);
 
 export default function Index() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  const handleProtectedAction = (e: React.MouseEvent, target: string) => {
+    if (!user) {
+      e.preventDefault();
+      navigate('/login');
+    } else if (target === 'resume') {
+      // Allow default download behavior
+    }
+  };
+
   return (
     <div className="min-h-screen">
       {/* ===== HERO ===== */}
@@ -154,12 +165,24 @@ export default function Index() {
               <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3}
                 className="flex flex-col sm:flex-row items-start gap-3 mb-4"
               >
-                <Button size="lg" asChild className="shadow-[0_0_15px_hsl(var(--primary)/0.3)] hover:shadow-[0_0_25px_hsl(var(--primary)/0.5)] transition-shadow">
-                  <a href="/resume.pdf" download><Download className="w-4 h-4 mr-2" />Download Resume</a>
-                </Button>
-                <Button size="lg" variant="outline" asChild>
-                  <Link to="/projects"><ArrowRight className="w-4 h-4 mr-2" />View Projects</Link>
-                </Button>
+                {user ? (
+                  <Button size="lg" asChild className="shadow-[0_0_15px_hsl(var(--primary)/0.3)] hover:shadow-[0_0_25px_hsl(var(--primary)/0.5)] transition-shadow">
+                    <a href="/resume.pdf" download><Download className="w-4 h-4 mr-2" />Download Resume</a>
+                  </Button>
+                ) : (
+                  <Button size="lg" className="shadow-[0_0_15px_hsl(var(--primary)/0.3)] hover:shadow-[0_0_25px_hsl(var(--primary)/0.5)] transition-shadow" onClick={(e) => handleProtectedAction(e, 'resume')}>
+                    <Lock className="w-4 h-4 mr-2" />Download Resume
+                  </Button>
+                )}
+                {user ? (
+                  <Button size="lg" variant="outline" asChild>
+                    <Link to="/projects"><ArrowRight className="w-4 h-4 mr-2" />View Projects</Link>
+                  </Button>
+                ) : (
+                  <Button size="lg" variant="outline" onClick={(e) => handleProtectedAction(e, 'projects')}>
+                    <Lock className="w-4 h-4 mr-2" />View Projects
+                  </Button>
+                )}
               </motion.div>
               <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3.5}
                 className="mb-8"
@@ -252,73 +275,73 @@ export default function Index() {
             <p className="section-heading">Portfolio</p>
             <h2 className="section-title">Featured Projects</h2>
           </div>
-          <div className="grid md:grid-cols-3 gap-6 mb-8">
-            {featuredProjects.map((project, i) => (
-              <motion.div key={project.id} initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={i}>
-                <Card className="h-full border-border/40 bg-card hover:border-primary/20 transition-colors group">
-                  <CardContent className="p-6 flex flex-col h-full">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Badge variant="outline" className="text-xs text-primary border-primary/20">{project.category}</Badge>
-                      <span className="text-xs text-muted-foreground">{project.year}</span>
-                    </div>
-                    <h3 className="font-semibold text-foreground mb-2 group-hover:text-primary transition-colors">
-                      <Link to={`/projects/${project.id}`}>{project.title}</Link>
-                    </h3>
-                    <p className="text-sm text-muted-foreground mb-4 line-clamp-2 flex-1">{project.description}</p>
-                    <div className="flex flex-wrap gap-1.5 mb-4">
-                      {project.tech.slice(0, 3).map(t => (
-                        <Badge key={t} variant="secondary" className="text-xs bg-muted text-muted-foreground border-0">{t}</Badge>
-                      ))}
-                    </div>
-                    {project.links.github && (
-                      <a href={project.links.github} target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center text-sm text-primary hover:underline">
-                        <Github className="w-4 h-4 mr-1.5" /> View on GitHub
-                      </a>
-                    )}
-                  </CardContent>
-                </Card>
+          {user ? (
+            <>
+              <div className="grid md:grid-cols-3 gap-6 mb-8">
+                {featuredProjects.map((project, i) => (
+                  <motion.div key={project.id} initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={i}>
+                    <Card className="h-full border-border/40 bg-card hover:border-primary/20 transition-colors group">
+                      <CardContent className="p-6 flex flex-col h-full">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Badge variant="outline" className="text-xs text-primary border-primary/20">{project.category}</Badge>
+                          <span className="text-xs text-muted-foreground">{project.year}</span>
+                        </div>
+                        <h3 className="font-semibold text-foreground mb-2 group-hover:text-primary transition-colors">
+                          <Link to={`/projects/${project.id}`}>{project.title}</Link>
+                        </h3>
+                        <p className="text-sm text-muted-foreground mb-4 line-clamp-2 flex-1">{project.description}</p>
+                        <div className="flex flex-wrap gap-1.5 mb-4">
+                          {project.tech.slice(0, 3).map(t => (
+                            <Badge key={t} variant="secondary" className="text-xs bg-muted text-muted-foreground border-0">{t}</Badge>
+                          ))}
+                        </div>
+                        {project.links.github && (
+                          <a href={project.links.github} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center text-sm text-primary hover:underline">
+                            <Github className="w-4 h-4 mr-1.5" /> View on GitHub
+                          </a>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))}
+              </div>
+
+              {/* GitHub Credibility Strip */}
+              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={0}
+                className="flex items-center justify-center gap-3 py-4 mb-8 rounded-lg border border-border/40 bg-card/50"
+              >
+                <Github className="w-5 h-5 text-primary" />
+                <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer"
+                  className="font-mono text-sm text-muted-foreground hover:text-primary transition-colors">
+                  10+ public repositories · Security Automation · Python · PowerShell · Bash
+                </a>
               </motion.div>
-            ))}
-          </div>
-          <div className="text-center">
-            <Button variant="outline" asChild>
-              <Link to="/projects">View All Projects <ArrowRight className="w-4 h-4 ml-2" /></Link>
-            </Button>
-          </div>
+
+              <div className="text-center">
+                <Button variant="outline" asChild>
+                  <Link to="/projects">View All Projects <ArrowRight className="w-4 h-4 ml-2" /></Link>
+                </Button>
+              </div>
+            </>
+          ) : (
+            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={0}>
+              <Card className="border-border/40 bg-card max-w-lg mx-auto">
+                <CardContent className="p-8 text-center">
+                  <Lock className="w-10 h-10 text-primary mx-auto mb-4" />
+                  <h3 className="font-semibold text-foreground text-lg mb-2">Portfolio Access Required</h3>
+                  <p className="text-sm text-muted-foreground mb-6">
+                    Sign in with Google to view detailed projects, GitHub repositories, and download resume.
+                  </p>
+                  <Button asChild>
+                    <Link to="/login">Sign In with Google</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
         </div>
       </section>
-
-      {/* ===== TECHNICAL WRITEUPS ===== */}
-      {recentWriteups.length > 0 && (
-        <section className="py-16 border-t border-border/40">
-          <div className="container max-w-6xl mx-auto">
-            <div className="text-center mb-12">
-              <p className="section-heading">Security Analysis</p>
-              <h2 className="section-title">Technical Writeups</h2>
-            </div>
-            <div className="grid md:grid-cols-3 gap-6 mb-8">
-              {recentWriteups.map((writeup: any, i: number) => (
-                <motion.div key={writeup.id || i} initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={i}>
-                  <Card className="h-full border-border/40 bg-card hover:border-primary/20 transition-colors">
-                    <CardContent className="p-6">
-                      <Badge variant="outline" className="text-xs mb-3 text-primary border-primary/20">{writeup.category}</Badge>
-                      <h3 className="font-semibold text-foreground mb-2">{writeup.title}</h3>
-                      <p className="text-sm text-muted-foreground line-clamp-2 mb-4">{writeup.summary || writeup.description}</p>
-                      <Link to="/writeups" className="text-sm text-primary hover:underline">View Analysis →</Link>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
-            </div>
-            <div className="text-center">
-              <Button variant="outline" asChild>
-                <Link to="/writeups">View All Writeups <ArrowRight className="w-4 h-4 ml-2" /></Link>
-              </Button>
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* ===== EXPERIENCE ===== */}
       <section className="py-16 border-t border-border/40">
