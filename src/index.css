@@ -219,3 +219,48 @@ html {
 .marquee-track:hover {
   animation-play-state: paused;
 }
+
+/* Shield rotation */
+@keyframes shield-rotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.animate-shield-rotate {
+  animation: shield-rotate 30s linear infinite;
+}
+
+.animate-shield-pulse {
+  animation: shield-pulse 4s ease-in-out infinite;
+}
+
+@keyframes shield-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* Orbit */
+@keyframes orbit {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Cyber pulse */
+@keyframes cyber-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 4px hsl(var(--success)); }
+  50% { opacity: 0.4; box-shadow: 0 0 8px hsl(var(--success)); }
+}
+
+.animate-cyber-pulse {
+  animation: cyber-pulse 2s ease-in-out infinite;
+}
+
+/* Terminal blink */
+@keyframes terminal-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.animate-terminal-blink {
+  animation: terminal-blink 1s step-end infinite;
+}
