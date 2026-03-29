@@ -35,48 +35,6 @@ const fadeUp = {
 
 const VP = { once: true, amount: 0.3 }; // viewport config
 
-const experience = [
-  {
-    company: 'R.S. Infotech', role: 'System Engineer', period: 'Feb 2023 – Aug 2024',
-    bullets: [
-      { text: 'Secured ', bold: '150+', after: ' enterprise endpoints with group policies, antivirus, and patch management' },
-      { text: 'Managed Active Directory identity hygiene and enforced MFA via PowerShell automation', bold: '', after: '' },
-      { text: 'Automated log analysis and reporting with Python, reducing manual effort by ', bold: '70%', after: '' },
-      { text: 'Maintained firewalls, IDS/IPS, reducing security breaches by ', bold: '20%', after: '' },
-    ],
-  },
-  {
-    company: 'L&T-Sargent & Lundy', role: 'Systems Intern', period: 'Jan 2023 – Apr 2023',
-    bullets: [
-      { text: 'Designed and optimized HVAC systems with ', bold: '100%', after: ' adherence to ASHRAE standards' },
-    ],
-  },
-  {
-    company: 'Elecon Engineering', role: 'Design Intern', period: 'Jan 2022 – Jun 2022',
-    bullets: [
-      { text: 'CAD modeling and engineering documentation for industrial systems', bold: '', after: '' },
-    ],
-  },
-];
-
-const education = [
-  {
-    school: 'Pace University', degree: 'M.S. Cybersecurity', location: 'New York, NY',
-    gpa: 'GPA: 4.00', status: 'Expected Dec 2026',
-    coursework: [
-      'Computational Statistics', 'Introduction to Cybersecurity', 'Information Security Management',
-      'Network Security & Defense', 'Ethical Hacking & Penetration Testing',
-      'Automating InfoSec with Python & Shell', 'Cyber Intelligence Analysis & Modeling',
-      'Operating Systems Theory & Administration',
-    ],
-  },
-  {
-    school: 'G.H. Patel College of Engineering & Technology', degree: 'B.E. Mechanical Engineering',
-    location: 'Gujarat, India', gpa: 'CGPA: 7.11', status: 'Completed Aug 2023', coursework: [] as string[],
-  },
-];
-
-const certifications = ['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'ISC2 Candidate', 'Google AI Essentials'];
 
 const openToRoles = [
   'Cybersecurity Engineering', 'Security Operations', 'Cloud Security',
