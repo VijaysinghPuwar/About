@@ -137,6 +137,21 @@ const certifications = [
   { name: 'Google AI Essentials', org: 'Google' },
 ];
 
+/* ── Pointer Arrow ── */
+function PointerArrow({ side }: { side: 'left' | 'right' }) {
+  // Points toward the center line
+  if (side === 'right') {
+    // Card is on right, arrow points left
+    return (
+      <div className="absolute top-5 -left-2 w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-r-[8px] border-r-[rgba(15,23,42,0.5)]" />
+    );
+  }
+  // Card is on left, arrow points right
+  return (
+    <div className="absolute top-5 -right-2 w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-l-[8px] border-l-[rgba(15,23,42,0.5)]" />
+  );
+}
+
 /* ── Timeline Node ── */
 function TimelineNode({ entry, index, expandedId, onToggle }: {
   entry: TimelineEntry;
@@ -147,8 +162,9 @@ function TimelineNode({ entry, index, expandedId, onToggle }: {
   const ref = useRef<HTMLDivElement>(null);
   const isInView = useInView(ref, { once: true, amount: 0.3 });
   const isExpanded = expandedId === entry.id;
-  const isLeft = index % 2 === 0;
+  const isLeft = index % 2 === 1; // 0→right, 1→left, 2→right...
   const Icon = entry.type === 'education' ? GraduationCap : Briefcase;
+  const isDimmed = expandedId !== null && !isExpanded;
 
   return (
     <div ref={ref} className="relative grid grid-cols-[1fr] md:grid-cols-[1fr_auto_1fr] gap-0 md:gap-8 items-start">
@@ -156,19 +172,22 @@ function TimelineNode({ entry, index, expandedId, onToggle }: {
       <div className={`hidden md:block ${isLeft ? '' : 'order-3'}`}>
         {isLeft && (
           <motion.div
-            initial={{ opacity: 0, x: -40 }}
-            animate={isInView ? { opacity: 1, x: 0 } : {}}
-            transition={{ type: 'spring', stiffness: 80, damping: 18, delay: 0.1 }}
+            initial={{ opacity: 0, x: -50 }}
+            animate={isInView ? { opacity: isDimmed ? 0.4 : 1, x: 0 } : {}}
+            transition={{ type: 'spring', stiffness: 80, damping: 18, delay: index * 0.15 }}
           >
-            <NodeCard entry={entry} isExpanded={isExpanded} onToggle={onToggle} />
+            <NodeCard entry={entry} isExpanded={isExpanded} onToggle={onToggle} pointerSide="left" />
           </motion.div>
         )}
       </div>
 
       {/* Center dot */}
       <div className="hidden md:flex flex-col items-center order-2">
-        <button
+        <motion.button
           onClick={() => onToggle(entry.id)}
+          initial={{ scale: 0 }}
+          animate={isInView ? { scale: 1 } : {}}
+          transition={{ type: 'spring', stiffness: 200, damping: 15, delay: index * 0.15 }}
           className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
             isExpanded
               ? 'bg-primary shadow-[0_0_20px_hsl(var(--primary)/0.7)] scale-110'
@@ -183,18 +202,18 @@ function TimelineNode({ entry, index, expandedId, onToggle }: {
               transition={{ duration: 2, repeat: Infinity }}
             />
           )}
-        </button>
+        </motion.button>
       </div>
 
       {/* Right content (desktop only) */}
       <div className={`hidden md:block ${isLeft ? 'order-3' : ''}`}>
         {!isLeft && (
           <motion.div
-            initial={{ opacity: 0, x: 40 }}
-            animate={isInView ? { opacity: 1, x: 0 } : {}}
-            transition={{ type: 'spring', stiffness: 80, damping: 18, delay: 0.1 }}
+            initial={{ opacity: 0, x: 50 }}
+            animate={isInView ? { opacity: isDimmed ? 0.4 : 1, x: 0 } : {}}
+            transition={{ type: 'spring', stiffness: 80, damping: 18, delay: index * 0.15 }}
           >
-            <NodeCard entry={entry} isExpanded={isExpanded} onToggle={onToggle} />
+            <NodeCard entry={entry} isExpanded={isExpanded} onToggle={onToggle} pointerSide="right" />
           </motion.div>
         )}
       </div>
@@ -202,8 +221,11 @@ function TimelineNode({ entry, index, expandedId, onToggle }: {
       {/* Mobile layout */}
       <div className="md:hidden flex gap-4">
         <div className="flex flex-col items-center">
-          <button
+          <motion.button
             onClick={() => onToggle(entry.id)}
+            initial={{ scale: 0 }}
+            animate={isInView ? { scale: 1 } : {}}
+            transition={{ type: 'spring', stiffness: 200, damping: 15, delay: index * 0.15 }}
             className={`relative z-10 w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300 ${
               isExpanded
                 ? 'bg-primary shadow-[0_0_16px_hsl(var(--primary)/0.7)]'
@@ -211,18 +233,18 @@ function TimelineNode({ entry, index, expandedId, onToggle }: {
             }`}
           >
             <Icon className={`w-3.5 h-3.5 ${isExpanded ? 'text-primary-foreground' : 'text-primary'}`} />
-          </button>
+          </motion.button>
           {index < entries.length - 1 && (
             <div className="w-[2px] flex-1 min-h-[20px] timeline-line-gradient" />
           )}
         </div>
         <motion.div
           className="flex-1 pb-8"
-          initial={{ opacity: 0, x: -20 }}
-          animate={isInView ? { opacity: 1, x: 0 } : {}}
-          transition={{ type: 'spring', stiffness: 80, damping: 18, delay: 0.1 }}
+          initial={{ opacity: 0, x: 20 }}
+          animate={isInView ? { opacity: isDimmed ? 0.4 : 1, x: 0 } : {}}
+          transition={{ type: 'spring', stiffness: 80, damping: 18, delay: index * 0.15 }}
         >
-          <NodeCard entry={entry} isExpanded={isExpanded} onToggle={onToggle} />
+          <NodeCard entry={entry} isExpanded={isExpanded} onToggle={onToggle} pointerSide="right" />
         </motion.div>
       </div>
     </div>
@@ -230,20 +252,24 @@ function TimelineNode({ entry, index, expandedId, onToggle }: {
 }
 
 /* ── Node Card ── */
-function NodeCard({ entry, isExpanded, onToggle }: {
+function NodeCard({ entry, isExpanded, onToggle, pointerSide }: {
   entry: TimelineEntry;
   isExpanded: boolean;
   onToggle: (id: string) => void;
+  pointerSide?: 'left' | 'right';
 }) {
   return (
     <div
       onClick={() => onToggle(entry.id)}
-      className={`glass-card rounded-lg p-5 cursor-pointer transition-all duration-300 ${
+      className={`relative bg-[rgba(15,23,42,0.5)] backdrop-blur-xl rounded-lg p-5 cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${
         isExpanded
           ? 'border border-primary/40 shadow-[0_0_24px_hsl(var(--primary)/0.12)]'
-          : 'border border-transparent hover:border-primary/20 hover:shadow-[0_4px_20px_hsl(var(--primary)/0.08)]'
+          : 'border border-[rgba(100,220,255,0.08)] hover:border-primary/20 hover:shadow-[0_4px_20px_hsl(var(--primary)/0.08)]'
       }`}
     >
+      {/* Pointer arrow (desktop only) */}
+      {pointerSide && <div className="hidden md:block"><PointerArrow side={pointerSide} /></div>}
+
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="font-bold text-foreground text-lg leading-tight">{entry.title}</h3>
