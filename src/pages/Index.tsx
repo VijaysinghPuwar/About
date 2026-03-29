@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Github, Linkedin, Mail, ArrowRight, Shield, Terminal, Cloud,
-  GraduationCap, Award, Radar, Download, Briefcase, Lock,
+  Radar, Download, Lock,
   Loader2, CheckCircle2, User,
 } from 'lucide-react';
 import { motion, AnimatePresence, useInView } from 'framer-motion';
@@ -19,6 +19,7 @@ import { TerminalHero } from '@/components/TerminalHero';
 import { SecurityShield } from '@/components/SecurityShield';
 import { SkillsRadar } from '@/components/SkillsRadar';
 import { SkillCategories } from '@/components/SkillCategories';
+import { ExperienceTimeline } from '@/components/ExperienceTimeline';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -34,48 +35,6 @@ const fadeUp = {
 
 const VP = { once: true, amount: 0.3 }; // viewport config
 
-const experience = [
-  {
-    company: 'R.S. Infotech', role: 'System Engineer', period: 'Feb 2023 – Aug 2024',
-    bullets: [
-      { text: 'Secured ', bold: '150+', after: ' enterprise endpoints with group policies, antivirus, and patch management' },
-      { text: 'Managed Active Directory identity hygiene and enforced MFA via PowerShell automation', bold: '', after: '' },
-      { text: 'Automated log analysis and reporting with Python, reducing manual effort by ', bold: '70%', after: '' },
-      { text: 'Maintained firewalls, IDS/IPS, reducing security breaches by ', bold: '20%', after: '' },
-    ],
-  },
-  {
-    company: 'L&T-Sargent & Lundy', role: 'Systems Intern', period: 'Jan 2023 – Apr 2023',
-    bullets: [
-      { text: 'Designed and optimized HVAC systems with ', bold: '100%', after: ' adherence to ASHRAE standards' },
-    ],
-  },
-  {
-    company: 'Elecon Engineering', role: 'Design Intern', period: 'Jan 2022 – Jun 2022',
-    bullets: [
-      { text: 'CAD modeling and engineering documentation for industrial systems', bold: '', after: '' },
-    ],
-  },
-];
-
-const education = [
-  {
-    school: 'Pace University', degree: 'M.S. Cybersecurity', location: 'New York, NY',
-    gpa: 'GPA: 4.00', status: 'Expected Dec 2026',
-    coursework: [
-      'Computational Statistics', 'Introduction to Cybersecurity', 'Information Security Management',
-      'Network Security & Defense', 'Ethical Hacking & Penetration Testing',
-      'Automating InfoSec with Python & Shell', 'Cyber Intelligence Analysis & Modeling',
-      'Operating Systems Theory & Administration',
-    ],
-  },
-  {
-    school: 'G.H. Patel College of Engineering & Technology', degree: 'B.E. Mechanical Engineering',
-    location: 'Gujarat, India', gpa: 'CGPA: 7.11', status: 'Completed Aug 2023', coursework: [] as string[],
-  },
-];
-
-const certifications = ['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'ISC2 Candidate', 'Google AI Essentials'];
 
 const openToRoles = [
   'Cybersecurity Engineering', 'Security Operations', 'Cloud Security',
@@ -104,8 +63,6 @@ export default function Index() {
     return [...normalized, ...jsonOnly];
   }, [dbProjects]);
 
-  /* experience tabs */
-  const [expTab, setExpTab] = useState<'experience' | 'education' | 'certifications'>('experience');
 
   /* competency hover expand */
   
@@ -242,7 +199,7 @@ export default function Index() {
           {/* Certification Ticker */}
           <div className="rounded-lg glass-card py-4 overflow-hidden">
             <div className="marquee-track">
-              {[...certifications, ...certifications].map((cert, i) => (
+              {[...['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'ISC2 Candidate', 'Google AI Essentials'], ...['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'ISC2 Candidate', 'Google AI Essentials']].map((cert, i) => (
                 <span key={`${cert}-${i}`} className="flex items-center gap-2 font-mono text-sm text-muted-foreground px-6 whitespace-nowrap">
                   <Shield className="w-3.5 h-3.5 text-primary shrink-0" />
                   {cert}
@@ -280,100 +237,14 @@ export default function Index() {
         </div>
       </section>
 
-      {/* ═══════ EXPERIENCE (Tabbed) ═══════ */}
+      {/* ═══════ EXPERIENCE & EDUCATION ═══════ */}
       <section id="experience" className="py-20 border-t border-border/40">
         <div className="container max-w-5xl mx-auto">
-          <div className="text-center mb-10">
-            <p className="section-heading">Background</p>
-            <h2 className="section-title mb-8">Experience & Education</h2>
-
-            {/* Tabs */}
-            <div className="inline-flex gap-1 p-1 rounded-lg glass-card">
-              {(['experience', 'education', 'certifications'] as const).map(tab => (
-                <button key={tab} onClick={() => setExpTab(tab)}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all capitalize ${expTab === tab ? 'gradient-btn' : 'text-muted-foreground hover:text-foreground'}`}>
-                  {tab}
-                </button>
-              ))}
-            </div>
+          <div className="text-center mb-4">
+            <p className="section-heading">Journey</p>
+            <h2 className="section-title">Experience & Education</h2>
           </div>
-
-          <AnimatePresence mode="wait">
-            {expTab === 'experience' && (
-              <motion.div key="exp" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
-                transition={{ type: 'spring', stiffness: 100, damping: 15 }}>
-                <div className="space-y-10">
-                  {experience.map((job, i) => (
-                    <motion.div key={job.company} initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={i}
-                      className="relative pl-8">
-                      <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-primary to-secondary" />
-                      <div className="absolute -left-[5px] top-2 w-3 h-3 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary)/0.6)]" />
-                      <div className="glass-card rounded-lg p-5">
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mb-2">
-                          <h3 className="font-bold text-foreground text-lg">{job.company}</h3>
-                          <span className="text-sm font-medium gradient-text">— {job.role}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mb-3 font-mono">{job.period}</p>
-                        <ul className="space-y-2">
-                          {job.bullets.map((b, j) => (
-                            <li key={j} className="text-sm text-muted-foreground flex items-start gap-2">
-                              <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-                              <span>{b.text}{b.bold && <strong className="text-primary font-semibold">{b.bold}</strong>}{b.after}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-
-            {expTab === 'education' && (
-              <motion.div key="edu" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
-                transition={{ type: 'spring', stiffness: 100, damping: 15 }}>
-                <div className="grid md:grid-cols-2 gap-6">
-                  {education.map((edu, i) => (
-                    <motion.div key={edu.school} initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={i}>
-                      <div className="h-full glass-card rounded-lg p-6">
-                        <GraduationCap className="w-7 h-7 text-primary mb-3" />
-                        <h3 className="font-bold text-foreground mb-1 text-lg">{edu.degree}</h3>
-                        <p className="text-sm text-muted-foreground mb-1">{edu.school}</p>
-                        <p className="text-sm text-muted-foreground">{edu.location}</p>
-                        <div className="flex gap-3 mt-3 mb-4">
-                          <span className="text-xs font-semibold px-2.5 py-1 rounded-md gradient-btn">{edu.gpa}</span>
-                          <Badge variant="outline" className="text-xs">{edu.status}</Badge>
-                        </div>
-                        {edu.coursework.length > 0 && (
-                          <div>
-                            <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider">Selected Coursework</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {edu.coursework.map(c => (
-                                <span key={c} className="text-xs px-2 py-0.5 rounded-full glass-card text-muted-foreground">{c}</span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-
-            {expTab === 'certifications' && (
-              <motion.div key="cert" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
-                transition={{ type: 'spring', stiffness: 100, damping: 15 }}>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-                  {certifications.map(cert => (
-                    <div key={cert} className="flex items-center justify-center gap-2.5 px-5 py-4 rounded-lg glass-card text-sm text-foreground hover:border-primary/30 hover:shadow-[0_0_20px_hsl(var(--primary)/0.1)] transition-all group">
-                      <Award className="w-4 h-4 text-primary flex-shrink-0 group-hover:scale-110 transition-transform" />{cert}
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <ExperienceTimeline />
         </div>
       </section>
 
