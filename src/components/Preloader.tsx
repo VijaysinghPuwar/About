@@ -2,8 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const HEX_PATH = 'M20 2 L36.66 11 L36.66 29 L20 38 L3.34 29 L3.34 11 Z';
-const HEX_GLOW_PATH = 'M20 0.5 L37.86 10.25 L37.86 29.75 L20 39.5 L2.14 29.75 L2.14 10.25 Z';
-const HEX_PERIMETER = 145; // approximate path length
+const HEX_PERIMETER = 145;
 
 const INIT_TEXT = 'Initializing secure connection...';
 const DONE_TEXT = 'Connection established ✓';
@@ -23,7 +22,6 @@ export function Preloader() {
     if (!visible) return;
     sessionStorage.setItem('preloaderShown', 'true');
 
-    // Type out init text from 0.8s to 1.4s (600ms for ~30 chars ≈ 20ms/char)
     const typeStart = setTimeout(() => {
       let i = 0;
       intervalRef.current = setInterval(() => {
@@ -35,17 +33,13 @@ export function Preloader() {
       }, 18);
     }, 800);
 
-    // Switch to done text at 1.4s
     const doneTimer = setTimeout(() => {
       if (intervalRef.current) clearInterval(intervalRef.current);
       setPhase('done');
       setTypedText(DONE_TEXT);
     }, 1400);
 
-    // Start exit at 1.7s
     const exitTimer = setTimeout(() => setPhase('exit'), 1700);
-
-    // Remove at 2.0s
     const removeTimer = setTimeout(() => setVisible(false), 2000);
 
     return () => {
@@ -69,7 +63,6 @@ export function Preloader() {
           className="fixed inset-0 z-[100] flex flex-col items-center justify-center"
           style={{ backgroundColor: '#050816' }}
         >
-          {/* Logo SVG with draw-on animation */}
           <div className="relative" style={{ width: 80, height: 80 }}>
             <svg viewBox="0 0 40 40" width={80} height={80} fill="none" xmlns="http://www.w3.org/2000/svg">
               <defs>
@@ -79,30 +72,10 @@ export function Preloader() {
                 </linearGradient>
               </defs>
 
-              {/* Glow hexagon - pulses at 0.8s */}
-              <motion.path
-                d={HEX_GLOW_PATH}
-                stroke="url(#preloader-hex-grad)"
-                strokeWidth="0.8"
-                fill="none"
-                initial={{ opacity: 0, scale: 1 }}
-                animate={{
-                  opacity: [0, 0, 0.3, 0],
-                  scale: [1, 1, 1.3, 1.3],
-                }}
-                transition={{
-                  duration: 1.2,
-                  times: [0, 0.67, 0.83, 1],
-                  ease: 'easeOut',
-                }}
-                style={{ transformOrigin: '20px 20px' }}
-              />
-
-              {/* Inner hexagon - stroke draw on 0-0.4s */}
               <motion.path
                 d={HEX_PATH}
                 stroke="url(#preloader-hex-grad)"
-                strokeWidth="1.2"
+                strokeWidth="1.5"
                 fill="none"
                 strokeDasharray={HEX_PERIMETER}
                 initial={{ strokeDashoffset: HEX_PERIMETER }}
@@ -110,39 +83,25 @@ export function Preloader() {
                 transition={{ duration: 0.4, ease: 'easeInOut' }}
               />
 
-              {/* V letter - fades in 0.4-0.7s */}
               <motion.text
-                x="14.5"
-                y="26"
+                x="19"
+                y="20"
+                textAnchor="middle"
+                dominantBaseline="central"
                 fontFamily="'Space Grotesk', system-ui, sans-serif"
                 fontWeight="700"
-                fontSize="15"
-                fill="#00e5ff"
+                fontSize="18"
+                letterSpacing="-0.8"
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4, duration: 0.3, ease: 'easeOut' }}
               >
-                V
-              </motion.text>
-
-              {/* P letter - fades in 0.5-0.8s */}
-              <motion.text
-                x="22"
-                y="26"
-                fontFamily="'Space Grotesk', system-ui, sans-serif"
-                fontWeight="700"
-                fontSize="15"
-                fill="#a855f7"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5, duration: 0.3, ease: 'easeOut' }}
-              >
-                P
+                <tspan fill="#00e5ff">V</tspan>
+                <tspan fill="#a855f7">P</tspan>
               </motion.text>
             </svg>
           </div>
 
-          {/* Typing text */}
           <motion.div
             className="mt-6 h-5"
             initial={{ opacity: 0 }}
