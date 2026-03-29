@@ -1,141 +1,71 @@
 import { useEffect, useRef } from 'react';
 
-const CHARS = '01{}< >/\\|$#@!=+-_&%~ABCDEF'.split('');
-const TERMS = ['ENCRYPT','HASH','AUTH','FIREWALL','PATCH','SUDO','ROOT','CHMOD','SSH','TLS','AES','RSA','NMAP','SCAN'];
-const FONT = '11px "JetBrains Mono", monospace';
-const COLOR = '#00e5ff';
-const COL_WIDTH = 28;
-const FPS_INTERVAL = 1000 / 30;
-
-interface Column {
-  x: number;
-  y: number;
-  speed: number;
-  chars: { char: string; y: number; age: number }[];
-  term: string | null;
-  termIdx: number;
-  active: boolean;
-  pauseUntil: number;
-}
+const CHARS = '01{}< >/\\|$#@!=+-_&%~ABCDEF';
+const COL_W = 20;
+const CELL_H = 14;
+const FPS = 20;
+const INTERVAL = 1000 / FPS;
 
 export function MatrixRain() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef(0);
   const visibleRef = useRef(false);
+  const dropsRef = useRef<number[]>([]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
-    let cols: Column[] = [];
-    let lastFrame = 0;
+    let lastTime = 0;
 
     const resize = () => {
-      const rect = canvas.parentElement!.getBoundingClientRect();
-      canvas.width = rect.width;
-      canvas.height = rect.height;
-      initCols();
-    };
-
-    const initCols = () => {
-      const count = Math.max(10, Math.min(30, Math.floor(canvas.width / COL_WIDTH)));
-      const spacing = canvas.width / count;
-      cols = Array.from({ length: count }, (_, i) => ({
-        x: spacing * i + spacing / 2,
-        y: -(Math.random() * canvas.height),
-        speed: 30 + Math.random() * 40,
-        chars: [],
-        term: Math.random() < 0.3 ? TERMS[Math.floor(Math.random() * TERMS.length)] : null,
-        termIdx: 0,
-        active: Math.random() < 0.7,
-        pauseUntil: Math.random() * 3000,
-      }));
-    };
-
-    const getChar = (col: Column): string => {
-      if (col.term && col.termIdx < col.term.length) {
-        return col.term[col.termIdx++];
-      }
-      if (col.term && col.termIdx >= col.term.length) {
-        col.term = Math.random() < 0.1 ? TERMS[Math.floor(Math.random() * TERMS.length)] : null;
-        col.termIdx = 0;
-      }
-      return CHARS[Math.floor(Math.random() * CHARS.length)];
+      const parent = canvas.parentElement!;
+      canvas.width = parent.clientWidth;
+      canvas.height = parent.clientHeight;
+      const colCount = Math.floor(canvas.width / COL_W);
+      dropsRef.current = Array.from({ length: colCount }, () => Math.random() * -100);
     };
 
     const draw = (ts: number) => {
       rafRef.current = requestAnimationFrame(draw);
       if (!visibleRef.current) return;
-      const delta = ts - lastFrame;
-      if (delta < FPS_INTERVAL) return;
-      lastFrame = ts - (delta % FPS_INTERVAL);
+      if (ts - lastTime < INTERVAL) return;
+      lastTime = ts;
 
-      const dt = delta / 1000;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.font = FONT;
-      ctx.textAlign = 'center';
+      // Fade trail
+      ctx.fillStyle = 'rgba(5, 8, 22, 0.08)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      for (const col of cols) {
-        // Organic pause logic
-        if (!col.active) {
-          if (ts > col.pauseUntil) {
-            col.active = true;
-          } else {
-            // Still draw existing chars while paused
-            for (let i = col.chars.length - 1; i >= 0; i--) {
-              const c = col.chars[i];
-              c.age += dt;
-              const bottomFade = 1 - Math.max(0, (c.y - canvas.height * 0.7) / (canvas.height * 0.3));
-              const alpha = Math.max(0, (0.04 + Math.random() * 0.04) * bottomFade);
-              if (alpha <= 0 || c.y > canvas.height) {
-                col.chars.splice(i, 1);
-                continue;
-              }
-              ctx.fillStyle = COLOR;
-              ctx.globalAlpha = alpha;
-              ctx.fillText(c.char, col.x, c.y);
-            }
-            continue;
-          }
+      ctx.font = '12px monospace';
+      const drops = dropsRef.current;
+
+      for (let i = 0; i < drops.length; i++) {
+        const char = CHARS[Math.floor(Math.random() * CHARS.length)];
+        const x = i * COL_W;
+        const y = drops[i] * CELL_H;
+
+        // Head character brighter
+        ctx.fillStyle = 'rgba(0, 229, 255, 0.25)';
+        ctx.fillText(char, x, y);
+
+        // Draw a slightly dimmer trail char one step behind
+        if (drops[i] > 1) {
+          const trailChar = CHARS[Math.floor(Math.random() * CHARS.length)];
+          ctx.fillStyle = 'rgba(0, 229, 255, 0.10)';
+          ctx.fillText(trailChar, x, y - CELL_H);
         }
 
-        col.y += col.speed * dt;
+        drops[i]++;
 
-        if (col.chars.length === 0 || col.y - (col.chars[col.chars.length - 1]?.y ?? -20) > 14) {
-          col.chars.push({ char: getChar(col), y: col.y, age: 0 });
-        }
-
-        for (let i = col.chars.length - 1; i >= 0; i--) {
-          const c = col.chars[i];
-          c.age += dt;
-          const bottomFade = 1 - Math.max(0, (c.y - canvas.height * 0.7) / (canvas.height * 0.3));
-          const flash = c.age < 0.15 ? 0.15 : 0.04 + Math.random() * 0.04;
-          const alpha = Math.max(0, flash * bottomFade);
-          if (alpha <= 0 || c.y > canvas.height) {
-            col.chars.splice(i, 1);
-            continue;
-          }
-          ctx.fillStyle = COLOR;
-          ctx.globalAlpha = alpha;
-          ctx.fillText(c.char, col.x, c.y);
-        }
-
-        if (col.y > canvas.height + 40 && col.chars.length === 0) {
-          col.y = -(Math.random() * 200);
-          col.speed = 30 + Math.random() * 40;
-          col.term = Math.random() < 0.1 ? TERMS[Math.floor(Math.random() * TERMS.length)] : null;
-          col.termIdx = 0;
-          // Randomly pause this column
-          if (Math.random() < 0.3) {
-            col.active = false;
-            col.pauseUntil = performance.now() + 1000 + Math.random() * 4000;
-          }
+        if (y > canvas.height && Math.random() > 0.975) {
+          drops[i] = 0;
         }
       }
-      ctx.globalAlpha = 1;
     };
 
-    const io = new IntersectionObserver(([e]) => { visibleRef.current = e.isIntersecting; }, { threshold: 0 });
+    const io = new IntersectionObserver(([e]) => {
+      visibleRef.current = e.isIntersecting;
+    }, { threshold: 0 });
     io.observe(canvas);
 
     const ro = new ResizeObserver(resize);
