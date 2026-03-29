@@ -63,8 +63,6 @@ export default function Index() {
     return [...normalized, ...jsonOnly];
   }, [dbProjects]);
 
-  /* experience tabs */
-  const [expTab, setExpTab] = useState<'experience' | 'education' | 'certifications'>('experience');
 
   /* competency hover expand */
   
