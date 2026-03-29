@@ -182,7 +182,7 @@ function TimelineNode({ entry, index, expandedId, onToggle }: {
       </div>
 
       {/* Center dot */}
-      <div className="hidden md:flex flex-col items-center order-2">
+      <div className="hidden md:flex flex-col items-center">
         <motion.button
           onClick={() => onToggle(entry.id)}
           initial={{ scale: 0 }}
