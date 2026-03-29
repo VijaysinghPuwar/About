@@ -1,11 +1,9 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Search, Lock } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Search, Lock, Github } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { ProjectCard } from '@/components/ProjectCard';
 import { useProjects } from '@/hooks/useProjects';
 import { useAuth } from '@/hooks/useAuth';
 import projectsData from '@/data/projects.json';
@@ -48,18 +46,16 @@ export default function Projects() {
   if (!user) {
     return (
       <div className="min-h-screen py-20 flex items-center justify-center">
-        <Card className="border-border/40 bg-card max-w-lg w-full mx-4">
-          <CardContent className="p-8 text-center">
-            <Lock className="w-10 h-10 text-primary mx-auto mb-4" />
-            <h2 className="font-semibold text-foreground text-xl mb-2">Portfolio Access Required</h2>
-            <p className="text-sm text-muted-foreground mb-6">
-              Sign in with Google to access the full project portfolio, GitHub repositories, and detailed project breakdowns.
-            </p>
-            <Button asChild>
-              <Link to="/login">Sign In with Google</Link>
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="glass-card rounded-lg max-w-lg w-full mx-4 p-8 text-center">
+          <Lock className="w-10 h-10 text-primary mx-auto mb-4" />
+          <h2 className="font-semibold text-foreground text-xl mb-2">Portfolio Access Required</h2>
+          <p className="text-sm text-muted-foreground mb-6">
+            Sign in with Google to access the full project portfolio, GitHub repositories, and detailed project breakdowns.
+          </p>
+          <Link to="/login" className="inline-flex items-center justify-center h-10 px-6 rounded-md text-sm font-medium gradient-btn">
+            Sign In with Google
+          </Link>
+        </div>
       </div>
     );
   }
@@ -78,12 +74,24 @@ export default function Projects() {
         <div className="flex flex-col sm:flex-row gap-3 mb-8">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-card border-border/40" />
+            <Input placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)}
+              className="pl-9 bg-background/50 border-border/40 focus:border-primary/60" />
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant={selectedCategory === null ? "default" : "outline"} size="sm" onClick={() => setSelectedCategory(null)}>All</Button>
+            <button
+              onClick={() => setSelectedCategory(null)}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                selectedCategory === null ? 'gradient-btn' : 'glass-card text-muted-foreground hover:text-foreground'
+              }`}
+            >All</button>
             {categories.map(cat => (
-              <Button key={cat} variant={selectedCategory === cat ? "default" : "outline"} size="sm" onClick={() => setSelectedCategory(cat)}>{cat}</Button>
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                  selectedCategory === cat ? 'gradient-btn' : 'glass-card text-muted-foreground hover:text-foreground'
+                }`}
+              >{cat}</button>
             ))}
           </div>
         </div>
@@ -91,7 +99,35 @@ export default function Projects() {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filtered.map((project, i) => (
             <motion.div key={project.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-              <ProjectCard project={project} />
+              <div className="h-full rounded-lg glass-card hover:border-primary/20 transition-all group flex flex-col">
+                <div className="p-6 flex flex-col h-full">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Badge variant="outline" className="text-xs text-primary border-primary/20">{project.category}</Badge>
+                    <span className="text-xs text-muted-foreground">{project.year}</span>
+                    {project.featured && (
+                      <span className="text-xs px-2 py-0.5 rounded-full gradient-btn">Featured</span>
+                    )}
+                  </div>
+                  <h3 className="font-semibold text-foreground mb-2 group-hover:text-primary transition-colors">
+                    <Link to={`/projects/${project.id}`}>{project.title}</Link>
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-4 line-clamp-2 flex-1">{project.description}</p>
+                  <div className="flex flex-wrap gap-1.5 mb-4">
+                    {project.tech.slice(0, 4).map(t => (
+                      <span key={t} className="text-xs px-2 py-0.5 rounded-full glass-card text-muted-foreground">{t}</span>
+                    ))}
+                    {project.tech.length > 4 && (
+                      <span className="text-xs px-2 py-0.5 rounded-full glass-card text-muted-foreground">+{project.tech.length - 4}</span>
+                    )}
+                  </div>
+                  {project.links.github && (
+                    <a href={project.links.github} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center text-sm text-primary hover:underline">
+                      <Github className="w-4 h-4 mr-1.5" /> View on GitHub
+                    </a>
+                  )}
+                </div>
+              </div>
             </motion.div>
           ))}
         </div>
