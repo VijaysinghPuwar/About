@@ -114,7 +114,7 @@ export default function Index() {
         <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] via-transparent to-background" />
 
         {/* Status indicators */}
-        <div className="absolute top-20 left-4 sm:left-8 flex flex-col gap-2 z-10">
+        <div className="relative mb-4 md:mb-0 md:absolute md:top-20 md:left-4 sm:md:left-8 flex flex-col gap-2 z-10 px-4 md:px-0 pt-20 md:pt-0">
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
             className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
