@@ -125,7 +125,7 @@ export default function Index() {
   const [expTab, setExpTab] = useState<'experience' | 'education' | 'certifications'>('experience');
 
   /* competency hover expand */
-  const [expandedCompetency, setExpandedCompetency] = useState<number | null>(null);
+  
 
   /* contact form */
   const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
