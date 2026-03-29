@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Menu, Shield, LogIn, LogOut, Settings, Lock } from 'lucide-react';
+import { Menu, LogIn, LogOut, Settings, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -52,13 +52,12 @@ export function Navigation() {
     <nav className={cn(
       "sticky top-0 z-50 w-full transition-all duration-300",
       scrolled
-        ? "bg-background/95 backdrop-blur border-b border-border/40 shadow-sm"
+        ? "bg-background/80 backdrop-blur-xl border-b border-border/40 shadow-sm"
         : "bg-transparent border-b border-transparent"
     )}>
       <div className="container flex h-14 items-center justify-between">
-        <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <Shield className="w-6 h-6 text-primary" />
-          <span className="font-bold text-foreground">Vijaysingh Puwar</span>
+        <Link to="/" className="flex items-center gap-1 hover:opacity-80 transition-opacity">
+          <span className="text-xl font-bold gradient-text">VP</span>
         </Link>
 
         {/* Desktop */}
@@ -68,14 +67,17 @@ export function Navigation() {
               key={item.path}
               to={item.gated && !user ? '/login' : item.path}
               className={cn(
-                "px-3 py-1.5 rounded-md text-sm font-medium transition-colors inline-flex items-center gap-1.5",
+                "relative px-3 py-1.5 rounded-md text-sm font-medium transition-colors inline-flex items-center gap-1.5",
                 isActive(item.path)
-                  ? "text-primary"
+                  ? "text-foreground"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
               {item.name}
               {item.gated && !user && <Lock className="w-3 h-3 text-muted-foreground" />}
+              {isActive(item.path) && (
+                <span className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full bg-gradient-to-r from-primary to-secondary" />
+              )}
             </Link>
           ))}
         </div>
@@ -92,7 +94,7 @@ export function Navigation() {
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48 bg-card border-border">
+              <DropdownMenuContent align="end" className="w-48 glass-card">
                 <div className="px-3 py-2">
                   <p className="text-sm font-medium truncate">{profile?.full_name || 'User'}</p>
                   <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
@@ -126,10 +128,10 @@ export function Navigation() {
                 <Menu className="w-5 h-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-[280px] bg-card border-border">
+            <SheetContent side="right" className="w-[280px] glass-card border-border/40">
               <div className="flex flex-col gap-4 mt-6">
-                <div className="pb-3 border-b border-border">
-                  <div className="font-bold text-foreground">Vijaysingh Puwar</div>
+                <div className="pb-3 border-b border-border/40">
+                  <div className="font-bold gradient-text text-lg">VP</div>
                   <div className="text-sm text-muted-foreground">Cybersecurity Engineer</div>
                 </div>
                 {navItems.map((item) => (
@@ -139,14 +141,14 @@ export function Navigation() {
                     onClick={() => setIsOpen(false)}
                     className={cn(
                       "px-3 py-2 rounded-md text-sm font-medium transition-colors inline-flex items-center gap-1.5",
-                      isActive(item.path) ? "text-primary bg-primary/5" : "text-muted-foreground hover:text-foreground"
+                      isActive(item.path) ? "text-foreground bg-primary/5" : "text-muted-foreground hover:text-foreground"
                     )}
                   >
                     {item.name}
                     {item.gated && !user && <Lock className="w-3 h-3 text-muted-foreground" />}
                   </Link>
                 ))}
-                <div className="pt-3 border-t border-border">
+                <div className="pt-3 border-t border-border/40">
                   {user ? (
                     <div className="space-y-2">
                       {isAdmin && (
@@ -159,7 +161,7 @@ export function Navigation() {
                       </Button>
                     </div>
                   ) : (
-                    <Button size="sm" className="w-full" asChild onClick={() => setIsOpen(false)}>
+                    <Button size="sm" className="w-full gradient-btn" asChild onClick={() => setIsOpen(false)}>
                       <Link to="/login"><LogIn className="w-4 h-4 mr-2" /> Sign In</Link>
                     </Button>
                   )}
