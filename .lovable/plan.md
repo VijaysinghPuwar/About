@@ -1,59 +1,69 @@
 
 
-# Redesign VP Logo & Preloader
+# Interactive 3D Hexagon Shield
 
-## Files to Create/Modify
+## Overview
+Replace `SecurityShield` with a new `HeroShield` component featuring multi-layered hexagons with 3D mouse-tracking tilt, parallax depth per layer, orbiting icons that scatter on hover, and a click-triggered scan pulse.
+
+## Files
 
 | File | Action |
 |------|--------|
-| `src/components/LogoIcon.tsx` | **Create** — Reusable hexagon VP SVG component |
-| `src/components/Preloader.tsx` | **Rewrite** — Boot sequence animation with sessionStorage check |
-| `src/components/Navigation.tsx` | **Edit** — Replace text "VP" with `<LogoIcon />` |
-| `src/components/Footer.tsx` | **Edit** — Replace text "VP" with `<LogoIcon size={28} />` |
-| `public/favicon.svg` | **Rewrite** — Hexagon VP design matching the new logo |
+| `src/components/HeroShield.tsx` | **Create** — Full interactive component |
+| `src/pages/Index.tsx` | **Edit** — Replace `SecurityShield` import/usage with `HeroShield` |
+| `src/components/SecurityShield.tsx` | **Delete** |
 
-## 1. `LogoIcon.tsx` — Reusable SVG Component
+## HeroShield Component Design
 
-Props: `size` (default 40), `className`, `animated` (default false — enables hover rotation).
+### Layered Hexagons (CSS transforms, not canvas)
+Each layer is an absolutely-positioned SVG hexagon centered in a container:
+- **Layer 1**: 380px, stroke `#00e5ff` at 0.15 opacity
+- **Layer 2**: 280px, stroke `#a855f7` at 0.2 opacity, rotated 15°
+- **Layer 3**: 180px, stroke `#00e5ff` at 0.3 opacity, rotated 30°
+- **Layer 4**: 100px, gradient fill at 0.1 opacity
+- **Center**: Lock icon (32px, white, 0.6 opacity)
 
-SVG structure (viewBox `0 0 40 40`):
-- **Outer glow hexagon**: Same hexagon path scaled ~1.1x, stroke opacity 0.15, `className` for CSS rotation animation when `animated=true`
-- **Inner hexagon**: Stroke-only hexagon using `<linearGradient>` from `#00e5ff` to `#a855f7`
-- **"V" text**: Fill `#00e5ff`, x centered left, Space Grotesk bold
-- **"P" text**: Fill `#a855f7`, x centered right, slightly overlapping V
+### 3D Tilt (mouse tracking)
+- `onMouseMove` on the container calculates offset from center
+- `tiltX = (mouseY - centerY) / height * 20`, `tiltY = (mouseX - centerX) / width * -20`
+- Each layer applies tilt at a different multiplier (1.0x, 0.7x, 0.4x, 0.2x) for parallax
+- Uses `requestAnimationFrame` + lerp (factor 0.08) to smooth the following
+- On mouse leave, lerps back to (0, 0)
+- Transform: `perspective(800px) rotateX() rotateY()`
 
-When `animated` is true (navbar usage):
-- Outer glow hexagon gets `animate-shield-rotate` (already exists in CSS — 30s rotation, will change to 8s)
-- On hover via CSS group: inner hexagon brightens, glow scales to 1.15x, letters flash white then return
+### Idle Animation (no hover)
+- Track `isHovering` state
+- When not hovering, layers rotate via CSS animation:
+  - L1: clockwise 30s, L2: counter-clockwise 25s, L3: clockwise 20s
+  - L4: scale pulse 1.0→1.05→1.0 over 3s
+- When hovering starts: set `animation-play-state: paused`, tilt takes over
+- When hovering ends: resume rotations, lerp tilt to zero
 
-## 2. `Preloader.tsx` — Boot Sequence
+### Orbiting Icons
+- 4 icons (Terminal, Shield, Cloud, Lock) positioned using `Math.sin`/`Math.cos` with time-based angle from `requestAnimationFrame`
+- Each at Layer 1 radius (~190px from center), offset by 0°/90°/180°/270°, different speeds (20s/25s/22s/28s)
+- Glass-morphism containers: 36px square, `bg-[rgba(15,23,42,0.5)]`, border `rgba(100,220,255,0.15)`
+- On hover: icons translate 40px further outward (lerped transition)
+- Icons also shift based on current tilt values for depth
 
-- Check `sessionStorage.getItem('preloaderShown')` — if set, return null immediately
-- On mount, set `sessionStorage.setItem('preloaderShown', 'true')`
-- Use framer-motion for the sequence (2s total):
-  - **0–0.4s**: Hexagon stroke draws on via `stroke-dashoffset` animation (motion.path)
-  - **0.4–0.7s**: "V" fades in + slides up
-  - **0.5–0.8s**: "P" fades in + slides up
-  - **0.8–1.2s**: Glow hexagon pulses outward (scale 1→1.3→1, opacity 0.3→0)
-  - **0.8–1.4s**: Text types out "Initializing secure connection..." char by char (JetBrains Mono, 12px, `#64748b`)
-  - **1.4–1.7s**: Text switches to "Connection established ✓" (checkmark in `#22d3ee`)
-  - **1.7–2.0s**: Everything fades out (opacity 0, scale 1.05)
-- Background: `#050816`, CyberGrid renders behind it naturally (z-index layering)
+### Click Scan Pulse
+- On click/touchstart, spawn a pulse ring element using state array
+- Ring expands 0→500px over 0.8s via CSS animation, gradient stroke, fades opacity 0.6→0
+- All hex layers briefly flash (opacity spike via a CSS class toggled for 200ms)
+- Center icon switches to CheckCircle for 1s, then reverts to Lock
 
-## 3. Navigation.tsx
+### Mobile (<768px)
+- Scale container to 60% via wrapper class
+- Disable tilt (skip mouse tracking)
+- Keep idle rotations and orbit animations
+- Use `touchstart` for scan pulse
 
-Replace line 86 (`<span className="text-xl font-bold gradient-text">VP</span>`) with `<LogoIcon size={36} animated />` wrapped in a group for hover effects.
+### Performance
+- All visual transforms are CSS (`transform`, `opacity`) — GPU composited
+- Single `requestAnimationFrame` loop handles: tilt lerping + orbit position calculation
+- Cleanup on unmount
 
-## 4. Footer.tsx
-
-Replace line 27 (`<span className="font-bold gradient-text text-lg">VP</span>`) with `<LogoIcon size={24} />`.
-
-## 5. CSS Updates in `index.css`
-
-- Change `animate-shield-rotate` duration from 30s to 8s for the logo rotation
-- Add a new `@keyframes` or keep separate — actually, add a dedicated `animate-logo-rotate` at 8s so we don't break the shield component
-
-## 6. `public/favicon.svg`
-
-Rewrite to use hexagon outline with VP letters matching the gradient colors, replacing the current rounded-rect design.
+## Index.tsx Changes
+- Replace `import { SecurityShield }` with `import { HeroShield }`
+- Replace `<SecurityShield />` with `<HeroShield />`
 
