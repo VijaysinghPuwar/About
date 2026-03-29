@@ -1,75 +1,71 @@
 
 
-# Interactive Project Showcase — Rebuild Plan
+# Interactive Timeline — Experience & Education
 
-Replace the current flat project card grid (lines ~273–377 in Index.tsx) with an interactive showcase featuring hoverable cards and an expandable modal with Framer Motion `layoutId` animations.
-
----
-
-## New Component: `src/components/ProjectShowcase.tsx`
-
-Self-contained component that receives `projects` array, `user` auth state, and handles all filtering, cards, and modal logic.
-
-### Filter Bar
-- Horizontal pills: All, Security Automation, Cloud Security, Network Security, Application Security, Research, Automation, Application Development
-- Active pill: `gradient-btn` class. Inactive: `glass-card text-muted-foreground`
-- Remove search input — filters only via category pills
-- Switching filters uses `AnimatePresence mode="popLayout"` with `layout` on each card for smooth rearrangement
-
-### Project Cards
-Two tiers based on `featured` flag:
-- **Featured** (6 cards): standard size in a 3-column grid (2-col on md, 1-col on mobile)
-- **Secondary** (6 cards): smaller cards in a 4-column grid below featured, more compact (less padding, no description)
-
-**Card default state:**
-- Glass-morphism card with 2px gradient top accent line (color varies by category via a color map)
-- Project name (white, bold), category pill + year, 1-line description (muted, `line-clamp-1`), tech pills (tiny), GitHub icon link in top-right corner
-- Uses `motion.div` with `layoutId={project.id}` for shared layout animation
-
-**Card hover state (desktop):**
-- `hover:-translate-y-2` lift, border brightens to `border-primary/40`
-- "View Details →" text fades in at bottom (`opacity-0 group-hover:opacity-100 transition-opacity`)
-- Subtle glow shadow: `hover:shadow-[0_8px_30px_hsl(var(--primary)/0.12)]`
-
-**Card click:**
-- Sets `selectedProject` state, opens modal overlay
-
-### Expanded Modal
-- Dark overlay (`bg-black/60 backdrop-blur-sm`) with `AnimatePresence`
-- Modal card uses `motion.div` with matching `layoutId={selectedProject.id}` so the card visually morphs into the modal
-- Modal content:
-  - Project name (large, `text-2xl font-bold`)
-  - Category pill + year
-  - Full description (from the hardcoded project data in the component — the user provided detailed descriptions for each)
-  - Tech stack as larger pills
-  - Key features as bullet list (3-4 items, also hardcoded per project)
-  - "View on GitHub →" gradient button
-  - Close X button top-right
-- Close on overlay click, Escape key, or X button
-- Mobile: modal is `w-full max-w-2xl` with padding, scrollable
-
-### Project Data
-Hardcode the enriched project data (descriptions, features) directly in the component since the user provided specific copy for all 12 projects. Map by project ID to merge with the existing `projects.json` data.
-
-### Bottom Strip
-- "18+ public repositories" with GitHub icon
-- "View All on GitHub →" gradient button linking to `github.com/vijaysinghpuwar`
+Replace the tabbed experience section (lines 283–378 in Index.tsx) with a new `ExperienceTimeline` component featuring an alternating vertical timeline with accordion behavior and flippable certification cards.
 
 ---
 
-## Index.tsx Changes (lines ~273–377)
+## New Component: `src/components/ExperienceTimeline.tsx`
 
-- Replace entire projects section with:
-  ```
-  <section id="projects">
-    <p className="section-heading">WORK</p>
-    <h2 className="section-title">Featured Projects</h2>
-    {user ? <ProjectShowcase projects={allProjects} /> : <sign-in-card />}
-  </section>
-  ```
-- Import `ProjectShowcase` component
-- Remove `search` state, `selectedCategory` state (moved into component)
-- Keep auth gating logic
+### Timeline Data
+5 entries in chronological order (most recent first), each with:
+- `type`: "education" | "work"
+- `icon`: GraduationCap or Briefcase
+- Collapsed: company/school, role/degree, period
+- Expanded: bullets (work) or coursework pills (education)
+- Metrics like "150+", "70%", "20%", "100%", "4.00" highlighted in cyan (`text-primary font-semibold`)
+
+### Layout
+- **Desktop**: Center vertical line with entries alternating left/right. Odd entries left, even entries right. Timeline dot centered on the line.
+- **Mobile**: Line on the left, all entries to the right.
+- Vertical line: animated gradient background using CSS `background-size` animation (energy flowing down).
+
+### Accordion Behavior
+- `expandedId` state — only one node open at a time
+- Click toggles: if same node clicked, collapse; otherwise expand new and collapse old
+- Use `AnimatePresence` + `motion.div` with `initial/animate/exit` height animation for expand/collapse
+- Expand icon: small `ChevronDown` that rotates 180° when expanded
+- Active timeline dot: brighter glow + pulse animation (`shadow-[0_0_16px_hsl(var(--primary)/0.8)]`)
+
+### Scroll Entrance
+- Each node uses `motion.div` with `whileInView` — slides in from left (odd) or right (even) on desktop, always from left on mobile
+
+### Certification Row (below timeline)
+- 5 cert cards in a horizontal flex/grid row
+- Each card has front/back via CSS `transform-style: preserve-3d` + `rotateY(180deg)` on hover
+- Front: Shield icon + cert name
+- Back: issuing org text (e.g., "CompTIA", "Cisco", "ISC2", "Google")
+- Glass-morphism styling, gradient border on hover
+
+---
+
+## Index.tsx Changes (lines 283–378)
+
+Replace entire experience section with:
+```
+<section id="experience">
+  <p className="section-heading">Journey</p>
+  <h2 className="section-title">Experience & Education</h2>
+  <ExperienceTimeline />
+</section>
+```
+
+Remove: `expTab` state, `experience` array, `education` array, `certifications` array (move into component). Clean up unused imports (`Award`, `GraduationCap`, `Briefcase` if only used there).
+
+---
+
+## CSS Addition (`src/index.css`)
+
+Add `@keyframes timeline-flow` for the animated gradient line:
+```css
+@keyframes timeline-flow {
+  0% { background-position: 0% 0%; }
+  100% { background-position: 0% 200%; }
+}
+```
+
+Add `.flip-card` styles for certification card 3D flip.
 
 ---
 
@@ -77,6 +73,7 @@ Hardcode the enriched project data (descriptions, features) directly in the comp
 
 | File | Action |
 |------|--------|
-| `src/components/ProjectShowcase.tsx` | **New** — full interactive project showcase with filters, cards, modal |
-| `src/pages/Index.tsx` | Replace lines ~273–377 with new section using ProjectShowcase, clean up unused state |
+| `src/components/ExperienceTimeline.tsx` | **New** — full timeline + cert cards |
+| `src/pages/Index.tsx` | Replace lines 283–378, remove moved data/state |
+| `src/index.css` | Add timeline-flow keyframes + flip-card styles |
 
