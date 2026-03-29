@@ -15,7 +15,7 @@ import projectsData from '@/data/projects.json';
 import { useAuth } from '@/hooks/useAuth';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
-import { SecurityShield } from '@/components/SecurityShield';
+import { HeroShield } from '@/components/HeroShield';
 
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -159,7 +159,7 @@ export default function Index() {
             <motion.div initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }}
               transition={{ type: 'spring', stiffness: 80, damping: 15, delay: 0.5 }}
               className="order-1 lg:order-2 hidden lg:flex relative h-[460px] items-center justify-center">
-              <SecurityShield />
+              <HeroShield />
             </motion.div>
           </div>
         </div>
