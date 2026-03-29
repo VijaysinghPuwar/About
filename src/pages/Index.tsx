@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, lazy, Suspense } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,16 +12,17 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence, useInView } from 'framer-motion';
 import projectsData from '@/data/projects.json';
-import { ProjectShowcase } from '@/components/ProjectShowcase';
 import { useAuth } from '@/hooks/useAuth';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
 import { SecurityShield } from '@/components/SecurityShield';
-import { SkillsRadar } from '@/components/SkillsRadar';
-import { SkillCategories } from '@/components/SkillCategories';
-import { ExperienceTimeline } from '@/components/ExperienceTimeline';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+
+const SkillsRadar = lazy(() => import('@/components/SkillsRadar').then(m => ({ default: m.SkillsRadar })));
+const SkillCategories = lazy(() => import('@/components/SkillCategories').then(m => ({ default: m.SkillCategories })));
+const ExperienceTimeline = lazy(() => import('@/components/ExperienceTimeline').then(m => ({ default: m.ExperienceTimeline })));
+const ProjectShowcase = lazy(() => import('@/components/ProjectShowcase').then(m => ({ default: m.ProjectShowcase })));
 
 /* ── animation helpers ── */
 const spring = (i: number) => ({
@@ -34,6 +35,14 @@ const fadeUp = {
 };
 
 const VP = { once: true, amount: 0.3 }; // viewport config
+
+/* section entrance animation */
+const sectionAnim = {
+  initial: { opacity: 0, y: 40 },
+  whileInView: { opacity: 1, y: 0 },
+  transition: { duration: 0.6, ease: 'easeOut' as const },
+  viewport: { once: true, amount: 0.2 },
+};
 
 
 
@@ -173,26 +182,23 @@ export default function Index() {
 
       {/* ═══════ SKILLS & TECHNOLOGIES ═══════ */}
       <section id="skills" className="py-20 border-t border-border/40">
-        <div className="container max-w-6xl mx-auto">
+        <motion.div {...sectionAnim} className="container max-w-6xl mx-auto">
           <div className="text-center mb-14">
             <p className="section-heading">Arsenal</p>
             <h2 className="section-title">Skills & Technologies</h2>
           </div>
 
-          {/* Two-column layout */}
-          <div className="grid lg:grid-cols-2 gap-10 items-start mb-14">
-            {/* Radar Chart */}
-            <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}>
-              <SkillsRadar />
-            </motion.div>
+          <Suspense fallback={<div className="h-64" />}>
+            <div className="grid lg:grid-cols-2 gap-10 items-start mb-14">
+              <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}>
+                <SkillsRadar />
+              </motion.div>
+              <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={1}>
+                <SkillCategories />
+              </motion.div>
+            </div>
+          </Suspense>
 
-            {/* Category Tabs */}
-            <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={1}>
-              <SkillCategories />
-            </motion.div>
-          </div>
-
-          {/* Certification Ticker */}
           <div className="rounded-lg glass-card py-4 overflow-hidden">
             <div className="marquee-track">
               {[...['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'ISC2 Candidate', 'Google AI Essentials'], ...['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'ISC2 Candidate', 'Google AI Essentials']].map((cert, i) => (
@@ -203,50 +209,54 @@ export default function Index() {
               ))}
             </div>
           </div>
-        </div>
+        </motion.div>
       </section>
 
       {/* ═══════ PROJECTS ═══════ */}
       <section id="projects" className="py-20 border-t border-border/40">
-        <div className="container max-w-6xl mx-auto">
+        <motion.div {...sectionAnim} className="container max-w-6xl mx-auto">
           <div className="text-center mb-14">
             <p className="section-heading">Work</p>
             <h2 className="section-title">Featured Projects</h2>
           </div>
 
-          {user ? (
-            <ProjectShowcase projects={allProjects} />
-          ) : (
-            <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}>
-              <div className="glass-card rounded-lg max-w-lg mx-auto p-8 text-center">
-                <Lock className="w-10 h-10 text-primary mx-auto mb-4" />
-                <h3 className="font-semibold text-foreground text-lg mb-2">Portfolio Access Required</h3>
-                <p className="text-sm text-muted-foreground mb-6">
-                  Sign in with Google to view detailed projects, GitHub repositories, and download resume.
-                </p>
-                <Link to="/login" className="inline-flex items-center justify-center h-10 px-6 rounded-md text-sm font-medium gradient-btn">
-                  Sign In with Google
-                </Link>
-              </div>
-            </motion.div>
-          )}
-        </div>
+          <Suspense fallback={<div className="h-64" />}>
+            {user ? (
+              <ProjectShowcase projects={allProjects} />
+            ) : (
+              <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}>
+                <div className="glass-card rounded-lg max-w-lg mx-auto p-8 text-center">
+                  <Lock className="w-10 h-10 text-primary mx-auto mb-4" />
+                  <h3 className="font-semibold text-foreground text-lg mb-2">Portfolio Access Required</h3>
+                  <p className="text-sm text-muted-foreground mb-6">
+                    Sign in with Google to view detailed projects, GitHub repositories, and download resume.
+                  </p>
+                  <Link to="/login" className="inline-flex items-center justify-center h-10 px-6 rounded-md text-sm font-medium gradient-btn">
+                    Sign In with Google
+                  </Link>
+                </div>
+              </motion.div>
+            )}
+          </Suspense>
+        </motion.div>
       </section>
 
       {/* ═══════ EXPERIENCE & EDUCATION ═══════ */}
       <section id="experience" className="py-20 border-t border-border/40">
-        <div className="container max-w-5xl mx-auto">
+        <motion.div {...sectionAnim} className="container max-w-5xl mx-auto">
           <div className="text-center mb-4">
             <p className="section-heading">Journey</p>
             <h2 className="section-title">Experience & Education</h2>
           </div>
-          <ExperienceTimeline />
-        </div>
+          <Suspense fallback={<div className="h-64" />}>
+            <ExperienceTimeline />
+          </Suspense>
+        </motion.div>
       </section>
 
       {/* ═══════ CONTACT ═══════ */}
       <section id="contact" className="py-20 border-t border-border/40">
-        <div className="container max-w-6xl mx-auto">
+        <motion.div {...sectionAnim} className="container max-w-6xl mx-auto">
           <div className="text-center mb-4">
             <p className="section-heading">Connect</p>
             <h2 className="section-title">Let's Work Together</h2>
@@ -350,7 +360,7 @@ export default function Index() {
               </AnimatePresence>
             </motion.div>
           </div>
-        </div>
+        </motion.div>
       </section>
     </div>
   );
