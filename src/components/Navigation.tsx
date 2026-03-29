@@ -154,7 +154,10 @@ export function Navigation() {
         {/* Mobile */}
         <div className="md:hidden flex items-center gap-2">
           <ThemeToggle />
-          <Sheet open={isOpen} onOpenChange={setIsOpen}>
+          <Sheet open={isOpen} onOpenChange={(open) => {
+              setIsOpen(open);
+              document.body.style.overflow = open ? 'hidden' : '';
+            }}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="sm" className="w-9 px-0">
                 <Menu className="w-5 h-5" />
