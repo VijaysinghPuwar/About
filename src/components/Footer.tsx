@@ -1,5 +1,6 @@
 import { Github, Linkedin, Mail } from 'lucide-react';
 import { useCallback } from 'react';
+import { LogoIcon } from '@/components/LogoIcon';
 
 const navLinks = [
   { label: 'Skills', id: 'skills' },
