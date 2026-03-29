@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Shield, Terminal, Cloud, Radar } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -48,20 +47,24 @@ const pill = {
   exit: { opacity: 0, y: -8, scale: 0.9 },
 };
 
-export function SkillCategories() {
-  const [active, setActive] = useState('security');
-  const current = CATEGORIES.find(c => c.key === active)!;
+interface SkillCategoriesProps {
+  activeTab?: string;
+  onTabChange?: (key: string) => void;
+}
+
+export function SkillCategories({ activeTab = 'security', onTabChange }: SkillCategoriesProps) {
+  const current = CATEGORIES.find(c => c.key === activeTab) || CATEGORIES[0];
 
   return (
     <div>
       {/* Tabs */}
       <div className="flex gap-1 mb-6 border-b border-border/40">
         {CATEGORIES.map(cat => {
-          const isActive = cat.key === active;
+          const isActive = cat.key === activeTab;
           return (
             <button
               key={cat.key}
-              onClick={() => setActive(cat.key)}
+              onClick={() => onTabChange?.(cat.key)}
               className={`relative flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors ${
                 isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/70'
               }`}
@@ -84,7 +87,7 @@ export function SkillCategories() {
       <div className="min-h-[140px]">
         <AnimatePresence mode="wait">
           <motion.div
-            key={active}
+            key={activeTab}
             variants={container}
             initial="hidden"
             animate="visible"
@@ -107,7 +110,7 @@ export function SkillCategories() {
       {/* Description */}
       <AnimatePresence mode="wait">
         <motion.p
-          key={active}
+          key={activeTab}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

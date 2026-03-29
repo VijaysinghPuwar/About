@@ -70,8 +70,9 @@ export default function Index() {
   }, [dbProjects]);
 
 
-  /* competency hover expand */
-  
+  /* shared skill tab state */
+  const [skillTab, setSkillTab] = useState('security');
+
 
   /* contact form */
   const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
@@ -192,10 +193,10 @@ export default function Index() {
           <Suspense fallback={<div className="h-64" />}>
             <div className="grid lg:grid-cols-2 gap-10 items-start mb-14">
               <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}>
-                <SkillsRadar />
+                <SkillsRadar activeTab={skillTab} onAxisClick={setSkillTab} />
               </motion.div>
               <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={1}>
-                <SkillCategories />
+                <SkillCategories activeTab={skillTab} onTabChange={setSkillTab} />
               </motion.div>
             </div>
           </Suspense>

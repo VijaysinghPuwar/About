@@ -1,18 +1,19 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useInView } from 'framer-motion';
 
 const SKILLS = [
-  { label: 'Identity\n& Access', value: 90 },
-  { label: 'Automation', value: 85 },
-  { label: 'Cloud\nSecurity', value: 75 },
-  { label: 'Network\nDefense', value: 80 },
-  { label: 'Detection\n& SIEM', value: 85 },
-  { label: 'Offensive\nSecurity', value: 70 },
+  { label: 'Identity\n& Access', value: 90, tabKey: 'security' },
+  { label: 'Automation', value: 85, tabKey: 'automation' },
+  { label: 'Cloud\nSecurity', value: 75, tabKey: 'cloud' },
+  { label: 'Network\nDefense', value: 80, tabKey: 'cloud' },
+  { label: 'Detection\n& SIEM', value: 85, tabKey: 'security' },
+  { label: 'Offensive\nSecurity', value: 70, tabKey: 'tools' },
 ];
 
 const CENTER = 200;
 const RADIUS = 140;
 const LEVELS = [0.25, 0.5, 0.75, 1];
+const N = SKILLS.length;
 
 function polarToCart(angle: number, r: number) {
   const a = (angle - 90) * (Math.PI / 180);
@@ -21,98 +22,216 @@ function polarToCart(angle: number, r: number) {
 
 function hexPoints(scale: number) {
   return SKILLS.map((_, i) => {
-    const angle = (360 / SKILLS.length) * i;
+    const angle = (360 / N) * i;
     const { x, y } = polarToCart(angle, RADIUS * scale);
     return `${x},${y}`;
   }).join(' ');
 }
 
+function hexPerimeter(scale: number) {
+  const r = RADIUS * scale;
+  return N * 2 * r * Math.sin(Math.PI / N);
+}
+
 function dataPoints(values: number[]) {
   return values.map((v, i) => {
-    const angle = (360 / SKILLS.length) * i;
+    const angle = (360 / N) * i;
     const { x, y } = polarToCart(angle, RADIUS * (v / 100));
     return `${x},${y}`;
   }).join(' ');
 }
 
-export function SkillsRadar() {
+interface SkillsRadarProps {
+  activeTab?: string;
+  onAxisClick?: (tabKey: string) => void;
+}
+
+export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
   const ref = useRef<SVGSVGElement>(null);
   const isInView = useInView(ref, { once: true, amount: 0.4 });
-  const [progress, setProgress] = useState(0);
   const [hovered, setHovered] = useState<number | null>(null);
 
+  // Animation phases: 0=hidden, 1=grid, 2=polygon, 3=dots, 4=labels, 5=done
+  const [phase, setPhase] = useState(0);
+
+  // Polygon animation progress (0→1)
+  const [polyProgress, setPolyProgress] = useState(0);
+
+  // Tab highlight state
+  const [tabHighlight, setTabHighlight] = useState<string | null>(null);
+  const tabHighlightTimeout = useRef<ReturnType<typeof setTimeout>>();
+
+  // Displayed values (lerped for smooth transitions)
+  const displayedRef = useRef<number[]>(SKILLS.map(() => 0));
+  const targetRef = useRef<number[]>(SKILLS.map(s => s.value));
+  const rafRef = useRef<number>(0);
+
+  // Phased entry animation
   useEffect(() => {
     if (!isInView) return;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    setPhase(1);
+    timers.push(setTimeout(() => setPhase(2), 800));
+    timers.push(setTimeout(() => setPhase(3), 1600));
+    timers.push(setTimeout(() => setPhase(4), 2200));
+    timers.push(setTimeout(() => setPhase(5), 2500));
+    return () => timers.forEach(clearTimeout);
+  }, [isInView]);
+
+  // Polygon grow animation (phase 2)
+  useEffect(() => {
+    if (phase < 2) return;
     let start: number | null = null;
     let raf: number;
-    const duration = 1000;
+    const duration = 800;
     const tick = (ts: number) => {
       if (!start) start = ts;
       const p = Math.min((ts - start) / duration, 1);
-      // ease out cubic
-      setProgress(1 - Math.pow(1 - p, 3));
+      setPolyProgress(1 - Math.pow(1 - p, 3));
       if (p < 1) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [isInView]);
+  }, [phase]);
 
-  const animatedValues = SKILLS.map(s => s.value * progress);
+  // Compute target values based on hover/tab highlight
+  useEffect(() => {
+    const base = SKILLS.map(s => s.value);
+    let newTarget: number[];
+
+    if (hovered !== null) {
+      newTarget = base.map((v, i) => (i === hovered ? 100 : v * 0.6));
+    } else if (tabHighlight) {
+      newTarget = base.map((v, i) => (SKILLS[i].tabKey === tabHighlight ? 100 : v * 0.5));
+    } else {
+      newTarget = base;
+    }
+    targetRef.current = newTarget;
+  }, [hovered, tabHighlight]);
+
+  // Lerp animation loop
+  useEffect(() => {
+    if (phase < 2) return;
+    const lerp = () => {
+      let needsUpdate = false;
+      const displayed = displayedRef.current;
+      const target = targetRef.current;
+      for (let i = 0; i < N; i++) {
+        const t = target[i] * polyProgress;
+        const diff = t - displayed[i];
+        if (Math.abs(diff) > 0.3) {
+          displayed[i] += diff * 0.12;
+          needsUpdate = true;
+        } else {
+          displayed[i] = t;
+        }
+      }
+      // Force re-render by updating a dummy state
+      setLerpTick(prev => prev + 1);
+      rafRef.current = requestAnimationFrame(lerp);
+    };
+    rafRef.current = requestAnimationFrame(lerp);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [phase, polyProgress]);
+
+  const [, setLerpTick] = useState(0);
+  const animatedValues = displayedRef.current;
+
+  // Tab highlight from parent
+  const prevTabRef = useRef(activeTab);
+  useEffect(() => {
+    if (activeTab && activeTab !== prevTabRef.current && phase >= 5) {
+      setTabHighlight(activeTab);
+      clearTimeout(tabHighlightTimeout.current);
+      tabHighlightTimeout.current = setTimeout(() => setTabHighlight(null), 1500);
+    }
+    prevTabRef.current = activeTab;
+  }, [activeTab, phase]);
+
+  const handleAxisClick = useCallback((i: number) => {
+    onAxisClick?.(SKILLS[i].tabKey);
+  }, [onAxisClick]);
+
+  const handleAxisHover = useCallback((i: number | null) => {
+    setHovered(i);
+  }, []);
+
+  const isIdle = hovered === null && !tabHighlight && phase >= 5;
 
   return (
     <div className="w-full max-w-md mx-auto relative">
       <svg ref={ref} viewBox="0 0 400 400" className="w-full h-auto">
         <defs>
           <linearGradient id="radar-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="hsl(var(--primary))" />
-            <stop offset="100%" stopColor="hsl(var(--secondary))" />
+            <stop offset="0%" stopColor="#00e5ff" />
+            <stop offset="100%" stopColor="#a855f7" />
           </linearGradient>
         </defs>
 
-        {/* Grid hexagons */}
-        {LEVELS.map(l => (
-          <polygon
-            key={l}
-            points={hexPoints(l)}
-            fill="none"
-            stroke="hsl(var(--muted-foreground))"
-            strokeOpacity={0.1}
-            strokeWidth={1}
-          />
-        ))}
+        {/* Grid hexagons — draw in phase 1+ */}
+        {LEVELS.map((l, li) => {
+          const perim = hexPerimeter(l);
+          const visible = phase >= 1;
+          return (
+            <polygon
+              key={l}
+              points={hexPoints(l)}
+              fill="none"
+              stroke="rgba(0, 229, 255, 0.06)"
+              strokeWidth={1}
+              strokeDasharray={perim}
+              strokeDashoffset={visible ? 0 : perim}
+              style={{
+                transition: `stroke-dashoffset 0.4s ease-out ${li * 0.15}s`,
+              }}
+            />
+          );
+        })}
 
         {/* Axis lines */}
         {SKILLS.map((_, i) => {
-          const angle = (360 / SKILLS.length) * i;
+          const angle = (360 / N) * i;
           const { x, y } = polarToCart(angle, RADIUS);
           return (
             <line
               key={i}
               x1={CENTER} y1={CENTER} x2={x} y2={y}
-              stroke="hsl(var(--muted-foreground))"
-              strokeOpacity={0.08}
+              stroke="rgba(0, 229, 255, 0.06)"
               strokeWidth={1}
+              opacity={phase >= 1 ? 1 : 0}
+              style={{ transition: 'opacity 0.3s ease-out' }}
             />
           );
         })}
 
         {/* Data polygon */}
-        <polygon
-          points={dataPoints(animatedValues)}
-          fill="url(#radar-gradient)"
-          fillOpacity={0.2}
-          stroke="url(#radar-gradient)"
-          strokeWidth={2}
-        />
+        {phase >= 2 && (
+          <polygon
+            points={dataPoints(animatedValues)}
+            fill="url(#radar-gradient)"
+            fillOpacity={0.2}
+            stroke="url(#radar-gradient)"
+            strokeWidth={2}
+            style={isIdle ? { animation: 'radarBreathe 3s ease-in-out infinite' } : undefined}
+          />
+        )}
 
         {/* Axis endpoints + labels */}
         {SKILLS.map((skill, i) => {
-          const angle = (360 / SKILLS.length) * i;
+          const angle = (360 / N) * i;
           const pointR = RADIUS * (animatedValues[i] / 100);
           const { x: px, y: py } = polarToCart(angle, pointR);
           const { x: lx, y: ly } = polarToCart(angle, RADIUS + 28);
           const isHov = hovered === i;
+          const isHighlighted = tabHighlight === skill.tabKey;
           const lines = skill.label.split('\n');
+
+          const dotVisible = phase >= 3;
+          const labelVisible = phase >= 4;
+          const dotDelay = i * 0.1;
+
+          // Ambient pulse offset
+          const pulseDelay = i * 0.3;
 
           return (
             <g key={i}>
@@ -121,8 +240,13 @@ export function SkillsRadar() {
                 x={lx} y={ly}
                 textAnchor="middle"
                 dominantBaseline="middle"
-                className="fill-muted-foreground font-mono"
                 fontSize={10}
+                fontFamily="ui-monospace, monospace"
+                fill={isHov || isHighlighted ? 'hsl(var(--foreground))' : 'hsl(var(--muted-foreground))'}
+                opacity={labelVisible ? 1 : 0}
+                style={{
+                  transition: 'opacity 0.3s ease-out, fill 0.2s ease-out',
+                }}
               >
                 {lines.map((line, li) => (
                   <tspan key={li} x={lx} dy={li === 0 ? 0 : 13}>{line}</tspan>
@@ -131,55 +255,113 @@ export function SkillsRadar() {
 
               {/* Hit area */}
               <circle
-                cx={px} cy={py} r={16}
+                cx={px} cy={py} r={20}
                 fill="transparent"
                 className="cursor-pointer"
-                onMouseEnter={() => setHovered(i)}
-                onMouseLeave={() => setHovered(null)}
+                onMouseEnter={() => handleAxisHover(i)}
+                onMouseLeave={() => handleAxisHover(null)}
+                onClick={() => handleAxisClick(i)}
+                onTouchStart={() => {
+                  handleAxisHover(hovered === i ? null : i);
+                  handleAxisClick(i);
+                }}
               />
 
               {/* Visible dot */}
               <circle
                 cx={px} cy={py}
-                r={isHov ? 6 : 4}
-                fill="url(#radar-gradient)"
-                className="transition-all duration-200"
-                style={{ filter: isHov ? 'drop-shadow(0 0 6px hsl(var(--primary)))' : 'none' }}
+                r={isHov ? 10 : 6}
+                fill="#00e5ff"
+                opacity={dotVisible ? 1 : 0}
+                style={{
+                  transition: `r 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease-out ${dotDelay}s`,
+                  filter: isHov ? 'drop-shadow(0 0 8px #00e5ff)' : 'none',
+                  transformOrigin: `${px}px ${py}px`,
+                  ...(isIdle && dotVisible ? {
+                    animation: `dotPulse 2s ease-in-out ${pulseDelay}s infinite`,
+                  } : {}),
+                }}
               />
 
               {/* Tooltip */}
               {isHov && (
-                <g>
-                  <rect
-                    x={px - 55} y={py - 42}
-                    width={110} height={34}
-                    rx={6}
-                    fill="hsl(var(--card))"
-                    stroke="hsl(var(--border))"
-                    strokeWidth={1}
-                  />
-                  <text
-                    x={px} y={py - 30}
-                    textAnchor="middle"
-                    className="fill-foreground font-mono"
-                    fontSize={10}
-                    fontWeight={600}
+                <g style={{ animation: 'tooltipIn 0.2s ease-out' }}>
+                  <foreignObject
+                    x={px - 70} y={py - 60}
+                    width={140} height={52}
                   >
-                    {skill.label.replace('\n', ' ')}
-                  </text>
-                  {/* Percentage bar bg */}
-                  <rect x={px - 40} y={py - 20} width={80} height={4} rx={2} fill="hsl(var(--muted))" />
-                  {/* Percentage bar fill */}
-                  <rect x={px - 40} y={py - 20} width={80 * (skill.value / 100)} height={4} rx={2} fill="url(#radar-gradient)" />
-                  <text x={px + 45} y={py - 16} className="fill-muted-foreground font-mono" fontSize={9}>
-                    {skill.value}%
-                  </text>
+                    <div
+                      style={{
+                        background: 'rgba(15,23,42,0.9)',
+                        backdropFilter: 'blur(12px)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '8px',
+                        padding: '8px 12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px',
+                      }}
+                    >
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}>
+                        <span style={{
+                          color: '#fff',
+                          fontWeight: 700,
+                          fontSize: '11px',
+                          fontFamily: 'ui-monospace, monospace',
+                        }}>
+                          {skill.label.replace('\n', ' ')}
+                        </span>
+                        <span style={{
+                          color: '#00e5ff',
+                          fontWeight: 700,
+                          fontSize: '11px',
+                          fontFamily: 'ui-monospace, monospace',
+                        }}>
+                          {skill.value}%
+                        </span>
+                      </div>
+                      <div style={{
+                        width: '100%',
+                        height: '3px',
+                        borderRadius: '2px',
+                        background: 'rgba(255,255,255,0.1)',
+                        overflow: 'hidden',
+                      }}>
+                        <div style={{
+                          width: `${skill.value}%`,
+                          height: '100%',
+                          borderRadius: '2px',
+                          background: 'linear-gradient(90deg, #00e5ff, #a855f7)',
+                        }} />
+                      </div>
+                    </div>
+                  </foreignObject>
                 </g>
               )}
             </g>
           );
         })}
       </svg>
+
+      {/* Inline CSS animations */}
+      <style>{`
+        @keyframes radarBreathe {
+          0%, 100% { fill-opacity: 0.15; }
+          50% { fill-opacity: 0.25; }
+        }
+        @keyframes dotPulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.2); }
+        }
+        @keyframes tooltipIn {
+          from { opacity: 0; transform: scale(0.9); }
+          to { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
     </div>
   );
 }
