@@ -81,23 +81,6 @@ const openToRoles = [
   'Security Automation', 'IAM / Identity Security',
 ];
 
-/* ── animated counter ── */
-function AnimatedCounter({ target, suffix }: { target: number; suffix: string }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const inView = useInView(ref, { once: true });
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    if (!inView) return;
-    let c = 0;
-    const step = Math.ceil(target / 40);
-    const t = setInterval(() => {
-      c += step;
-      if (c >= target) { setCount(target); clearInterval(t); } else setCount(c);
-    }, 30);
-    return () => clearInterval(t);
-  }, [inView, target]);
-  return <span ref={ref} className="gradient-text">{count}{suffix}</span>;
-}
 
 /* ── main component ── */
 export default function Index() {
