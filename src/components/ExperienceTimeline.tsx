@@ -169,7 +169,7 @@ function TimelineNode({ entry, index, expandedId, onToggle }: {
   return (
     <div ref={ref} className="relative grid grid-cols-[1fr] md:grid-cols-[1fr_auto_1fr] gap-0 md:gap-8 items-start">
       {/* Left content (desktop only) */}
-      <div className={`hidden md:block ${isLeft ? '' : 'order-3'}`}>
+      <div className="hidden md:block">
         {isLeft && (
           <motion.div
             initial={{ opacity: 0, x: -50 }}
@@ -182,7 +182,7 @@ function TimelineNode({ entry, index, expandedId, onToggle }: {
       </div>
 
       {/* Center dot */}
-      <div className="hidden md:flex flex-col items-center order-2">
+      <div className="hidden md:flex flex-col items-center">
         <motion.button
           onClick={() => onToggle(entry.id)}
           initial={{ scale: 0 }}
@@ -206,7 +206,7 @@ function TimelineNode({ entry, index, expandedId, onToggle }: {
       </div>
 
       {/* Right content (desktop only) */}
-      <div className={`hidden md:block ${isLeft ? 'order-3' : ''}`}>
+      <div className="hidden md:block">
         {!isLeft && (
           <motion.div
             initial={{ opacity: 0, x: 50 }}
