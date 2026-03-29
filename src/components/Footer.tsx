@@ -24,7 +24,7 @@ export function Footer() {
 
       <div className="container max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <span className="font-bold gradient-text text-lg">VP</span>
+          <LogoIcon size={24} />
           <p className="text-sm text-muted-foreground font-mono">
             © {new Date().getFullYear()} · Built with intent
           </p>

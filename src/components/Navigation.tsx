@@ -163,7 +163,7 @@ export function Navigation() {
             <SheetContent side="right" className="w-[280px] glass-card border-border/40">
               <div className="flex flex-col gap-4 mt-6">
                 <div className="pb-3 border-b border-border/40">
-                  <div className="font-bold gradient-text text-lg">VP</div>
+                  <LogoIcon size={28} />
                   <div className="text-sm text-muted-foreground">Cybersecurity Engineer</div>
                 </div>
                 {isHomePage ? (
