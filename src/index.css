@@ -6,52 +6,52 @@
 
 @layer base {
   :root, .theme-blue {
-    --background: 225 47% 6%;
-    --foreground: 210 40% 96%;
+    --background: 230 50% 4%;
+    --foreground: 215 25% 90%;
 
-    --card: 222 47% 8%;
-    --card-foreground: 210 20% 93%;
-    --card-elevated: 222 47% 10%;
+    --card: 217 50% 11%;
+    --card-foreground: 215 20% 90%;
+    --card-elevated: 217 50% 14%;
 
-    --popover: 222 47% 7%;
-    --popover-foreground: 210 20% 93%;
+    --popover: 217 50% 9%;
+    --popover-foreground: 215 20% 90%;
 
-    --primary: 195 100% 50%;
-    --primary-foreground: 222 47% 6%;
-    --primary-glow: 195 100% 65%;
+    --primary: 187 100% 50%;
+    --primary-foreground: 230 50% 4%;
+    --primary-glow: 187 100% 65%;
 
-    --secondary: 263 70% 58%;
+    --secondary: 271 91% 65%;
     --secondary-foreground: 0 0% 100%;
-    --secondary-glow: 263 70% 72%;
+    --secondary-glow: 271 91% 78%;
 
-    --muted: 215 20% 14%;
-    --muted-foreground: 215 15% 55%;
+    --muted: 217 25% 14%;
+    --muted-foreground: 215 16% 47%;
 
-    --accent: 215 20% 14%;
-    --accent-foreground: 210 20% 93%;
+    --accent: 217 25% 14%;
+    --accent-foreground: 215 20% 90%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 350 80% 55%;
     --destructive-foreground: 0 0% 98%;
-    --success: 142 60% 40%;
+    --success: 185 80% 48%;
     --success-foreground: 0 0% 98%;
     --warning: 38 92% 50%;
-    --warning-foreground: 222 47% 6%;
+    --warning-foreground: 230 50% 4%;
 
-    --border: 215 20% 16%;
-    --input: 215 20% 16%;
-    --ring: 195 100% 50%;
+    --border: 217 20% 14%;
+    --input: 217 20% 14%;
+    --ring: 187 100% 50%;
 
     --radius: 0.5rem;
 
-    --grid-color: 215 20% 14%;
-    --scanline-color: 195 100% 50%;
-    --terminal-green: 142 60% 40%;
-    --danger-red: 0 72% 51%;
+    --grid-color: 217 20% 12%;
+    --scanline-color: 187 100% 50%;
+    --terminal-green: 185 80% 48%;
+    --danger-red: 350 80% 55%;
     --warning-amber: 38 92% 50%;
   }
 
   .theme-pentest {
-    --background: 0 15% 5%;
+    --background: 0 15% 4%;
     --foreground: 0 0% 95%;
 
     --card: 0 15% 8%;
@@ -61,9 +61,9 @@
     --popover: 0 15% 7%;
     --popover-foreground: 0 0% 93%;
 
-    --primary: 0 72% 51%;
+    --primary: 350 80% 55%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 0 72% 65%;
+    --primary-glow: 350 80% 68%;
 
     --secondary: 15 60% 45%;
     --secondary-foreground: 0 0% 100%;
@@ -75,23 +75,27 @@
     --accent: 0 15% 14%;
     --accent-foreground: 0 0% 93%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 350 80% 55%;
     --destructive-foreground: 0 0% 98%;
     --success: 0 60% 45%;
     --success-foreground: 0 0% 98%;
     --warning: 15 80% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 0 12% 16%;
-    --input: 0 12% 16%;
-    --ring: 0 72% 51%;
+    --border: 0 12% 14%;
+    --input: 0 12% 14%;
+    --ring: 350 80% 55%;
 
-    --grid-color: 0 12% 14%;
-    --scanline-color: 0 72% 51%;
-    --terminal-green: 0 72% 51%;
-    --danger-red: 0 72% 51%;
+    --grid-color: 0 12% 12%;
+    --scanline-color: 350 80% 55%;
+    --terminal-green: 350 80% 55%;
+    --danger-red: 350 80% 55%;
     --warning-amber: 15 80% 50%;
   }
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 @layer base {
@@ -156,10 +160,10 @@
   }
 
   .glass-card {
-    background: rgba(15, 23, 42, 0.6);
+    background: rgba(15, 23, 42, 0.5);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(148, 163, 184, 0.1);
+    border: 1px solid rgba(100, 220, 255, 0.08);
   }
 
   .gradient-border {
