@@ -185,9 +185,9 @@ export default function Index() {
 
       {/* ═══════ SKILLS & TECHNOLOGIES ═══════ */}
       <section id="skills" className="py-20 border-t border-border/40">
-        <motion.div {...sectionAnim} className="container max-w-6xl mx-auto">
+        <SectionReveal className="container max-w-6xl mx-auto px-4">
           <div className="text-center mb-14">
-            <p className="section-heading">Arsenal</p>
+            <RevealLabel text="Arsenal" />
             <h2 className="section-title">Skills & Technologies</h2>
           </div>
 
@@ -212,7 +212,7 @@ export default function Index() {
               ))}
             </div>
           </div>
-        </motion.div>
+        </SectionReveal>
       </section>
 
       {/* ═══════ PROJECTS ═══════ */}
