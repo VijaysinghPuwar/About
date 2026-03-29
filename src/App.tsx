@@ -42,6 +42,7 @@ const App = () => (
           <div className="min-h-screen bg-background">
             <BrowserRouter>
               <ThreatLevelIndicator />
+              <CommandPalette />
               <Navigation />
               <main className="relative">
                 <Routes>
