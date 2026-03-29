@@ -1,104 +1,55 @@
 
 
-# Single-Page Portfolio Rebuild — Deep Space Design System
+# Terminal-Themed Hero Rebuild
 
-Major architectural shift from multi-page routing to a single-page scrolling app with section anchors, a new color palette, and interactive elements throughout.
-
----
-
-## Architecture Change
-
-Convert from React Router multi-page to a **single scrolling page** with smooth-scroll anchor navigation. Keep `/login`, `/admin`, `/pending`, `/blocked` as separate routes. Remove `/about`, `/contact`, `/projects`, `/projects/:id` as standalone pages — their content merges into the single homepage.
+Replace the current two-column hero (text left + CyberVisual right) with an immersive terminal-themed hero that tells a story through a typewriter effect.
 
 ---
 
-## 1. Color System Update (`src/index.css`)
+## Architecture
 
-Replace current HSL variables with the new deeper palette:
-- `--background`: #050816 (near-black)
-- `--card`: rgba(15, 23, 42, 0.5) with backdrop-blur
-- `--primary`: #00e5ff (electric cyan, slightly warmer than current)
-- `--secondary`: #a855f7 (vivid purple, brighter than current)
-- Text primary: #e2e8f0, muted: #64748b
-- Update `.glass-card` border to `rgba(100, 220, 255, 0.08)`
-- Add `--success-metric: #22d3ee` for highlighted numbers
+Two new components + hero section rewrite in Index.tsx. The existing `CyberVisual.tsx` will be replaced with a new `SecurityShield.tsx` for the right-side geometric visual. A new `TerminalHero.tsx` component handles the typewriter logic.
 
 ---
 
-## 2. Navigation → Scroll Anchors (`src/components/Navigation.tsx`)
+## 1. `src/components/TerminalHero.tsx` (New)
 
-- Change nav items from route `Link`s to smooth-scroll anchor `<a href="#section">` elements
-- Sections: Home, Skills, Projects, Experience, Contact
-- Add `scroll-behavior: smooth` to `<html>`
-- Active section detection using `IntersectionObserver` — highlight the nav item whose section is currently in viewport
-- Keep auth dropdown, mobile sheet, VP monogram
-- Keep `/login` redirect for gated items
+A self-contained terminal component with typewriter animation:
 
----
+- **Terminal chrome**: Dark card (`glass-card`) with rounded top corners, three colored dots (red `#f43f5e`, yellow `#eab308`, green `#22c55e`) in top-left, title bar text `vijaysingh@security:~$` in JetBrains Mono
+- **Typewriter engine**: Uses `useState` + `useEffect` with `setTimeout` to type through a sequence of lines. Each line object has: `type` ("command" or "output"), `text`, `color` (cyan for commands, white for output, gradient for role, green-tinted for skills), `delay` (pause before starting), `speed` (ms per char, ~40ms for commands, instant for output lines that appear after command finishes)
+- **Line sequence** (exactly as specified): `$ whoami` → name output → `$ cat role.txt` → role output → `$ cat mission.txt` → mission lines → `$ ls skills/` → skills output → `$ ./connect.sh`
+- **After typing completes**: Two CTA buttons fade in inside the terminal card — "View My Work" (gradient) and "Download Resume" (outline). Resume button is auth-gated (shows Lock icon if not signed in)
+- **Blinking cursor**: A `|` character with `animate-terminal-blink` on the last visible line
 
-## 3. App.tsx — Simplified Routing
+## 2. `src/components/SecurityShield.tsx` (New, replaces CyberVisual)
 
-- Remove routes for `/about`, `/contact`, `/projects`, `/projects/:id`
-- Keep only: `/` (single page), `/login`, `/admin`, `/pending`, `/blocked`
-- The Index page becomes the entire site
+Desktop-only (`hidden lg:flex`) animated geometric shield:
 
----
+- **SVG shield shape**: Built from layered hexagons with circuit-line patterns, using the cyan-to-violet gradient
+- **Subtle rotation**: Entire shield slowly rotates (0→360° over ~30s, CSS animation)
+- **Pulsing opacity**: Shield layers pulse between 0.6 and 1.0
+- **Orbiting icons**: 4 small Lucide icons (Lock, Terminal, Cloud, Shield) positioned on a circular orbit path using CSS `@keyframes orbit` with staggered delays — they slowly circle the shield
+- **Glow backdrop**: Same radial blur blobs as current CyberVisual
 
-## 4. Index.tsx — Full Single-Page Rebuild
+## 3. Hero Section in `src/pages/Index.tsx`
 
-Merge all content into one scrolling page with these sections (each with an `id` for anchors):
+Replace lines 220-280 (current hero) with:
 
-### `#home` — Hero (keep existing structure)
-- CyberVisual on right, text on left
-- Update spring physics: `type: "spring", stiffness: 100, damping: 15`
-- Update `whileInView` to use `viewport={{ once: true, amount: 0.3 }}`
+**Top-left status indicators** (absolute positioned or flex row at top of hero):
+- Green dot + "SYSTEMS ONLINE" — tiny, `font-mono text-xs text-muted-foreground`
+- Pin icon + "Location: New York, NY"
+- Pulsing green dot + "Status: Open to opportunities" — dot uses `animate-cyber-pulse`
 
-### `#skills` — Skills & Competencies
-- Merge the marquee ticker + bento competency grid + skills grid from About page into one section
-- Bento grid with interactive hover — hovering a competency card reveals expanded description with a slide-down animation
-- Skills organized into 4 category cards (Security, Automation, Cloud & Network, Tools) with hover-to-highlight individual skills
+**Layout**: `grid lg:grid-cols-[3fr_2fr]` — terminal takes ~60%, shield takes ~40%
 
-### `#projects` — Projects (Full Grid, Not Just Featured)
-- Show ALL projects (not just 3 featured) with category filter tabs
-- Keep auth gating — unauthenticated users see the sign-in placeholder
-- Active filter tab gets gradient background
-- Cards: glass-morphism with gradient mesh header, tech stack pills, GitHub links
-- Staggered entrance with `AnimatePresence` for filter transitions
+**Left side**: `<TerminalHero />` component + social icons below it (GitHub, LinkedIn, Email)
 
-### `#experience` — Experience + Education + Certifications
-- Combine experience timeline, education cards, and certifications into one section
-- Use tabbed interface: **Experience | Education | Certifications** — clicking switches content with Framer Motion `AnimatePresence`
-- This makes the section interactive rather than a long scroll of cards
-- Timeline, education, certifications keep their current visual treatment
+**Right side**: `<SecurityShield />` with `hidden lg:block`
 
-### `#contact` — Contact
-- Merge Contact page content directly into the homepage
-- Two-column layout: info on left, form on right
-- Keep existing form logic (Supabase edge function, auth-aware prefill)
-- Add the "Open To" role chips above or beside the contact form
-- Keep availability indicators with glowing dots
+**Scroll indicator** at bottom: Bouncing chevron-down icon + "Scroll to explore" text. Uses a scroll listener to fade out after scrollY > 100.
 
----
-
-## 5. Animation System Update
-
-All `fadeUp` variants updated to use spring physics:
-```
-transition: { type: "spring", stiffness: 100, damping: 15, delay: i * 0.1 }
-```
-All `whileInView` uses `viewport={{ once: true, amount: 0.3 }}`
-
----
-
-## 6. Back-to-Top Button
-
-Add a floating button (bottom-right) that appears after scrolling past the hero. Gradient background, small, rounded. Smooth-scrolls to `#home`.
-
----
-
-## 7. Footer (`src/components/Footer.tsx`)
-
-Keep minimal. No changes needed beyond what's already there.
+**Remove**: The skills marquee stays as-is below the hero (it's separate from the hero section).
 
 ---
 
@@ -106,21 +57,8 @@ Keep minimal. No changes needed beyond what's already there.
 
 | File | Action |
 |------|--------|
-| `src/index.css` | Deeper color palette (#050816), updated glass-card border color |
-| `src/pages/Index.tsx` | **Full rewrite** — merge all sections into single scrolling page |
-| `src/components/Navigation.tsx` | Anchor-based scroll nav with IntersectionObserver active detection |
-| `src/App.tsx` | Remove /about, /contact, /projects routes |
-| `src/components/BackToTop.tsx` | **New** — floating scroll-to-top button |
-
-### Files kept but no longer routed (can delete later)
-- `src/pages/About.tsx` — content merged into Index
-- `src/pages/Contact.tsx` — content merged into Index
-- `src/pages/Projects.tsx` — content merged into Index
-- `src/pages/ProjectDetail.tsx` — content merged into Index
-
-### Key interactive elements per section
-- **Skills**: Hover-expand on competency cards, skill badge hover highlights
-- **Projects**: Filter tabs with animated layout transitions, card hover lift + glow
-- **Experience**: Tabbed interface switching between Experience/Education/Certifications
-- **Contact**: Form with focus state gradient borders, glowing availability dots
+| `src/components/TerminalHero.tsx` | **New** — typewriter terminal with CTA buttons |
+| `src/components/SecurityShield.tsx` | **New** — geometric shield with orbiting icons |
+| `src/pages/Index.tsx` | Replace hero section (lines ~220-280), update imports |
+| `src/index.css` | Add `@keyframes orbit` for orbiting icons, add `@keyframes bounce-subtle` for scroll indicator |
 
