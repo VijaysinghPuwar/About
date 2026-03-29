@@ -16,6 +16,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
 import { HeroShield } from '@/components/HeroShield';
+import { SectionReveal, RevealLabel } from '@/components/SectionReveal';
 
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
