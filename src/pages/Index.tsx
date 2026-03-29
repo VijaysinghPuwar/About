@@ -1,195 +1,263 @@
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Github, Linkedin, Mail, ArrowRight, Shield, Terminal, Cloud, GraduationCap, Award, Radar, Download, Briefcase, Lock } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Github, Linkedin, Mail, ArrowRight, Shield, Terminal, Cloud,
+  GraduationCap, Award, Radar, Download, Briefcase, Lock,
+  Search, Loader2, CheckCircle2, User,
+} from 'lucide-react';
+import { motion, AnimatePresence, useInView } from 'framer-motion';
 import projectsData from '@/data/projects.json';
 import { useAuth } from '@/hooks/useAuth';
+import { useProjects } from '@/hooks/useProjects';
 import { CyberVisual } from '@/components/CyberVisual';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+
+/* ── animation helpers ── */
+const spring = (i: number) => ({
+  type: 'spring' as const, stiffness: 100, damping: 15, delay: i * 0.1,
+});
 
 const fadeUp = {
-  hidden: { opacity: 0, y: 20 },
-  visible: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.1, duration: 0.5 }
-  })
+  hidden: { opacity: 0, y: 24 },
+  visible: (i: number) => ({ opacity: 1, y: 0, transition: spring(i) }),
 };
 
+const VP = { once: true, amount: 0.3 }; // viewport config
+
+/* ── data ── */
 const securityStack = [
   'Python', 'PowerShell', 'AWS', 'Active Directory', 'Splunk',
   'Docker', 'Linux', 'Ansible', 'IAM', 'SIEM', 'Nmap', 'Wireshark',
   'Cisco', 'Firewalls',
 ];
 
-const highlights = [
+const competencies = [
   {
     icon: Shield,
-    title: "Security Operations & IAM",
-    description: "Active Directory hygiene, MFA enforcement, endpoint hardening, and incident response across enterprise environments.",
+    title: 'Security Operations & IAM',
+    short: 'Identity security, endpoint hardening, incident response.',
+    long: 'Active Directory hygiene, MFA enforcement, endpoint hardening, and incident response across enterprise environments. Group Policy management, access reviews, and compliance auditing.',
     featured: true,
   },
   {
     icon: Terminal,
-    title: "Security Automation",
-    description: "Python and PowerShell tooling for log analysis, security assessments, system hardening, and operational workflows.",
+    title: 'Security Automation',
+    short: 'Python & PowerShell security tooling.',
+    long: 'Building automated security workflows for log analysis, system hardening, vulnerability scanning, and operational reporting using Python and PowerShell.',
   },
   {
     icon: Cloud,
-    title: "Cloud & Network Security",
-    description: "AWS security configurations, VPC architecture, firewall management, IDS/IPS, and Cisco network defense.",
+    title: 'Cloud & Network Security',
+    short: 'AWS security, firewalls, IDS/IPS.',
+    long: 'AWS security configurations (VPC, IAM, CloudWatch, GuardDuty), Cisco network defense, firewall management, and network monitoring.',
   },
   {
     icon: Radar,
-    title: "Detection & Monitoring",
-    description: "SIEM monitoring with Splunk, log analysis, threat detection rules, and security alerting pipelines.",
+    title: 'Detection & Monitoring',
+    short: 'SIEM, threat detection, alerting pipelines.',
+    long: 'SIEM monitoring with Splunk, custom detection rules, log correlation, threat hunting, and security alerting pipeline development.',
   },
 ];
 
+const skills: Record<string, string[]> = {
+  Security: ['IAM / Active Directory', 'SIEM (Splunk)', 'IDS/IPS', 'Vulnerability Assessment', 'Incident Response', 'Endpoint Hardening'],
+  Automation: ['Python', 'PowerShell', 'Shell Scripting', 'Ansible'],
+  'Cloud & Network': ['AWS (EC2, VPC, IAM, CloudWatch)', 'Cisco (Routing, Switching, VLANs)', 'Firewalls', 'TCP/IP'],
+  Tools: ['Wireshark', 'Nmap', 'Metasploit', 'Burp Suite', 'Git', 'Docker', 'Linux'],
+};
+
 const experience = [
   {
-    company: "R.S. Infotech",
-    role: "System Engineer",
-    period: "Feb 2023 – Aug 2024",
+    company: 'R.S. Infotech', role: 'System Engineer', period: 'Feb 2023 – Aug 2024',
     bullets: [
-      { text: "Secured ", bold: "150+", after: " enterprise endpoints with group policies, antivirus, and patch management" },
-      { text: "Managed Active Directory identity hygiene and enforced MFA via PowerShell automation", bold: "", after: "" },
-      { text: "Automated log analysis and reporting with Python, reducing manual effort by ", bold: "70%", after: "" },
-      { text: "Maintained firewalls, IDS/IPS, reducing security breaches by ", bold: "20%", after: "" },
+      { text: 'Secured ', bold: '150+', after: ' enterprise endpoints with group policies, antivirus, and patch management' },
+      { text: 'Managed Active Directory identity hygiene and enforced MFA via PowerShell automation', bold: '', after: '' },
+      { text: 'Automated log analysis and reporting with Python, reducing manual effort by ', bold: '70%', after: '' },
+      { text: 'Maintained firewalls, IDS/IPS, reducing security breaches by ', bold: '20%', after: '' },
     ],
   },
   {
-    company: "L&T-Sargent & Lundy",
-    role: "Systems Intern",
-    period: "Jan 2023 – Apr 2023",
+    company: 'L&T-Sargent & Lundy', role: 'Systems Intern', period: 'Jan 2023 – Apr 2023',
     bullets: [
-      { text: "Designed and optimized HVAC systems with ", bold: "100%", after: " adherence to ASHRAE standards" },
+      { text: 'Designed and optimized HVAC systems with ', bold: '100%', after: ' adherence to ASHRAE standards' },
     ],
   },
   {
-    company: "Elecon Engineering",
-    role: "Design Intern",
-    period: "Jan 2022 – Jun 2022",
+    company: 'Elecon Engineering', role: 'Design Intern', period: 'Jan 2022 – Jun 2022',
     bullets: [
-      { text: "CAD modeling and engineering documentation for industrial systems", bold: "", after: "" },
+      { text: 'CAD modeling and engineering documentation for industrial systems', bold: '', after: '' },
     ],
   },
 ];
 
 const education = [
   {
-    school: "Pace University",
-    degree: "M.S. Cybersecurity",
-    location: "New York, NY",
-    gpa: "GPA: 4.00",
-    status: "Expected Dec 2026",
+    school: 'Pace University', degree: 'M.S. Cybersecurity', location: 'New York, NY',
+    gpa: 'GPA: 4.00', status: 'Expected Dec 2026',
     coursework: [
-      "Computational Statistics", "Introduction to Cybersecurity", "Information Security Management",
-      "Network Security & Defense", "Ethical Hacking & Penetration Testing",
-      "Automating InfoSec with Python & Shell", "Cyber Intelligence Analysis & Modeling",
-      "Operating Systems Theory & Administration",
+      'Computational Statistics', 'Introduction to Cybersecurity', 'Information Security Management',
+      'Network Security & Defense', 'Ethical Hacking & Penetration Testing',
+      'Automating InfoSec with Python & Shell', 'Cyber Intelligence Analysis & Modeling',
+      'Operating Systems Theory & Administration',
     ],
   },
   {
-    school: "G.H. Patel College of Engineering & Technology",
-    degree: "B.E. Mechanical Engineering",
-    location: "Gujarat, India",
-    gpa: "CGPA: 7.11",
-    status: "Completed Aug 2023",
-    coursework: [
-      "Engineering Design & Analysis", "Manufacturing Systems",
-      "Thermodynamics & Fluid Mechanics", "Technical Documentation",
-    ],
+    school: 'G.H. Patel College of Engineering & Technology', degree: 'B.E. Mechanical Engineering',
+    location: 'Gujarat, India', gpa: 'CGPA: 7.11', status: 'Completed Aug 2023', coursework: [] as string[],
   },
 ];
 
-const certifications = [
-  "CompTIA Security+", "CompTIA CySA+", "Cisco CCNA", "ISC2 Candidate", "Google AI Essentials",
-];
+const certifications = ['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'ISC2 Candidate', 'Google AI Essentials'];
 
 const openToRoles = [
-  "Cybersecurity Engineering", "Security Operations", "Cloud Security",
-  "Security Automation", "IAM / Identity Security",
+  'Cybersecurity Engineering', 'Security Operations', 'Cloud Security',
+  'Security Automation', 'IAM / Identity Security',
 ];
 
-const featuredProjects = projectsData.filter(p => p.featured).slice(0, 3);
+/* ── animated counter ── */
+function AnimatedCounter({ target, suffix }: { target: number; suffix: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true });
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (!inView) return;
+    let c = 0;
+    const step = Math.ceil(target / 40);
+    const t = setInterval(() => {
+      c += step;
+      if (c >= target) { setCount(target); clearInterval(t); } else setCount(c);
+    }, 30);
+    return () => clearInterval(t);
+  }, [inView, target]);
+  return <span ref={ref} className="gradient-text">{count}{suffix}</span>;
+}
 
-const projectColors = [
-  'from-primary/20 to-secondary/10',
-  'from-secondary/20 to-primary/10',
-  'from-primary/15 via-secondary/10 to-primary/5',
-];
-
+/* ── main component ── */
 export default function Index() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
 
-  const handleProtectedAction = (e: React.MouseEvent, target: string) => {
-    if (!user) {
-      e.preventDefault();
-      navigate('/login');
-    } else if (target === 'resume') {
-      // Allow default download behavior
+  /* projects */
+  const { projects: dbProjects } = useProjects();
+  const [search, setSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  const allProjects = useMemo(() => {
+    const dbIds = new Set((dbProjects || []).map(p => p.id));
+    const normalized = (dbProjects || []).map(p => ({
+      id: p.id, title: p.title, description: p.description || '', category: p.category || '',
+      tech: p.tech || [], year: p.year || '', status: p.status || 'completed',
+      featured: p.featured || false, keyResults: p.key_results || [],
+      links: { github: p.github_link, writeup: p.writeup_link, demo: p.demo_link },
+      image: p.image || '', tags: p.tags || [],
+    }));
+    const jsonOnly = projectsData.filter(p => !dbIds.has(p.id));
+    return [...normalized, ...jsonOnly];
+  }, [dbProjects]);
+
+  const categories = useMemo(() => {
+    const cats = new Set(allProjects.map(p => p.category).filter(Boolean));
+    return Array.from(cats).sort();
+  }, [allProjects]);
+
+  const filteredProjects = useMemo(() => {
+    return allProjects.filter(p => {
+      const ms = !search || p.title.toLowerCase().includes(search.toLowerCase()) ||
+        p.description.toLowerCase().includes(search.toLowerCase()) ||
+        p.tech.some(t => t.toLowerCase().includes(search.toLowerCase()));
+      const mc = !selectedCategory || p.category === selectedCategory;
+      return ms && mc;
+    });
+  }, [allProjects, search, selectedCategory]);
+
+  /* experience tabs */
+  const [expTab, setExpTab] = useState<'experience' | 'education' | 'certifications'>('experience');
+
+  /* competency hover expand */
+  const [expandedCompetency, setExpandedCompetency] = useState<number | null>(null);
+
+  /* contact form */
+  const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    if (profile?.full_name) setFormData(prev => ({ ...prev, name: profile.full_name || '' }));
+  }, [profile]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const body = user
+        ? { name: formData.name, subject: formData.subject, message: formData.message }
+        : { name: formData.name, email: formData.email, subject: formData.subject, message: formData.message };
+      const { error } = await supabase.functions.invoke('send-contact-email', { body });
+      if (error) throw error;
+      setSubmitted(true);
+      setFormData({ name: '', email: '', subject: '', message: '' });
+      toast({ title: 'Message sent', description: "Thank you — I'll get back to you soon." });
+    } catch {
+      toast({ title: 'Failed to send', description: 'Please try again or email me directly.', variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
     }
+  };
+
+  const handleProtectedAction = (e: React.MouseEvent, _target: string) => {
+    if (!user) { e.preventDefault(); navigate('/login'); }
   };
 
   return (
     <div className="min-h-screen">
-      {/* ===== HERO ===== */}
-      <section className="relative pt-20 md:pt-28 lg:pt-32 pb-16 overflow-hidden hero-grid-bg">
+      {/* ═══════ HERO ═══════ */}
+      <section id="home" className="relative pt-24 md:pt-32 lg:pt-36 pb-16 overflow-hidden hero-grid-bg">
         <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] via-transparent to-background" />
         <div className="container relative max-w-6xl mx-auto">
-          <div className="grid lg:grid-cols-[1fr_1fr] gap-12 lg:gap-8 items-center">
-            {/* Left — Text */}
+          <div className="grid lg:grid-cols-2 gap-12 lg:gap-8 items-center">
             <div className="order-2 lg:order-1">
               <motion.p initial="hidden" animate="visible" variants={fadeUp} custom={0}
-                className="font-mono text-sm tracking-[0.2em] uppercase gradient-text mb-4 font-semibold"
-              >
+                className="font-mono text-sm tracking-[0.2em] uppercase gradient-text mb-4 font-semibold">
                 Cybersecurity Engineer
               </motion.p>
               <motion.h1 initial="hidden" animate="visible" variants={fadeUp} custom={1}
-                className="text-4xl sm:text-5xl lg:text-7xl font-bold text-foreground mb-6 leading-[1.1] tracking-tight"
-              >
+                className="text-4xl sm:text-5xl lg:text-7xl font-bold text-foreground mb-6 leading-[1.1] tracking-tight">
                 Vijaysingh Puwar
               </motion.h1>
               <motion.p initial="hidden" animate="visible" variants={fadeUp} custom={2}
-                className="text-lg md:text-xl text-muted-foreground max-w-xl mb-8 leading-relaxed"
-              >
+                className="text-lg md:text-xl text-muted-foreground max-w-xl mb-8 leading-relaxed">
                 I secure enterprise infrastructure, automate security operations, and build detection pipelines that catch threats before they escalate.
               </motion.p>
               <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3}
-                className="flex flex-col sm:flex-row items-start gap-3 mb-4"
-              >
+                className="flex flex-col sm:flex-row items-start gap-3 mb-4">
                 {user ? (
-                  <a href="/resume.pdf" download
-                    className="inline-flex items-center justify-center h-11 px-8 rounded-md text-sm font-medium gradient-btn">
+                  <a href="/resume.pdf" download className="inline-flex items-center justify-center h-11 px-8 rounded-md text-sm font-medium gradient-btn">
                     <Download className="w-4 h-4 mr-2" />Download Resume
                   </a>
                 ) : (
-                  <button onClick={(e) => handleProtectedAction(e, 'resume')}
-                    className="inline-flex items-center justify-center h-11 px-8 rounded-md text-sm font-medium gradient-btn">
+                  <button onClick={(e) => handleProtectedAction(e, 'resume')} className="inline-flex items-center justify-center h-11 px-8 rounded-md text-sm font-medium gradient-btn">
                     <Lock className="w-4 h-4 mr-2" />Download Resume
                   </button>
                 )}
-                {user ? (
-                  <Button size="lg" variant="outline" asChild className="border-border/60 hover:border-primary/40">
-                    <Link to="/projects"><ArrowRight className="w-4 h-4 mr-2" />View Projects</Link>
-                  </Button>
-                ) : (
-                  <Button size="lg" variant="outline" className="border-border/60 hover:border-primary/40" onClick={(e) => handleProtectedAction(e, 'projects')}>
-                    <Lock className="w-4 h-4 mr-2" />View Projects
-                  </Button>
-                )}
+                <Button size="lg" variant="outline" className="border-border/60 hover:border-primary/40"
+                  onClick={() => document.getElementById('projects')?.scrollIntoView({ behavior: 'smooth' })}>
+                  <ArrowRight className="w-4 h-4 mr-2" />View Projects
+                </Button>
               </motion.div>
-              <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3.5}
-                className="mb-8"
-              >
-                <Link to="/contact" className="text-sm text-muted-foreground hover:text-primary transition-colors inline-flex items-center gap-1">
+              <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3.5} className="mb-8">
+                <button onClick={() => document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' })}
+                  className="text-sm text-muted-foreground hover:text-primary transition-colors inline-flex items-center gap-1">
                   <Mail className="w-3.5 h-3.5" /> Contact Me
-                </Link>
+                </button>
               </motion.div>
-              <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={4}
-                className="flex gap-5"
-              >
+              <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={4} className="flex gap-5">
                 {[
                   { href: 'https://github.com/vijaysinghpuwar', icon: Github },
                   { href: 'https://linkedin.com/in/vijaysinghpuwar', icon: Linkedin },
@@ -202,22 +270,17 @@ export default function Index() {
                 ))}
               </motion.div>
             </div>
-
-            {/* Right — Animated Cyber Visual */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.8, delay: 0.3 }}
-              className="order-1 lg:order-2 relative h-72 sm:h-80 lg:h-[500px]"
-            >
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 100, damping: 15, delay: 0.3 }}
+              className="order-1 lg:order-2 relative h-72 sm:h-80 lg:h-[500px]">
               <CyberVisual />
             </motion.div>
           </div>
         </div>
       </section>
 
-      {/* ===== SKILLS MARQUEE ===== */}
-      <section className="py-6 border-t border-border/40 overflow-hidden">
+      {/* ═══════ SKILLS MARQUEE ═══════ */}
+      <div className="py-6 border-t border-border/40 overflow-hidden">
         <div className="marquee-track">
           {[...securityStack, ...securityStack].map((tool, i) => (
             <span key={`${tool}-${i}`} className="font-mono text-xs px-4 py-2 mx-1.5 rounded-full glass-card text-muted-foreground hover:text-primary transition-colors whitespace-nowrap">
@@ -225,28 +288,71 @@ export default function Index() {
             </span>
           ))}
         </div>
-      </section>
+      </div>
 
-      {/* ===== CORE COMPETENCIES — BENTO GRID ===== */}
-      <section className="py-16 border-t border-border/40">
+      {/* ═══════ SKILLS & COMPETENCIES ═══════ */}
+      <section id="skills" className="py-20 border-t border-border/40">
         <div className="container max-w-6xl mx-auto">
-          <div className="text-center mb-12">
+          <div className="text-center mb-14">
             <p className="section-heading">What I Do</p>
             <h2 className="section-title">Core Competencies</h2>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {highlights.map((item, i) => (
-              <motion.div
-                key={item.title}
-                initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={i}
+
+          {/* Bento grid with hover expand */}
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+            {competencies.map((item, i) => (
+              <motion.div key={item.title} initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={i}
                 className={item.featured ? 'lg:col-span-2' : ''}
-              >
-                <div className={`h-full rounded-lg p-6 glass-card hover:border-primary/20 transition-all group ${item.featured ? 'gradient-border' : ''}`}>
-                  <div className="w-11 h-11 rounded-lg bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center mb-4">
+                onMouseEnter={() => setExpandedCompetency(i)}
+                onMouseLeave={() => setExpandedCompetency(null)}>
+                <div className={`h-full rounded-lg p-6 glass-card hover:border-primary/20 transition-all group cursor-default ${item.featured ? 'gradient-border' : ''}`}>
+                  <div className="w-11 h-11 rounded-lg bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center mb-4 group-hover:shadow-[0_0_20px_hsl(var(--primary)/0.3)] transition-shadow">
                     <item.icon className="w-5 h-5 text-primary" />
                   </div>
                   <h3 className="font-semibold text-foreground mb-2 text-base group-hover:text-primary transition-colors">{item.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{item.description}</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{item.short}</p>
+                  <AnimatePresence>
+                    {expandedCompetency === i && (
+                      <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.3 }}
+                        className="text-sm text-muted-foreground/80 leading-relaxed mt-3 overflow-hidden">
+                        {item.long}
+                      </motion.p>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Stats */}
+          <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}
+            className="grid grid-cols-3 gap-4 mb-16">
+            {[
+              { value: 150, suffix: '+', label: 'Systems Secured' },
+              { value: 10, suffix: '+', label: 'Security Projects' },
+              { value: 5, suffix: '+', label: 'Certifications' },
+            ].map(s => (
+              <div key={s.label} className="text-center py-5 rounded-lg glass-card">
+                <p className="text-3xl font-bold"><AnimatedCounter target={s.value} suffix={s.suffix} /></p>
+                <p className="text-xs text-muted-foreground mt-1">{s.label}</p>
+              </div>
+            ))}
+          </motion.div>
+
+          {/* Skills grid */}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {Object.entries(skills).map(([category, items], i) => (
+              <motion.div key={category} initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={i}>
+                <div className="h-full glass-card rounded-lg p-5">
+                  <h3 className="text-sm font-semibold gradient-text mb-3">{category}</h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {items.map(s => (
+                      <span key={s} className="text-xs px-2 py-0.5 rounded-full glass-card text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors cursor-default">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </motion.div>
             ))}
@@ -254,71 +360,97 @@ export default function Index() {
         </div>
       </section>
 
-      {/* ===== FEATURED PROJECTS ===== */}
-      <section className="py-16 border-t border-border/40">
+      {/* ═══════ PROJECTS ═══════ */}
+      <section id="projects" className="py-20 border-t border-border/40">
         <div className="container max-w-6xl mx-auto">
-          <div className="text-center mb-12">
+          <div className="text-center mb-14">
             <p className="section-heading">Portfolio</p>
-            <h2 className="section-title">Featured Projects</h2>
+            <h2 className="section-title">Projects</h2>
           </div>
+
           {user ? (
             <>
-              <div className="grid md:grid-cols-3 gap-6 mb-8">
-                {featuredProjects.map((project, i) => (
-                  <motion.div key={project.id} initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={i}>
-                    <div className="h-full rounded-lg glass-card hover:border-primary/20 transition-all group flex flex-col overflow-hidden">
-                      {/* Gradient mesh header */}
-                      <div className={`h-24 bg-gradient-to-br ${projectColors[i % projectColors.length]} flex items-center justify-center`}>
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <Shield className="w-5 h-5 text-primary/60" />
-                        </div>
-                      </div>
-                      <div className="p-6 flex flex-col flex-1">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Badge variant="outline" className="text-xs text-primary border-primary/20">{project.category}</Badge>
-                          <span className="text-xs text-muted-foreground">{project.year}</span>
-                        </div>
-                        <h3 className="font-semibold text-foreground mb-2 group-hover:text-primary transition-colors">
-                          <Link to={`/projects/${project.id}`}>{project.title}</Link>
-                        </h3>
-                        <p className="text-sm text-muted-foreground mb-4 line-clamp-2 flex-1">{project.description}</p>
-                        <div className="flex flex-wrap gap-1.5 mb-4">
-                          {project.tech.slice(0, 3).map(t => (
-                            <span key={t} className="text-xs px-2 py-0.5 rounded-full glass-card text-muted-foreground">{t}</span>
-                          ))}
-                        </div>
-                        {project.links.github && (
-                          <a href={project.links.github} target="_blank" rel="noopener noreferrer"
-                            className="inline-flex items-center text-sm text-primary hover:underline">
-                            <Github className="w-4 h-4 mr-1.5" /> View on GitHub
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
+              {/* Filters */}
+              <div className="flex flex-col sm:flex-row gap-3 mb-8">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)}
+                    className="pl-9 bg-background/50 border-border/40 focus:border-primary/60" />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => setSelectedCategory(null)}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${selectedCategory === null ? 'gradient-btn' : 'glass-card text-muted-foreground hover:text-foreground'}`}>
+                    All
+                  </button>
+                  {categories.map(cat => (
+                    <button key={cat} onClick={() => setSelectedCategory(cat)}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${selectedCategory === cat ? 'gradient-btn' : 'glass-card text-muted-foreground hover:text-foreground'}`}>
+                      {cat}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* GitHub Credibility Strip */}
-              <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={0}
-                className="flex items-center justify-center gap-3 py-4 mb-8 rounded-lg glass-card"
-              >
+              {/* Project grid */}
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <AnimatePresence mode="popLayout">
+                  {filteredProjects.map((project, i) => (
+                    <motion.div key={project.id}
+                      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+                      transition={spring(i % 6)}
+                      layout>
+                      <div className="h-full rounded-lg glass-card hover:border-primary/20 transition-all group flex flex-col hover:shadow-[0_0_30px_hsl(var(--primary)/0.08)]">
+                        {/* Gradient mesh header */}
+                        <div className="h-20 bg-gradient-to-br from-primary/15 via-secondary/10 to-primary/5 flex items-center justify-center rounded-t-lg">
+                          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Shield className="w-4 h-4 text-primary/60" />
+                          </div>
+                        </div>
+                        <div className="p-5 flex flex-col flex-1">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Badge variant="outline" className="text-xs text-primary border-primary/20">{project.category}</Badge>
+                            <span className="text-xs text-muted-foreground">{project.year}</span>
+                            {project.featured && <span className="text-xs px-2 py-0.5 rounded-full gradient-btn">Featured</span>}
+                          </div>
+                          <h3 className="font-semibold text-foreground mb-2 group-hover:text-primary transition-colors">{project.title}</h3>
+                          <p className="text-sm text-muted-foreground mb-4 line-clamp-2 flex-1">{project.description}</p>
+                          <div className="flex flex-wrap gap-1.5 mb-4">
+                            {project.tech.slice(0, 4).map(t => (
+                              <span key={t} className="text-xs px-2 py-0.5 rounded-full glass-card text-muted-foreground">{t}</span>
+                            ))}
+                            {project.tech.length > 4 && (
+                              <span className="text-xs px-2 py-0.5 rounded-full glass-card text-muted-foreground">+{project.tech.length - 4}</span>
+                            )}
+                          </div>
+                          {project.links.github && (
+                            <a href={project.links.github} target="_blank" rel="noopener noreferrer"
+                              className="inline-flex items-center text-sm text-primary hover:underline">
+                              <Github className="w-4 h-4 mr-1.5" /> View on GitHub
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+
+              {filteredProjects.length === 0 && (
+                <div className="text-center py-16 text-muted-foreground">No projects found matching your criteria.</div>
+              )}
+
+              {/* GitHub strip */}
+              <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}
+                className="flex items-center justify-center gap-3 py-4 mt-8 rounded-lg glass-card">
                 <Github className="w-5 h-5 text-primary" />
                 <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer"
                   className="font-mono text-sm text-muted-foreground hover:text-primary transition-colors">
                   18+ public repositories · Security Automation · Python · PowerShell · Bash
                 </a>
               </motion.div>
-
-              <div className="text-center">
-                <Link to="/projects"
-                  className="inline-flex items-center justify-center h-11 px-8 rounded-md text-sm font-medium gradient-btn">
-                  View All Projects <ArrowRight className="w-4 h-4 ml-2" />
-                </Link>
-              </div>
             </>
           ) : (
-            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={0}>
+            <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}>
               <div className="glass-card rounded-lg max-w-lg mx-auto p-8 text-center">
                 <Lock className="w-10 h-10 text-primary mx-auto mb-4" />
                 <h3 className="font-semibold text-foreground text-lg mb-2">Portfolio Access Required</h3>
@@ -334,134 +466,194 @@ export default function Index() {
         </div>
       </section>
 
-      {/* ===== EXPERIENCE TIMELINE ===== */}
-      <section className="py-16 border-t border-border/40">
+      {/* ═══════ EXPERIENCE (Tabbed) ═══════ */}
+      <section id="experience" className="py-20 border-t border-border/40">
         <div className="container max-w-5xl mx-auto">
-          <div className="text-center mb-12">
-            <p className="section-heading">Career</p>
-            <h2 className="section-title">Experience</h2>
+          <div className="text-center mb-10">
+            <p className="section-heading">Background</p>
+            <h2 className="section-title mb-8">Experience & Education</h2>
+
+            {/* Tabs */}
+            <div className="inline-flex gap-1 p-1 rounded-lg glass-card">
+              {(['experience', 'education', 'certifications'] as const).map(tab => (
+                <button key={tab} onClick={() => setExpTab(tab)}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all capitalize ${expTab === tab ? 'gradient-btn' : 'text-muted-foreground hover:text-foreground'}`}>
+                  {tab}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="space-y-10">
-            {experience.map((job, i) => (
-              <motion.div key={job.company} initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={i}
-                className="relative pl-8"
-              >
-                {/* Gradient timeline line */}
-                <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-primary to-secondary" />
-                {/* Glowing dot */}
-                <div className="absolute -left-[5px] top-2 w-3 h-3 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary)/0.6)]" />
-                
-                <div className="glass-card rounded-lg p-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mb-2">
-                    <h3 className="font-bold text-foreground text-lg">{job.company}</h3>
-                    <span className="text-sm font-medium gradient-text">— {job.role}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mb-3 font-mono">{job.period}</p>
-                  <ul className="space-y-2">
-                    {job.bullets.map((b, j) => (
-                      <li key={j} className="text-sm text-muted-foreground flex items-start gap-2">
-                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-                        <span>
-                          {b.text}
-                          {b.bold && <strong className="text-primary font-semibold">{b.bold}</strong>}
-                          {b.after}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+
+          <AnimatePresence mode="wait">
+            {expTab === 'experience' && (
+              <motion.div key="exp" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
+                transition={{ type: 'spring', stiffness: 100, damping: 15 }}>
+                <div className="space-y-10">
+                  {experience.map((job, i) => (
+                    <motion.div key={job.company} initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={i}
+                      className="relative pl-8">
+                      <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-primary to-secondary" />
+                      <div className="absolute -left-[5px] top-2 w-3 h-3 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary)/0.6)]" />
+                      <div className="glass-card rounded-lg p-5">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mb-2">
+                          <h3 className="font-bold text-foreground text-lg">{job.company}</h3>
+                          <span className="text-sm font-medium gradient-text">— {job.role}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-3 font-mono">{job.period}</p>
+                        <ul className="space-y-2">
+                          {job.bullets.map((b, j) => (
+                            <li key={j} className="text-sm text-muted-foreground flex items-start gap-2">
+                              <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
+                              <span>{b.text}{b.bold && <strong className="text-primary font-semibold">{b.bold}</strong>}{b.after}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </motion.div>
+                  ))}
                 </div>
               </motion.div>
-            ))}
-          </div>
+            )}
+
+            {expTab === 'education' && (
+              <motion.div key="edu" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
+                transition={{ type: 'spring', stiffness: 100, damping: 15 }}>
+                <div className="grid md:grid-cols-2 gap-6">
+                  {education.map((edu, i) => (
+                    <motion.div key={edu.school} initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={i}>
+                      <div className="h-full glass-card rounded-lg p-6">
+                        <GraduationCap className="w-7 h-7 text-primary mb-3" />
+                        <h3 className="font-bold text-foreground mb-1 text-lg">{edu.degree}</h3>
+                        <p className="text-sm text-muted-foreground mb-1">{edu.school}</p>
+                        <p className="text-sm text-muted-foreground">{edu.location}</p>
+                        <div className="flex gap-3 mt-3 mb-4">
+                          <span className="text-xs font-semibold px-2.5 py-1 rounded-md gradient-btn">{edu.gpa}</span>
+                          <Badge variant="outline" className="text-xs">{edu.status}</Badge>
+                        </div>
+                        {edu.coursework.length > 0 && (
+                          <div>
+                            <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider">Selected Coursework</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {edu.coursework.map(c => (
+                                <span key={c} className="text-xs px-2 py-0.5 rounded-full glass-card text-muted-foreground">{c}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {expTab === 'certifications' && (
+              <motion.div key="cert" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
+                transition={{ type: 'spring', stiffness: 100, damping: 15 }}>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                  {certifications.map(cert => (
+                    <div key={cert} className="flex items-center justify-center gap-2.5 px-5 py-4 rounded-lg glass-card text-sm text-foreground hover:border-primary/30 hover:shadow-[0_0_20px_hsl(var(--primary)/0.1)] transition-all group">
+                      <Award className="w-4 h-4 text-primary flex-shrink-0 group-hover:scale-110 transition-transform" />{cert}
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </section>
 
-      {/* ===== EDUCATION ===== */}
-      <section className="py-16 border-t border-border/40">
+      {/* ═══════ CONTACT ═══════ */}
+      <section id="contact" className="py-20 border-t border-border/40">
         <div className="container max-w-6xl mx-auto">
-          <div className="text-center mb-12">
-            <p className="section-heading">Education</p>
-            <h2 className="section-title">Academic Background</h2>
+          <div className="text-center mb-14">
+            <p className="section-heading">Get in Touch</p>
+            <h2 className="section-title">Let's Connect</h2>
           </div>
-          <div className="grid md:grid-cols-2 gap-6">
-            {education.map((edu, i) => (
-              <motion.div key={edu.school} initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={i}>
-                <div className="h-full glass-card rounded-lg p-6">
-                  <GraduationCap className="w-7 h-7 text-primary mb-3" />
-                  <h3 className="font-bold text-foreground mb-1 text-lg">{edu.degree}</h3>
-                  <p className="text-sm text-muted-foreground mb-1">{edu.school}</p>
-                  <p className="text-sm text-muted-foreground">{edu.location}</p>
-                  <div className="flex gap-3 mt-3 mb-4">
-                    <span className="text-xs font-semibold px-2.5 py-1 rounded-md gradient-btn">{edu.gpa}</span>
-                    <Badge variant="outline" className="text-xs">{edu.status}</Badge>
-                  </div>
-                  {edu.coursework.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider">Selected Coursework</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {edu.coursework.map(c => (
-                          <span key={c} className="text-xs px-2 py-0.5 rounded-full glass-card text-muted-foreground">{c}</span>
-                        ))}
-                      </div>
+
+          {/* Open to roles */}
+          <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}
+            className="flex flex-wrap justify-center gap-3 mb-12">
+            {openToRoles.map(role => (
+              <div key={role} className="flex items-center gap-2 px-4 py-2.5 rounded-lg glass-card text-sm text-foreground font-medium hover:border-primary/30 transition-colors">
+                <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0 shadow-[0_0_6px_hsl(var(--primary)/0.5)]" />
+                {role}
+              </div>
+            ))}
+          </motion.div>
+
+          <div className="grid md:grid-cols-2 gap-8">
+            {/* Left info */}
+            <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0} className="space-y-6">
+              <div>
+                <h3 className="text-xl font-bold text-foreground mb-2">Let's Connect</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Whether you're looking for a cybersecurity engineer, need help with a security project, or want to discuss opportunities — I'd love to hear from you.
+                </p>
+              </div>
+              <div className="glass-card rounded-lg p-6 space-y-4">
+                <a href="mailto:contact@vijaysinghpuwar.com" className="flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <Mail className="w-4 h-4 text-primary" /> contact@vijaysinghpuwar.com
+                </a>
+                <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <Github className="w-4 h-4 text-primary" /> github.com/vijaysinghpuwar
+                </a>
+                <a href="https://linkedin.com/in/vijaysinghpuwar" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <Linkedin className="w-4 h-4 text-primary" /> linkedin.com/in/vijaysinghpuwar
+                </a>
+              </div>
+            </motion.div>
+
+            {/* Right form */}
+            <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={1}>
+              {submitted ? (
+                <div className="text-center py-16">
+                  <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold text-foreground mb-2">Message Sent</h3>
+                  <p className="text-muted-foreground mb-4">Thanks for reaching out. I'll respond within 24–48 hours.</p>
+                  <Button variant="outline" onClick={() => setSubmitted(false)} className="border-border/60">Send Another</Button>
+                </div>
+              ) : (
+                <div className="glass-card rounded-lg p-6">
+                  {user && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4 pb-4 border-b border-border/40">
+                      <User className="w-4 h-4 text-primary" />
+                      <span>Signed in as <span className="text-foreground font-medium">{user.email}</span></span>
                     </div>
                   )}
+                  <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className={user ? '' : 'grid sm:grid-cols-2 gap-4'}>
+                      <div>
+                        <Label htmlFor="name" className="text-sm">Name</Label>
+                        <Input id="name" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
+                          className="bg-background/50 border-border/40 mt-1 focus:border-primary/60" />
+                      </div>
+                      {!user && (
+                        <div>
+                          <Label htmlFor="email" className="text-sm">Email</Label>
+                          <Input id="email" type="email" required value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })}
+                            className="bg-background/50 border-border/40 mt-1 focus:border-primary/60" />
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <Label htmlFor="subject" className="text-sm">Subject</Label>
+                      <Input id="subject" required value={formData.subject} onChange={e => setFormData({ ...formData, subject: e.target.value })}
+                        className="bg-background/50 border-border/40 mt-1 focus:border-primary/60" />
+                    </div>
+                    <div>
+                      <Label htmlFor="message" className="text-sm">Message</Label>
+                      <Textarea id="message" required rows={5} value={formData.message} onChange={e => setFormData({ ...formData, message: e.target.value })}
+                        className="bg-background/50 border-border/40 mt-1 focus:border-primary/60" />
+                    </div>
+                    <button type="submit" disabled={isSubmitting}
+                      className="w-full h-11 rounded-md text-sm font-medium gradient-btn inline-flex items-center justify-center disabled:opacity-50">
+                      {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending...</> : 'Send Message'}
+                    </button>
+                  </form>
                 </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ===== CERTIFICATIONS ===== */}
-      <section className="py-16 border-t border-border/40">
-        <div className="container max-w-6xl mx-auto text-center">
-          <p className="section-heading">Credentials</p>
-          <h2 className="section-title mb-10">Certifications</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-            {certifications.map(cert => (
-              <div key={cert} className="flex items-center justify-center gap-2.5 px-5 py-4 rounded-lg glass-card text-sm text-foreground hover:border-primary/30 transition-colors group">
-                <Award className="w-4 h-4 text-primary flex-shrink-0 group-hover:scale-110 transition-transform" />{cert}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ===== OPEN TO ===== */}
-      <section className="py-16 border-t border-border/40">
-        <div className="container max-w-4xl mx-auto text-center">
-          <p className="section-heading">Opportunities</p>
-          <h2 className="section-title mb-4">Open To</h2>
-          <p className="text-muted-foreground mb-8 max-w-xl mx-auto">
-            Actively seeking roles where I can contribute to building and defending secure infrastructure.
-          </p>
-          <div className="flex flex-wrap justify-center gap-3">
-            {openToRoles.map(role => (
-              <div key={role} className="flex items-center gap-2 px-5 py-3 rounded-lg glass-card text-sm text-foreground font-medium hover:border-primary/30 transition-colors">
-                <Briefcase className="w-4 h-4 text-primary flex-shrink-0" />{role}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ===== CONTACT CTA ===== */}
-      <section className="py-16 border-t border-border/40">
-        <div className="container max-w-4xl mx-auto text-center">
-          <p className="section-heading">Get in Touch</p>
-          <h2 className="section-title mb-4">Let's Connect</h2>
-          <p className="text-muted-foreground mb-8">
-            Open to opportunities in cybersecurity engineering, security operations, and cloud security roles.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link to="/contact" className="inline-flex items-center justify-center h-11 px-8 rounded-md text-sm font-medium gradient-btn">
-              Contact Me
-            </Link>
-            <Button size="lg" variant="outline" asChild className="border-border/60 hover:border-primary/40">
-              <a href="mailto:contact@vijaysinghpuwar.com">
-                <Mail className="w-4 h-4 mr-2" /> contact@vijaysinghpuwar.com
-              </a>
-            </Button>
+              )}
+            </motion.div>
           </div>
         </div>
       </section>
