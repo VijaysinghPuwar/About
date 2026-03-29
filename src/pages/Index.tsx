@@ -182,26 +182,23 @@ export default function Index() {
 
       {/* ═══════ SKILLS & TECHNOLOGIES ═══════ */}
       <section id="skills" className="py-20 border-t border-border/40">
-        <div className="container max-w-6xl mx-auto">
+        <motion.div {...sectionAnim} className="container max-w-6xl mx-auto">
           <div className="text-center mb-14">
             <p className="section-heading">Arsenal</p>
             <h2 className="section-title">Skills & Technologies</h2>
           </div>
 
-          {/* Two-column layout */}
-          <div className="grid lg:grid-cols-2 gap-10 items-start mb-14">
-            {/* Radar Chart */}
-            <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}>
-              <SkillsRadar />
-            </motion.div>
+          <Suspense fallback={<div className="h-64" />}>
+            <div className="grid lg:grid-cols-2 gap-10 items-start mb-14">
+              <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}>
+                <SkillsRadar />
+              </motion.div>
+              <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={1}>
+                <SkillCategories />
+              </motion.div>
+            </div>
+          </Suspense>
 
-            {/* Category Tabs */}
-            <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={1}>
-              <SkillCategories />
-            </motion.div>
-          </div>
-
-          {/* Certification Ticker */}
           <div className="rounded-lg glass-card py-4 overflow-hidden">
             <div className="marquee-track">
               {[...['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'ISC2 Candidate', 'Google AI Essentials'], ...['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'ISC2 Candidate', 'Google AI Essentials']].map((cert, i) => (
@@ -212,7 +209,7 @@ export default function Index() {
               ))}
             </div>
           </div>
-        </div>
+        </motion.div>
       </section>
 
       {/* ═══════ PROJECTS ═══════ */}
