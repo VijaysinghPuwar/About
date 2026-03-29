@@ -208,7 +208,7 @@ export function ThreatLevelIndicator() {
                   animate={{ x: 0, opacity: 1 }}
                   exit={{ x: -12, opacity: 0 }}
                   transition={{ duration: 0.2, ease: 'easeOut' }}
-                  className="absolute font-mono uppercase text-[11px] tracking-[1.5px] whitespace-nowrap"
+                  className="absolute font-mono uppercase text-[10px] sm:text-[11px] tracking-[1.5px] whitespace-nowrap"
                   style={{ color: current.dot }}
                 >
                   {displayStatus}
