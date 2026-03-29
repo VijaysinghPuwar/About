@@ -1,69 +1,38 @@
 
 
-# Interactive 3D Hexagon Shield
+# Fix VP Logo Centering & Proportions
 
-## Overview
-Replace `SecurityShield` with a new `HeroShield` component featuring multi-layered hexagons with 3D mouse-tracking tilt, parallax depth per layer, orbiting icons that scatter on hover, and a click-triggered scan pulse.
+## Problem
+The "VP" text is off-center (shifted right) inside the hexagon. The letters are too small, the stroke is too thick, and there's an unnecessary double/glow hexagon.
 
-## Files
+## Changes
 
-| File | Action |
-|------|--------|
-| `src/components/HeroShield.tsx` | **Create** — Full interactive component |
-| `src/pages/Index.tsx` | **Edit** — Replace `SecurityShield` import/usage with `HeroShield` |
-| `src/components/SecurityShield.tsx` | **Delete** |
+### 1. `src/components/LogoIcon.tsx` — Rewrite
+- **Remove** the outer glow hexagon entirely (lines 29-41)
+- **Reduce** inner hexagon `strokeWidth` from `1.2` to `1.5` (in viewBox units, ~1.5 scaled)
+- **Center VP text** using a single `<text>` element at exact center (x=20, y=20) with `text-anchor="middle"` and `dominant-baseline="central"`, shifted ~1px left for optical correction → x=19
+- **Increase font-size** from 15 to 18 so letters fill ~55-60% of hexagon width
+- **Negative letter-spacing**: use `letter-spacing="-0.8"` on the text element
+- Keep V as `#00e5ff`, P as `#a855f7` — use two `<tspan>` elements inside one centered `<text>`
+- Remove the `animated` glow rotation (no glow hex to rotate). Keep the hover effects on the single hexagon (brighten stroke, letters flash white)
 
-## HeroShield Component Design
+### 2. `src/components/Preloader.tsx` — Update logo SVG (lines 101-141)
+- Remove the glow hexagon pulse path (lines 82-99)
+- Update the inner hexagon `strokeWidth` to match LogoIcon
+- Replace the two separate `<motion.text>` elements with centered text using same approach (x=19, y=20, text-anchor=middle, dominant-baseline=central, font-size=18)
+- Keep the stroke draw-on and letter fade-in animations
 
-### Layered Hexagons (CSS transforms, not canvas)
-Each layer is an absolutely-positioned SVG hexagon centered in a container:
-- **Layer 1**: 380px, stroke `#00e5ff` at 0.15 opacity
-- **Layer 2**: 280px, stroke `#a855f7` at 0.2 opacity, rotated 15°
-- **Layer 3**: 180px, stroke `#00e5ff` at 0.3 opacity, rotated 30°
-- **Layer 4**: 100px, gradient fill at 0.1 opacity
-- **Center**: Lock icon (32px, white, 0.6 opacity)
+### 3. `public/favicon.svg` — Update
+- Same centering fix: position text at center with text-anchor="middle"
+- Increase font size, reduce stroke width, remove outer glow hexagon
 
-### 3D Tilt (mouse tracking)
-- `onMouseMove` on the container calculates offset from center
-- `tiltX = (mouseY - centerY) / height * 20`, `tiltY = (mouseX - centerX) / width * -20`
-- Each layer applies tilt at a different multiplier (1.0x, 0.7x, 0.4x, 0.2x) for parallax
-- Uses `requestAnimationFrame` + lerp (factor 0.08) to smooth the following
-- On mouse leave, lerps back to (0, 0)
-- Transform: `perspective(800px) rotateX() rotateY()`
-
-### Idle Animation (no hover)
-- Track `isHovering` state
-- When not hovering, layers rotate via CSS animation:
-  - L1: clockwise 30s, L2: counter-clockwise 25s, L3: clockwise 20s
-  - L4: scale pulse 1.0→1.05→1.0 over 3s
-- When hovering starts: set `animation-play-state: paused`, tilt takes over
-- When hovering ends: resume rotations, lerp tilt to zero
-
-### Orbiting Icons
-- 4 icons (Terminal, Shield, Cloud, Lock) positioned using `Math.sin`/`Math.cos` with time-based angle from `requestAnimationFrame`
-- Each at Layer 1 radius (~190px from center), offset by 0°/90°/180°/270°, different speeds (20s/25s/22s/28s)
-- Glass-morphism containers: 36px square, `bg-[rgba(15,23,42,0.5)]`, border `rgba(100,220,255,0.15)`
-- On hover: icons translate 40px further outward (lerped transition)
-- Icons also shift based on current tilt values for depth
-
-### Click Scan Pulse
-- On click/touchstart, spawn a pulse ring element using state array
-- Ring expands 0→500px over 0.8s via CSS animation, gradient stroke, fades opacity 0.6→0
-- All hex layers briefly flash (opacity spike via a CSS class toggled for 200ms)
-- Center icon switches to CheckCircle for 1s, then reverts to Lock
-
-### Mobile (<768px)
-- Scale container to 60% via wrapper class
-- Disable tilt (skip mouse tracking)
-- Keep idle rotations and orbit animations
-- Use `touchstart` for scan pulse
-
-### Performance
-- All visual transforms are CSS (`transform`, `opacity`) — GPU composited
-- Single `requestAnimationFrame` loop handles: tilt lerping + orbit position calculation
-- Cleanup on unmount
-
-## Index.tsx Changes
-- Replace `import { SecurityShield }` with `import { HeroShield }`
-- Replace `<SecurityShield />` with `<HeroShield />`
+## Technical Detail — SVG Text Centering
+```xml
+<text x="19" y="20" textAnchor="middle" dominantBaseline="central"
+      fontFamily="'Space Grotesk', system-ui, sans-serif" fontWeight="700" fontSize="18">
+  <tspan fill="#00e5ff">V</tspan>
+  <tspan fill="#a855f7">P</tspan>
+</text>
+```
+The hexagon center is at (20, 20). Using x=19 provides the ~1px leftward optical correction for the P's visual weight.
 
