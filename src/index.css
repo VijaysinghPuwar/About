@@ -97,6 +97,22 @@
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 3.5rem;
+  overflow-x: hidden;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* Mobile text sizing overrides */
+@media (max-width: 767px) {
+  .section-title {
+    font-size: 1.75rem !important; /* 28px */
+    line-height: 1.2 !important;
+  }
+  .section-heading {
+    font-size: 11px !important;
+  }
 }
 
 /* Keyboard focus */
