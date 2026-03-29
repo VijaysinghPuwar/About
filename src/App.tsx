@@ -30,6 +30,7 @@ const App = () => (
     <TooltipProvider>
       <ThemeProvider>
         <AuthProvider>
+          <CyberGrid />
           <Preloader />
           <ScrollProgress />
           <CursorSpotlight />
