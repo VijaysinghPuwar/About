@@ -84,7 +84,7 @@ export function Navigation() {
     )}>
       <div className="container flex h-14 items-center justify-between">
         <button onClick={() => scrollTo('home')} className="flex items-center gap-1 hover:opacity-80 transition-opacity">
-          <span className="text-xl font-bold gradient-text">VP</span>
+          <LogoIcon size={36} animated />
         </button>
 
         {/* Desktop */}
