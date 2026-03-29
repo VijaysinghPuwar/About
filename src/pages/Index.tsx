@@ -214,29 +214,31 @@ export default function Index() {
 
       {/* ═══════ PROJECTS ═══════ */}
       <section id="projects" className="py-20 border-t border-border/40">
-        <div className="container max-w-6xl mx-auto">
+        <motion.div {...sectionAnim} className="container max-w-6xl mx-auto">
           <div className="text-center mb-14">
             <p className="section-heading">Work</p>
             <h2 className="section-title">Featured Projects</h2>
           </div>
 
-          {user ? (
-            <ProjectShowcase projects={allProjects} />
-          ) : (
-            <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}>
-              <div className="glass-card rounded-lg max-w-lg mx-auto p-8 text-center">
-                <Lock className="w-10 h-10 text-primary mx-auto mb-4" />
-                <h3 className="font-semibold text-foreground text-lg mb-2">Portfolio Access Required</h3>
-                <p className="text-sm text-muted-foreground mb-6">
-                  Sign in with Google to view detailed projects, GitHub repositories, and download resume.
-                </p>
-                <Link to="/login" className="inline-flex items-center justify-center h-10 px-6 rounded-md text-sm font-medium gradient-btn">
-                  Sign In with Google
-                </Link>
-              </div>
-            </motion.div>
-          )}
-        </div>
+          <Suspense fallback={<div className="h-64" />}>
+            {user ? (
+              <ProjectShowcase projects={allProjects} />
+            ) : (
+              <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}>
+                <div className="glass-card rounded-lg max-w-lg mx-auto p-8 text-center">
+                  <Lock className="w-10 h-10 text-primary mx-auto mb-4" />
+                  <h3 className="font-semibold text-foreground text-lg mb-2">Portfolio Access Required</h3>
+                  <p className="text-sm text-muted-foreground mb-6">
+                    Sign in with Google to view detailed projects, GitHub repositories, and download resume.
+                  </p>
+                  <Link to="/login" className="inline-flex items-center justify-center h-10 px-6 rounded-md text-sm font-medium gradient-btn">
+                    Sign In with Google
+                  </Link>
+                </div>
+              </motion.div>
+            )}
+          </Suspense>
+        </motion.div>
       </section>
 
       {/* ═══════ EXPERIENCE & EDUCATION ═══════ */}
