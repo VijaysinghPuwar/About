@@ -70,8 +70,9 @@ export default function Index() {
   }, [dbProjects]);
 
 
-  /* competency hover expand */
-  
+  /* shared skill tab state */
+  const [skillTab, setSkillTab] = useState('security');
+
 
   /* contact form */
   const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
