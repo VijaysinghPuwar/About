@@ -206,7 +206,7 @@ function TimelineNode({ entry, index, expandedId, onToggle }: {
       </div>
 
       {/* Right content (desktop only) */}
-      <div className={`hidden md:block ${isLeft ? 'order-3' : ''}`}>
+      <div className="hidden md:block">
         {!isLeft && (
           <motion.div
             initial={{ opacity: 0, x: 50 }}
