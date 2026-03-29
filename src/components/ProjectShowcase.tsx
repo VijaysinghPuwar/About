@@ -1,7 +1,82 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Github, X, ExternalLink, Shield, ArrowRight } from 'lucide-react';
+import { Github, X, ExternalLink, Shield, ArrowRight, Columns2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+
+const IMPACT_DIFFS: Record<string, { before: string[]; after: string[] }> = {
+  'secure-ubuntu-fleet': {
+    before: [
+      'SSH: default port 22 exposed',
+      'Root login: enabled via password',
+      'Firewall: UFW inactive, all ports open',
+      'System updates: manual, months behind',
+      'File permissions: world-readable defaults',
+      'Logging: minimal syslog only',
+    ],
+    after: [
+      'SSH: custom port, key-only authentication',
+      'Root login: disabled, sudo with audit trail',
+      'Firewall: UFW active, deny-by-default policy',
+      'System updates: automated unattended-upgrades',
+      'File permissions: CIS benchmark hardened',
+      'Logging: centralized with rsyslog forwarding',
+    ],
+  },
+  'http-hardening-nmap-nse': {
+    before: [
+      'X-Frame-Options: missing',
+      'Content-Security-Policy: not set',
+      'HSTS: not enforced',
+      'Server header: version exposed',
+      'X-Content-Type-Options: missing',
+      'Cookies: no Secure/HttpOnly flags',
+    ],
+    after: [
+      'X-Frame-Options: DENY enforced',
+      'Content-Security-Policy: strict policy applied',
+      'HSTS: max-age=31536000 with preload',
+      'Server header: stripped/generic',
+      'X-Content-Type-Options: nosniff set',
+      'Cookies: Secure, HttpOnly, SameSite=Strict',
+    ],
+  },
+  'win-dev-sec-bootstrap': {
+    before: [
+      'Setup time: 4-6 hours manual config',
+      'Environment: inconsistent across machines',
+      'Security tools: manually downloaded',
+      'WSL2: requires multi-step install',
+      'Docker: separate installer needed',
+      'Reproducibility: none, tribal knowledge',
+    ],
+    after: [
+      'Setup time: single command, under 30 min',
+      'Environment: identical on every machine',
+      'Security tools: auto-installed and configured',
+      'WSL2: provisioned automatically',
+      'Docker: installed and integrated with WSL2',
+      'Reproducibility: idempotent, version-controlled',
+    ],
+  },
+  'aws-cloud-security': {
+    before: [
+      'Security groups: allow all inbound (0.0.0.0/0)',
+      'IAM: root account used for daily operations',
+      'Monitoring: no CloudWatch alarms set',
+      'VPC: default VPC, no subnet isolation',
+      'Encryption: EBS volumes unencrypted',
+      'Logging: CloudTrail not enabled',
+    ],
+    after: [
+      'Security groups: least-privilege, port-specific rules',
+      'IAM: role-based access, MFA enforced, no root usage',
+      'Monitoring: CloudWatch alarms on all critical metrics',
+      'VPC: custom VPC with public/private subnet isolation',
+      'Encryption: EBS encryption enabled by default',
+      'Logging: CloudTrail enabled with S3 log archival',
+    ],
+  },
+};
 
 interface Project {
   id: string;
