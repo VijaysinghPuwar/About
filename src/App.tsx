@@ -40,6 +40,7 @@ const App = () => (
           <Sonner />
           <div className="min-h-screen bg-background">
             <BrowserRouter>
+              <ThreatLevelIndicator />
               <Navigation />
               <main className="relative">
                 <Routes>
