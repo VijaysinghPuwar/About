@@ -14,6 +14,7 @@ import { Menu, LogIn, LogOut, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { LogoIcon } from '@/components/LogoIcon';
 
 const sections = [
   { name: 'Home', id: 'home' },
