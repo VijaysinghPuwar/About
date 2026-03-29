@@ -185,7 +185,7 @@ export function CommandPalette() {
 
           {/* Modal */}
           <motion.div
-            className="relative w-[90vw] max-w-[560px] h-fit rounded-2xl overflow-hidden"
+            className="relative w-[95vw] md:w-[90vw] max-w-[560px] h-fit rounded-2xl overflow-hidden"
             style={{
               background: 'rgba(15,23,42,0.95)',
               backdropFilter: 'blur(24px)',
