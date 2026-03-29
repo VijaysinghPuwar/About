@@ -260,9 +260,9 @@ export default function Index() {
 
       {/* ═══════ CONTACT ═══════ */}
       <section id="contact" className="py-20 border-t border-border/40">
-        <motion.div {...sectionAnim} className="container max-w-6xl mx-auto">
+        <SectionReveal className="container max-w-6xl mx-auto px-4">
           <div className="text-center mb-4">
-            <p className="section-heading">Connect</p>
+            <RevealLabel text="Connect" />
             <h2 className="section-title">Let's Work Together</h2>
             <p className="text-sm text-muted-foreground max-w-xl mx-auto mt-3">
               Open to cybersecurity roles, security operations, cloud security, and consulting opportunities.
