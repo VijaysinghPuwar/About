@@ -247,15 +247,15 @@ export default function Index() {
       {/* ═══════ EXPERIENCE & EDUCATION ═══════ */}
       <section id="experience" className="py-20 border-t border-border/40 relative overflow-hidden">
         
-        <motion.div {...sectionAnim} className="container max-w-5xl mx-auto relative z-10">
+        <SectionReveal className="container max-w-5xl mx-auto relative z-10 px-4">
           <div className="text-center mb-4">
-            <p className="section-heading">Journey</p>
+            <RevealLabel text="Journey" />
             <h2 className="section-title">Experience & Education</h2>
           </div>
           <Suspense fallback={<div className="h-64" />}>
             <ExperienceTimeline />
           </Suspense>
-        </motion.div>
+        </SectionReveal>
       </section>
 
       {/* ═══════ CONTACT ═══════ */}
