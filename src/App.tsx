@@ -15,6 +15,7 @@ import { CyberGrid } from "@/components/CyberGrid";
 import { Preloader } from "@/components/Preloader";
 import { ThreatLevelIndicator } from "@/components/ThreatLevelIndicator";
 import { KonamiCode } from "@/components/KonamiCode";
+import { CommandPalette } from "@/components/CommandPalette";
 
 import Index from "./pages/Index";
 import Login from "./pages/Login";
