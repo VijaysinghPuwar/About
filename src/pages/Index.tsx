@@ -199,7 +199,7 @@ export default function Index() {
           {/* Certification Ticker */}
           <div className="rounded-lg glass-card py-4 overflow-hidden">
             <div className="marquee-track">
-              {[...certifications, ...certifications].map((cert, i) => (
+              {[...['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'ISC2 Candidate', 'Google AI Essentials'], ...['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'ISC2 Candidate', 'Google AI Essentials']].map((cert, i) => (
                 <span key={`${cert}-${i}`} className="flex items-center gap-2 font-mono text-sm text-muted-foreground px-6 whitespace-nowrap">
                   <Shield className="w-3.5 h-3.5 text-primary shrink-0" />
                   {cert}
