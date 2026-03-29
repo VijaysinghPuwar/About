@@ -2,16 +2,16 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Github, Linkedin, Mail, ArrowRight, Shield, Terminal, Cloud,
   GraduationCap, Award, Radar, Download, Briefcase, Lock,
-  Search, Loader2, CheckCircle2, User,
+  Loader2, CheckCircle2, User,
 } from 'lucide-react';
 import { motion, AnimatePresence, useInView } from 'framer-motion';
 import projectsData from '@/data/projects.json';
+import { ProjectShowcase } from '@/components/ProjectShowcase';
 import { useAuth } from '@/hooks/useAuth';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
