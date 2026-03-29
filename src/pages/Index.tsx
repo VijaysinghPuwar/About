@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Github, Linkedin, Mail, ArrowRight, Shield, Terminal, Cloud,
-  GraduationCap, Award, Radar, Download, Briefcase, Lock,
+  Radar, Download, Lock,
   Loader2, CheckCircle2, User,
 } from 'lucide-react';
 import { motion, AnimatePresence, useInView } from 'framer-motion';
