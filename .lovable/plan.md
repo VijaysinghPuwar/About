@@ -1,71 +1,51 @@
 
 
-# Interactive Timeline — Experience & Education
+# Contact Section & Footer Rebuild
 
-Replace the tabbed experience section (lines 283–378 in Index.tsx) with a new `ExperienceTimeline` component featuring an alternating vertical timeline with accordion behavior and flippable certification cards.
-
----
-
-## New Component: `src/components/ExperienceTimeline.tsx`
-
-### Timeline Data
-5 entries in chronological order (most recent first), each with:
-- `type`: "education" | "work"
-- `icon`: GraduationCap or Briefcase
-- Collapsed: company/school, role/degree, period
-- Expanded: bullets (work) or coursework pills (education)
-- Metrics like "150+", "70%", "20%", "100%", "4.00" highlighted in cyan (`text-primary font-semibold`)
-
-### Layout
-- **Desktop**: Center vertical line with entries alternating left/right. Odd entries left, even entries right. Timeline dot centered on the line.
-- **Mobile**: Line on the left, all entries to the right.
-- Vertical line: animated gradient background using CSS `background-size` animation (energy flowing down).
-
-### Accordion Behavior
-- `expandedId` state — only one node open at a time
-- Click toggles: if same node clicked, collapse; otherwise expand new and collapse old
-- Use `AnimatePresence` + `motion.div` with `initial/animate/exit` height animation for expand/collapse
-- Expand icon: small `ChevronDown` that rotates 180° when expanded
-- Active timeline dot: brighter glow + pulse animation (`shadow-[0_0_16px_hsl(var(--primary)/0.8)]`)
-
-### Scroll Entrance
-- Each node uses `motion.div` with `whileInView` — slides in from left (odd) or right (even) on desktop, always from left on mobile
-
-### Certification Row (below timeline)
-- 5 cert cards in a horizontal flex/grid row
-- Each card has front/back via CSS `transform-style: preserve-3d` + `rotateY(180deg)` on hover
-- Front: Shield icon + cert name
-- Back: issuing org text (e.g., "CompTIA", "Cisco", "ISC2", "Google")
-- Glass-morphism styling, gradient border on hover
+## Overview
+Replace the contact section in Index.tsx (lines 251-344) with an interactive "digital business card" layout, and rebuild the Footer component with center nav links and a gradient separator.
 
 ---
 
-## Index.tsx Changes (lines 283–378)
+## 1. Contact Section in `src/pages/Index.tsx` (lines 251-344)
 
-Replace entire experience section with:
-```
-<section id="experience">
-  <p className="section-heading">Journey</p>
-  <h2 className="section-title">Experience & Education</h2>
-  <ExperienceTimeline />
-</section>
-```
+### Section Intro
+- Label: "CONNECT" (gradient, uppercase)
+- Heading: "Let's Work Together"
+- Subtitle text about openness to roles
 
-Remove: `expTab` state, `experience` array, `education` array, `certifications` array (move into component). Clean up unused imports (`Award`, `GraduationCap`, `Briefcase` if only used there).
+### Left Column — Digital Business Card + Availability
+**Business card** (glass-card):
+- "VP" monogram with `gradient-text text-3xl font-bold`
+- Name: "Vijaysingh Puwar" in white bold
+- Title: "Cybersecurity Engineer" in muted
+- 3 contact rows (Mail, Github, Linkedin icons), each with `group` hover: row background brightens + subtle cyan glow (`hover:bg-primary/5 hover:shadow-[inset_0_0_20px_hsl(var(--primary)/0.05)]`)
+- Rounded corners, gradient-border on hover
+
+**Availability section** below the card:
+- 4 items with pulsing green dots (`animate-cyber-pulse` reused from existing CSS)
+- Items: Cybersecurity Engineering roles, Security Operations positions, Cloud Security opportunities, Collaborations & Consulting
+
+### Right Column — Contact Form (keep existing logic)
+- Preserve existing `handleSubmit` with Supabase edge function
+- Preserve auth-aware behavior (hide email when logged in, pre-fill name)
+- **Enhanced styling**: inputs get `focus:shadow-[0_0_12px_hsl(var(--primary)/0.15)]` glow on focus
+- **Success state upgrade**: After submit, animate button to checkmark using `AnimatePresence` — button morphs to a success state with `CheckCircle2` icon + "Message Sent!" text, then a "Send Another" option appears below
+
+### Remove
+- `openToRoles` array (move inline into availability items)
+- The role pills bar above the grid (lines 260-268)
 
 ---
 
-## CSS Addition (`src/index.css`)
+## 2. Footer — `src/components/Footer.tsx`
 
-Add `@keyframes timeline-flow` for the animated gradient line:
-```css
-@keyframes timeline-flow {
-  0% { background-position: 0% 0%; }
-  100% { background-position: 0% 200%; }
-}
-```
-
-Add `.flip-card` styles for certification card 3D flip.
+Rebuild with 3-column layout:
+- **Top border**: gradient line (`bg-gradient-to-r from-transparent via-primary/40 to-transparent h-px`)
+- **Left**: "VP" gradient monogram + "© 2026 · Built with intent"
+- **Center**: Nav links as tiny `text-xs font-mono` anchors: Skills · Projects · Experience · Contact (smooth scroll `href="#skills"` etc.)
+- **Right**: Social icons (GitHub, LinkedIn, Email) — same as current
+- Transparent background so particle effects show through (`bg-transparent`)
 
 ---
 
@@ -73,7 +53,6 @@ Add `.flip-card` styles for certification card 3D flip.
 
 | File | Action |
 |------|--------|
-| `src/components/ExperienceTimeline.tsx` | **New** — full timeline + cert cards |
-| `src/pages/Index.tsx` | Replace lines 283–378, remove moved data/state |
-| `src/index.css` | Add timeline-flow keyframes + flip-card styles |
+| `src/pages/Index.tsx` | Replace contact section (lines 251-344), remove `openToRoles` array, enhance form success state |
+| `src/components/Footer.tsx` | Rebuild with 3-column layout + gradient separator + center nav links |
 
