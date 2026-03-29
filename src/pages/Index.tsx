@@ -33,48 +33,6 @@ const fadeUp = {
 
 const VP = { once: true, amount: 0.3 }; // viewport config
 
-/* ── data ── */
-const securityStack = [
-  'Python', 'PowerShell', 'AWS', 'Active Directory', 'Splunk',
-  'Docker', 'Linux', 'Ansible', 'IAM', 'SIEM', 'Nmap', 'Wireshark',
-  'Cisco', 'Firewalls',
-];
-
-const competencies = [
-  {
-    icon: Shield,
-    title: 'Security Operations & IAM',
-    short: 'Identity security, endpoint hardening, incident response.',
-    long: 'Active Directory hygiene, MFA enforcement, endpoint hardening, and incident response across enterprise environments. Group Policy management, access reviews, and compliance auditing.',
-    featured: true,
-  },
-  {
-    icon: Terminal,
-    title: 'Security Automation',
-    short: 'Python & PowerShell security tooling.',
-    long: 'Building automated security workflows for log analysis, system hardening, vulnerability scanning, and operational reporting using Python and PowerShell.',
-  },
-  {
-    icon: Cloud,
-    title: 'Cloud & Network Security',
-    short: 'AWS security, firewalls, IDS/IPS.',
-    long: 'AWS security configurations (VPC, IAM, CloudWatch, GuardDuty), Cisco network defense, firewall management, and network monitoring.',
-  },
-  {
-    icon: Radar,
-    title: 'Detection & Monitoring',
-    short: 'SIEM, threat detection, alerting pipelines.',
-    long: 'SIEM monitoring with Splunk, custom detection rules, log correlation, threat hunting, and security alerting pipeline development.',
-  },
-];
-
-const skills: Record<string, string[]> = {
-  Security: ['IAM / Active Directory', 'SIEM (Splunk)', 'IDS/IPS', 'Vulnerability Assessment', 'Incident Response', 'Endpoint Hardening'],
-  Automation: ['Python', 'PowerShell', 'Shell Scripting', 'Ansible'],
-  'Cloud & Network': ['AWS (EC2, VPC, IAM, CloudWatch)', 'Cisco (Routing, Switching, VLANs)', 'Firewalls', 'TCP/IP'],
-  Tools: ['Wireshark', 'Nmap', 'Metasploit', 'Burp Suite', 'Git', 'Docker', 'Linux'],
-};
-
 const experience = [
   {
     company: 'R.S. Infotech', role: 'System Engineer', period: 'Feb 2023 – Aug 2024',
