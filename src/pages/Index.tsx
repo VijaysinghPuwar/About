@@ -14,7 +14,8 @@ import { motion, AnimatePresence, useInView } from 'framer-motion';
 import projectsData from '@/data/projects.json';
 import { useAuth } from '@/hooks/useAuth';
 import { useProjects } from '@/hooks/useProjects';
-import { CyberVisual } from '@/components/CyberVisual';
+import { TerminalHero } from '@/components/TerminalHero';
+import { SecurityShield } from '@/components/SecurityShield';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
