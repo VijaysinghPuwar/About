@@ -32,7 +32,7 @@ const App = () => (
         <AuthProvider>
           <CyberGrid />
           <Preloader />
-          <ScrollProgress />
+          {/* ThreatLevelIndicator needs router context, mounted inside BrowserRouter below */}
           <CursorSpotlight />
           <CursorTrail />
           <KonamiCode />
