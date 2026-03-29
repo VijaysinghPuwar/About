@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -10,23 +10,26 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Menu, LogIn, LogOut, Settings, Lock } from 'lucide-react';
+import { Menu, LogIn, LogOut, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
-const navItems = [
-  { name: 'Home', path: '/' },
-  { name: 'Projects', path: '/projects', gated: true },
-  { name: 'About', path: '/about' },
-  { name: 'Contact', path: '/contact' },
+const sections = [
+  { name: 'Home', id: 'home' },
+  { name: 'Skills', id: 'skills' },
+  { name: 'Projects', id: 'projects' },
+  { name: 'Experience', id: 'experience' },
+  { name: 'Contact', id: 'contact' },
 ];
 
 export function Navigation() {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [activeSection, setActiveSection] = useState('home');
   const location = useLocation();
   const { user, profile, isAdmin, signOut } = useAuth();
+  const isHomePage = location.pathname === '/';
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -34,10 +37,30 @@ export function Navigation() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const isActive = (path: string) => {
-    if (path === '/') return location.pathname === '/';
-    return location.pathname.startsWith(path);
-  };
+  // IntersectionObserver for active section detection
+  useEffect(() => {
+    if (!isHomePage) return;
+    const observers: IntersectionObserver[] = [];
+    sections.forEach(({ id }) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const obs = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) setActiveSection(id);
+        },
+        { rootMargin: '-40% 0px -55% 0px' }
+      );
+      obs.observe(el);
+      observers.push(obs);
+    });
+    return () => observers.forEach(o => o.disconnect());
+  }, [isHomePage]);
+
+  const scrollTo = useCallback((id: string) => {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+    setIsOpen(false);
+  }, []);
 
   const handleSignOut = async () => {
     await signOut();
@@ -50,36 +73,41 @@ export function Navigation() {
 
   return (
     <nav className={cn(
-      "sticky top-0 z-50 w-full transition-all duration-300",
+      "fixed top-0 z-50 w-full transition-all duration-300",
       scrolled
         ? "bg-background/80 backdrop-blur-xl border-b border-border/40 shadow-sm"
         : "bg-transparent border-b border-transparent"
     )}>
       <div className="container flex h-14 items-center justify-between">
-        <Link to="/" className="flex items-center gap-1 hover:opacity-80 transition-opacity">
+        <button onClick={() => scrollTo('home')} className="flex items-center gap-1 hover:opacity-80 transition-opacity">
           <span className="text-xl font-bold gradient-text">VP</span>
-        </Link>
+        </button>
 
         {/* Desktop */}
         <div className="hidden md:flex items-center gap-1">
-          {navItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.gated && !user ? '/login' : item.path}
-              className={cn(
-                "relative px-3 py-1.5 rounded-md text-sm font-medium transition-colors inline-flex items-center gap-1.5",
-                isActive(item.path)
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {item.name}
-              {item.gated && !user && <Lock className="w-3 h-3 text-muted-foreground" />}
-              {isActive(item.path) && (
-                <span className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full bg-gradient-to-r from-primary to-secondary" />
-              )}
+          {isHomePage ? (
+            sections.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => scrollTo(item.id)}
+                className={cn(
+                  "relative px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+                  activeSection === item.id
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {item.name}
+                {activeSection === item.id && (
+                  <span className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full bg-gradient-to-r from-primary to-secondary" />
+                )}
+              </button>
+            ))
+          ) : (
+            <Link to="/" className="px-3 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+              ← Back Home
             </Link>
-          ))}
+          )}
         </div>
 
         <div className="hidden md:flex items-center gap-2">
@@ -134,20 +162,24 @@ export function Navigation() {
                   <div className="font-bold gradient-text text-lg">VP</div>
                   <div className="text-sm text-muted-foreground">Cybersecurity Engineer</div>
                 </div>
-                {navItems.map((item) => (
-                  <Link
-                    key={item.path}
-                    to={item.gated && !user ? '/login' : item.path}
-                    onClick={() => setIsOpen(false)}
-                    className={cn(
-                      "px-3 py-2 rounded-md text-sm font-medium transition-colors inline-flex items-center gap-1.5",
-                      isActive(item.path) ? "text-foreground bg-primary/5" : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {item.name}
-                    {item.gated && !user && <Lock className="w-3 h-3 text-muted-foreground" />}
+                {isHomePage ? (
+                  sections.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => scrollTo(item.id)}
+                      className={cn(
+                        "px-3 py-2 rounded-md text-sm font-medium transition-colors text-left",
+                        activeSection === item.id ? "text-foreground bg-primary/5" : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {item.name}
+                    </button>
+                  ))
+                ) : (
+                  <Link to="/" onClick={() => setIsOpen(false)} className="px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
+                    ← Back Home
                   </Link>
-                ))}
+                )}
                 <div className="pt-3 border-t border-border/40">
                   {user ? (
                     <div className="space-y-2">
