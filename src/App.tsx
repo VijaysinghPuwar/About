@@ -10,6 +10,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { CursorSpotlight } from "@/components/CursorSpotlight";
+import { CursorTrail } from "@/components/CursorTrail";
 import { Preloader } from "@/components/Preloader";
 import { ScrollProgress } from "@/components/ScrollProgress";
 import { KonamiCode } from "@/components/KonamiCode";
@@ -31,6 +32,7 @@ const App = () => (
           <Preloader />
           <ScrollProgress />
           <CursorSpotlight />
+          <CursorTrail />
           <KonamiCode />
           <Toaster />
           <Sonner />
