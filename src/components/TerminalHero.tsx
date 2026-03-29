@@ -169,7 +169,13 @@ export function TerminalHero() {
                 className="flex flex-col sm:flex-row gap-3 mt-6 pt-4 border-t border-border/20"
               >
                 <button
-                  onClick={() => document.getElementById('projects')?.scrollIntoView({ behavior: 'smooth' })}
+                  onClick={() => {
+                    const el = document.getElementById('projects');
+                    if (el) {
+                      const top = el.getBoundingClientRect().top + window.scrollY - 64;
+                      window.scrollTo({ top, behavior: 'smooth' });
+                    }
+                  }}
                   className="inline-flex items-center justify-center h-10 px-6 rounded-md text-sm font-medium gradient-btn"
                 >
                   <ArrowRight className="w-4 h-4 mr-2" />View My Work

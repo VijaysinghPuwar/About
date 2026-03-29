@@ -109,7 +109,11 @@ export function ThreatLevelIndicator() {
   }, [isExpanded]);
 
   const navigateTo = useCallback((id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+    const el = document.getElementById(id);
+    if (el) {
+      const top = el.getBoundingClientRect().top + window.scrollY - 64;
+      window.scrollTo({ top, behavior: 'smooth' });
+    }
     setIsExpanded(false);
   }, []);
 

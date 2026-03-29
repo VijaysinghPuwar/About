@@ -245,7 +245,7 @@ export function CommandPalette() {
                             }}
                           >
                             <Icon className="w-[18px] h-[18px] shrink-0" style={{ color: isSelected ? '#00e5ff' : '#64748b' }} />
-                            <span className="flex-1 text-sm text-foreground truncate">{item.label}</span>
+                            <span className="flex-1 text-[13px] md:text-sm text-foreground truncate">{item.label}</span>
                             {item.hint && (
                               <span className="text-[11px] text-muted-foreground shrink-0">{item.hint}</span>
                             )}

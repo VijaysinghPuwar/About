@@ -175,7 +175,7 @@ export function Navigation() {
                       key={item.id}
                       onClick={() => scrollTo(item.id)}
                       className={cn(
-                        "px-3 py-2 rounded-md text-sm font-medium transition-colors text-left",
+                        "px-3 py-2 min-h-[44px] rounded-md text-sm font-medium transition-colors text-left flex items-center",
                         activeSection === item.id ? "text-foreground bg-primary/5" : "text-muted-foreground hover:text-foreground"
                       )}
                     >
