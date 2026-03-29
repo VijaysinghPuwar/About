@@ -1,59 +1,47 @@
 
 
-# Command Palette (⌘K / Ctrl+K)
+# "Show Impact" Diff View in Project Modal
 
-## Files
+## Overview
+Add a toggle button to the project modal in `ProjectShowcase.tsx` that switches between the normal detail view and a before/after security diff view. Only shown for 4 specific projects.
+
+## File to Modify
 
 | File | Action |
 |------|--------|
-| `src/components/CommandPalette.tsx` | **Create** — Full component |
-| `src/App.tsx` | **Edit** — Mount inside BrowserRouter |
-| `src/components/Footer.tsx` | **Edit** — Add "Press ⌘K to navigate" hint |
+| `src/components/ProjectShowcase.tsx` | **Edit** — Add diff toggle + diff view inside the modal |
 
-## CommandPalette.tsx
+## Implementation
 
-### Data
-Build a static commands array from `projects.json` and hardcoded nav/action entries, grouped into 4 categories:
+### Diff Data
+Add a `const IMPACT_DIFFS` map keyed by project ID with `before: string[]` and `after: string[]` arrays for the 4 projects:
+- `secure-ubuntu-fleet`
+- `http-hardening-nmap-nse`
+- `win-dev-sec-bootstrap`
+- `aws-cloud-security`
 
-- **Navigation**: Go to Home/Skills/Projects/Experience/Contact — each scrolls to that section ID
-- **Actions**: Download Resume (alert placeholder), Open GitHub, Open LinkedIn, Send Email
-- **Skills**: Python, PowerShell, AWS, Docker, Linux, Nmap — with "Used in N projects" hints computed from `projects.json` tech arrays
-- **Projects**: All 12 project titles from `projects.json` — activating scrolls to `#projects`
+Content exactly as specified in the request (SSH hardening lines, HTTP headers, setup time, security groups, etc.).
 
-### Keyboard
-- `useEffect` listener for `keydown`: if `(e.metaKey || e.ctrlKey) && e.key === 'k'` → toggle `isOpen`, `e.preventDefault()`
-- Arrow Up/Down changes `selectedIndex`, Enter executes, Escape closes
-- Auto-focus input on open; restore focus on close
+### Modal Changes
+Inside the modal (lines 197–258), add:
 
-### Filtering
-- Simple case-insensitive substring match on label + keywords
-- Group results by category; hide empty category headers
-- Show "No results found" with muted icon when empty
+1. **State**: `const [showDiff, setShowDiff] = useState(false)` — reset to `false` when `selectedProject` changes
+2. **Toggle button**: Rendered next to the close button (top-right area) only when `selectedProject.id` is in `IMPACT_DIFFS`. Ghost-styled, font-mono text-[12px], glass border. Shows "Show Impact" with `Columns2` icon or "Show Details" with gradient border when active.
+3. **Content swap**: Wrap the existing description/tech/features/github-link block and the diff view in `AnimatePresence` with `mode="wait"`. When `showDiff` is false, render existing content with a fade motion wrapper. When true, render the diff view.
 
-### Rendering
-- Overlay: fixed inset-0, `rgba(5,8,22,0.7)`, backdrop-blur-sm, click to close
-- Modal: centered ~20% from top, max-w-[560px] w-[90vw], glass-morphism card
-- Input row with Search icon left, ESC badge right, bottom border
-- Scrollable results list (max-h-[360px]), category headers as small uppercase labels
-- Selected row: `bg-[rgba(0,229,255,0.06)]` + 2px left cyan border
-- Footer: keyboard hints in mono 11px
-- Framer Motion `AnimatePresence` for open/close (scale 0.95→1, opacity, 0.15s)
+### Diff View Component
+Inline within the modal or as a local component `DiffView`:
 
-### Icons (from lucide-react)
-- Navigation: `Compass`
-- Actions: `Zap`
-- Skills: `Code`
-- Projects: `Folder`
+- Two-column grid (`grid md:grid-cols-2 gap-4`, stacked on mobile)
+- **Left column**: Red-tinted — 3px left border `rgba(244,63,94,0.3)`, bg `rgba(244,63,94,0.03)`, header badge "BEFORE" in red, lines with `−` prefix in font-mono text-[12px] (11px on mobile)
+- **Right column**: Green-tinted — 3px left border `rgba(34,197,94,0.3)`, bg `rgba(34,197,94,0.03)`, header badge "AFTER" in green, lines with `+` prefix
 
-## App.tsx
-Add `import { CommandPalette } from "@/components/CommandPalette"` and mount `<CommandPalette />` inside `BrowserRouter`, next to `ThreatLevelIndicator`.
+### Staggered Line Animation
+Use Framer Motion `variants` with stagger:
+- BEFORE lines animate in first (slide from left, 0.08s stagger)
+- AFTER lines animate after BEFORE completes (slide from right, 0.08s stagger, `delayChildren: beforeLines.length * 0.08`)
+- Use a `key` on the diff container tied to `selectedProject.id` so animation replays when toggling back
 
-## Footer.tsx
-After the social icons div, add a small element:
-```tsx
-<span className="font-mono text-[11px] text-[#475569]">
-  Press <kbd>⌘K</kbd> to navigate
-</span>
-```
-Detect Mac via `navigator.platform` to show ⌘ vs Ctrl. Style the `kbd` as a tiny bordered key cap.
+### Reset on Toggle Off
+When switching back to "Show Details", `showDiff` becomes false, the diff unmounts (AnimatePresence handles crossfade), and next toggle-on replays the animation via fresh mount.
 
