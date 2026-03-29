@@ -13,7 +13,10 @@ interface Command {
 
 const scrollTo = (id: string) => {
   const el = document.getElementById(id);
-  if (el) el.scrollIntoView({ behavior: 'smooth' });
+  if (el) {
+    const top = el.getBoundingClientRect().top + window.scrollY - 64;
+    window.scrollTo({ top, behavior: 'smooth' });
+  }
 };
 
 const CATEGORY_ICONS: Record<string, typeof Compass> = {
