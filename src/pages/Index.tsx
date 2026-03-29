@@ -19,6 +19,7 @@ import { TerminalHero } from '@/components/TerminalHero';
 import { SecurityShield } from '@/components/SecurityShield';
 import { SkillsRadar } from '@/components/SkillsRadar';
 import { SkillCategories } from '@/components/SkillCategories';
+import { ExperienceTimeline } from '@/components/ExperienceTimeline';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
