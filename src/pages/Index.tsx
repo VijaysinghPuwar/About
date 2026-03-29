@@ -8,10 +8,11 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Github, Linkedin, Mail, ArrowRight, Shield, Terminal, Cloud,
   GraduationCap, Award, Radar, Download, Briefcase, Lock,
-  Search, Loader2, CheckCircle2, User,
+  Loader2, CheckCircle2, User,
 } from 'lucide-react';
 import { motion, AnimatePresence, useInView } from 'framer-motion';
 import projectsData from '@/data/projects.json';
+import { ProjectShowcase } from '@/components/ProjectShowcase';
 import { useAuth } from '@/hooks/useAuth';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
@@ -90,9 +91,6 @@ export default function Index() {
 
   /* projects */
   const { projects: dbProjects } = useProjects();
-  const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-
   const allProjects = useMemo(() => {
     const dbIds = new Set((dbProjects || []).map(p => p.id));
     const normalized = (dbProjects || []).map(p => ({
@@ -105,21 +103,6 @@ export default function Index() {
     const jsonOnly = projectsData.filter(p => !dbIds.has(p.id));
     return [...normalized, ...jsonOnly];
   }, [dbProjects]);
-
-  const categories = useMemo(() => {
-    const cats = new Set(allProjects.map(p => p.category).filter(Boolean));
-    return Array.from(cats).sort();
-  }, [allProjects]);
-
-  const filteredProjects = useMemo(() => {
-    return allProjects.filter(p => {
-      const ms = !search || p.title.toLowerCase().includes(search.toLowerCase()) ||
-        p.description.toLowerCase().includes(search.toLowerCase()) ||
-        p.tech.some(t => t.toLowerCase().includes(search.toLowerCase()));
-      const mc = !selectedCategory || p.category === selectedCategory;
-      return ms && mc;
-    });
-  }, [allProjects, search, selectedCategory]);
 
   /* experience tabs */
   const [expTab, setExpTab] = useState<'experience' | 'education' | 'certifications'>('experience');
@@ -274,91 +257,12 @@ export default function Index() {
       <section id="projects" className="py-20 border-t border-border/40">
         <div className="container max-w-6xl mx-auto">
           <div className="text-center mb-14">
-            <p className="section-heading">Portfolio</p>
-            <h2 className="section-title">Projects</h2>
+            <p className="section-heading">Work</p>
+            <h2 className="section-title">Featured Projects</h2>
           </div>
 
           {user ? (
-            <>
-              {/* Filters */}
-              <div className="flex flex-col sm:flex-row gap-3 mb-8">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)}
-                    className="pl-9 bg-background/50 border-border/40 focus:border-primary/60" />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={() => setSelectedCategory(null)}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${selectedCategory === null ? 'gradient-btn' : 'glass-card text-muted-foreground hover:text-foreground'}`}>
-                    All
-                  </button>
-                  {categories.map(cat => (
-                    <button key={cat} onClick={() => setSelectedCategory(cat)}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${selectedCategory === cat ? 'gradient-btn' : 'glass-card text-muted-foreground hover:text-foreground'}`}>
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Project grid */}
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <AnimatePresence mode="popLayout">
-                  {filteredProjects.map((project, i) => (
-                    <motion.div key={project.id}
-                      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-                      transition={spring(i % 6)}
-                      layout>
-                      <div className="h-full rounded-lg glass-card hover:border-primary/20 transition-all group flex flex-col hover:shadow-[0_0_30px_hsl(var(--primary)/0.08)]">
-                        {/* Gradient mesh header */}
-                        <div className="h-20 bg-gradient-to-br from-primary/15 via-secondary/10 to-primary/5 flex items-center justify-center rounded-t-lg">
-                          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
-                            <Shield className="w-4 h-4 text-primary/60" />
-                          </div>
-                        </div>
-                        <div className="p-5 flex flex-col flex-1">
-                          <div className="flex items-center gap-2 mb-3">
-                            <Badge variant="outline" className="text-xs text-primary border-primary/20">{project.category}</Badge>
-                            <span className="text-xs text-muted-foreground">{project.year}</span>
-                            {project.featured && <span className="text-xs px-2 py-0.5 rounded-full gradient-btn">Featured</span>}
-                          </div>
-                          <h3 className="font-semibold text-foreground mb-2 group-hover:text-primary transition-colors">{project.title}</h3>
-                          <p className="text-sm text-muted-foreground mb-4 line-clamp-2 flex-1">{project.description}</p>
-                          <div className="flex flex-wrap gap-1.5 mb-4">
-                            {project.tech.slice(0, 4).map(t => (
-                              <span key={t} className="text-xs px-2 py-0.5 rounded-full glass-card text-muted-foreground">{t}</span>
-                            ))}
-                            {project.tech.length > 4 && (
-                              <span className="text-xs px-2 py-0.5 rounded-full glass-card text-muted-foreground">+{project.tech.length - 4}</span>
-                            )}
-                          </div>
-                          {project.links.github && (
-                            <a href={project.links.github} target="_blank" rel="noopener noreferrer"
-                              className="inline-flex items-center text-sm text-primary hover:underline">
-                              <Github className="w-4 h-4 mr-1.5" /> View on GitHub
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
-
-              {filteredProjects.length === 0 && (
-                <div className="text-center py-16 text-muted-foreground">No projects found matching your criteria.</div>
-              )}
-
-              {/* GitHub strip */}
-              <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}
-                className="flex items-center justify-center gap-3 py-4 mt-8 rounded-lg glass-card">
-                <Github className="w-5 h-5 text-primary" />
-                <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer"
-                  className="font-mono text-sm text-muted-foreground hover:text-primary transition-colors">
-                  18+ public repositories · Security Automation · Python · PowerShell · Bash
-                </a>
-              </motion.div>
-            </>
+            <ProjectShowcase projects={allProjects} />
           ) : (
             <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}>
               <div className="glass-card rounded-lg max-w-lg mx-auto p-8 text-center">
