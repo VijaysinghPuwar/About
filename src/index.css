@@ -278,6 +278,24 @@ html {
   100% { transform: rotate(360deg); }
 }
 
+/* Hero hexagon idle spin */
+@keyframes hero-hex-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Hero hexagon center pulse */
+@keyframes hero-hex-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+/* Hero scan pulse ring */
+@keyframes hero-scan-pulse {
+  0% { width: 0; height: 0; opacity: 0.6; }
+  100% { width: 500px; height: 500px; opacity: 0; }
+}
+
 /* Cyber pulse */
 @keyframes cyber-pulse {
   0%, 100% { opacity: 1; box-shadow: 0 0 4px hsl(var(--success)); }
