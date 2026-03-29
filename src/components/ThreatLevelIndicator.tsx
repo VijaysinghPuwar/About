@@ -122,7 +122,7 @@ export function ThreatLevelIndicator() {
   return (
     <div
       ref={widgetRef}
-      className="fixed bottom-4 left-4 z-50 w-[140px] sm:w-[160px]"
+      className="fixed bottom-4 left-4 z-50 w-[130px] sm:w-[160px]"
     >
       <motion.div
         layout
