@@ -219,46 +219,40 @@ export default function Index() {
   return (
     <div className="min-h-screen">
       {/* ═══════ HERO ═══════ */}
-      <section id="home" className="relative pt-24 md:pt-32 lg:pt-36 pb-16 overflow-hidden hero-grid-bg">
+      <section id="home" className="relative min-h-screen flex flex-col justify-center overflow-hidden hero-grid-bg">
         <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] via-transparent to-background" />
-        <div className="container relative max-w-6xl mx-auto">
-          <div className="grid lg:grid-cols-2 gap-12 lg:gap-8 items-center">
+
+        {/* Status indicators */}
+        <div className="absolute top-20 left-4 sm:left-8 flex flex-col gap-2 z-10">
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
+            className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
+            <span className="font-mono text-[10px] text-muted-foreground tracking-wider uppercase">Systems Online</span>
+          </motion.div>
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }}
+            className="flex items-center gap-2">
+            <span className="text-muted-foreground/60 text-xs">📍</span>
+            <span className="font-mono text-[10px] text-muted-foreground">New York, NY</span>
+          </motion.div>
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.6 }}
+            className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-success animate-cyber-pulse" />
+            <span className="font-mono text-[10px] text-muted-foreground">Open to opportunities</span>
+          </motion.div>
+        </div>
+
+        <div className="container relative max-w-6xl mx-auto pt-32 pb-20 sm:pt-36 sm:pb-24">
+          <div className="grid lg:grid-cols-[3fr_2fr] gap-10 lg:gap-6 items-center">
+            {/* Left: Terminal */}
             <div className="order-2 lg:order-1">
-              <motion.p initial="hidden" animate="visible" variants={fadeUp} custom={0}
-                className="font-mono text-sm tracking-[0.2em] uppercase gradient-text mb-4 font-semibold">
-                Cybersecurity Engineer
-              </motion.p>
-              <motion.h1 initial="hidden" animate="visible" variants={fadeUp} custom={1}
-                className="text-4xl sm:text-5xl lg:text-7xl font-bold text-foreground mb-6 leading-[1.1] tracking-tight">
-                Vijaysingh Puwar
-              </motion.h1>
-              <motion.p initial="hidden" animate="visible" variants={fadeUp} custom={2}
-                className="text-lg md:text-xl text-muted-foreground max-w-xl mb-8 leading-relaxed">
-                I secure enterprise infrastructure, automate security operations, and build detection pipelines that catch threats before they escalate.
-              </motion.p>
-              <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3}
-                className="flex flex-col sm:flex-row items-start gap-3 mb-4">
-                {user ? (
-                  <a href="/resume.pdf" download className="inline-flex items-center justify-center h-11 px-8 rounded-md text-sm font-medium gradient-btn">
-                    <Download className="w-4 h-4 mr-2" />Download Resume
-                  </a>
-                ) : (
-                  <button onClick={(e) => handleProtectedAction(e, 'resume')} className="inline-flex items-center justify-center h-11 px-8 rounded-md text-sm font-medium gradient-btn">
-                    <Lock className="w-4 h-4 mr-2" />Download Resume
-                  </button>
-                )}
-                <Button size="lg" variant="outline" className="border-border/60 hover:border-primary/40"
-                  onClick={() => document.getElementById('projects')?.scrollIntoView({ behavior: 'smooth' })}>
-                  <ArrowRight className="w-4 h-4 mr-2" />View Projects
-                </Button>
+              <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
+                transition={{ type: 'spring', stiffness: 100, damping: 15, delay: 0.3 }}>
+                <TerminalHero />
               </motion.div>
-              <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3.5} className="mb-8">
-                <button onClick={() => document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' })}
-                  className="text-sm text-muted-foreground hover:text-primary transition-colors inline-flex items-center gap-1">
-                  <Mail className="w-3.5 h-3.5" /> Contact Me
-                </button>
-              </motion.div>
-              <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={4} className="flex gap-5">
+
+              {/* Social icons */}
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.5 }}
+                className="flex gap-5 mt-6">
                 {[
                   { href: 'https://github.com/vijaysinghpuwar', icon: Github },
                   { href: 'https://linkedin.com/in/vijaysinghpuwar', icon: Linkedin },
@@ -271,13 +265,31 @@ export default function Index() {
                 ))}
               </motion.div>
             </div>
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-              transition={{ type: 'spring', stiffness: 100, damping: 15, delay: 0.3 }}
-              className="order-1 lg:order-2 relative h-72 sm:h-80 lg:h-[500px]">
-              <CyberVisual />
+
+            {/* Right: Shield (desktop only) */}
+            <motion.div initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 80, damping: 15, delay: 0.5 }}
+              className="order-1 lg:order-2 hidden lg:flex relative h-[460px] items-center justify-center">
+              <SecurityShield />
             </motion.div>
           </div>
         </div>
+
+        {/* Scroll indicator */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 3 }}
+          className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 z-10"
+        >
+          <span className="font-mono text-[10px] text-muted-foreground/50 tracking-wider uppercase">Scroll to explore</span>
+          <motion.div
+            animate={{ y: [0, 6, 0] }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            <ArrowRight className="w-4 h-4 text-muted-foreground/40 rotate-90" />
+          </motion.div>
+        </motion.div>
       </section>
 
       {/* ═══════ SKILLS MARQUEE ═══════ */}
