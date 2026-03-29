@@ -13,7 +13,7 @@ import { CursorSpotlight } from "@/components/CursorSpotlight";
 import { CursorTrail } from "@/components/CursorTrail";
 import { CyberGrid } from "@/components/CyberGrid";
 import { Preloader } from "@/components/Preloader";
-import { ScrollProgress } from "@/components/ScrollProgress";
+import { ThreatLevelIndicator } from "@/components/ThreatLevelIndicator";
 import { KonamiCode } from "@/components/KonamiCode";
 
 import Index from "./pages/Index";

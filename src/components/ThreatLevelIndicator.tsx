@@ -27,14 +27,12 @@ export function ThreatLevelIndicator() {
   const widgetRef = useRef<HTMLDivElement>(null);
   const prevIdxRef = useRef(0);
 
-  // Only show on index page
-  if (location.pathname !== '/') return null;
-
+  const isIndex = location.pathname === '/';
   const current = SECTIONS[activeIdx];
 
   // Intersection Observer
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
+    if (!isIndex) return;
     const entries = new Map<string, number>();
     const observer = new IntersectionObserver(
       (obs) => {
@@ -66,10 +64,9 @@ export function ThreatLevelIndicator() {
       clearTimeout(timer);
       observer.disconnect();
     };
-  }, []);
+  }, [isIndex]);
 
   // Transition glitch on section change
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     if (prevIdxRef.current !== activeIdx) {
       prevIdxRef.current = activeIdx;
@@ -80,7 +77,6 @@ export function ThreatLevelIndicator() {
   }, [activeIdx]);
 
   // CLASSIFIED periodic glitch
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     if (current.id !== 'experience') {
       setGlitchText(null);
@@ -94,7 +90,6 @@ export function ThreatLevelIndicator() {
   }, [current.id]);
 
   // Click outside to close
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     if (!isExpanded) return;
     const handler = (e: MouseEvent) => {
@@ -118,6 +113,8 @@ export function ThreatLevelIndicator() {
     setIsExpanded(false);
   }, []);
 
+  if (!isIndex) return null;
+
   const displayStatus = transitionGlitch
     ? scramble(current.status.length)
     : glitchText || current.status;
@@ -126,7 +123,6 @@ export function ThreatLevelIndicator() {
     <div
       ref={widgetRef}
       className="fixed bottom-4 left-4 z-50 w-[140px] sm:w-[160px]"
-      style={{ pointerEvents: 'auto' }}
     >
       <motion.div
         layout
@@ -196,17 +192,14 @@ export function ThreatLevelIndicator() {
           className="w-full px-3.5 py-2.5 text-left cursor-pointer"
         >
           <div className="flex items-center gap-2">
-            {/* Pulsing dot */}
             <span
-              className="w-2 h-2 rounded-full shrink-0"
+              className="w-2 h-2 rounded-full shrink-0 animate-[threatDotPulse_2s_ease-in-out_infinite]"
               style={{
                 backgroundColor: current.dot,
                 transition: 'background-color 0.3s ease',
-                animation: 'threatDotPulse 2s ease-in-out infinite',
               }}
             />
 
-            {/* Status text with AnimatePresence */}
             <div className="relative overflow-hidden h-[14px] flex-1">
               <AnimatePresence mode="wait">
                 <motion.span
@@ -224,7 +217,6 @@ export function ThreatLevelIndicator() {
             </div>
           </div>
 
-          {/* Section label */}
           <div className="mt-0.5 ml-4">
             <AnimatePresence mode="wait">
               <motion.span
