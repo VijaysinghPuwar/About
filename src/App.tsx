@@ -9,6 +9,10 @@ import { BackToTop } from "@/components/BackToTop";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { CursorSpotlight } from "@/components/CursorSpotlight";
+import { Preloader } from "@/components/Preloader";
+import { ScrollProgress } from "@/components/ScrollProgress";
+import { KonamiCode } from "@/components/KonamiCode";
 
 import Index from "./pages/Index";
 import Login from "./pages/Login";
@@ -24,6 +28,10 @@ const App = () => (
     <TooltipProvider>
       <ThemeProvider>
         <AuthProvider>
+          <Preloader />
+          <ScrollProgress />
+          <CursorSpotlight />
+          <KonamiCode />
           <Toaster />
           <Sonner />
           <div className="min-h-screen bg-background">

@@ -96,6 +96,29 @@
 
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: 3.5rem;
+}
+
+/* Keyboard focus */
+*:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Rainbow easter egg */
+@keyframes rainbow-shift {
+  0% { --primary: 0 100% 50%; --secondary: 60 100% 50%; }
+  16% { --primary: 60 100% 50%; --secondary: 120 100% 50%; }
+  33% { --primary: 120 100% 50%; --secondary: 180 100% 50%; }
+  50% { --primary: 180 100% 50%; --secondary: 240 100% 50%; }
+  66% { --primary: 240 100% 50%; --secondary: 300 100% 50%; }
+  83% { --primary: 300 100% 50%; --secondary: 0 100% 50%; }
+  100% { --primary: 0 100% 50%; --secondary: 60 100% 50%; }
+}
+
+.rainbow-mode {
+  animation: rainbow-shift 2s linear infinite;
 }
 
 @layer base {
