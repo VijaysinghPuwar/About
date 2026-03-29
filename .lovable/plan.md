@@ -1,74 +1,82 @@
 
 
-# Interactive Skills Explorer — Rebuild Plan
+# Interactive Project Showcase — Rebuild Plan
 
-Replace the current skills section (lines 295–373 in Index.tsx) with a two-column interactive layout featuring a radar chart and toggleable skill categories.
+Replace the current flat project card grid (lines ~273–377 in Index.tsx) with an interactive showcase featuring hoverable cards and an expandable modal with Framer Motion `layoutId` animations.
 
 ---
 
-## New Component: `src/components/SkillsRadar.tsx`
+## New Component: `src/components/ProjectShowcase.tsx`
 
-Custom SVG radar/spider chart:
-- 6 axes: Identity & Access (90), Automation (85), Cloud Security (75), Network Defense (80), Detection & SIEM (85), Offensive Security (70)
-- Concentric hexagonal grid lines at 25/50/75/100% in `stroke-muted-foreground/10`
-- Filled data polygon with `fill: url(#gradient)` at 0.2 opacity and gradient stroke
-- **Scroll animation**: Use `useInView` to trigger. Animate polygon points from center (0) to actual values over ~1s using `requestAnimationFrame` and interpolation
-- **Hover interaction**: Each axis endpoint is a transparent hit-area circle. On hover, enlarge the point and show a tooltip (skill name + percentage bar) using local state
-- Axis labels positioned outside the hexagon in `font-mono text-xs`
-- SVG viewBox ~400x400, responsive via `w-full max-w-md mx-auto`
+Self-contained component that receives `projects` array, `user` auth state, and handles all filtering, cards, and modal logic.
 
-## New Component: `src/components/SkillCategories.tsx`
+### Filter Bar
+- Horizontal pills: All, Security Automation, Cloud Security, Network Security, Application Security, Research, Automation, Application Development
+- Active pill: `gradient-btn` class. Inactive: `glass-card text-muted-foreground`
+- Remove search input — filters only via category pills
+- Switching filters uses `AnimatePresence mode="popLayout"` with `layout` on each card for smooth rearrangement
 
-Toggleable category tabs with animated pill badges:
-- 4 tabs: Security (Shield icon), Automation (Terminal icon), Cloud & Network (Cloud icon), Tools (Radar icon)
-- Active tab: gradient bottom border (`border-b-2` with gradient via pseudo-element), brighter text
-- Below tabs: `AnimatePresence mode="wait"` wrapping a `motion.div` keyed by active category
-- Each skill renders as a pill badge: `glass-card` background, thin border that transitions to gradient on hover, subtle glow (`hover:shadow-[0_0_12px_hsl(var(--primary)/0.15)]`)
-- Pills stagger in: `variants` with `staggerChildren: 0.05`, each pill fades up
-- Below pills: 1-line category description in `text-sm text-muted-foreground`
-- Category descriptions map:
-  - Security: "Enterprise identity security, threat detection, and incident response."
-  - Automation: "Scripting and tooling to eliminate manual security workflows."
-  - Cloud & Network: "Cloud infrastructure security and network defense architecture."
-  - Tools: "Offensive and defensive security tooling for assessment and monitoring."
+### Project Cards
+Two tiers based on `featured` flag:
+- **Featured** (6 cards): standard size in a 3-column grid (2-col on md, 1-col on mobile)
+- **Secondary** (6 cards): smaller cards in a 4-column grid below featured, more compact (less padding, no description)
 
-## Index.tsx Changes (lines ~295–373)
+**Card default state:**
+- Glass-morphism card with 2px gradient top accent line (color varies by category via a color map)
+- Project name (white, bold), category pill + year, 1-line description (muted, `line-clamp-1`), tech pills (tiny), GitHub icon link in top-right corner
+- Uses `motion.div` with `layoutId={project.id}` for shared layout animation
 
-Replace the skills marquee + skills section with:
+**Card hover state (desktop):**
+- `hover:-translate-y-2` lift, border brightens to `border-primary/40`
+- "View Details →" text fades in at bottom (`opacity-0 group-hover:opacity-100 transition-opacity`)
+- Subtle glow shadow: `hover:shadow-[0_8px_30px_hsl(var(--primary)/0.12)]`
 
-```text
-┌─────────────────────────────────────────────────────┐
-│ ARSENAL (gradient label)                            │
-│ Skills & Technologies (heading)                     │
-├────────────────────┬────────────────────────────────┤
-│   Radar Chart      │   Category Tabs                │
-│   (SkillsRadar)    │   [Security] [Auto] [Cloud]... │
-│                    │   ┌─────────────────────┐      │
-│                    │   │ pill  pill  pill     │      │
-│                    │   │ pill  pill           │      │
-│                    │   └─────────────────────┘      │
-│                    │   Category description line     │
-├────────────────────┴────────────────────────────────┤
-│ 🛡 CompTIA Security+ · 🛡 CompTIA CySA+ · ...      │
-│ (certification marquee, glass-card bar)             │
-└─────────────────────────────────────────────────────┘
-```
+**Card click:**
+- Sets `selectedProject` state, opens modal overlay
 
-- On mobile: radar chart stacks above category tabs (single column)
-- Remove the old competency bento grid, stats counters, and skills grid
-- Keep stats counters — move them into the experience section or remove (they're redundant with the new radar)
+### Expanded Modal
+- Dark overlay (`bg-black/60 backdrop-blur-sm`) with `AnimatePresence`
+- Modal card uses `motion.div` with matching `layoutId={selectedProject.id}` so the card visually morphs into the modal
+- Modal content:
+  - Project name (large, `text-2xl font-bold`)
+  - Category pill + year
+  - Full description (from the hardcoded project data in the component — the user provided detailed descriptions for each)
+  - Tech stack as larger pills
+  - Key features as bullet list (3-4 items, also hardcoded per project)
+  - "View on GitHub →" gradient button
+  - Close X button top-right
+- Close on overlay click, Escape key, or X button
+- Mobile: modal is `w-full max-w-2xl` with padding, scrollable
 
-### Certification Ticker
-- Full-width glass-card bar below the two columns
-- Infinite horizontal marquee (reuse existing `.marquee-track` CSS)
-- Each cert: Shield icon (Lucide) + cert name, `font-mono text-sm`
-- Pauses on hover (existing CSS handles this)
+### Project Data
+Hardcode the enriched project data (descriptions, features) directly in the component since the user provided specific copy for all 12 projects. Map by project ID to merge with the existing `projects.json` data.
+
+### Bottom Strip
+- "18+ public repositories" with GitHub icon
+- "View All on GitHub →" gradient button linking to `github.com/vijaysinghpuwar`
+
+---
+
+## Index.tsx Changes (lines ~273–377)
+
+- Replace entire projects section with:
+  ```
+  <section id="projects">
+    <p className="section-heading">WORK</p>
+    <h2 className="section-title">Featured Projects</h2>
+    {user ? <ProjectShowcase projects={allProjects} /> : <sign-in-card />}
+  </section>
+  ```
+- Import `ProjectShowcase` component
+- Remove `search` state, `selectedCategory` state (moved into component)
+- Keep auth gating logic
+
+---
 
 ## Files
 
 | File | Action |
 |------|--------|
-| `src/components/SkillsRadar.tsx` | **New** — SVG radar chart with scroll animation + hover tooltips |
-| `src/components/SkillCategories.tsx` | **New** — tabbed skill category explorer with animated pills |
-| `src/pages/Index.tsx` | Replace lines ~295–373 with new skills section using both components + cert ticker |
+| `src/components/ProjectShowcase.tsx` | **New** — full interactive project showcase with filters, cards, modal |
+| `src/pages/Index.tsx` | Replace lines ~273–377 with new section using ProjectShowcase, clean up unused state |
 
