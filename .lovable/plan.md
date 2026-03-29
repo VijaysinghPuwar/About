@@ -1,42 +1,52 @@
 
 
-# Matrix Rain Background for Experience Section
+# Redesign Experience Timeline + Update Matrix Rain
 
 ## Overview
-Create a `MatrixRain` canvas component and add it as an absolute-positioned overlay behind the Experience section content.
+The existing `ExperienceTimeline.tsx` already has an alternating layout skeleton but needs key fixes: wrong side assignment, missing focus-dimming, no triangular pointers, no hover lift. The `MatrixRain.tsx` needs minor tweaks for column staggering.
 
-## New File: `src/components/MatrixRain.tsx`
+## Changes to `src/components/ExperienceTimeline.tsx`
 
-A self-contained canvas component that renders the falling code effect:
+### 1. Fix alternating side assignment
+Currently `isLeft = index % 2 === 0` which puts Entry 0 (M.S. Cybersecurity) on left. Change to `isLeft = index % 2 === 1` so:
+- Index 0 (M.S. Cybersecurity) → RIGHT
+- Index 1 (System Engineer) → LEFT
+- Index 2 (Systems Intern) → RIGHT
+- Index 3 (B.E. Mechanical) → LEFT
+- Index 4 (Design Intern) → RIGHT
 
-- **Characters**: `0 1 { } < > / \ | $ # @ ! = + - _ & % ~ A B C D E F` plus occasional security terms ("ENCRYPT", "HASH", "AUTH", "FIREWALL", "PATCH", "SUDO", "ROOT", "CHMOD", "SSH", "TLS", "AES", "RSA") dropped letter-by-letter
-- **Rendering**: Single `<canvas>` element, `requestAnimationFrame` loop capped at ~30fps via timestamp delta check
-- **Columns**: 20-30 on desktop, 10-15 on mobile (based on canvas width / column spacing)
-- **Per-column state**: random speed (30-80 px/s), current y position, character queue
-- **Character appearance**: JetBrains Mono (or monospace fallback), 11px, `#00e5ff` at 0.06-0.12 opacity; brief 0.3 opacity flash on first frame of each new char, then dims
-- **Fade out**: Characters fade as they approach bottom of canvas
-- **Intersection Observer**: Pauses the rAF loop when the canvas is not in the viewport
-- **Canvas sizing**: `ResizeObserver` to match parent dimensions
+### 2. Add focus-dimming
+Pass `expandedId` to each `NodeCard`. When `expandedId !== null && !isExpanded`, apply `opacity-40` transition to the card wrapper. This dims non-active cards when one is expanded.
 
-## Edit: `src/pages/Index.tsx` (lines 244-255)
+### 3. Add triangular pointer arrows
+On each card, add a CSS triangle pseudo-element (or a small absolute-positioned div) pointing toward the center line:
+- Left-side cards: triangle on the right edge pointing right
+- Right-side cards: triangle on the left edge pointing left
+- Use `border` trick for the triangle, colored to match the card background
 
-Add `relative overflow-hidden` to the experience `<section>` and render `<MatrixRain />` as an absolute-positioned child behind the content:
+### 4. Card styling updates
+- Replace `glass-card` with explicit: `bg-[rgba(15,23,42,0.5)] backdrop-blur-xl border border-[rgba(100,220,255,0.08)]`
+- Add hover lift: `hover:-translate-y-0.5`
+- Expanded state keeps the brighter border glow
 
-```tsx
-<section id="experience" className="py-20 border-t border-border/40 relative overflow-hidden">
-  <MatrixRain />
-  <motion.div {...sectionAnim} className="container max-w-5xl mx-auto relative z-10">
-    ...
-  </motion.div>
-</section>
-```
+### 5. Animation stagger
+Add `delay: index * 0.15` to each card's entrance animation (currently all use 0.1).
 
-Import `MatrixRain` (not lazy-loaded since it's a lightweight canvas).
+### 6. Mobile layout
+Already mostly correct (line on left, cards on right). Ensure cards animate from the right (`x: 20` instead of current `x: -20`).
+
+## Changes to `src/components/MatrixRain.tsx`
+
+### 7. Organic column activation
+Add a simple mechanism where not all columns are active simultaneously — each column has a random start delay and occasionally pauses for a random duration before restarting. This makes the rain feel more organic.
+
+### 8. Adjust opacity range
+Change the dim opacity from `0.06 + random * 0.06` to `0.04 + random * 0.04` (max ~0.08 when dim) to keep it even more subtle per the user's emphasis. Flash opacity stays at 0.15.
 
 ## Files
 
 | File | Action |
 |------|--------|
-| `src/components/MatrixRain.tsx` | **New** — canvas falling code effect |
-| `src/pages/Index.tsx` | Add `MatrixRain` to experience section, add relative/overflow-hidden |
+| `src/components/ExperienceTimeline.tsx` | Redesign layout: fix sides, add dimming, pointers, hover lift, stagger |
+| `src/components/MatrixRain.tsx` | Add organic column pausing, adjust opacity |
 
