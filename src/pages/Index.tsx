@@ -256,7 +256,7 @@ export default function Index() {
 
       {/* ═══════ CONTACT ═══════ */}
       <section id="contact" className="py-20 border-t border-border/40">
-        <div className="container max-w-6xl mx-auto">
+        <motion.div {...sectionAnim} className="container max-w-6xl mx-auto">
           <div className="text-center mb-4">
             <p className="section-heading">Connect</p>
             <h2 className="section-title">Let's Work Together</h2>
