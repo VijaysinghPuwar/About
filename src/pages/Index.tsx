@@ -15,7 +15,7 @@ import projectsData from '@/data/projects.json';
 import { useAuth } from '@/hooks/useAuth';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
-import { SecurityShield } from '@/components/SecurityShield';
+import { HeroShield } from '@/components/HeroShield';
 
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
