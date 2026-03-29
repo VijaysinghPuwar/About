@@ -1,58 +1,75 @@
 
 
-# Contact Section & Footer Rebuild
+# Final Polish Pass
 
-## Overview
-Replace the contact section in Index.tsx (lines 251-344) with an interactive "digital business card" layout, and rebuild the Footer component with center nav links and a gradient separator.
-
----
-
-## 1. Contact Section in `src/pages/Index.tsx` (lines 251-344)
-
-### Section Intro
-- Label: "CONNECT" (gradient, uppercase)
-- Heading: "Let's Work Together"
-- Subtitle text about openness to roles
-
-### Left Column — Digital Business Card + Availability
-**Business card** (glass-card):
-- "VP" monogram with `gradient-text text-3xl font-bold`
-- Name: "Vijaysingh Puwar" in white bold
-- Title: "Cybersecurity Engineer" in muted
-- 3 contact rows (Mail, Github, Linkedin icons), each with `group` hover: row background brightens + subtle cyan glow (`hover:bg-primary/5 hover:shadow-[inset_0_0_20px_hsl(var(--primary)/0.05)]`)
-- Rounded corners, gradient-border on hover
-
-**Availability section** below the card:
-- 4 items with pulsing green dots (`animate-cyber-pulse` reused from existing CSS)
-- Items: Cybersecurity Engineering roles, Security Operations positions, Cloud Security opportunities, Collaborations & Consulting
-
-### Right Column — Contact Form (keep existing logic)
-- Preserve existing `handleSubmit` with Supabase edge function
-- Preserve auth-aware behavior (hide email when logged in, pre-fill name)
-- **Enhanced styling**: inputs get `focus:shadow-[0_0_12px_hsl(var(--primary)/0.15)]` glow on focus
-- **Success state upgrade**: After submit, animate button to checkmark using `AnimatePresence` — button morphs to a success state with `CheckCircle2` icon + "Message Sent!" text, then a "Send Another" option appears below
-
-### Remove
-- `openToRoles` array (move inline into availability items)
-- The role pills bar above the grid (lines 260-268)
+12 items covering smooth scroll, animations, cursor effect, preloader, Konami code, SEO, favicon, keyboard accessibility, and scroll progress.
 
 ---
 
-## 2. Footer — `src/components/Footer.tsx`
+## Files to Create
 
-Rebuild with 3-column layout:
-- **Top border**: gradient line (`bg-gradient-to-r from-transparent via-primary/40 to-transparent h-px`)
-- **Left**: "VP" gradient monogram + "© 2026 · Built with intent"
-- **Center**: Nav links as tiny `text-xs font-mono` anchors: Skills · Projects · Experience · Contact (smooth scroll `href="#skills"` etc.)
-- **Right**: Social icons (GitHub, LinkedIn, Email) — same as current
-- Transparent background so particle effects show through (`bg-transparent`)
+### 1. `src/components/CursorSpotlight.tsx` — NEW
+Mouse-following radial gradient spotlight. Uses `mousemove` listener on `document`, updates a `div` position via `useRef` + `requestAnimationFrame`. 300px radial gradient of `hsl(var(--primary) / 0.04)`. Hidden on mobile via `hidden md:block` or `useIsMobile()` check.
+
+### 2. `src/components/Preloader.tsx` — NEW
+Shows "VP" monogram with gradient pulse animation for 1.5s, then fades out. Uses `useState` timer + `AnimatePresence`. Renders a full-screen overlay with `z-[100]` that exits with opacity fade.
+
+### 3. `src/components/ScrollProgress.tsx` — NEW
+Fixed bar at very top (`top-0 left-0 z-[60]`), 2px tall, gradient background. Width driven by `scroll` event: `scrollY / (docHeight - windowHeight) * 100%`. Uses `requestAnimationFrame` for smooth updates.
+
+### 4. `src/components/KonamiCode.tsx` — NEW
+Listens for `keydown` sequence: up up down down left right left right b a. On trigger, adds a `.rainbow-mode` class to `document.documentElement` for 5 seconds, then removes it. The class is defined in CSS to override gradient variables with rainbow colors.
+
+### 5. `public/favicon.svg` — NEW
+Simple SVG: "VP" text with a linear gradient fill in cyan-to-purple.
 
 ---
 
-## Files
+## Files to Modify
 
-| File | Action |
-|------|--------|
-| `src/pages/Index.tsx` | Replace contact section (lines 251-344), remove `openToRoles` array, enhance form success state |
-| `src/components/Footer.tsx` | Rebuild with 3-column layout + gradient separator + center nav links |
+### 6. `index.html`
+- Update `<title>` to "Vijaysingh Puwar | Cybersecurity Engineer"
+- Update `<meta name="description">` to the new copy
+- Add `<meta name="keywords">`
+- Replace favicon link to point to `/favicon.svg` with `type="image/svg+xml"`
+
+### 7. `src/index.css`
+- Add `.rainbow-mode` class that overrides `--primary` and `--secondary` CSS variables with rotating hue animation
+- Add focus-visible utility: `*:focus-visible { outline: 2px solid hsl(var(--primary)); outline-offset: 2px; border-radius: 4px; }` for keyboard nav
+- Ensure `html { scroll-behavior: smooth; scroll-padding-top: 4rem; }` for navbar offset
+
+### 8. `src/App.tsx`
+- Import and render `CursorSpotlight`, `Preloader`, `ScrollProgress`, `KonamiCode`
+- `Preloader` wraps or sits above everything, controls visibility
+- `ScrollProgress` sits at top of the layout
+- `CursorSpotlight` is a global overlay
+
+### 9. `src/pages/Index.tsx`
+- Wrap each section (skills, projects, experience, contact) content in a `motion.div` with:
+  ```
+  initial={{ opacity: 0, y: 40 }}
+  whileInView={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.6, ease: "easeOut" }}
+  viewport={{ once: true, amount: 0.2 }}
+  ```
+- The hero section already has entrance animations so skip it
+- Use `React.lazy` + `Suspense` for `ProjectShowcase`, `ExperienceTimeline`, `SkillsRadar`, `SkillCategories` to lazy-load below-fold components
+
+### 10. `src/components/Navigation.tsx`
+- Update `scrollTo` to use `window.scrollTo` with offset calculation: `el.getBoundingClientRect().top + window.scrollY - 64` (navbar height)
+- IntersectionObserver rootMargin is already set; verify it works correctly with the offset
+
+### 11. `src/components/Footer.tsx`
+- Update nav link clicks to use smooth scroll with offset (same pattern as Navigation)
+
+---
+
+## Technical Notes
+
+- **Scroll offset**: `scroll-padding-top: 3.5rem` in CSS handles the 56px (h-14) navbar
+- **Cursor spotlight**: Absolutely positioned div with `pointer-events: none`, `position: fixed`, `mix-blend-mode: screen`
+- **Preloader**: Uses `onAnimationEnd` or `setTimeout(1500)` then sets `loaded` state, `AnimatePresence` fades it out
+- **Rainbow mode**: `@keyframes rainbow-shift` rotates hue; `.rainbow-mode` sets `--primary` and `--secondary` to animated values using CSS `filter: hue-rotate()` on gradient elements
+- **Favicon**: Simple `<text>` SVG element with gradient `<linearGradient>` fill
+- **Performance**: Lazy imports use dynamic `import()`, all animations use transform/opacity only, cursor spotlight uses rAF
 
