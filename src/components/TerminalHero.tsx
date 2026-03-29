@@ -102,7 +102,7 @@ export function TerminalHero() {
     let className = 'font-mono text-sm leading-relaxed ';
     switch (line.style) {
       case 'name':
-        className += 'text-foreground text-2xl sm:text-3xl font-bold';
+        className += 'text-foreground text-xl sm:text-3xl font-bold break-words';
         break;
       case 'role':
         className += 'gradient-text text-lg sm:text-xl font-semibold';
