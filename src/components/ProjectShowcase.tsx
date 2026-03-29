@@ -206,7 +206,7 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
           <button
             key={cat}
             onClick={() => setActiveFilter(cat)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+            className={`px-4 py-1.5 min-h-[44px] rounded-full text-sm font-medium transition-all ${
               activeFilter === cat
                 ? 'gradient-btn'
                 : 'glass-card text-muted-foreground hover:text-foreground'
