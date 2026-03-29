@@ -172,6 +172,10 @@ const featuredIds = new Set([
 export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
   const [activeFilter, setActiveFilter] = useState('All');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [showDiff, setShowDiff] = useState(false);
+
+  // Reset diff view when project changes
+  useEffect(() => { setShowDiff(false); }, [selectedProject]);
 
   const filtered = activeFilter === 'All'
     ? projects
@@ -190,6 +194,9 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
 
   const getGradient = (category: string) => categoryColors[category] || 'from-primary to-primary';
   const getEnriched = (id: string) => enrichedData[id];
+
+  const hasDiff = selectedProject ? selectedProject.id in IMPACT_DIFFS : false;
+  const diffData = selectedProject ? IMPACT_DIFFS[selectedProject.id] : null;
 
   return (
     <div>
@@ -274,11 +281,26 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
               className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-xl glass-card border border-border/60 p-6 sm:p-8"
               onClick={e => e.stopPropagation()}
             >
-              {/* Close */}
-              <button onClick={closeModal}
-                className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
-                <X className="w-5 h-5" />
-              </button>
+              {/* Top buttons */}
+              <div className="absolute top-4 right-4 flex items-center gap-2">
+                {hasDiff && (
+                  <button
+                    onClick={() => setShowDiff(!showDiff)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-[12px] transition-all ${
+                      showDiff
+                        ? 'border border-primary/40 bg-primary/10 text-primary'
+                        : 'glass-card border border-border/40 text-muted-foreground hover:text-foreground hover:border-primary/30'
+                    }`}
+                  >
+                    <Columns2 className="w-3.5 h-3.5" />
+                    {showDiff ? 'Show Details' : 'Show Impact'}
+                  </button>
+                )}
+                <button onClick={closeModal}
+                  className="text-muted-foreground hover:text-foreground transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
               {/* Gradient accent */}
               <div className={`h-1 w-20 rounded-full bg-gradient-to-r ${getGradient(selectedProject.category)} mb-6`} />
@@ -292,48 +314,139 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
                 <span className="text-xs text-muted-foreground">{selectedProject.year}</span>
               </div>
 
-              <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-                {getEnriched(selectedProject.id)?.description || selectedProject.description}
-              </p>
+              {/* Content swap */}
+              <AnimatePresence mode="wait">
+                {!showDiff ? (
+                  <motion.div
+                    key="details"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <p className="text-sm text-muted-foreground leading-relaxed mb-6">
+                      {getEnriched(selectedProject.id)?.description || selectedProject.description}
+                    </p>
 
-              {/* Tech */}
-              <div className="flex flex-wrap gap-2 mb-6">
-                {selectedProject.tech.map(t => (
-                  <span key={t} className="text-xs px-3 py-1 rounded-full glass-card text-foreground border border-border/40">
-                    {t}
-                  </span>
-                ))}
-              </div>
+                    <div className="flex flex-wrap gap-2 mb-6">
+                      {selectedProject.tech.map(t => (
+                        <span key={t} className="text-xs px-3 py-1 rounded-full glass-card text-foreground border border-border/40">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
 
-              {/* Features */}
-              {getEnriched(selectedProject.id)?.features && (
-                <div className="mb-6">
-                  <h4 className="text-sm font-semibold text-foreground mb-2">Key Features</h4>
-                  <ul className="space-y-1.5">
-                    {getEnriched(selectedProject.id)!.features.map(f => (
-                      <li key={f} className="flex items-start gap-2 text-sm text-muted-foreground">
-                        <Shield className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+                    {getEnriched(selectedProject.id)?.features && (
+                      <div className="mb-6">
+                        <h4 className="text-sm font-semibold text-foreground mb-2">Key Features</h4>
+                        <ul className="space-y-1.5">
+                          {getEnriched(selectedProject.id)!.features.map(f => (
+                            <li key={f} className="flex items-start gap-2 text-sm text-muted-foreground">
+                              <Shield className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+                              {f}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
-              {selectedProject.links.github && (
-                <a
-                  href={selectedProject.links.github}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-medium gradient-btn"
-                >
-                  <Github className="w-4 h-4" /> View on GitHub <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              )}
+                    {selectedProject.links.github && (
+                      <a
+                        href={selectedProject.links.github}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-medium gradient-btn"
+                      >
+                        <Github className="w-4 h-4" /> View on GitHub <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                  </motion.div>
+                ) : diffData ? (
+                  <motion.div
+                    key={`diff-${selectedProject.id}`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <DiffView before={diffData.before} after={diffData.after} />
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+/* ── Diff View ── */
+
+function DiffView({ before, after }: { before: string[]; after: string[] }) {
+  const beforeDelay = before.length * 0.08;
+
+  return (
+    <div className="grid md:grid-cols-2 gap-4">
+      {/* BEFORE */}
+      <div
+        className="rounded-lg p-4 overflow-x-auto"
+        style={{
+          borderLeft: '3px solid rgba(244, 63, 94, 0.3)',
+          background: 'rgba(244, 63, 94, 0.03)',
+        }}
+      >
+        <span
+          className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider mb-3"
+          style={{ background: 'rgba(244, 63, 94, 0.15)', color: '#f43f5e' }}
+        >
+          Before
+        </span>
+        <div className="space-y-1.5">
+          {before.map((line, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.08, duration: 0.2 }}
+              className="flex items-start gap-2 font-mono text-[12px] md:text-[12px] text-[11px]"
+            >
+              <span className="shrink-0" style={{ color: '#f43f5e' }}>−</span>
+              <span className="text-muted-foreground">{line}</span>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
+      {/* AFTER */}
+      <div
+        className="rounded-lg p-4 overflow-x-auto"
+        style={{
+          borderLeft: '3px solid rgba(34, 197, 94, 0.3)',
+          background: 'rgba(34, 197, 94, 0.03)',
+        }}
+      >
+        <span
+          className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider mb-3"
+          style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e' }}
+        >
+          After
+        </span>
+        <div className="space-y-1.5">
+          {after.map((line, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: beforeDelay + i * 0.08, duration: 0.2 }}
+              className="flex items-start gap-2 font-mono text-[12px] md:text-[12px] text-[11px]"
+            >
+              <span className="shrink-0" style={{ color: '#22c55e' }}>+</span>
+              <span className="text-muted-foreground">{line}</span>
+            </motion.div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
