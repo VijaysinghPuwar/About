@@ -14,6 +14,7 @@ import { Menu, LogIn, LogOut, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { LogoIcon } from '@/components/LogoIcon';
 
 const sections = [
   { name: 'Home', id: 'home' },
@@ -83,7 +84,7 @@ export function Navigation() {
     )}>
       <div className="container flex h-14 items-center justify-between">
         <button onClick={() => scrollTo('home')} className="flex items-center gap-1 hover:opacity-80 transition-opacity">
-          <span className="text-xl font-bold gradient-text">VP</span>
+          <LogoIcon size={36} animated />
         </button>
 
         {/* Desktop */}
@@ -162,7 +163,7 @@ export function Navigation() {
             <SheetContent side="right" className="w-[280px] glass-card border-border/40">
               <div className="flex flex-col gap-4 mt-6">
                 <div className="pb-3 border-b border-border/40">
-                  <div className="font-bold gradient-text text-lg">VP</div>
+                  <LogoIcon size={28} />
                   <div className="text-sm text-muted-foreground">Cybersecurity Engineer</div>
                 </div>
                 {isHomePage ? (

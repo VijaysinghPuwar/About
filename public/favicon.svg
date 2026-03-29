@@ -5,6 +5,8 @@
       <stop offset="100%" stop-color="#a855f7"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="12" fill="#070b14"/>
-  <text x="32" y="44" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="700" font-size="28" fill="url(#g)">VP</text>
+  <polygon points="32,4 58,19 58,49 32,64 6,49 6,19" fill="none" stroke="url(#g)" stroke-width="2.5"/>
+  <polygon points="32,1 60.5,17.5 60.5,50.5 32,67 3.5,50.5 3.5,17.5" fill="none" stroke="url(#g)" stroke-width="1" stroke-opacity="0.15"/>
+  <text x="22" y="43" font-family="system-ui,sans-serif" font-weight="700" font-size="24" fill="#00e5ff">V</text>
+  <text x="35" y="43" font-family="system-ui,sans-serif" font-weight="700" font-size="24" fill="#a855f7">P</text>
 </svg>

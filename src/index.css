@@ -253,6 +253,16 @@ html {
   animation: shield-rotate 30s linear infinite;
 }
 
+/* Logo rotation (8s) */
+@keyframes logo-rotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.animate-logo-rotate {
+  animation: logo-rotate 8s linear infinite;
+}
+
 .animate-shield-pulse {
   animation: shield-pulse 4s ease-in-out infinite;
 }
