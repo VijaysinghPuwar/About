@@ -360,7 +360,7 @@ export default function Index() {
               </AnimatePresence>
             </motion.div>
           </div>
-        </div>
+        </motion.div>
       </section>
     </div>
   );
