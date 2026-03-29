@@ -1,38 +1,77 @@
 
 
-# Fix VP Logo Centering & Proportions
+# Interactive Skills Radar Chart
 
-## Problem
-The "VP" text is off-center (shifted right) inside the hexagon. The letters are too small, the stroke is too thick, and there's an unnecessary double/glow hexagon.
+## Architecture Change
+The radar and skill tabs need to share state. Lift `activeTab` state to the parent (`Index.tsx`) and pass it as props to both components. Both components become controlled.
 
-## Changes
+## Files to Modify
 
-### 1. `src/components/LogoIcon.tsx` — Rewrite
-- **Remove** the outer glow hexagon entirely (lines 29-41)
-- **Reduce** inner hexagon `strokeWidth` from `1.2` to `1.5` (in viewBox units, ~1.5 scaled)
-- **Center VP text** using a single `<text>` element at exact center (x=20, y=20) with `text-anchor="middle"` and `dominant-baseline="central"`, shifted ~1px left for optical correction → x=19
-- **Increase font-size** from 15 to 18 so letters fill ~55-60% of hexagon width
-- **Negative letter-spacing**: use `letter-spacing="-0.8"` on the text element
-- Keep V as `#00e5ff`, P as `#a855f7` — use two `<tspan>` elements inside one centered `<text>`
-- Remove the `animated` glow rotation (no glow hex to rotate). Keep the hover effects on the single hexagon (brighten stroke, letters flash white)
+| File | Action |
+|------|--------|
+| `src/components/SkillsRadar.tsx` | **Rewrite** — Full interactive radar |
+| `src/components/SkillCategories.tsx` | **Edit** — Accept `activeTab`/`onTabChange` props |
+| `src/pages/Index.tsx` | **Edit** — Lift shared state, pass props |
 
-### 2. `src/components/Preloader.tsx` — Update logo SVG (lines 101-141)
-- Remove the glow hexagon pulse path (lines 82-99)
-- Update the inner hexagon `strokeWidth` to match LogoIcon
-- Replace the two separate `<motion.text>` elements with centered text using same approach (x=19, y=20, text-anchor=middle, dominant-baseline=central, font-size=18)
-- Keep the stroke draw-on and letter fade-in animations
+## SkillsRadar.tsx — Full Rewrite
 
-### 3. `public/favicon.svg` — Update
-- Same centering fix: position text at center with text-anchor="middle"
-- Increase font size, reduce stroke width, remove outer glow hexagon
-
-## Technical Detail — SVG Text Centering
-```xml
-<text x="19" y="20" textAnchor="middle" dominantBaseline="central"
-      fontFamily="'Space Grotesk', system-ui, sans-serif" fontWeight="700" fontSize="18">
-  <tspan fill="#00e5ff">V</tspan>
-  <tspan fill="#a855f7">P</tspan>
-</text>
+### Data mapping (radar axis → tab key)
 ```
-The hexagon center is at (20, 20). Using x=19 provides the ~1px leftward optical correction for the P's visual weight.
+Identity & Access → security
+Automation → automation
+Cloud Security → cloud
+Network Defense → cloud
+Detection & SIEM → security
+Offensive Security → tools
+```
+
+### Props
+- `activeTab: string` — current tab from parent
+- `onAxisClick: (tabKey: string) => void` — notify parent to switch tab
+
+### Interaction 1: Hover spotlight
+- On hover of axis `i`, compute modified values: hovered axis goes to 100%, others shrink to 60% of their base value
+- Animate polygon points using `requestAnimationFrame` lerping (not direct setState per frame — lerp a target array and render interpolated values)
+- Dot grows to 10px, label brightens to white
+- Glass-morphism tooltip with name, percentage bar, and value — positioned relative to the dot with smart placement (avoid clipping edges)
+
+### Interaction 2: Radar ↔ Tab sync
+- **Click axis → switch tab**: Call `onAxisClick(mappedTabKey)` on click
+- **Tab changes radar**: When `activeTab` prop changes, temporarily override displayed values — axes mapped to that tab go to 100%, others to 50%. After 1.5s timeout, return to base values. Track this with a `tabHighlight` state + timeout ref.
+
+### Interaction 3: Animated entry (scroll into view)
+Phased animation using `useInView` + a `phase` state variable:
+1. **Phase 0** (not in view): Nothing visible
+2. **Phase 1** (0–0.8s): Grid hexagons draw in one by one (inner to outer), using `stroke-dashoffset` animation with 0.2s stagger
+3. **Phase 2** (0.8–1.6s): Data polygon morphs from center point to full shape (spring)
+4. **Phase 3** (1.6–2.2s): Dots pop in clockwise (0.1s stagger each)
+5. **Phase 4** (2.2–2.5s): Labels fade in together
+
+### Interaction 4: Ambient pulse (idle)
+- When `hovered === null` and no tab highlight active:
+  - Polygon fill opacity oscillates 0.15↔0.25 via CSS animation (3s infinite)
+  - Each dot has a subtle scale pulse (1.0→1.2→1.0, 2s, offset by `i * 0.3s`)
+
+### Styling
+- Gradient: `#00e5ff` to `#a855f7`
+- Grid hexagons: `rgba(0, 229, 255, 0.06)` stroke
+- Dots: `#00e5ff`, 6px default
+- Tooltips: `rgba(15,23,42,0.9)` bg, backdrop-blur, thin border, scale+fade entry
+
+### Mobile
+- Hover → tap (toggle hovered state on tap, dismiss on tap elsewhere)
+- Tap axis triggers tab switch same as click
+
+## SkillCategories.tsx — Minor Edit
+- Change from internal `useState('security')` to props: `activeTab: string`, `onTabChange: (key: string) => void`
+- Replace `active`/`setActive` with the props
+- Everything else stays the same
+
+## Index.tsx — Lift State
+```tsx
+const [skillTab, setSkillTab] = useState('security');
+// ...
+<SkillsRadar activeTab={skillTab} onAxisClick={setSkillTab} />
+<SkillCategories activeTab={skillTab} onTabChange={setSkillTab} />
+```
 
