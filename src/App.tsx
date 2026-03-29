@@ -32,6 +32,7 @@ const App = () => (
           <Preloader />
           <ScrollProgress />
           <CursorSpotlight />
+          <CursorTrail />
           <KonamiCode />
           <Toaster />
           <Sonner />
