@@ -16,6 +16,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
 import { SecurityShield } from '@/components/SecurityShield';
+import { SkillsRadar } from '@/components/SkillsRadar';
+import { SkillCategories } from '@/components/SkillCategories';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
