@@ -231,7 +231,7 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
 
       {/* Secondary Projects */}
       {secondary.length > 0 && (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
           <AnimatePresence mode="popLayout">
             {secondary.map(project => (
               <ProjectCardCompact key={project.id} project={project} gradient={getGradient(project.category)}
