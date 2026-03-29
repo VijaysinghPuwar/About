@@ -65,7 +65,7 @@ export function SkillCategories({ activeTab = 'security', onTabChange }: SkillCa
             <button
               key={cat.key}
               onClick={() => onTabChange?.(cat.key)}
-              className={`relative flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors ${
+              className={`relative flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] text-sm font-medium transition-colors ${
                 isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/70'
               }`}
             >

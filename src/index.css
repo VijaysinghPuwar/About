@@ -97,6 +97,22 @@
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 3.5rem;
+  overflow-x: hidden;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* Mobile text sizing overrides */
+@media (max-width: 767px) {
+  .section-title {
+    font-size: 1.75rem !important; /* 28px */
+    line-height: 1.2 !important;
+  }
+  .section-heading {
+    font-size: 11px !important;
+  }
 }
 
 /* Keyboard focus */
@@ -366,4 +382,18 @@ html {
 @keyframes threatDotPulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
+}
+
+/* Section reveal line wipe */
+@keyframes section-line-wipe {
+  0% { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .section-reveal * {
+    animation: none !important;
+    transition: none !important;
+  }
 }

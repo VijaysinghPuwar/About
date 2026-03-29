@@ -102,7 +102,7 @@ export function TerminalHero() {
     let className = 'font-mono text-sm leading-relaxed ';
     switch (line.style) {
       case 'name':
-        className += 'text-foreground text-2xl sm:text-3xl font-bold';
+        className += 'text-foreground text-xl sm:text-3xl font-bold break-words';
         break;
       case 'role':
         className += 'gradient-text text-lg sm:text-xl font-semibold';
@@ -169,7 +169,13 @@ export function TerminalHero() {
                 className="flex flex-col sm:flex-row gap-3 mt-6 pt-4 border-t border-border/20"
               >
                 <button
-                  onClick={() => document.getElementById('projects')?.scrollIntoView({ behavior: 'smooth' })}
+                  onClick={() => {
+                    const el = document.getElementById('projects');
+                    if (el) {
+                      const top = el.getBoundingClientRect().top + window.scrollY - 64;
+                      window.scrollTo({ top, behavior: 'smooth' });
+                    }
+                  }}
                   className="inline-flex items-center justify-center h-10 px-6 rounded-md text-sm font-medium gradient-btn"
                 >
                   <ArrowRight className="w-4 h-4 mr-2" />View My Work

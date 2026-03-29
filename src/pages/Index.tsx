@@ -16,6 +16,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
 import { HeroShield } from '@/components/HeroShield';
+import { SectionReveal, RevealLabel } from '@/components/SectionReveal';
 
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -113,7 +114,7 @@ export default function Index() {
         <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] via-transparent to-background" />
 
         {/* Status indicators */}
-        <div className="absolute top-20 left-4 sm:left-8 flex flex-col gap-2 z-10">
+        <div className="relative mb-4 md:mb-0 md:absolute md:top-20 md:left-4 sm:md:left-8 flex flex-col gap-2 z-10 px-4 md:px-0 pt-20 md:pt-0">
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
             className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
@@ -184,9 +185,9 @@ export default function Index() {
 
       {/* ═══════ SKILLS & TECHNOLOGIES ═══════ */}
       <section id="skills" className="py-20 border-t border-border/40">
-        <motion.div {...sectionAnim} className="container max-w-6xl mx-auto">
+        <SectionReveal className="container max-w-6xl mx-auto px-4">
           <div className="text-center mb-14">
-            <p className="section-heading">Arsenal</p>
+            <RevealLabel text="Arsenal" />
             <h2 className="section-title">Skills & Technologies</h2>
           </div>
 
@@ -211,14 +212,14 @@ export default function Index() {
               ))}
             </div>
           </div>
-        </motion.div>
+        </SectionReveal>
       </section>
 
       {/* ═══════ PROJECTS ═══════ */}
       <section id="projects" className="py-20 border-t border-border/40">
-        <motion.div {...sectionAnim} className="container max-w-6xl mx-auto">
+        <SectionReveal className="container max-w-6xl mx-auto px-4">
           <div className="text-center mb-14">
-            <p className="section-heading">Work</p>
+            <RevealLabel text="Work" />
             <h2 className="section-title">Featured Projects</h2>
           </div>
 
@@ -240,28 +241,28 @@ export default function Index() {
               </motion.div>
             )}
           </Suspense>
-        </motion.div>
+        </SectionReveal>
       </section>
 
       {/* ═══════ EXPERIENCE & EDUCATION ═══════ */}
       <section id="experience" className="py-20 border-t border-border/40 relative overflow-hidden">
         
-        <motion.div {...sectionAnim} className="container max-w-5xl mx-auto relative z-10">
+        <SectionReveal className="container max-w-5xl mx-auto relative z-10 px-4">
           <div className="text-center mb-4">
-            <p className="section-heading">Journey</p>
+            <RevealLabel text="Journey" />
             <h2 className="section-title">Experience & Education</h2>
           </div>
           <Suspense fallback={<div className="h-64" />}>
             <ExperienceTimeline />
           </Suspense>
-        </motion.div>
+        </SectionReveal>
       </section>
 
       {/* ═══════ CONTACT ═══════ */}
       <section id="contact" className="py-20 border-t border-border/40">
-        <motion.div {...sectionAnim} className="container max-w-6xl mx-auto">
+        <SectionReveal className="container max-w-6xl mx-auto px-4">
           <div className="text-center mb-4">
-            <p className="section-heading">Connect</p>
+            <RevealLabel text="Connect" />
             <h2 className="section-title">Let's Work Together</h2>
             <p className="text-sm text-muted-foreground max-w-xl mx-auto mt-3">
               Open to cybersecurity roles, security operations, cloud security, and consulting opportunities.
@@ -363,7 +364,7 @@ export default function Index() {
               </AnimatePresence>
             </motion.div>
           </div>
-        </motion.div>
+        </SectionReveal>
       </section>
     </div>
   );

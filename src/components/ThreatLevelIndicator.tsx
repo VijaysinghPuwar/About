@@ -109,7 +109,11 @@ export function ThreatLevelIndicator() {
   }, [isExpanded]);
 
   const navigateTo = useCallback((id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+    const el = document.getElementById(id);
+    if (el) {
+      const top = el.getBoundingClientRect().top + window.scrollY - 64;
+      window.scrollTo({ top, behavior: 'smooth' });
+    }
     setIsExpanded(false);
   }, []);
 
@@ -122,7 +126,7 @@ export function ThreatLevelIndicator() {
   return (
     <div
       ref={widgetRef}
-      className="fixed bottom-4 left-4 z-50 w-[140px] sm:w-[160px]"
+      className="fixed bottom-4 left-4 z-50 w-[130px] sm:w-[160px]"
     >
       <motion.div
         layout
@@ -208,7 +212,7 @@ export function ThreatLevelIndicator() {
                   animate={{ x: 0, opacity: 1 }}
                   exit={{ x: -12, opacity: 0 }}
                   transition={{ duration: 0.2, ease: 'easeOut' }}
-                  className="absolute font-mono uppercase text-[11px] tracking-[1.5px] whitespace-nowrap"
+                  className="absolute font-mono uppercase text-[10px] sm:text-[11px] tracking-[1.5px] whitespace-nowrap"
                   style={{ color: current.dot }}
                 >
                   {displayStatus}

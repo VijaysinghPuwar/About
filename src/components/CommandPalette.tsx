@@ -13,7 +13,10 @@ interface Command {
 
 const scrollTo = (id: string) => {
   const el = document.getElementById(id);
-  if (el) el.scrollIntoView({ behavior: 'smooth' });
+  if (el) {
+    const top = el.getBoundingClientRect().top + window.scrollY - 64;
+    window.scrollTo({ top, behavior: 'smooth' });
+  }
 };
 
 const CATEGORY_ICONS: Record<string, typeof Compass> = {
@@ -182,7 +185,7 @@ export function CommandPalette() {
 
           {/* Modal */}
           <motion.div
-            className="relative w-[90vw] max-w-[560px] h-fit rounded-2xl overflow-hidden"
+            className="relative w-[95vw] md:w-[90vw] max-w-[560px] h-fit rounded-2xl overflow-hidden"
             style={{
               background: 'rgba(15,23,42,0.95)',
               backdropFilter: 'blur(24px)',
@@ -242,7 +245,7 @@ export function CommandPalette() {
                             }}
                           >
                             <Icon className="w-[18px] h-[18px] shrink-0" style={{ color: isSelected ? '#00e5ff' : '#64748b' }} />
-                            <span className="flex-1 text-sm text-foreground truncate">{item.label}</span>
+                            <span className="flex-1 text-[13px] md:text-sm text-foreground truncate">{item.label}</span>
                             {item.hint && (
                               <span className="text-[11px] text-muted-foreground shrink-0">{item.hint}</span>
                             )}

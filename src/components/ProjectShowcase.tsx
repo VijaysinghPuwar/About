@@ -206,7 +206,7 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
           <button
             key={cat}
             onClick={() => setActiveFilter(cat)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+            className={`px-4 py-1.5 min-h-[44px] rounded-full text-sm font-medium transition-all ${
               activeFilter === cat
                 ? 'gradient-btn'
                 : 'glass-card text-muted-foreground hover:text-foreground'
@@ -219,7 +219,7 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
 
       {/* Featured Projects */}
       {featured.length > 0 && (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <AnimatePresence mode="popLayout">
             {featured.map(project => (
               <ProjectCard key={project.id} project={project} gradient={getGradient(project.category)}
@@ -231,7 +231,7 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
 
       {/* Secondary Projects */}
       {secondary.length > 0 && (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
           <AnimatePresence mode="popLayout">
             {secondary.map(project => (
               <ProjectCardCompact key={project.id} project={project} gradient={getGradient(project.category)}
@@ -278,7 +278,7 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
           >
             <motion.div
               layoutId={`card-${selectedProject.id}`}
-              className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-xl glass-card border border-border/60 p-6 sm:p-8"
+              className="relative w-screen h-screen md:w-full md:max-w-2xl md:max-h-[85vh] md:rounded-xl rounded-none overflow-y-auto glass-card border border-border/60 p-6 sm:p-8"
               onClick={e => e.stopPropagation()}
             >
               {/* Top buttons */}

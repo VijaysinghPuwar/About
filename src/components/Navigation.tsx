@@ -154,7 +154,10 @@ export function Navigation() {
         {/* Mobile */}
         <div className="md:hidden flex items-center gap-2">
           <ThemeToggle />
-          <Sheet open={isOpen} onOpenChange={setIsOpen}>
+          <Sheet open={isOpen} onOpenChange={(open) => {
+              setIsOpen(open);
+              document.body.style.overflow = open ? 'hidden' : '';
+            }}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="sm" className="w-9 px-0">
                 <Menu className="w-5 h-5" />
@@ -172,7 +175,7 @@ export function Navigation() {
                       key={item.id}
                       onClick={() => scrollTo(item.id)}
                       className={cn(
-                        "px-3 py-2 rounded-md text-sm font-medium transition-colors text-left",
+                        "px-3 py-2 min-h-[44px] rounded-md text-sm font-medium transition-colors text-left flex items-center",
                         activeSection === item.id ? "text-foreground bg-primary/5" : "text-muted-foreground hover:text-foreground"
                       )}
                     >
