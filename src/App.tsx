@@ -13,7 +13,7 @@ import { CursorSpotlight } from "@/components/CursorSpotlight";
 import { CursorTrail } from "@/components/CursorTrail";
 import { CyberGrid } from "@/components/CyberGrid";
 import { Preloader } from "@/components/Preloader";
-import { ScrollProgress } from "@/components/ScrollProgress";
+import { ThreatLevelIndicator } from "@/components/ThreatLevelIndicator";
 import { KonamiCode } from "@/components/KonamiCode";
 
 import Index from "./pages/Index";
@@ -32,7 +32,7 @@ const App = () => (
         <AuthProvider>
           <CyberGrid />
           <Preloader />
-          <ScrollProgress />
+          {/* ThreatLevelIndicator needs router context, mounted inside BrowserRouter below */}
           <CursorSpotlight />
           <CursorTrail />
           <KonamiCode />
@@ -40,6 +40,7 @@ const App = () => (
           <Sonner />
           <div className="min-h-screen bg-background">
             <BrowserRouter>
+              <ThreatLevelIndicator />
               <Navigation />
               <main className="relative">
                 <Routes>
