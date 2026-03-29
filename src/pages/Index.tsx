@@ -294,83 +294,37 @@ export default function Index() {
         </motion.div>
       </section>
 
-      {/* ═══════ SKILLS MARQUEE ═══════ */}
-      <div className="py-6 border-t border-border/40 overflow-hidden">
-        <div className="marquee-track">
-          {[...securityStack, ...securityStack].map((tool, i) => (
-            <span key={`${tool}-${i}`} className="font-mono text-xs px-4 py-2 mx-1.5 rounded-full glass-card text-muted-foreground hover:text-primary transition-colors whitespace-nowrap">
-              {tool}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* ═══════ SKILLS & COMPETENCIES ═══════ */}
+      {/* ═══════ SKILLS & TECHNOLOGIES ═══════ */}
       <section id="skills" className="py-20 border-t border-border/40">
         <div className="container max-w-6xl mx-auto">
           <div className="text-center mb-14">
-            <p className="section-heading">What I Do</p>
-            <h2 className="section-title">Core Competencies</h2>
+            <p className="section-heading">Arsenal</p>
+            <h2 className="section-title">Skills & Technologies</h2>
           </div>
 
-          {/* Bento grid with hover expand */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
-            {competencies.map((item, i) => (
-              <motion.div key={item.title} initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={i}
-                className={item.featured ? 'lg:col-span-2' : ''}
-                onMouseEnter={() => setExpandedCompetency(i)}
-                onMouseLeave={() => setExpandedCompetency(null)}>
-                <div className={`h-full rounded-lg p-6 glass-card hover:border-primary/20 transition-all group cursor-default ${item.featured ? 'gradient-border' : ''}`}>
-                  <div className="w-11 h-11 rounded-lg bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center mb-4 group-hover:shadow-[0_0_20px_hsl(var(--primary)/0.3)] transition-shadow">
-                    <item.icon className="w-5 h-5 text-primary" />
-                  </div>
-                  <h3 className="font-semibold text-foreground mb-2 text-base group-hover:text-primary transition-colors">{item.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{item.short}</p>
-                  <AnimatePresence>
-                    {expandedCompetency === i && (
-                      <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.3 }}
-                        className="text-sm text-muted-foreground/80 leading-relaxed mt-3 overflow-hidden">
-                        {item.long}
-                      </motion.p>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </motion.div>
-            ))}
+          {/* Two-column layout */}
+          <div className="grid lg:grid-cols-2 gap-10 items-start mb-14">
+            {/* Radar Chart */}
+            <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}>
+              <SkillsRadar />
+            </motion.div>
+
+            {/* Category Tabs */}
+            <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={1}>
+              <SkillCategories />
+            </motion.div>
           </div>
 
-          {/* Stats */}
-          <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}
-            className="grid grid-cols-3 gap-4 mb-16">
-            {[
-              { value: 150, suffix: '+', label: 'Systems Secured' },
-              { value: 10, suffix: '+', label: 'Security Projects' },
-              { value: 5, suffix: '+', label: 'Certifications' },
-            ].map(s => (
-              <div key={s.label} className="text-center py-5 rounded-lg glass-card">
-                <p className="text-3xl font-bold"><AnimatedCounter target={s.value} suffix={s.suffix} /></p>
-                <p className="text-xs text-muted-foreground mt-1">{s.label}</p>
-              </div>
-            ))}
-          </motion.div>
-
-          {/* Skills grid */}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {Object.entries(skills).map(([category, items], i) => (
-              <motion.div key={category} initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={i}>
-                <div className="h-full glass-card rounded-lg p-5">
-                  <h3 className="text-sm font-semibold gradient-text mb-3">{category}</h3>
-                  <div className="flex flex-wrap gap-1.5">
-                    {items.map(s => (
-                      <span key={s} className="text-xs px-2 py-0.5 rounded-full glass-card text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors cursor-default">
-                        {s}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            ))}
+          {/* Certification Ticker */}
+          <div className="rounded-lg glass-card py-4 overflow-hidden">
+            <div className="marquee-track">
+              {[...certifications, ...certifications].map((cert, i) => (
+                <span key={`${cert}-${i}`} className="flex items-center gap-2 font-mono text-sm text-muted-foreground px-6 whitespace-nowrap">
+                  <Shield className="w-3.5 h-3.5 text-primary shrink-0" />
+                  {cert}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </section>
