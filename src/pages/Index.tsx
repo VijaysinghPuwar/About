@@ -247,93 +247,107 @@ export default function Index() {
       {/* ═══════ CONTACT ═══════ */}
       <section id="contact" className="py-20 border-t border-border/40">
         <div className="container max-w-6xl mx-auto">
-          <div className="text-center mb-14">
-            <p className="section-heading">Get in Touch</p>
-            <h2 className="section-title">Let's Connect</h2>
+          <div className="text-center mb-4">
+            <p className="section-heading">Connect</p>
+            <h2 className="section-title">Let's Work Together</h2>
+            <p className="text-sm text-muted-foreground max-w-xl mx-auto mt-3">
+              Open to cybersecurity roles, security operations, cloud security, and consulting opportunities.
+            </p>
           </div>
 
-          {/* Open to roles */}
-          <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}
-            className="flex flex-wrap justify-center gap-3 mb-12">
-            {openToRoles.map(role => (
-              <div key={role} className="flex items-center gap-2 px-4 py-2.5 rounded-lg glass-card text-sm text-foreground font-medium hover:border-primary/30 transition-colors">
-                <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0 shadow-[0_0_6px_hsl(var(--primary)/0.5)]" />
-                {role}
-              </div>
-            ))}
-          </motion.div>
-
-          <div className="grid md:grid-cols-2 gap-8">
-            {/* Left info */}
+          <div className="grid md:grid-cols-2 gap-8 mt-12">
+            {/* Left — Digital Business Card */}
             <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0} className="space-y-6">
-              <div>
-                <h3 className="text-xl font-bold text-foreground mb-2">Let's Connect</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  Whether you're looking for a cybersecurity engineer, need help with a security project, or want to discuss opportunities — I'd love to hear from you.
-                </p>
+              <div className="glass-card rounded-xl p-6 space-y-5 hover:border-primary/30 transition-colors">
+                <div className="flex items-center gap-4">
+                  <span className="gradient-text text-3xl font-bold">VP</span>
+                  <div>
+                    <h3 className="text-lg font-bold text-foreground">Vijaysingh Puwar</h3>
+                    <p className="text-sm text-muted-foreground">Cybersecurity Engineer</p>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  {[
+                    { href: 'mailto:contact@vijaysinghpuwar.com', icon: Mail, label: 'contact@vijaysinghpuwar.com' },
+                    { href: 'https://github.com/vijaysinghpuwar', icon: Github, label: 'github.com/vijaysinghpuwar', external: true },
+                    { href: 'https://linkedin.com/in/vijaysinghpuwar', icon: Linkedin, label: 'linkedin.com/in/vijaysinghpuwar', external: true },
+                  ].map(({ href, icon: Icon, label, external }) => (
+                    <a key={href} href={href} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined}
+                      className="group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:shadow-[inset_0_0_20px_hsl(var(--primary)/0.05)] transition-all">
+                      <Icon className="w-4 h-4 text-primary" />
+                      {label}
+                    </a>
+                  ))}
+                </div>
               </div>
-              <div className="glass-card rounded-lg p-6 space-y-4">
-                <a href="mailto:contact@vijaysinghpuwar.com" className="flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  <Mail className="w-4 h-4 text-primary" /> contact@vijaysinghpuwar.com
-                </a>
-                <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  <Github className="w-4 h-4 text-primary" /> github.com/vijaysinghpuwar
-                </a>
-                <a href="https://linkedin.com/in/vijaysinghpuwar" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  <Linkedin className="w-4 h-4 text-primary" /> linkedin.com/in/vijaysinghpuwar
-                </a>
+
+              {/* Availability */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Availability</h4>
+                {['Cybersecurity Engineering roles', 'Security Operations positions', 'Cloud Security opportunities', 'Collaborations & Consulting'].map(item => (
+                  <div key={item} className="flex items-center gap-2.5 text-sm text-foreground/80">
+                    <span className="w-2 h-2 rounded-full bg-success animate-cyber-pulse flex-shrink-0" />
+                    {item}
+                  </div>
+                ))}
               </div>
             </motion.div>
 
-            {/* Right form */}
+            {/* Right — Contact Form */}
             <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={1}>
-              {submitted ? (
-                <div className="text-center py-16">
-                  <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-4" />
-                  <h3 className="text-xl font-semibold text-foreground mb-2">Message Sent</h3>
-                  <p className="text-muted-foreground mb-4">Thanks for reaching out. I'll respond within 24–48 hours.</p>
-                  <Button variant="outline" onClick={() => setSubmitted(false)} className="border-border/60">Send Another</Button>
-                </div>
-              ) : (
-                <div className="glass-card rounded-lg p-6">
-                  {user && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4 pb-4 border-b border-border/40">
-                      <User className="w-4 h-4 text-primary" />
-                      <span>Signed in as <span className="text-foreground font-medium">{user.email}</span></span>
-                    </div>
-                  )}
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className={user ? '' : 'grid sm:grid-cols-2 gap-4'}>
-                      <div>
-                        <Label htmlFor="name" className="text-sm">Name</Label>
-                        <Input id="name" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
-                          className="bg-background/50 border-border/40 mt-1 focus:border-primary/60" />
+              <AnimatePresence mode="wait">
+                {submitted ? (
+                  <motion.div key="success" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+                    className="glass-card rounded-xl text-center py-16 px-6">
+                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200, damping: 12, delay: 0.1 }}>
+                      <CheckCircle2 className="w-14 h-14 text-success mx-auto mb-4" />
+                    </motion.div>
+                    <h3 className="text-xl font-semibold text-foreground mb-2">Message Sent!</h3>
+                    <p className="text-muted-foreground mb-6">Thanks for reaching out. I'll respond within 24–48 hours.</p>
+                    <Button variant="outline" onClick={() => setSubmitted(false)} className="border-border/60">Send Another</Button>
+                  </motion.div>
+                ) : (
+                  <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="glass-card rounded-xl p-6">
+                    {user && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4 pb-4 border-b border-border/40">
+                        <User className="w-4 h-4 text-primary" />
+                        <span>Signed in as <span className="text-foreground font-medium">{user.email}</span></span>
                       </div>
-                      {!user && (
+                    )}
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                      <div className={user ? '' : 'grid sm:grid-cols-2 gap-4'}>
                         <div>
-                          <Label htmlFor="email" className="text-sm">Email</Label>
-                          <Input id="email" type="email" required value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })}
-                            className="bg-background/50 border-border/40 mt-1 focus:border-primary/60" />
+                          <Label htmlFor="name" className="text-sm">Name</Label>
+                          <Input id="name" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
+                            className="bg-background/50 border-border/40 mt-1 focus:border-primary/60 focus:shadow-[0_0_12px_hsl(var(--primary)/0.15)] transition-shadow" />
                         </div>
-                      )}
-                    </div>
-                    <div>
-                      <Label htmlFor="subject" className="text-sm">Subject</Label>
-                      <Input id="subject" required value={formData.subject} onChange={e => setFormData({ ...formData, subject: e.target.value })}
-                        className="bg-background/50 border-border/40 mt-1 focus:border-primary/60" />
-                    </div>
-                    <div>
-                      <Label htmlFor="message" className="text-sm">Message</Label>
-                      <Textarea id="message" required rows={5} value={formData.message} onChange={e => setFormData({ ...formData, message: e.target.value })}
-                        className="bg-background/50 border-border/40 mt-1 focus:border-primary/60" />
-                    </div>
-                    <button type="submit" disabled={isSubmitting}
-                      className="w-full h-11 rounded-md text-sm font-medium gradient-btn inline-flex items-center justify-center disabled:opacity-50">
-                      {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending...</> : 'Send Message'}
-                    </button>
-                  </form>
-                </div>
-              )}
+                        {!user && (
+                          <div>
+                            <Label htmlFor="email" className="text-sm">Email</Label>
+                            <Input id="email" type="email" required value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })}
+                              className="bg-background/50 border-border/40 mt-1 focus:border-primary/60 focus:shadow-[0_0_12px_hsl(var(--primary)/0.15)] transition-shadow" />
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <Label htmlFor="subject" className="text-sm">Subject</Label>
+                        <Input id="subject" required value={formData.subject} onChange={e => setFormData({ ...formData, subject: e.target.value })}
+                          className="bg-background/50 border-border/40 mt-1 focus:border-primary/60 focus:shadow-[0_0_12px_hsl(var(--primary)/0.15)] transition-shadow" />
+                      </div>
+                      <div>
+                        <Label htmlFor="message" className="text-sm">Message</Label>
+                        <Textarea id="message" required rows={5} value={formData.message} onChange={e => setFormData({ ...formData, message: e.target.value })}
+                          className="bg-background/50 border-border/40 mt-1 focus:border-primary/60 focus:shadow-[0_0_12px_hsl(var(--primary)/0.15)] transition-shadow" />
+                      </div>
+                      <button type="submit" disabled={isSubmitting}
+                        className="w-full h-11 rounded-md text-sm font-medium gradient-btn inline-flex items-center justify-center disabled:opacity-50">
+                        {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending...</> : 'Send Message'}
+                      </button>
+                    </form>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           </div>
         </div>
