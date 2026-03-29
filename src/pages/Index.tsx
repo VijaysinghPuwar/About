@@ -91,9 +91,6 @@ export default function Index() {
 
   /* projects */
   const { projects: dbProjects } = useProjects();
-  const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-
   const allProjects = useMemo(() => {
     const dbIds = new Set((dbProjects || []).map(p => p.id));
     const normalized = (dbProjects || []).map(p => ({
@@ -106,21 +103,6 @@ export default function Index() {
     const jsonOnly = projectsData.filter(p => !dbIds.has(p.id));
     return [...normalized, ...jsonOnly];
   }, [dbProjects]);
-
-  const categories = useMemo(() => {
-    const cats = new Set(allProjects.map(p => p.category).filter(Boolean));
-    return Array.from(cats).sort();
-  }, [allProjects]);
-
-  const filteredProjects = useMemo(() => {
-    return allProjects.filter(p => {
-      const ms = !search || p.title.toLowerCase().includes(search.toLowerCase()) ||
-        p.description.toLowerCase().includes(search.toLowerCase()) ||
-        p.tech.some(t => t.toLowerCase().includes(search.toLowerCase()));
-      const mc = !selectedCategory || p.category === selectedCategory;
-      return ms && mc;
-    });
-  }, [allProjects, search, selectedCategory]);
 
   /* experience tabs */
   const [expTab, setExpTab] = useState<'experience' | 'education' | 'certifications'>('experience');
