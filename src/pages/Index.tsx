@@ -36,10 +36,6 @@ const fadeUp = {
 const VP = { once: true, amount: 0.3 }; // viewport config
 
 
-const openToRoles = [
-  'Cybersecurity Engineering', 'Security Operations', 'Cloud Security',
-  'Security Automation', 'IAM / Identity Security',
-];
 
 
 /* ── main component ── */

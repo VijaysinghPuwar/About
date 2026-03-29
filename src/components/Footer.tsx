@@ -1,15 +1,41 @@
 import { Github, Linkedin, Mail } from 'lucide-react';
 
+const navLinks = [
+  { label: 'Skills', href: '#skills' },
+  { label: 'Projects', href: '#projects' },
+  { label: 'Experience', href: '#experience' },
+  { label: 'Contact', href: '#contact' },
+];
+
 export function Footer() {
   return (
-    <footer className="border-t border-border/40 bg-background/80 backdrop-blur-xl py-6">
-      <div className="container max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+    <footer className="relative bg-transparent pt-0 pb-6">
+      {/* Gradient separator */}
+      <div className="h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent mb-6" />
+
+      <div className="container max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+        {/* Left */}
         <div className="flex items-center gap-3">
-          <span className="font-bold gradient-text">VP</span>
+          <span className="font-bold gradient-text text-lg">VP</span>
           <p className="text-sm text-muted-foreground font-mono">
             © {new Date().getFullYear()} · Built with intent
           </p>
         </div>
+
+        {/* Center nav */}
+        <nav className="flex items-center gap-4">
+          {navLinks.map((link) => (
+            <a
+              key={link.href}
+              href={link.href}
+              className="text-xs font-mono text-muted-foreground hover:text-primary transition-colors"
+            >
+              {link.label}
+            </a>
+          ))}
+        </nav>
+
+        {/* Right social */}
         <div className="flex items-center gap-5">
           <a href="mailto:contact@vijaysinghpuwar.com" className="text-muted-foreground hover:text-primary transition-colors" aria-label="Email">
             <Mail className="w-4 h-4" />
