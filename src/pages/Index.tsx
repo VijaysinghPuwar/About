@@ -237,100 +237,14 @@ export default function Index() {
         </div>
       </section>
 
-      {/* ═══════ EXPERIENCE (Tabbed) ═══════ */}
+      {/* ═══════ EXPERIENCE & EDUCATION ═══════ */}
       <section id="experience" className="py-20 border-t border-border/40">
         <div className="container max-w-5xl mx-auto">
-          <div className="text-center mb-10">
-            <p className="section-heading">Background</p>
-            <h2 className="section-title mb-8">Experience & Education</h2>
-
-            {/* Tabs */}
-            <div className="inline-flex gap-1 p-1 rounded-lg glass-card">
-              {(['experience', 'education', 'certifications'] as const).map(tab => (
-                <button key={tab} onClick={() => setExpTab(tab)}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all capitalize ${expTab === tab ? 'gradient-btn' : 'text-muted-foreground hover:text-foreground'}`}>
-                  {tab}
-                </button>
-              ))}
-            </div>
+          <div className="text-center mb-4">
+            <p className="section-heading">Journey</p>
+            <h2 className="section-title">Experience & Education</h2>
           </div>
-
-          <AnimatePresence mode="wait">
-            {expTab === 'experience' && (
-              <motion.div key="exp" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
-                transition={{ type: 'spring', stiffness: 100, damping: 15 }}>
-                <div className="space-y-10">
-                  {experience.map((job, i) => (
-                    <motion.div key={job.company} initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={i}
-                      className="relative pl-8">
-                      <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-primary to-secondary" />
-                      <div className="absolute -left-[5px] top-2 w-3 h-3 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary)/0.6)]" />
-                      <div className="glass-card rounded-lg p-5">
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mb-2">
-                          <h3 className="font-bold text-foreground text-lg">{job.company}</h3>
-                          <span className="text-sm font-medium gradient-text">— {job.role}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mb-3 font-mono">{job.period}</p>
-                        <ul className="space-y-2">
-                          {job.bullets.map((b, j) => (
-                            <li key={j} className="text-sm text-muted-foreground flex items-start gap-2">
-                              <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-                              <span>{b.text}{b.bold && <strong className="text-primary font-semibold">{b.bold}</strong>}{b.after}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-
-            {expTab === 'education' && (
-              <motion.div key="edu" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
-                transition={{ type: 'spring', stiffness: 100, damping: 15 }}>
-                <div className="grid md:grid-cols-2 gap-6">
-                  {education.map((edu, i) => (
-                    <motion.div key={edu.school} initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={i}>
-                      <div className="h-full glass-card rounded-lg p-6">
-                        <GraduationCap className="w-7 h-7 text-primary mb-3" />
-                        <h3 className="font-bold text-foreground mb-1 text-lg">{edu.degree}</h3>
-                        <p className="text-sm text-muted-foreground mb-1">{edu.school}</p>
-                        <p className="text-sm text-muted-foreground">{edu.location}</p>
-                        <div className="flex gap-3 mt-3 mb-4">
-                          <span className="text-xs font-semibold px-2.5 py-1 rounded-md gradient-btn">{edu.gpa}</span>
-                          <Badge variant="outline" className="text-xs">{edu.status}</Badge>
-                        </div>
-                        {edu.coursework.length > 0 && (
-                          <div>
-                            <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider">Selected Coursework</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {edu.coursework.map(c => (
-                                <span key={c} className="text-xs px-2 py-0.5 rounded-full glass-card text-muted-foreground">{c}</span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-
-            {expTab === 'certifications' && (
-              <motion.div key="cert" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
-                transition={{ type: 'spring', stiffness: 100, damping: 15 }}>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-                  {certifications.map(cert => (
-                    <div key={cert} className="flex items-center justify-center gap-2.5 px-5 py-4 rounded-lg glass-card text-sm text-foreground hover:border-primary/30 hover:shadow-[0_0_20px_hsl(var(--primary)/0.1)] transition-all group">
-                      <Award className="w-4 h-4 text-primary flex-shrink-0 group-hover:scale-110 transition-transform" />{cert}
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <ExperienceTimeline />
         </div>
       </section>
 
