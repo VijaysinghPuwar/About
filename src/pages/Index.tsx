@@ -16,7 +16,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
 import { SecurityShield } from '@/components/SecurityShield';
-import { MatrixRain } from '@/components/MatrixRain';
+
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -244,7 +244,7 @@ export default function Index() {
 
       {/* ═══════ EXPERIENCE & EDUCATION ═══════ */}
       <section id="experience" className="py-20 border-t border-border/40 relative overflow-hidden">
-        <MatrixRain />
+        
         <motion.div {...sectionAnim} className="container max-w-5xl mx-auto relative z-10">
           <div className="text-center mb-4">
             <p className="section-heading">Journey</p>
