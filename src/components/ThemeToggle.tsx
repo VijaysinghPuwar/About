@@ -11,6 +11,7 @@ export function ThemeToggle({ showLabel = false }: { showLabel?: boolean }) {
       variant="ghost"
       size="sm"
       onClick={toggleTheme}
+      disabled={isTransitioning}
       className={cn(
         "transition-colors gap-2",
         showLabel ? "px-3" : "w-9 px-0",

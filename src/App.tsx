@@ -33,6 +33,7 @@ const App = () => (
       <ThemeProvider>
         <AuthProvider>
           <CyberGrid />
+          <ThemeTransition />
           <Preloader />
           {/* ThreatLevelIndicator needs router context, mounted inside BrowserRouter below */}
           <CursorSpotlight />
