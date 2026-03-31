@@ -115,8 +115,18 @@ export function CyberGrid() {
 
       ctx.clearRect(0, 0, w, h);
 
+      // Lerp color toward target
+      const c = colorRef.current;
+      const tc = targetColorRef.current;
+      c.r += (tc.r - c.r) * 0.04;
+      c.g += (tc.g - c.g) * 0.04;
+      c.b += (tc.b - c.b) * 0.04;
+      const cr = Math.round(c.r);
+      const cg = Math.round(c.g);
+      const cb = Math.round(c.b);
+
       // Draw grid lines
-      ctx.strokeStyle = 'rgba(0, 229, 255, 0.03)';
+      ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, 0.03)`;
       ctx.lineWidth = 1;
       ctx.beginPath();
       const yStart = (offsetY % spacing + spacing) % spacing;
