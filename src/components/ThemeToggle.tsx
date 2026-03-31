@@ -4,7 +4,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 
 export function ThemeToggle({ showLabel = false }: { showLabel?: boolean }) {
-  const { isPentest, toggleTheme } = useTheme();
+  const { isPentest, toggleTheme, isTransitioning } = useTheme();
 
   return (
     <Button
