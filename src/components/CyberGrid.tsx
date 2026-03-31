@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useTheme } from '@/hooks/useTheme';
 
 interface GridDot {
   x: number;
