@@ -39,6 +39,11 @@ export function CyberGrid() {
   const colorRef = useRef({ r: 0, g: 229, b: 255 });
   const targetColorRef = useRef({ r: 0, g: 229, b: 255 });
 
+  // Update target color when theme changes
+  useEffect(() => {
+    targetColorRef.current = isPentest ? { r: 244, g: 63, b: 94 } : { r: 0, g: 229, b: 255 };
+  }, [isPentest]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
