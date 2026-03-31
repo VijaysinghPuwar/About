@@ -35,6 +35,9 @@ export function CyberGrid() {
   const rafRef = useRef(0);
   const isMobile = useIsMobile();
   const spacingRef = useRef(60);
+  const { isPentest } = useTheme();
+  const colorRef = useRef({ r: 0, g: 229, b: 255 });
+  const targetColorRef = useRef({ r: 0, g: 229, b: 255 });
 
   useEffect(() => {
     const canvas = canvasRef.current;
