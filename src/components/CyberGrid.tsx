@@ -213,7 +213,7 @@ export function CyberGrid() {
 
         ctx.beginPath();
         ctx.arc(d.x, dy, d.currentSize, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(0, 229, 255, ${d.currentOpacity})`;
+        ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${d.currentOpacity})`;
         ctx.fill();
       }
 
