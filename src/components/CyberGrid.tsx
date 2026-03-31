@@ -219,7 +219,7 @@ export function CyberGrid() {
 
       // Connecting lines between glowing dots near cursor
       if (glowingDots.length > 1) {
-        ctx.strokeStyle = 'rgba(0, 229, 255, 0.08)';
+        ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, 0.08)`;
         ctx.lineWidth = 0.5;
         for (let a = 0; a < glowingDots.length; a++) {
           for (let b = a + 1; b < glowingDots.length; b++) {
