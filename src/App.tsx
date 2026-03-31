@@ -12,6 +12,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { CursorSpotlight } from "@/components/CursorSpotlight";
 import { CursorTrail } from "@/components/CursorTrail";
 import { CyberGrid } from "@/components/CyberGrid";
+import { ThemeTransition } from "@/components/ThemeTransition";
 import { Preloader } from "@/components/Preloader";
 import { ThreatLevelIndicator } from "@/components/ThreatLevelIndicator";
 import { KonamiCode } from "@/components/KonamiCode";
