@@ -1,137 +1,140 @@
 
 
-# Mobile Responsiveness, Smooth Scrolling & Scroll Reveal Effects
+# Full-Site Theme Transformation System
 
 ## Overview
-Three-part overhaul: (1) fix all mobile responsiveness issues across every component, (2) improve scroll navigation with navbar offset handling, (3) add scroll-triggered section reveal animations (line wipe + fade-up + letter reveal).
+Create a cinematic, system-recalibration-style transition overlay that fires whenever the user toggles between Default (blue/cyan) and Pentest (red) modes. The transition will feel like an interface changing operational state — not a color swap.
 
-## Files to Modify
+## Architecture
 
+### New Files
+| File | Purpose |
+|------|---------|
+| `src/components/ThemeTransition.tsx` | Full-screen transition overlay component |
+
+### Modified Files
 | File | Changes |
 |------|---------|
-| `src/index.css` | Add `overflow-x: hidden` on html/body, mobile text sizing overrides, section reveal keyframes, `prefers-reduced-motion` rules |
-| `src/pages/Index.tsx` | Mobile padding on all sections (`px-4`), cap `section-title` sizes, replace `sectionAnim` with new `SectionReveal` wrapper, add letter-by-letter label animation |
-| `src/components/TerminalHero.tsx` | Cap name text to `max-w-full text-xl` on mobile, ensure terminal is `w-full px-3` on mobile |
-| `src/components/HeroShield.tsx` | Already `hidden lg:flex` — confirmed OK |
-| `src/components/SkillsRadar.tsx` | No changes needed — already responsive SVG |
-| `src/components/SkillCategories.tsx` | Ensure tab buttons have `min-h-[44px]` tap targets |
-| `src/components/ExperienceTimeline.tsx` | Mobile timeline already left-aligned — verify tap targets are 44px |
-| `src/components/ProjectShowcase.tsx` | Project cards: force `grid-cols-1` on mobile. Modal: full-screen on mobile (`md:max-w-2xl md:max-h-[85vh] md:rounded-xl` else `w-screen h-screen rounded-none`). Filter pills: `min-h-[44px]`. Diff view already stacks on mobile. |
-| `src/components/Navigation.tsx` | Add `overflow-hidden` on body when sheet open. Mobile nav links: `min-h-[44px]`. Fix `scrollTo` to use `window.scrollTo` with offset. |
-| `src/components/ThreatLevelIndicator.tsx` | Reduce to `w-[130px]`, font `text-[10px]` on mobile |
-| `src/components/CommandPalette.tsx` | Width `w-[95vw]` on mobile, results font `text-[13px]` |
-| `src/components/Footer.tsx` | Ensure `px-4` padding on mobile |
-| `src/components/CyberGrid.tsx` | Already handles mobile spacing (40px) and skips proximity glow — OK |
-| `src/components/SectionReveal.tsx` | **Create** — reusable wrapper component |
+| `src/hooks/useTheme.tsx` | Add `isTransitioning` state + `transitionDirection` to context; delay actual theme class swap until mid-transition |
+| `src/components/ThemeToggle.tsx` | Disable button during transition to prevent double-clicks |
+| `src/App.tsx` | Mount `<ThemeTransition />` at root level (above everything) |
+| `src/components/CyberGrid.tsx` | Read theme from context to use red or cyan dot colors |
+| `src/index.css` | Add CSS transitions on all theme-driven custom properties for post-transition settling |
 
-## Part 1: Global Mobile Fixes
+---
 
-### `src/index.css`
-- Add to `html` rule: `overflow-x: hidden`
-- Add `body { overflow-x: hidden; }`
-- Add responsive overrides:
+## ThemeTransition.tsx — The Core Effect
+
+### Trigger Flow
+1. User clicks toggle → `useTheme.toggleTheme()` sets `isTransitioning: true` and `transitionDirection: 'to-pentest' | 'to-default'`
+2. Overlay mounts (z-index 90, above content, below preloader)
+3. At ~400ms mark (midpoint), the actual CSS theme class swaps on `<html>` — the new colors are now underneath
+4. At ~900ms, overlay begins exiting
+5. At ~1100ms, overlay unmounts, `isTransitioning` resets to false
+6. A brief mode-confirmation chip appears top-right for 2s then fades out
+
+### Visual Design: "System Recalibration Sweep"
+
+**Phase 1 — Scan Line (0–400ms)**
+- A horizontal 2px line sweeps top-to-bottom across the viewport
+- Line color: cyan gradient for to-default, red gradient for to-pentest
+- Behind it, a very subtle full-width band (40px tall, 0.08 opacity) follows
+- CSS animation on a pseudo-element for GPU performance
+
+**Phase 2 — Grid Pulse + Theme Swap (300–700ms)**
+- At 400ms, theme class swaps
+- A radial glow emanates from center of viewport (the "recalibration pulse")
+  - To-pentest: red radial gradient, opacity 0→0.15→0
+  - To-default: cyan radial gradient, opacity 0→0.12→0
+- Subtle grid overlay (matching CyberGrid spacing) flashes once then fades
+
+**Phase 3 — Settle (700–1100ms)**
+- Overlay opacity fades to 0
+- All CSS custom property transitions on `<html>` kick in (0.4s ease-out on color vars via `transition: color 0.4s, background-color 0.4s, border-color 0.4s`)
+- Interface elements visibly settle into new palette
+
+### Direction-Specific Differences
+
+**Blue → Red (to-pentest)**
+- Scan line: sharper, faster (300ms), red-orange gradient
+- Pulse: red, slightly stronger (opacity 0.18)
+- Overlay text flash: "PENTEST MODE ACTIVATED" in mono 11px, red, center screen, appears at 500ms for 400ms
+
+**Red → Blue (to-default)**
+- Scan line: smoother, slightly slower (400ms), cyan-to-purple gradient
+- Pulse: cyan, calmer (opacity 0.12)
+- Overlay text flash: "SECURE MODE RESTORED" in mono 11px, cyan, center screen
+
+### Implementation
+- Use React portal or fixed div with `z-index: 90`
+- All animations via CSS `@keyframes` + inline styles (no Framer Motion needed for the overlay — pure CSS for max performance)
+- Use `requestAnimationFrame` for the theme swap timing
+- Respect `prefers-reduced-motion`: skip scan line + pulse, do instant theme swap with a single 200ms opacity crossfade
+
+### Mobile
+- Same effect but scan line is 50% faster
+- No grid flash (skip for performance)
+- Radial pulse radius reduced
+- Total duration ~800ms instead of ~1100ms
+
+---
+
+## useTheme.tsx Changes
+
+Expand the context to include:
+```
+isTransitioning: boolean
+transitionDirection: 'to-pentest' | 'to-default' | null
+```
+
+New `toggleTheme` flow:
+1. Set `isTransitioning: true`, `transitionDirection`
+2. After 400ms delay, swap the actual theme class on `<html>` and update localStorage
+3. After 1100ms, set `isTransitioning: false`
+
+---
+
+## Mode Confirmation Chip
+
+After the overlay exits, render a small status chip in the top-right corner:
+- "Pentest Mode Activated" or "Defensive Mode Restored"
+- Font: JetBrains Mono, 11px
+- Glass background with colored left border (red or cyan)
+- Appears with slide-in-right, holds 2s, fades out
+- Part of `ThemeTransition.tsx` (manages its own timeout)
+
+---
+
+## CyberGrid Theme Awareness
+
+Currently hardcodes `rgba(0, 229, 255, ...)` for dots and lines. Change to read from theme context:
+- Default mode: keep cyan `rgba(0, 229, 255, ...)`
+- Pentest mode: use red `rgba(244, 63, 94, ...)`
+- Transition between colors smoothly by lerping the RGB values when theme changes
+
+---
+
+## CSS Property Transitions
+
+Add to `index.css` on the root:
 ```css
-@media (max-width: 767px) {
-  .section-title { font-size: 1.75rem !important; } /* 28px */
-  .section-heading { font-size: 11px !important; }
+:root, .theme-blue, .theme-pentest {
+  transition: --background 0.4s, --primary 0.4s; /* won't work on custom props */
 }
 ```
 
-### `src/pages/Index.tsx`
-- Add `px-4` to all section containers (most already have `container` class which provides padding, but verify)
-- Hero status indicators: change from `absolute top-20 left-4` to `relative` on mobile with a wrapper that shows above the terminal on small screens — use `md:absolute md:top-20 md:left-8` and `relative mb-4 md:mb-0 md:absolute`
-- Hero grid: already `lg:grid-cols-[3fr_2fr]` → collapses to 1 col. Shield already `hidden lg:flex` ✓
-- Skills grid: change `lg:grid-cols-2` to ensure stacking below 768px (already does since it's `lg:`) ✓
-- Contact grid: already `md:grid-cols-2` ✓
-- Wrap each section's inner content with `<SectionReveal>` component for the scroll animation
-
-### `src/components/TerminalHero.tsx`
-- Name style: change `text-2xl sm:text-3xl` to `text-xl sm:text-3xl` (caps at 24px on mobile)
-- Terminal body padding: already `px-4 sm:px-6` ✓
-
-### `src/components/ProjectShowcase.tsx`
-- Featured grid: `grid-cols-1 md:grid-cols-2 lg:grid-cols-3` (add `grid-cols-1`)
-- Secondary grid: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4` (add `grid-cols-1`)
-- Filter pills: add `min-h-[44px]` class
-- Modal: on mobile make it full-screen:
-  ```
-  className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-xl glass-card ...
-  // Change to:
-  className="relative w-full md:max-w-2xl md:max-h-[85vh] md:rounded-xl 
-             max-md:w-screen max-md:h-screen max-md:rounded-none max-md:max-h-screen
-             overflow-y-auto glass-card ...
-  ```
-
-### `src/components/Navigation.tsx`
-- Mobile nav links: add `min-h-[44px]` to each button
-- When sheet opens, add `document.body.style.overflow = 'hidden'`; restore on close
-- Update `scrollTo` to use `window.scrollTo({ top, behavior: 'smooth' })` — already does this ✓
-
-### `src/components/ThreatLevelIndicator.tsx`
-- Change width: `w-[130px] sm:w-[160px]` (currently `w-[140px] sm:w-[160px]` — reduce mobile to 130px)
-- Status text: `text-[10px] sm:text-[11px]`
-
-### `src/components/CommandPalette.tsx`
-- Modal width: add `max-md:w-[95vw]`
-- Results text: `text-[13px] md:text-sm`
-
-### `src/components/SkillCategories.tsx`
-- Tab buttons: add `min-h-[44px]`
-
-## Part 2: Smooth Scrolling
-
-Already handled:
-- `html { scroll-behavior: smooth; scroll-padding-top: 3.5rem; }` exists in `index.css`
-- `Navigation.scrollTo` already computes offset of 64px and uses `window.scrollTo`
-- `Footer.scrollTo` already does the same
-
-Fix needed:
-- `CommandPalette.scrollTo` uses `el.scrollIntoView` — change to offset-aware `window.scrollTo`
-- `ThreatLevelIndicator.navigateTo` uses `scrollIntoView` — change to offset-aware `window.scrollTo`
-- `TerminalHero` "View My Work" button uses `scrollIntoView` — change to offset-aware scroll
-
-## Part 3: Scroll-Triggered Section Reveal
-
-### Create `src/components/SectionReveal.tsx`
-A wrapper component that:
-1. Uses `IntersectionObserver` (threshold 0.15, `once: true`)
-2. When triggered:
-   - Renders a horizontal line (1px) that expands from center outward (CSS animation, 0.6s)
-   - Line holds 0.3s then fades out
-   - After 0.3s delay, children fade up (opacity 0→1, translateY 30px→0 on desktop, 15px on mobile)
-   - Children stagger by 0.08s
-3. Respects `prefers-reduced-motion` — skip all animations, show content immediately
-
-### Section Label Letter Reveal
-Create a `RevealLabel` sub-component used for the section-heading labels ("ARSENAL", "WORK", etc.):
-- Each letter animates individually: opacity 0 + translateY(-10px) → visible
-- 0.04s delay between letters
-- Triggers after the line wipe completes
-
-### Usage in `Index.tsx`
-Wrap each section's content `<motion.div {...sectionAnim}>` replacement:
-```tsx
-<SectionReveal>
-  <RevealLabel text="Arsenal" />
-  <h2 className="section-title">Skills & Technologies</h2>
-  ...
-</SectionReveal>
-```
-
-### CSS additions in `index.css`
+Since CSS custom properties don't transition, instead add transition rules to the elements that consume them:
 ```css
-@keyframes line-wipe {
-  0% { transform: scaleX(0); }
-  100% { transform: scaleX(1); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .section-reveal * { animation: none !important; transition: none !important; }
-}
+body { transition: background-color 0.4s ease-out; }
+.glass-card { transition: border-color 0.4s ease-out, background-color 0.4s ease-out; }
 ```
+This ensures cards, borders, backgrounds, and accents all smoothly settle after the overlay reveals the new theme.
 
-### Animation implementation
-- Use Framer Motion for the content fade-up and stagger (consistent with rest of site)
-- Use CSS animation for the horizontal line (simpler, GPU-accelerated)
-- Track triggered state with `useRef` + `useState` per section so animations only fire once
+---
+
+## Performance Budget
+- Overlay uses only `transform`, `opacity`, and `background` animations (GPU-composited)
+- No DOM measurement during animation
+- No Framer Motion for the overlay (lighter)
+- Total JS: ~150 lines for ThemeTransition + ~20 lines of useTheme changes
 
