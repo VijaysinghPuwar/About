@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useTheme } from '@/hooks/useTheme';
 
 interface GridDot {
   x: number;
@@ -34,6 +35,14 @@ export function CyberGrid() {
   const rafRef = useRef(0);
   const isMobile = useIsMobile();
   const spacingRef = useRef(60);
+  const { isPentest } = useTheme();
+  const colorRef = useRef({ r: 0, g: 229, b: 255 });
+  const targetColorRef = useRef({ r: 0, g: 229, b: 255 });
+
+  // Update target color when theme changes
+  useEffect(() => {
+    targetColorRef.current = isPentest ? { r: 244, g: 63, b: 94 } : { r: 0, g: 229, b: 255 };
+  }, [isPentest]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -106,8 +115,18 @@ export function CyberGrid() {
 
       ctx.clearRect(0, 0, w, h);
 
+      // Lerp color toward target
+      const c = colorRef.current;
+      const tc = targetColorRef.current;
+      c.r += (tc.r - c.r) * 0.04;
+      c.g += (tc.g - c.g) * 0.04;
+      c.b += (tc.b - c.b) * 0.04;
+      const cr = Math.round(c.r);
+      const cg = Math.round(c.g);
+      const cb = Math.round(c.b);
+
       // Draw grid lines
-      ctx.strokeStyle = 'rgba(0, 229, 255, 0.03)';
+      ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, 0.03)`;
       ctx.lineWidth = 1;
       ctx.beginPath();
       const yStart = (offsetY % spacing + spacing) % spacing;
@@ -147,7 +166,7 @@ export function CyberGrid() {
         // Draw ripple circle
         ctx.beginPath();
         ctx.arc(rip.x, rip.y, rip.radius, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(0, 229, 255, ${rip.opacity})`;
+        ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, ${rip.opacity})`;
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
@@ -194,13 +213,13 @@ export function CyberGrid() {
 
         ctx.beginPath();
         ctx.arc(d.x, dy, d.currentSize, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(0, 229, 255, ${d.currentOpacity})`;
+        ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${d.currentOpacity})`;
         ctx.fill();
       }
 
       // Connecting lines between glowing dots near cursor
       if (glowingDots.length > 1) {
-        ctx.strokeStyle = 'rgba(0, 229, 255, 0.08)';
+        ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, 0.08)`;
         ctx.lineWidth = 0.5;
         for (let a = 0; a < glowingDots.length; a++) {
           for (let b = a + 1; b < glowingDots.length; b++) {
