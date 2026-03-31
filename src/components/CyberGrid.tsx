@@ -166,7 +166,7 @@ export function CyberGrid() {
         // Draw ripple circle
         ctx.beginPath();
         ctx.arc(rip.x, rip.y, rip.radius, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(0, 229, 255, ${rip.opacity})`;
+        ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, ${rip.opacity})`;
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
