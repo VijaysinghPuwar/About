@@ -280,6 +280,16 @@ export type Database = {
         }
         Returns: boolean
       }
+      insert_auth_event: {
+        Args: {
+          p_email?: string
+          p_event_type: string
+          p_ip_address?: string
+          p_metadata?: Json
+          p_user_agent?: string
+        }
+        Returns: undefined
+      }
       update_profile_status: {
         Args: { new_status: string; target_user_id: string }
         Returns: undefined
