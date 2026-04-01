@@ -28,11 +28,6 @@ function hexPoints(scale: number) {
   }).join(' ');
 }
 
-function hexPerimeter(scale: number) {
-  const r = RADIUS * scale;
-  return N * 2 * r * Math.sin(Math.PI / N);
-}
-
 function dataPoints(values: number[]) {
   return values.map((v, i) => {
     const angle = (360 / N) * i;
@@ -53,20 +48,17 @@ export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
 
   // Animation phases: 0=hidden, 1=grid, 2=polygon, 3=dots, 4=labels, 5=done
   const [phase, setPhase] = useState(0);
-
-  // Polygon animation progress (0→1)
   const [polyProgress, setPolyProgress] = useState(0);
-
-  // Tab highlight state
   const [tabHighlight, setTabHighlight] = useState<string | null>(null);
   const tabHighlightTimeout = useRef<ReturnType<typeof setTimeout>>();
 
-  // Displayed values (lerped for smooth transitions)
+  // Lerp state
   const displayedRef = useRef<number[]>(SKILLS.map(() => 0));
   const targetRef = useRef<number[]>(SKILLS.map(s => s.value));
   const rafRef = useRef<number>(0);
+  const [renderTick, setRenderTick] = useState(0);
 
-  // Phased entry animation
+  // Phased entry
   useEffect(() => {
     if (!isInView) return;
     const timers: ReturnType<typeof setTimeout>[] = [];
@@ -78,7 +70,7 @@ export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
     return () => timers.forEach(clearTimeout);
   }, [isInView]);
 
-  // Polygon grow animation (phase 2)
+  // Polygon grow
   useEffect(() => {
     if (phase < 2) return;
     let start: number | null = null;
@@ -94,24 +86,22 @@ export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
     return () => cancelAnimationFrame(raf);
   }, [phase]);
 
-  // Compute target values based on hover/tab highlight
+  // Update targets
   useEffect(() => {
     const base = SKILLS.map(s => s.value);
-    let newTarget: number[];
-
     if (hovered !== null) {
-      newTarget = base.map((v, i) => (i === hovered ? 100 : v * 0.6));
+      targetRef.current = base.map((v, i) => (i === hovered ? 100 : v * 0.6));
     } else if (tabHighlight) {
-      newTarget = base.map((v, i) => (SKILLS[i].tabKey === tabHighlight ? 100 : v * 0.5));
+      targetRef.current = base.map((v, i) => (SKILLS[i].tabKey === tabHighlight ? 100 : v * 0.5));
     } else {
-      newTarget = base;
+      targetRef.current = base;
     }
-    targetRef.current = newTarget;
   }, [hovered, tabHighlight]);
 
-  // Lerp animation loop
+  // Lerp loop — stops when settled
   useEffect(() => {
     if (phase < 2) return;
+
     const lerp = () => {
       let needsUpdate = false;
       const displayed = displayedRef.current;
@@ -126,15 +116,15 @@ export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
           displayed[i] = t;
         }
       }
-      // Force re-render by updating a dummy state
-      setLerpTick(prev => prev + 1);
-      rafRef.current = requestAnimationFrame(lerp);
+      setRenderTick(prev => prev + 1);
+      if (needsUpdate) {
+        rafRef.current = requestAnimationFrame(lerp);
+      }
     };
     rafRef.current = requestAnimationFrame(lerp);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [phase, polyProgress]);
+  }, [phase, polyProgress, hovered, tabHighlight]);
 
-  const [, setLerpTick] = useState(0);
   const animatedValues = displayedRef.current;
 
   // Tab highlight from parent
@@ -159,8 +149,8 @@ export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
   const isIdle = hovered === null && !tabHighlight && phase >= 5;
 
   return (
-    <div className="w-full max-w-md mx-auto relative">
-      <svg ref={ref} viewBox="0 0 400 400" className="w-full h-auto">
+    <div className="w-full max-w-md mx-auto relative overflow-hidden">
+      <svg ref={ref} viewBox="0 0 400 400" className="w-full h-auto max-w-[360px] mx-auto sm:max-w-none">
         <defs>
           <linearGradient id="radar-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#00e5ff" />
@@ -168,9 +158,8 @@ export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
           </linearGradient>
         </defs>
 
-        {/* Grid hexagons — draw in phase 1+ */}
+        {/* Grid hexagons */}
         {LEVELS.map((l, li) => {
-          const perim = hexPerimeter(l);
           const visible = phase >= 1;
           return (
             <polygon
@@ -179,11 +168,8 @@ export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
               fill="none"
               stroke="rgba(0, 229, 255, 0.06)"
               strokeWidth={1}
-              strokeDasharray={perim}
-              strokeDashoffset={visible ? 0 : perim}
-              style={{
-                transition: `stroke-dashoffset 0.4s ease-out ${li * 0.15}s`,
-              }}
+              opacity={visible ? 1 : 0}
+              style={{ transition: `opacity 0.4s ease-out ${li * 0.15}s` }}
             />
           );
         })}
@@ -209,7 +195,7 @@ export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
           <polygon
             points={dataPoints(animatedValues)}
             fill="url(#radar-gradient)"
-            fillOpacity={0.2}
+            fillOpacity={isIdle ? undefined : 0.2}
             stroke="url(#radar-gradient)"
             strokeWidth={2}
             style={isIdle ? { animation: 'radarBreathe 3s ease-in-out infinite' } : undefined}
@@ -230,9 +216,6 @@ export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
           const labelVisible = phase >= 4;
           const dotDelay = i * 0.1;
 
-          // Ambient pulse offset
-          const pulseDelay = i * 0.3;
-
           return (
             <g key={i}>
               {/* Label */}
@@ -244,9 +227,7 @@ export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
                 fontFamily="ui-monospace, monospace"
                 fill={isHov || isHighlighted ? 'hsl(var(--foreground))' : 'hsl(var(--muted-foreground))'}
                 opacity={labelVisible ? 1 : 0}
-                style={{
-                  transition: 'opacity 0.3s ease-out, fill 0.2s ease-out',
-                }}
+                style={{ transition: 'opacity 0.3s ease-out, fill 0.2s ease-out' }}
               >
                 {lines.map((line, li) => (
                   <tspan key={li} x={lx} dy={li === 0 ? 0 : 13}>{line}</tspan>
@@ -267,18 +248,17 @@ export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
                 }}
               />
 
-              {/* Visible dot */}
+              {/* Visible dot — opacity pulse instead of transform scale */}
               <circle
                 cx={px} cy={py}
                 r={isHov ? 10 : 6}
                 fill="#00e5ff"
                 opacity={dotVisible ? 1 : 0}
                 style={{
-                  transition: `r 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease-out ${dotDelay}s`,
+                  transition: `opacity 0.2s ease-out ${dotDelay}s`,
                   filter: isHov ? 'drop-shadow(0 0 8px #00e5ff)' : 'none',
-                  transformOrigin: `${px}px ${py}px`,
                   ...(isIdle && dotVisible ? {
-                    animation: `dotPulse 2s ease-in-out ${pulseDelay}s infinite`,
+                    animation: `dotPulseOpacity 2s ease-in-out ${i * 0.3}s infinite`,
                   } : {}),
                 }}
               />
@@ -286,10 +266,7 @@ export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
               {/* Tooltip */}
               {isHov && (
                 <g style={{ animation: 'tooltipIn 0.2s ease-out' }}>
-                  <foreignObject
-                    x={px - 70} y={py - 60}
-                    width={140} height={52}
-                  >
+                  <foreignObject x={px - 70} y={py - 60} width={140} height={52}>
                     <div
                       style={{
                         background: 'rgba(15,23,42,0.9)',
@@ -302,41 +279,16 @@ export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
                         gap: '4px',
                       }}
                     >
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                      }}>
-                        <span style={{
-                          color: '#fff',
-                          fontWeight: 700,
-                          fontSize: '11px',
-                          fontFamily: 'ui-monospace, monospace',
-                        }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#fff', fontWeight: 700, fontSize: '11px', fontFamily: 'ui-monospace, monospace' }}>
                           {skill.label.replace('\n', ' ')}
                         </span>
-                        <span style={{
-                          color: '#00e5ff',
-                          fontWeight: 700,
-                          fontSize: '11px',
-                          fontFamily: 'ui-monospace, monospace',
-                        }}>
+                        <span style={{ color: '#00e5ff', fontWeight: 700, fontSize: '11px', fontFamily: 'ui-monospace, monospace' }}>
                           {skill.value}%
                         </span>
                       </div>
-                      <div style={{
-                        width: '100%',
-                        height: '3px',
-                        borderRadius: '2px',
-                        background: 'rgba(255,255,255,0.1)',
-                        overflow: 'hidden',
-                      }}>
-                        <div style={{
-                          width: `${skill.value}%`,
-                          height: '100%',
-                          borderRadius: '2px',
-                          background: 'linear-gradient(90deg, #00e5ff, #a855f7)',
-                        }} />
+                      <div style={{ width: '100%', height: '3px', borderRadius: '2px', background: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+                        <div style={{ width: `${skill.value}%`, height: '100%', borderRadius: '2px', background: 'linear-gradient(90deg, #00e5ff, #a855f7)' }} />
                       </div>
                     </div>
                   </foreignObject>
@@ -347,19 +299,18 @@ export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
         })}
       </svg>
 
-      {/* Inline CSS animations */}
       <style>{`
         @keyframes radarBreathe {
           0%, 100% { fill-opacity: 0.15; }
           50% { fill-opacity: 0.25; }
         }
-        @keyframes dotPulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.2); }
+        @keyframes dotPulseOpacity {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
         }
         @keyframes tooltipIn {
-          from { opacity: 0; transform: scale(0.9); }
-          to { opacity: 1; transform: scale(1); }
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
       `}</style>
     </div>
