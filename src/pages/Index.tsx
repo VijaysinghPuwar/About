@@ -143,7 +143,7 @@ export default function Index() {
 
               {/* Social icons */}
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.5 }}
-                className="flex gap-5 mt-6">
+                className="flex gap-5 mt-4 sm:mt-6">
                 {[
                   { href: 'https://github.com/vijaysinghpuwar', icon: Github },
                   { href: 'https://linkedin.com/in/vijaysinghpuwar', icon: Linkedin },
@@ -171,7 +171,7 @@ export default function Index() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 3 }}
-          className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 z-10"
+          className="absolute bottom-8 left-1/2 -translate-x-1/2 hidden lg:flex flex-col items-center gap-2 z-10"
         >
           <span className="font-mono text-[10px] text-muted-foreground/50 tracking-wider uppercase">Scroll to explore</span>
           <motion.div
