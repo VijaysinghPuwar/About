@@ -141,7 +141,7 @@ export function TerminalHero() {
         </div>
 
         {/* Terminal body */}
-        <div className="px-4 sm:px-6 py-5 min-h-[320px] sm:min-h-[380px] flex flex-col justify-start">
+        <div className="px-4 sm:px-6 py-4 sm:py-5 min-h-[260px] sm:min-h-[380px] flex flex-col justify-start">
           {visibleLines.map((line, i) => renderLine(line, i))}
 
           {/* Currently typing line */}
