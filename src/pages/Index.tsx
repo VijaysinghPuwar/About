@@ -132,7 +132,7 @@ export default function Index() {
           </motion.div>
         </div>
 
-        <div className="container relative max-w-6xl mx-auto pt-32 pb-20 sm:pt-36 sm:pb-24">
+        <div className="container relative max-w-6xl mx-auto pt-6 pb-10 sm:pt-36 sm:pb-24">
           <div className="grid lg:grid-cols-[3fr_2fr] gap-10 lg:gap-6 items-center">
             {/* Left: Terminal */}
             <div className="order-2 lg:order-1">
