@@ -1,119 +1,66 @@
 
 
-# Security Fixes, Radar Stability, Mobile Polish & Logo Transformation
+## Mobile Hero — Eliminate Blank-Screen-First Issue
 
-## Part 1: Security Fixes (Database Migration)
+### Root cause
+The hero uses `min-h-screen flex flex-col justify-center` plus the inner container has `pt-32 pb-20` (128px top padding). On a 390px-wide phone, vertical-centering a tall terminal inside a min-100vh section + 128px top padding pushes the terminal far below the fold, leaving the top ~40% of the screen empty. The status indicators (`pt-20`) sit just below the navbar but are tiny, so the first impression is "empty dark space."
 
-### Issue 1: `auth_events` public INSERT policy
-The `WITH CHECK (true)` INSERT policy allows anyone to inject fake events.
+### Fix scope
+Mobile-only (< lg). Desktop layout stays exactly as-is.
 
-**Fix**: Remove the public INSERT policy. Create a `SECURITY DEFINER` function `insert_auth_event` that validates `event_type` against an allowlist and inserts with `auth.uid()`. Only callable server-side or by authenticated users through the function.
+### Changes — `src/pages/Index.tsx` hero section only
 
-### Issue 2: `profiles` UPDATE — users can change own `status`
-Current UPDATE policy allows `auth.uid() = user_id` with no column restriction, so users can set their own status to `approved`.
+**1. Hero section wrapper (line 113)**
+- Remove `min-h-screen` and `justify-center` on mobile; apply only at `lg:` breakpoint.
+- New: `relative flex flex-col overflow-hidden hero-grid-bg lg:min-h-screen lg:justify-center`
+- This lets the hero be exactly as tall as its content on mobile.
 
-**Fix**: Drop the current UPDATE policy. Create a new one that adds a `WITH CHECK` ensuring `status` equals the old status (prevent status changes). Alternatively, use a trigger to prevent status modification by non-admins — a `BEFORE UPDATE` trigger that checks if `status` is changing and if the caller is not admin, resets it. The trigger approach is more robust.
+**2. Inner container (line 135)**
+- Cut top padding hard on mobile: `pt-20 pb-10` (80px top — just clears the 56px navbar with a small breath) instead of `pt-32 pb-20`.
+- Keep desktop: `sm:pt-36 sm:pb-24`.
 
-### Issue 3: `user_roles` — no INSERT restriction for non-admins
-The `ALL` policy for admins covers INSERT, but there's no explicit denial for non-admin INSERT.
+**3. Status indicator block (line 117)**
+- Currently has its own `pt-20` AND sits above the container which also has `pt-32` → double spacing.
+- Remove `pt-20` on mobile; reduce `mb-4` to `mb-3`.
+- Keep absolute positioning on desktop (`md:absolute md:top-20`).
 
-**Fix**: Already safe — the only INSERT-capable policy is the admin `ALL` policy. RLS is deny-by-default. Non-admins have no INSERT policy, so they can't insert. No change needed. Add a note confirming this.
+**4. Scroll indicator (line 170)**
+- On mobile this gets stranded mid-page once we shrink the section. Hide on mobile: add `hidden lg:flex`.
 
-### Issue 4: Unauthenticated event injection
-Covered by Issue 1 fix — removing the public INSERT policy and replacing with a `SECURITY DEFINER` function.
+**5. Social icons (line 145)**
+- Reduce `mt-6` → `mt-4` on mobile to tighten.
 
-**Migration SQL** (single migration):
-```sql
--- 1. Drop unsafe auth_events INSERT policy
-DROP POLICY IF EXISTS "System can insert auth_events" ON public.auth_events;
+### Changes — `src/components/TerminalHero.tsx`
 
--- 2. Create secure insert function
-CREATE OR REPLACE FUNCTION public.insert_auth_event(
-  p_event_type TEXT,
-  p_email TEXT DEFAULT NULL,
-  p_ip_address TEXT DEFAULT NULL,
-  p_user_agent TEXT DEFAULT NULL,
-  p_metadata JSONB DEFAULT '{}'
-)
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  IF p_event_type NOT IN ('login','logout','signup','token_refresh','password_reset','failed_login','suspicious_activity') THEN
-    RAISE EXCEPTION 'Invalid event type: %', p_event_type;
-  END IF;
-  INSERT INTO public.auth_events (user_id, event_type, email, ip_address, user_agent, metadata)
-  VALUES (auth.uid(), p_event_type, p_email, p_ip_address, p_user_agent, p_metadata);
-END;
-$$;
+**6. Terminal body min-height (line ~140 area)**
+- Currently `min-h-[320px] sm:min-h-[380px]` — too tall before content types in, contributing to perceived emptiness.
+- Change to `min-h-[260px] sm:min-h-[380px]` so mobile starts more compact while typing animation plays.
 
--- 3. Prevent non-admin status changes on profiles
-CREATE OR REPLACE FUNCTION public.prevent_status_self_change()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  IF NEW.status IS DISTINCT FROM OLD.status THEN
-    IF NOT has_role(auth.uid(), 'admin') THEN
-      NEW.status := OLD.status;
-    END IF;
-  END IF;
-  RETURN NEW;
-END;
-$$;
+**7. Terminal padding**
+- `px-4 sm:px-6 py-5` → `px-4 sm:px-6 py-4 sm:py-5` (small mobile reduction).
 
-CREATE TRIGGER trg_prevent_status_self_change
-  BEFORE UPDATE ON public.profiles
-  FOR EACH ROW
-  EXECUTE FUNCTION public.prevent_status_self_change();
+### Expected mobile above-the-fold (390×844 iPhone)
+```
+[ 0–56px   ] Navbar (logo • shield • menu)
+[ 56–80px  ] Status row: ● Systems Online · 📍 NY · ● Open
+[ 80–96px  ] (12px breath)
+[ 96–420px ] Terminal card — name, role, mission begin typing immediately
+[ 420–470px] Social icons + bottom of card
+[ 470–844px] Skills section header peeks → invites scroll
 ```
 
-**Code change**: Update any client-side code that does `supabase.from('auth_events').insert(...)` to use `supabase.rpc('insert_auth_event', {...})` instead.
+No empty top zone. Hero content visible instantly.
 
-| File | Change |
-|------|--------|
-| Search for `auth_events.*insert` | Replace with RPC call |
+### Out of scope (already fine)
+- Navigation spacing — Navigation.tsx already handles mobile cleanly per prior fixes
+- Skills/projects/contact mobile layout — already addressed in earlier passes
+- HeroShield — already `hidden lg:flex`, doesn't render on mobile
 
-## Part 2: Radar Chart Stability
+### Files modified
+| File | Lines touched |
+|------|---------------|
+| `src/pages/Index.tsx` | 113, 117, 135, 145, 170 (hero section only) |
+| `src/components/TerminalHero.tsx` | terminal body min-height + padding |
 
-The SkillsRadar runs a perpetual `requestAnimationFrame` loop (line 131) that increments `setLerpTick` every frame forever, even when idle. This causes continuous re-renders and jank.
-
-**Fix in `SkillsRadar.tsx`**:
-- Stop the RAF loop when `needsUpdate` is `false` (all values have settled)
-- Restart it only when targets change (via a `useEffect` watching hovered/tabHighlight/polyProgress)
-- This eliminates the perpetual re-render cycle that causes mobile jank
-
-Also: The `dotPulse` animation uses `transform: scale()` without `will-change` or `transform-origin` on SVG circle elements, causing layout recalculation. Replace the inline `<style>` keyframe with a simpler opacity-based pulse to avoid SVG transform bugs on mobile WebKit.
-
-## Part 3: Mobile Polish
-
-Minor remaining issues visible in the screenshots:
-
-| Component | Fix |
-|-----------|-----|
-| `SkillsRadar.tsx` | Add `overflow: hidden` to the container div; cap SVG `max-width` at `min(100%, 360px)` on mobile |
-| `ThreatLevelIndicator.tsx` | The "SCANNING" overlay clips text — truncate with `overflow-hidden text-ellipsis` |
-| `TerminalHero.tsx` | Verify hero name caps at `text-xl` on mobile (already set in prior changes) |
-
-## Part 4: Logo Theme Transformation
-
-**`LogoIcon.tsx`**:
-- Import `useTheme` hook
-- Use unique gradient IDs (avoid SVG ID collisions when multiple logos render)
-- Change gradient stops based on `isPentest`: cyan→purple for default, red→orange for pentest
-- Add CSS transition on the gradient stops using `<animate>` SVG elements or by transitioning `stopColor` via inline styles
-- Add a brief glow/pulse animation during `isTransitioning`: scale the hex path to 1.08 and add a `filter: drop-shadow` that fades in/out over 600ms
-- Use `className` with conditional `animate-pulse` style during transition
-
-**`ThemeTransition.tsx`**:
-- No changes needed — already handles the overlay
-
-## Files Summary
-
-| File | Action |
-|------|--------|
-| DB Migration | Security fixes (drop policy, add functions, add trigger) |
-| `src/components/SkillsRadar.tsx` | Stop perpetual RAF loop; simplify pulse animation; add mobile overflow guard |
-| `src/components/LogoIcon.tsx` | Theme-aware gradient colors + transition glow animation |
-| Client code using `auth_events` insert | Switch to RPC call |
+No new files. No database changes. No desktop regression.
 
