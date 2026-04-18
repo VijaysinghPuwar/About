@@ -3,7 +3,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 export function ThemeTransition() {
-  const { isTransitioning, transitionDirection } = useTheme();
+  const { isTransitioning, transitionDirection, transitionOrigin } = useTheme();
   const isMobile = useIsMobile();
   const [showChip, setShowChip] = useState(false);
   const [chipFading, setChipFading] = useState(false);
@@ -44,6 +44,13 @@ export function ThemeTransition() {
   const chipText = chipDirection.current === 'to-pentest' ? 'Pentest Mode Activated' : 'Defensive Mode Restored';
   const chipBorderColor = chipDirection.current === 'to-pentest' ? '#f43f5e' : '#00e5ff';
 
+  const originX = transitionOrigin?.x ?? (typeof window !== 'undefined' ? window.innerWidth / 2 : 0);
+  const originY = transitionOrigin?.y ?? (typeof window !== 'undefined' ? window.innerHeight / 2 : 0);
+  const pulseScale = isMobile ? '180vmax' : '260vmax';
+  const pulseDuration = isMobile ? 500 : 700;
+  const pulseRingColor = isPentest ? 'rgba(244, 63, 94, 0.55)' : 'rgba(0, 229, 255, 0.45)';
+  const pulseInnerColor = isPentest ? 'rgba(244, 63, 94, 0.18)' : 'rgba(0, 229, 255, 0.14)';
+
   return (
     <>
       {/* Full-screen overlay */}
@@ -52,6 +59,61 @@ export function ThemeTransition() {
           className="fixed inset-0 pointer-events-none"
           style={{ zIndex: 90 }}
         >
+          {/* Energy pulse from toggle origin */}
+          <div
+            style={{
+              position: 'absolute',
+              left: originX,
+              top: originY,
+              width: '10px',
+              height: '10px',
+              marginLeft: '-5px',
+              marginTop: '-5px',
+              borderRadius: '50%',
+              background: `radial-gradient(circle, ${pulseInnerColor} 0%, transparent 70%)`,
+              boxShadow: `0 0 0 2px ${pulseRingColor}`,
+              animation: `theme-energy-pulse ${pulseDuration}ms cubic-bezier(0.16, 1, 0.3, 1) forwards`,
+              ['--pulse-scale' as string]: pulseScale,
+              zIndex: 2,
+            }}
+          />
+
+          {/* Glitch / RGB-shift layer (desktop only) */}
+          {!isMobile && (
+            <>
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: `linear-gradient(90deg, transparent 0%, ${isPentest ? 'rgba(244,63,94,0.10)' : 'rgba(0,229,255,0.10)'} 50%, transparent 100%)`,
+                  mixBlendMode: 'screen',
+                  animation: `theme-glitch-r 220ms steps(4, end) forwards`,
+                  zIndex: 5,
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: `linear-gradient(90deg, transparent 0%, ${isPentest ? 'rgba(0,229,255,0.08)' : 'rgba(168,85,247,0.10)'} 50%, transparent 100%)`,
+                  mixBlendMode: 'screen',
+                  animation: `theme-glitch-c 220ms steps(4, end) forwards`,
+                  zIndex: 5,
+                }}
+              />
+              {/* Scanline strip */}
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backgroundImage: `repeating-linear-gradient(0deg, ${isPentest ? 'rgba(244,63,94,0.06)' : 'rgba(0,229,255,0.05)'} 0px, ${isPentest ? 'rgba(244,63,94,0.06)' : 'rgba(0,229,255,0.05)'} 1px, transparent 1px, transparent 3px)`,
+                  animation: `theme-scanlines 300ms ease-out forwards`,
+                  zIndex: 4,
+                }}
+              />
+            </>
+          )}
+
           {/* Scan line sweeping top to bottom */}
           <div
             style={{

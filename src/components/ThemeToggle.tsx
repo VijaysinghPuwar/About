@@ -1,4 +1,5 @@
 import { Crosshair, Shield } from 'lucide-react';
+import { MouseEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
@@ -6,11 +7,16 @@ import { cn } from '@/lib/utils';
 export function ThemeToggle({ showLabel = false }: { showLabel?: boolean }) {
   const { isPentest, toggleTheme, isTransitioning } = useTheme();
 
+  const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    toggleTheme({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+  };
+
   return (
     <Button
       variant="ghost"
       size="sm"
-      onClick={toggleTheme}
+      onClick={handleClick}
       disabled={isTransitioning}
       className={cn(
         "transition-colors gap-2",

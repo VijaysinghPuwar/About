@@ -24,8 +24,9 @@ export function LogoIcon({ size = 36, className }: LogoIconProps) {
         width: size,
         height: size,
         transition: 'filter 0.4s ease-out, transform 0.3s ease-out',
-        filter: isTransitioning ? `drop-shadow(0 0 8px ${stop1})` : 'none',
+        filter: isTransitioning ? `drop-shadow(0 0 12px ${stop1}) drop-shadow(0 0 4px ${stop2})` : 'none',
         transform: isTransitioning ? 'scale(1.08)' : 'scale(1)',
+        animation: isTransitioning ? 'logo-hue-morph 1s ease-in-out' : undefined,
       }}
     >
       <svg
