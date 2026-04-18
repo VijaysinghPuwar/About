@@ -151,6 +151,82 @@ a, button, .gradient-text, .section-heading, .gradient-btn, .gradient-border::be
   100% { opacity: 1; transform: translateX(0); }
 }
 
+/* Energy pulse from toggle origin */
+@keyframes theme-energy-pulse {
+  0%   { transform: scale(0); opacity: 1; }
+  60%  { opacity: 0.7; }
+  100% { transform: scale(var(--pulse-scale, 250vmax)); opacity: 0; }
+}
+
+/* Glitch / RGB-shift layers (desktop only) */
+@keyframes theme-glitch-r {
+  0%   { transform: translateX(0); opacity: 0; }
+  20%  { transform: translateX(3px); opacity: 1; }
+  40%  { transform: translateX(-2px); opacity: 0.8; }
+  60%  { transform: translateX(2px); opacity: 0.6; }
+  80%  { transform: translateX(-1px); opacity: 0.3; }
+  100% { transform: translateX(0); opacity: 0; }
+}
+
+@keyframes theme-glitch-c {
+  0%   { transform: translateX(0); opacity: 0; }
+  20%  { transform: translateX(-3px); opacity: 1; }
+  40%  { transform: translateX(2px); opacity: 0.8; }
+  60%  { transform: translateX(-2px); opacity: 0.6; }
+  80%  { transform: translateX(1px); opacity: 0.3; }
+  100% { transform: translateX(0); opacity: 0; }
+}
+
+@keyframes theme-scanlines {
+  0%   { opacity: 0; }
+  30%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Logo hue morph during transition */
+@keyframes logo-hue-morph {
+  0%   { filter: hue-rotate(0deg) drop-shadow(0 0 8px currentColor); }
+  50%  { filter: hue-rotate(180deg) drop-shadow(0 0 14px currentColor); }
+  100% { filter: hue-rotate(0deg) drop-shadow(0 0 8px currentColor); }
+}
+
+/* Global UI reactions during theme shift */
+html.theme-shifting .glass-card,
+html.theme-shifting [data-card],
+html.theme-shifting .gradient-border {
+  transform: scale(0.985);
+  transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1), border-color 400ms;
+}
+
+html.theme-shifting svg {
+  filter: drop-shadow(0 0 4px currentColor);
+  transition: filter 300ms ease-out;
+}
+
+/* Pentest mode subtle animated noise overlay (desktop only) */
+@media (min-width: 769px) {
+  html.theme-pentest body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.04;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 0.2 0 0 0 0 0.3 0 0 0 0.6 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    background-size: 160px 160px;
+    animation: pentest-noise-drift 8s steps(8) infinite;
+    mix-blend-mode: overlay;
+  }
+}
+
+@keyframes pentest-noise-drift {
+  0%   { background-position: 0 0; }
+  25%  { background-position: -40px 20px; }
+  50%  { background-position: 30px -20px; }
+  75%  { background-position: -20px -30px; }
+  100% { background-position: 0 0; }
+}
+
 /* Mobile text sizing overrides */
 @media (max-width: 767px) {
   .section-title {
