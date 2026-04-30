@@ -3,6 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Download, Mail, Github, Linkedin, GraduationCap, Award, Briefcase } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { Helmet } from 'react-helmet-async';
 
 const skills = {
   "Security": ["IAM / Active Directory", "SIEM (Splunk)", "IDS/IPS", "Vulnerability Assessment", "Incident Response", "Endpoint Hardening"],
@@ -53,7 +54,12 @@ const fadeUp = {
 
 export default function Resume() {
   return (
-    <div className="min-h-screen py-20">
+    <div className="min-h-[100dvh] py-20">
+      <Helmet>
+        <title>Resume | Vijaysingh Puwar</title>
+        <meta name="description" content="Resume of Vijaysingh Puwar, Cybersecurity Engineer — experience, education, certifications, and core skills." />
+        <link rel="canonical" href="https://vijaysinghpuwar.com/resume" />
+      </Helmet>
       <div className="container max-w-4xl mx-auto">
         <div className="text-center mb-12">
           <h1 className="section-title mb-2">Vijaysingh Puwar</h1>

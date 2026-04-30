@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Shield, Terminal, Cloud, Mail, Github, Linkedin, CheckCircle2, Download, Briefcase, GraduationCap, Award } from 'lucide-react';
 import { motion, useInView } from 'framer-motion';
+import { Helmet } from 'react-helmet-async';
 import { useRef, useEffect, useState } from 'react';
 
 const fadeUp = {
@@ -99,7 +100,12 @@ function AnimatedCounter({ target, suffix }: { target: number; suffix: string })
 
 export default function About() {
   return (
-    <div className="min-h-screen py-20">
+    <div className="min-h-[100dvh] py-20">
+      <Helmet>
+        <title>About | Vijaysingh Puwar</title>
+        <meta name="description" content="Cybersecurity engineer focused on identity security, security automation, and cloud defense. Background, capabilities, and career highlights." />
+        <link rel="canonical" href="https://vijaysinghpuwar.com/about" />
+      </Helmet>
       <div className="container max-w-6xl mx-auto">
         <div className="text-center mb-14">
           <p className="section-heading">About</p>

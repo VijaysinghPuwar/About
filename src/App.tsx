@@ -1,4 +1,5 @@
-import { Toaster } from "@/components/ui/toaster";
+import { lazy, Suspense } from "react";
+import { HelmetProvider } from "react-helmet-async";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -9,14 +10,27 @@ import { BackToTop } from "@/components/BackToTop";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { CursorSpotlight } from "@/components/CursorSpotlight";
-import { CursorTrail } from "@/components/CursorTrail";
 import { CyberGrid } from "@/components/CyberGrid";
-import { ThemeTransition } from "@/components/ThemeTransition";
 import { Preloader } from "@/components/Preloader";
-import { ThreatLevelIndicator } from "@/components/ThreatLevelIndicator";
-import { KonamiCode } from "@/components/KonamiCode";
-import { CommandPalette } from "@/components/CommandPalette";
+
+const CursorSpotlight = lazy(() =>
+  import("@/components/CursorSpotlight").then(m => ({ default: m.CursorSpotlight }))
+);
+const CursorTrail = lazy(() =>
+  import("@/components/CursorTrail").then(m => ({ default: m.CursorTrail }))
+);
+const ThemeTransition = lazy(() =>
+  import("@/components/ThemeTransition").then(m => ({ default: m.ThemeTransition }))
+);
+const ThreatLevelIndicator = lazy(() =>
+  import("@/components/ThreatLevelIndicator").then(m => ({ default: m.ThreatLevelIndicator }))
+);
+const KonamiCode = lazy(() =>
+  import("@/components/KonamiCode").then(m => ({ default: m.KonamiCode }))
+);
+const CommandPalette = lazy(() =>
+  import("@/components/CommandPalette").then(m => ({ default: m.CommandPalette }))
+);
 
 import Index from "./pages/Index";
 import Login from "./pages/Login";
@@ -28,23 +42,35 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
+  <HelmetProvider>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
       <ThemeProvider>
         <AuthProvider>
           <CyberGrid />
-          <ThemeTransition />
+          <Suspense fallback={null}>
+            <ThemeTransition />
+          </Suspense>
           <Preloader />
           {/* ThreatLevelIndicator needs router context, mounted inside BrowserRouter below */}
-          <CursorSpotlight />
-          <CursorTrail />
-          <KonamiCode />
-          <Toaster />
+          <Suspense fallback={null}>
+            <CursorSpotlight />
+          </Suspense>
+          <Suspense fallback={null}>
+            <CursorTrail />
+          </Suspense>
+          <Suspense fallback={null}>
+            <KonamiCode />
+          </Suspense>
           <Sonner />
-          <div className="min-h-screen bg-background">
+          <div className="min-h-[100dvh] bg-background">
             <BrowserRouter>
-              <ThreatLevelIndicator />
-              <CommandPalette />
+              <Suspense fallback={null}>
+                <ThreatLevelIndicator />
+              </Suspense>
+              <Suspense fallback={null}>
+                <CommandPalette />
+              </Suspense>
               <Navigation />
               <main className="relative">
                 <Routes>
@@ -62,8 +88,9 @@ const App = () => (
           </div>
         </AuthProvider>
       </ThemeProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </HelmetProvider>
 );
 
 export default App;

@@ -44,13 +44,13 @@ export function Footer() {
 
         <div className="flex items-center gap-5">
           <a href="mailto:contact@vijaysinghpuwar.com" className="text-muted-foreground hover:text-primary transition-colors" aria-label="Email">
-            <Mail className="w-4 h-4" />
+            <Mail className="w-4 h-4" aria-hidden="true" />
           </a>
           <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors" aria-label="GitHub">
-            <Github className="w-4 h-4" />
+            <Github className="w-4 h-4" aria-hidden="true" />
           </a>
           <a href="https://linkedin.com/in/vijaysinghpuwar" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors" aria-label="LinkedIn">
-            <Linkedin className="w-4 h-4" />
+            <Linkedin className="w-4 h-4" aria-hidden="true" />
           </a>
           <span className="hidden sm:inline-flex items-center gap-1 font-mono text-[11px]" style={{ color: '#475569' }}>
             Press{' '}

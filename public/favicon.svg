@@ -6,7 +6,7 @@
     </linearGradient>
   </defs>
   <polygon points="32,4 58,19 58,49 32,64 6,49 6,19" fill="none" stroke="url(#g)" stroke-width="1.5"/>
-  <text x="30.5" y="34" font-family="system-ui,sans-serif" font-weight="700" font-size="26" text-anchor="middle" dominant-baseline="central" letter-spacing="-1">
-    <tspan fill="#00e5ff">V</tspan><tspan fill="#a855f7">P</tspan>
+  <text x="32" y="34" font-family="system-ui,sans-serif" font-weight="700" font-size="26" text-anchor="middle" dominant-baseline="central" letter-spacing="-1">
+    <tspan fill="#00e5ff">V</tspan><tspan fill="#a855f7">J</tspan>
   </text>
 </svg>

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { Helmet } from 'react-helmet-async';
 import { ShieldX, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -18,7 +19,10 @@ export default function Blocked() {
   }, [user, profile, loading, navigate]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
+    <div className="min-h-[100dvh] flex items-center justify-center px-4">
+      <Helmet>
+        <title>Access Denied | Vijaysingh Puwar</title>
+      </Helmet>
       <div className="absolute inset-0 bg-gradient-to-b from-destructive/5 via-transparent to-transparent" />
       <div className="absolute inset-0 cyber-grid opacity-20" />
 

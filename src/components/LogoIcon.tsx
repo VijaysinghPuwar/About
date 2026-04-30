@@ -20,7 +20,7 @@ export function LogoIcon({ size = 36, className }: LogoIconProps) {
 
   return (
     <div
-      className={cn('group relative inline-flex items-center justify-center', className)}
+      className={cn('group relative inline-flex items-center justify-center theme-glow', className)}
       style={{
         width: size,
         height: size,
@@ -36,8 +36,11 @@ export function LogoIcon({ size = 36, className }: LogoIconProps) {
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
         shapeRendering="geometricPrecision"
+        role="img"
+        aria-label="Vijaysingh Puwar"
         className="absolute inset-0"
       >
+        <title>Vijaysingh Puwar</title>
         <defs>
           <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor={stop1} style={{ transition: 'stop-color 0.4s ease-out' }} />

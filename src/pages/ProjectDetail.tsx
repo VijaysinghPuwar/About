@@ -2,6 +2,7 @@ import { useParams, Navigate, Link } from 'react-router-dom';
 import { ArrowLeft, Github, ExternalLink, FileText, Tag, CheckCircle2, Loader2, Lock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { motion } from 'framer-motion';
+import { Helmet } from 'react-helmet-async';
 import { useProject } from '@/hooks/useProjects';
 import { useAuth } from '@/hooks/useAuth';
 import projectsData from '@/data/projects.json';
@@ -20,7 +21,7 @@ export default function ProjectDetail() {
 
   if (!user) {
     return (
-      <div className="min-h-screen py-20 flex items-center justify-center">
+      <div className="min-h-[100dvh] py-20 flex items-center justify-center">
         <div className="glass-card rounded-lg max-w-lg w-full mx-4 p-8 text-center">
           <Lock className="w-10 h-10 text-primary mx-auto mb-4" />
           <h2 className="font-semibold text-foreground text-xl mb-2">Portfolio Access Required</h2>
@@ -49,13 +50,18 @@ export default function ProjectDetail() {
     .slice(0, 3);
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+    return <div className="min-h-[100dvh] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
 
   if (!project) return <Navigate to="/projects" replace />;
 
   return (
-    <div className="min-h-screen py-20">
+    <div className="min-h-[100dvh] py-20">
+      <Helmet>
+        <title>{`${project.title} | Vijaysingh Puwar`}</title>
+        <meta name="description" content={project.description} />
+        <link rel="canonical" href={`https://vijaysinghpuwar.com/projects/${project.id}`} />
+      </Helmet>
       <div className="container max-w-4xl mx-auto">
         <Link to="/projects" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors">
           <ArrowLeft className="w-4 h-4 mr-2" /> Back to Projects

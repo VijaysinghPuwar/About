@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { Lock, Terminal, Cloud, Shield, CheckCircle } from 'lucide-react';
+import { useReducedMotion } from 'framer-motion';
 
 /* ── Hexagon SVG path generator ── */
 function hexPath(size: number): string {
@@ -51,6 +52,7 @@ export function HeroShield() {
   const [pulses, setPulses] = useState<number[]>([]);
   const [flashing, setFlashing] = useState(false);
   const [showCheck, setShowCheck] = useState(false);
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     isMobile.current = window.matchMedia('(max-width: 767px)').matches;
@@ -58,6 +60,7 @@ export function HeroShield() {
 
   /* ── RAF loop: tilt lerp + orbit positions ── */
   useEffect(() => {
+    if (reducedMotion) return;
     const loop = () => {
       // Lerp tilt
       const lf = 0.08;
@@ -86,7 +89,7 @@ export function HeroShield() {
     };
     rafRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafRef.current);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [reducedMotion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Mouse handlers ── */
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
@@ -136,7 +139,7 @@ export function HeroShield() {
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-full flex items-center justify-center cursor-pointer md:scale-100 scale-[0.6]"
+      className="theme-glow relative w-full h-full flex items-center justify-center cursor-pointer md:scale-100 scale-[0.6]"
       onMouseMove={handleMouseMove}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -151,7 +154,9 @@ export function HeroShield() {
       {layers.map((layer, i) => {
         const tx = tilt.x * layer.tiltMul;
         const ty = tilt.y * layer.tiltMul;
-        const idleRotateStyle: React.CSSProperties = !hovering && layer.idleSpeed > 0
+        const idleRotateStyle: React.CSSProperties = reducedMotion
+          ? {}
+          : !hovering && layer.idleSpeed > 0
           ? {
               animation: `hero-hex-spin ${layer.idleSpeed}s linear infinite${layer.idleDir < 0 ? ' reverse' : ''}`,
             }
@@ -178,6 +183,8 @@ export function HeroShield() {
               viewBox={`${-layer.size / 2} ${-layer.size / 2} ${layer.size} ${layer.size}`}
               width={layer.size}
               height={layer.size}
+              aria-hidden="true"
+              focusable="false"
               className="w-full h-full"
             >
               <defs>

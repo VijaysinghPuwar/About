@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useLocation } from 'react-router-dom';
 
 const SECTIONS = [
@@ -26,6 +26,7 @@ export function ThreatLevelIndicator() {
   const [transitionGlitch, setTransitionGlitch] = useState(false);
   const widgetRef = useRef<HTMLDivElement>(null);
   const prevIdxRef = useRef(0);
+  const reducedMotion = useReducedMotion();
 
   const isIndex = location.pathname === '/';
   const current = SECTIONS[activeIdx];
@@ -78,7 +79,7 @@ export function ThreatLevelIndicator() {
 
   // CLASSIFIED periodic glitch
   useEffect(() => {
-    if (current.id !== 'experience') {
+    if (current.id !== 'experience' || reducedMotion) {
       setGlitchText(null);
       return;
     }
@@ -87,7 +88,7 @@ export function ThreatLevelIndicator() {
       setTimeout(() => setGlitchText(null), 150);
     }, 3000);
     return () => clearInterval(iv);
-  }, [current.id]);
+  }, [current.id, reducedMotion]);
 
   // Click outside to close
   useEffect(() => {

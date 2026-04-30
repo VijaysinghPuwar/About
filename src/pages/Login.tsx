@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { Helmet } from 'react-helmet-async';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 export default function Login() {
   const [loading, setLoading] = useState(false);
   const { user, profile, loading: authLoading, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
-  const { toast } = useToast();
 
   useEffect(() => {
     if (!authLoading && user && profile) {
@@ -24,25 +24,28 @@ export default function Login() {
     try {
       const { error } = await signInWithGoogle();
       if (error) {
-        toast({ title: 'Sign in failed', description: error.message || 'Could not sign in with Google.', variant: 'destructive' });
+        toast.error('Sign in failed', { description: error.message || 'Could not sign in with Google.' });
         setLoading(false);
       }
     } catch {
-      toast({ title: 'Sign in failed', description: 'An unexpected error occurred.', variant: 'destructive' });
+      toast.error('Sign in failed', { description: 'An unexpected error occurred.' });
       setLoading(false);
     }
   };
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-[100dvh] flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 hero-grid-bg">
+    <div className="min-h-[100dvh] flex items-center justify-center px-4 hero-grid-bg">
+      <Helmet>
+        <title>Sign In | Vijaysingh Puwar</title>
+      </Helmet>
       <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent" />
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative w-full max-w-md">
