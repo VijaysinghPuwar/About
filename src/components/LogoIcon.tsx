@@ -35,6 +35,7 @@ export function LogoIcon({ size = 36, className }: LogoIconProps) {
         height={size}
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
+        shapeRendering="geometricPrecision"
       >
         <defs>
           <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
@@ -48,18 +49,18 @@ export function LogoIcon({ size = 36, className }: LogoIconProps) {
           stroke={`url(#${gradientId})`}
           strokeWidth="1.5"
           fill="none"
+          vectorEffect="non-scaling-stroke"
           className="transition-all duration-300 group-hover:[stroke-opacity:1]"
         />
 
         <text
-          x="19"
-          y="20"
+          x="20"
+          y="21"
           textAnchor="middle"
-          dominantBaseline="central"
-          fontFamily="'Space Grotesk', system-ui, sans-serif"
+          dominantBaseline="middle"
+          fontFamily="'Space Grotesk', -apple-system, BlinkMacSystemFont, system-ui, sans-serif"
           fontWeight="700"
-          fontSize="18"
-          letterSpacing="-0.8"
+          fontSize="14"
         >
           <tspan
             fill={stop1}
@@ -68,6 +69,7 @@ export function LogoIcon({ size = 36, className }: LogoIconProps) {
           >V</tspan>
           <tspan
             fill={stop2}
+            dx="0.5"
             className="transition-colors duration-300 group-hover:fill-white"
             style={{ transition: 'fill 0.4s ease-out' }}
           >P</tspan>

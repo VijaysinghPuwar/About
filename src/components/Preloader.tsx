@@ -64,7 +64,14 @@ export function Preloader() {
           style={{ backgroundColor: '#050816' }}
         >
           <div className="relative" style={{ width: 80, height: 80 }}>
-            <svg viewBox="0 0 40 40" width={80} height={80} fill="none" xmlns="http://www.w3.org/2000/svg">
+            <svg
+              viewBox="0 0 40 40"
+              width={80}
+              height={80}
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              shapeRendering="geometricPrecision"
+            >
               <defs>
                 <linearGradient id="preloader-hex-grad" x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%" stopColor="#00e5ff" />
@@ -77,28 +84,31 @@ export function Preloader() {
                 stroke="url(#preloader-hex-grad)"
                 strokeWidth="1.5"
                 fill="none"
+                vectorEffect="non-scaling-stroke"
                 strokeDasharray={HEX_PERIMETER}
                 initial={{ strokeDashoffset: HEX_PERIMETER }}
                 animate={{ strokeDashoffset: 0 }}
                 transition={{ duration: 0.4, ease: 'easeInOut' }}
               />
 
-              <motion.text
-                x="19"
-                y="20"
-                textAnchor="middle"
-                dominantBaseline="central"
-                fontFamily="'Space Grotesk', system-ui, sans-serif"
-                fontWeight="700"
-                fontSize="18"
-                letterSpacing="-0.8"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
+              <motion.g
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 transition={{ delay: 0.4, duration: 0.3, ease: 'easeOut' }}
               >
-                <tspan fill="#00e5ff">V</tspan>
-                <tspan fill="#a855f7">P</tspan>
-              </motion.text>
+                <text
+                  x="20"
+                  y="21"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontFamily="'Space Grotesk', -apple-system, BlinkMacSystemFont, system-ui, sans-serif"
+                  fontWeight="700"
+                  fontSize="14"
+                >
+                  <tspan fill="#00e5ff">V</tspan>
+                  <tspan fill="#a855f7" dx="0.5">P</tspan>
+                </text>
+              </motion.g>
             </svg>
           </div>
 
