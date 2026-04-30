@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -106,7 +106,6 @@ export default function Admin() {
   const [showSuspiciousOnly, setShowSuspiciousOnly] = useState(false);
   const { user, isAdmin, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const { toast } = useToast();
 
   const form = useForm<ProjectFormData>({
     resolver: zodResolver(projectSchema),
@@ -156,7 +155,7 @@ export default function Admin() {
       setProjectAccess(accessByProject);
     } catch (err) {
       console.error('Error fetching data:', err);
-      toast({ title: 'Error', description: 'Failed to load admin data', variant: 'destructive' });
+      toast.error('Error', { description: 'Failed to load admin data' });
     } finally {
       setLoading(false);
     }
@@ -170,10 +169,10 @@ export default function Admin() {
         new_status: newStatus,
       });
       if (error) throw error;
-      toast({ title: 'Status Updated', description: `User status changed to ${newStatus}` });
+      toast.success('Status Updated', { description: `User status changed to ${newStatus}` });
       fetchData();
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message || 'Failed to update status', variant: 'destructive' });
+      toast.error('Error', { description: err.message || 'Failed to update status' });
     } finally {
       setUpdatingStatus(null);
     }
@@ -202,11 +201,11 @@ export default function Admin() {
         github_link: data.github_link || null, featured: data.featured || false,
       });
       if (error) throw error;
-      toast({ title: 'Project Created', description: `${data.title} has been added.` });
+      toast.success('Project Created', { description: `${data.title} has been added.` });
       form.reset();
       fetchData();
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message || 'Failed to create project', variant: 'destructive' });
+      toast.error('Error', { description: err.message || 'Failed to create project' });
     } finally {
       setIsAddingProject(false);
     }
@@ -217,9 +216,9 @@ export default function Admin() {
       const { error } = await supabase.from('projects').update({ access_level: newLevel }).eq('id', projectId);
       if (error) throw error;
       setProjects(projects.map(p => p.id === projectId ? { ...p, access_level: newLevel } : p));
-      toast({ title: 'Access Updated', description: `Project access level changed to ${newLevel}` });
+      toast.success('Access Updated', { description: `Project access level changed to ${newLevel}` });
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+      toast.error('Error', { description: err.message });
     }
   };
 
@@ -229,13 +228,13 @@ export default function Admin() {
         project_id: projectId, user_id: userId, granted_by: user?.id,
       });
       if (error) {
-        if (error.code === '23505') { toast({ title: 'Already Granted' }); return; }
+        if (error.code === '23505') { toast.info('Already Granted'); return; }
         throw error;
       }
-      toast({ title: 'Access Granted' });
+      toast.success('Access Granted');
       fetchData();
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+      toast.error('Error', { description: err.message });
     }
   };
 
@@ -243,10 +242,10 @@ export default function Admin() {
     try {
       const { error } = await supabase.from('project_access').delete().eq('id', accessId);
       if (error) throw error;
-      toast({ title: 'Access Revoked' });
+      toast.success('Access Revoked');
       fetchData();
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+      toast.error('Error', { description: err.message });
     }
   };
 
@@ -255,10 +254,10 @@ export default function Admin() {
     try {
       const { error } = await supabase.from('projects').delete().eq('id', projectId);
       if (error) throw error;
-      toast({ title: 'Project Deleted' });
+      toast.success('Project Deleted');
       fetchData();
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+      toast.error('Error', { description: err.message });
     }
   };
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useReducedMotion } from 'framer-motion';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 interface Particle {
@@ -17,9 +18,10 @@ export function CursorTrail() {
   const lastPosRef = useRef({ x: 0, y: 0 });
   const rafRef = useRef(0);
   const isMobile = useIsMobile();
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
-    if (isMobile) return;
+    if (isMobile || reducedMotion) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
@@ -93,9 +95,9 @@ export function CursorTrail() {
       window.removeEventListener('mousemove', onMove);
       cancelAnimationFrame(rafRef.current);
     };
-  }, [isMobile]);
+  }, [isMobile, reducedMotion]);
 
-  if (isMobile) return null;
+  if (isMobile || reducedMotion) return null;
 
   return (
     <canvas

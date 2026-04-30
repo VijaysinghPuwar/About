@@ -10,14 +10,14 @@ import {
   Radar, Download, Lock,
   Loader2, CheckCircle2, User,
 } from 'lucide-react';
-import { motion, AnimatePresence, useInView } from 'framer-motion';
+import { motion, AnimatePresence, useInView, useReducedMotion } from 'framer-motion';
+import { toast } from 'sonner';
 import projectsData from '@/data/projects.json';
 import { useAuth } from '@/hooks/useAuth';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
 import { SectionReveal, RevealLabel } from '@/components/SectionReveal';
 
-import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
 const HeroShield = lazy(() => import('@/components/HeroShield').then(m => ({ default: m.HeroShield })));
@@ -53,7 +53,7 @@ const sectionAnim = {
 export default function Index() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const reducedMotion = useReducedMotion();
 
   /* projects */
   const { projects: dbProjects } = useProjects();
@@ -95,9 +95,9 @@ export default function Index() {
       if (error) throw error;
       setSubmitted(true);
       setFormData({ name: '', email: '', subject: '', message: '' });
-      toast({ title: 'Message sent', description: "Thank you — I'll get back to you soon." });
+      toast.success('Message sent', { description: "Thank you — I'll get back to you soon." });
     } catch {
-      toast({ title: 'Failed to send', description: 'Please try again or email me directly.', variant: 'destructive' });
+      toast.error('Failed to send', { description: 'Please try again or email me directly.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -177,8 +177,8 @@ export default function Index() {
         >
           <span className="font-mono text-[10px] text-muted-foreground/50 tracking-wider uppercase">Scroll to explore</span>
           <motion.div
-            animate={{ y: [0, 6, 0] }}
-            transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+            animate={reducedMotion ? undefined : { y: [0, 6, 0] }}
+            transition={reducedMotion ? undefined : { duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
           >
             <ArrowRight className="w-4 h-4 text-muted-foreground/40 rotate-90" />
           </motion.div>

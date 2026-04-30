@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useReducedMotion } from 'framer-motion';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useTheme } from '@/hooks/useTheme';
 
@@ -34,6 +35,7 @@ export function CyberGrid() {
   const scrollRef = useRef(0);
   const rafRef = useRef(0);
   const isMobile = useIsMobile();
+  const reducedMotion = useReducedMotion();
   const spacingRef = useRef(60);
   const { isPentest } = useTheme();
   const colorRef = useRef({ r: 0, g: 229, b: 255 });
@@ -80,14 +82,28 @@ export function CyberGrid() {
     window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
 
-    // Mouse (desktop only)
+    // Mouse (desktop only) — rAF-throttled so we update the ref at most once per frame
+    let pendingMouse: { x: number; y: number } | null = null;
+    let mouseRafQueued = false;
+    const flushMouse = () => {
+      mouseRafQueued = false;
+      if (pendingMouse) {
+        mouseRef.current = pendingMouse;
+        pendingMouse = null;
+      }
+    };
     const onMove = (e: MouseEvent) => {
-      mouseRef.current = { x: e.clientX, y: e.clientY };
+      pendingMouse = { x: e.clientX, y: e.clientY };
+      if (!mouseRafQueued) {
+        mouseRafQueued = true;
+        requestAnimationFrame(flushMouse);
+      }
     };
     if (!mobile) window.addEventListener('mousemove', onMove, { passive: true });
 
-    // Click / tap ripple
+    // Click / tap ripple — disabled when user prefers reduced motion
     const spawnRipple = (x: number, y: number) => {
+      if (reducedMotion) return;
       ripplesRef.current.push({ x, y, radius: 0, opacity: 0.15 });
     };
     const onClick = (e: MouseEvent) => spawnRipple(e.clientX, e.clientY);
@@ -178,8 +194,8 @@ export function CyberGrid() {
         }
       }
 
-      // Proximity glow (desktop, skip if frame is slow)
-      const skipProximity = mobile || dt > 20;
+      // Proximity glow (desktop only, skip on slow frames or reduced-motion preference)
+      const skipProximity = mobile || dt > 20 || reducedMotion;
       const glowingDots: number[] = [];
 
       if (!skipProximity) {
@@ -247,7 +263,7 @@ export function CyberGrid() {
       window.removeEventListener('click', onClick);
       window.removeEventListener('touchstart', onTouch);
     };
-  }, [isMobile]);
+  }, [isMobile, reducedMotion]);
 
   return (
     <canvas

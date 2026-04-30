@@ -20,7 +20,7 @@ export function LogoIcon({ size = 36, className }: LogoIconProps) {
 
   return (
     <div
-      className={cn('group relative inline-flex items-center justify-center', className)}
+      className={cn('group relative inline-flex items-center justify-center theme-glow', className)}
       style={{
         width: size,
         height: size,

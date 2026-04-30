@@ -3,13 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 export default function Login() {
   const [loading, setLoading] = useState(false);
   const { user, profile, loading: authLoading, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
-  const { toast } = useToast();
 
   useEffect(() => {
     if (!authLoading && user && profile) {
@@ -24,11 +23,11 @@ export default function Login() {
     try {
       const { error } = await signInWithGoogle();
       if (error) {
-        toast({ title: 'Sign in failed', description: error.message || 'Could not sign in with Google.', variant: 'destructive' });
+        toast.error('Sign in failed', { description: error.message || 'Could not sign in with Google.' });
         setLoading(false);
       }
     } catch {
-      toast({ title: 'Sign in failed', description: 'An unexpected error occurred.', variant: 'destructive' });
+      toast.error('Sign in failed', { description: 'An unexpected error occurred.' });
       setLoading(false);
     }
   };

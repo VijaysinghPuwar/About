@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Mail, Github, Linkedin, Loader2, CheckCircle2, User } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -14,7 +14,6 @@ export default function Contact() {
   const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const { toast } = useToast();
 
   useEffect(() => {
     if (profile?.full_name) {
@@ -33,9 +32,9 @@ export default function Contact() {
       if (error) throw error;
       setSubmitted(true);
       setFormData({ name: '', email: '', subject: '', message: '' });
-      toast({ title: 'Message sent', description: "Thank you — I'll get back to you soon." });
+      toast.success('Message sent', { description: "Thank you — I'll get back to you soon." });
     } catch {
-      toast({ title: 'Failed to send', description: 'Please try again or email me directly.', variant: 'destructive' });
+      toast.error('Failed to send', { description: 'Please try again or email me directly.' });
     } finally {
       setIsSubmitting(false);
     }
