@@ -16,7 +16,7 @@ export function LogoIcon({ size = 36, className }: LogoIconProps) {
   const stop1 = isPentest ? '#f43f5e' : '#3b82f6';
   const stop2 = isPentest ? '#fb923c' : '#a855f7';
   const gradientId = `hex-grad-${uid}`;
-  const fontPx = Math.round(size * 0.36);
+  const fontPx = Math.round(size * 0.45);
 
   return (
     <div
@@ -60,7 +60,7 @@ export function LogoIcon({ size = 36, className }: LogoIconProps) {
         style={{
           fontFamily: "'Space Grotesk', -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
           fontSize: `${fontPx}px`,
-          letterSpacing: '-0.02em',
+          letterSpacing: '-0.05em',
         }}
       >
         <span

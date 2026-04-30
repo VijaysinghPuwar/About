@@ -96,8 +96,8 @@ export function Preloader() {
               className="relative z-10 select-none leading-none font-bold tracking-tight"
               style={{
                 fontFamily: "'Space Grotesk', -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
-                fontSize: '28px',
-                letterSpacing: '-0.02em',
+                fontSize: '36px',
+                letterSpacing: '-0.05em',
               }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
