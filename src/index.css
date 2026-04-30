@@ -16,13 +16,13 @@
     --popover: 217 50% 9%;
     --popover-foreground: 215 20% 90%;
 
-    --primary: 187 100% 50%;
+    --primary: 217 91% 60%;
     --primary-foreground: 230 50% 4%;
-    --primary-glow: 187 100% 65%;
+    --primary-glow: 217 91% 72%;
 
-    --secondary: 271 91% 65%;
+    --secondary: 262 83% 66%;
     --secondary-foreground: 0 0% 100%;
-    --secondary-glow: 271 91% 78%;
+    --secondary-glow: 262 83% 78%;
 
     --muted: 217 25% 14%;
     --muted-foreground: 215 16% 47%;
@@ -39,12 +39,12 @@
 
     --border: 217 20% 14%;
     --input: 217 20% 14%;
-    --ring: 187 100% 50%;
+    --ring: 217 91% 60%;
 
     --radius: 0.5rem;
 
     --grid-color: 217 20% 12%;
-    --scanline-color: 187 100% 50%;
+    --scanline-color: 217 91% 60%;
     --terminal-green: 185 80% 48%;
     --danger-red: 350 80% 55%;
     --warning-amber: 38 92% 50%;

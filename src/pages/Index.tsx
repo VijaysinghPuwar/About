@@ -274,7 +274,7 @@ export default function Index() {
             <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0} className="space-y-6">
               <div className="glass-card rounded-xl p-6 space-y-5 hover:border-primary/30 transition-colors">
                 <div className="flex items-center gap-4">
-                  <span className="gradient-text text-3xl font-bold">VP</span>
+                  <span className="gradient-text text-3xl font-bold">VJ</span>
                   <div>
                     <h3 className="text-lg font-bold text-foreground">Vijaysingh Puwar</h3>
                     <p className="text-sm text-muted-foreground">Cybersecurity Engineer</p>

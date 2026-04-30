@@ -113,7 +113,7 @@ export default function About() {
           <div className="flex-shrink-0">
             <div className="w-44 h-44 rounded-2xl gradient-border overflow-hidden flex items-center justify-center">
               <div className="w-full h-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
-                <span className="text-5xl font-bold gradient-text">VP</span>
+                <span className="text-5xl font-bold gradient-text">VJ</span>
               </div>
             </div>
           </div>

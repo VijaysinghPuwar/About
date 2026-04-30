@@ -50,7 +50,7 @@ export default function Login() {
           {/* Logo */}
           <div className="text-center space-y-3">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl gradient-border">
-              <span className="text-2xl font-bold gradient-text">VP</span>
+              <span className="text-2xl font-bold gradient-text">VJ</span>
             </div>
             <div>
               <h1 className="text-2xl font-bold text-foreground">Welcome</h1>
