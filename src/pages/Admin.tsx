@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { Helmet } from 'react-helmet-async';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -349,6 +350,10 @@ export default function Admin() {
 
   return (
     <div className="min-h-[100dvh] py-12">
+      <Helmet>
+        <title>Admin Dashboard | Vijaysingh Puwar</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
       <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent" />
       <div className="absolute inset-0 cyber-grid opacity-20" />
 

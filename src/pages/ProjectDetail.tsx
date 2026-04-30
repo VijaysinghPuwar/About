@@ -2,6 +2,7 @@ import { useParams, Navigate, Link } from 'react-router-dom';
 import { ArrowLeft, Github, ExternalLink, FileText, Tag, CheckCircle2, Loader2, Lock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { motion } from 'framer-motion';
+import { Helmet } from 'react-helmet-async';
 import { useProject } from '@/hooks/useProjects';
 import { useAuth } from '@/hooks/useAuth';
 import projectsData from '@/data/projects.json';
@@ -56,6 +57,11 @@ export default function ProjectDetail() {
 
   return (
     <div className="min-h-[100dvh] py-20">
+      <Helmet>
+        <title>{`${project.title} | Vijaysingh Puwar`}</title>
+        <meta name="description" content={project.description} />
+        <link rel="canonical" href={`https://vijaysinghpuwar.com/projects/${project.id}`} />
+      </Helmet>
       <div className="container max-w-4xl mx-auto">
         <Link to="/projects" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors">
           <ArrowLeft className="w-4 h-4 mr-2" /> Back to Projects

@@ -183,6 +183,8 @@ export function HeroShield() {
               viewBox={`${-layer.size / 2} ${-layer.size / 2} ${layer.size} ${layer.size}`}
               width={layer.size}
               height={layer.size}
+              aria-hidden="true"
+              focusable="false"
               className="w-full h-full"
             >
               <defs>

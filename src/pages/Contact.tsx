@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Mail, Github, Linkedin, Loader2, CheckCircle2, User } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { Helmet } from 'react-helmet-async';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -42,6 +43,11 @@ export default function Contact() {
 
   return (
     <div className="min-h-[100dvh] py-20">
+      <Helmet>
+        <title>Contact | Vijaysingh Puwar</title>
+        <meta name="description" content="Reach out about cybersecurity engineering roles, security operations, cloud security, and consulting." />
+        <link rel="canonical" href="https://vijaysinghpuwar.com/contact" />
+      </Helmet>
       <div className="container max-w-6xl mx-auto">
         <div className="text-center mb-12">
           <p className="section-heading">Contact</p>

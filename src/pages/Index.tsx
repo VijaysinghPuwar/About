@@ -11,6 +11,7 @@ import {
   Loader2, CheckCircle2, User,
 } from 'lucide-react';
 import { motion, AnimatePresence, useInView, useReducedMotion } from 'framer-motion';
+import { Helmet } from 'react-helmet-async';
 import { toast } from 'sonner';
 import projectsData from '@/data/projects.json';
 import { useAuth } from '@/hooks/useAuth';
@@ -109,8 +110,16 @@ export default function Index() {
 
   return (
     <div className="min-h-[100dvh]">
+      <Helmet>
+        <title>Vijaysingh Puwar | Cybersecurity Engineer</title>
+        <meta name="description" content="Cybersecurity engineer specializing in identity security, security automation, cloud defense, and detection engineering. M.S. Cybersecurity at Pace University, New York." />
+        <link rel="canonical" href="https://vijaysinghpuwar.com/" />
+      </Helmet>
+      {/* sr-only h1 establishes the page heading for SEO and screen readers; the visual hero is the terminal card */}
+      <h1 className="sr-only">Vijaysingh Puwar — Cybersecurity Engineer</h1>
       {/* ═══════ HERO ═══════ */}
-      <section id="home" className="relative flex flex-col overflow-hidden hero-grid-bg lg:min-h-[100dvh] lg:justify-center">
+      <section id="home" aria-labelledby="home-heading" className="relative flex flex-col overflow-hidden hero-grid-bg lg:min-h-[100dvh] lg:justify-center">
+        <span id="home-heading" className="sr-only">Hero</span>
         <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] via-transparent to-background" />
 
         {/* Status indicators */}
@@ -145,13 +154,14 @@ export default function Index() {
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.5 }}
                 className="flex gap-5 mt-4 sm:mt-6">
                 {[
-                  { href: 'https://github.com/vijaysinghpuwar', icon: Github },
-                  { href: 'https://linkedin.com/in/vijaysinghpuwar', icon: Linkedin },
-                  { href: 'mailto:contact@vijaysinghpuwar.com', icon: Mail },
-                ].map(({ href, icon: Icon }) => (
+                  { href: 'https://github.com/vijaysinghpuwar', icon: Github, label: 'GitHub' },
+                  { href: 'https://linkedin.com/in/vijaysinghpuwar', icon: Linkedin, label: 'LinkedIn' },
+                  { href: 'mailto:contact@vijaysinghpuwar.com', icon: Mail, label: 'Email' },
+                ].map(({ href, icon: Icon, label }) => (
                   <a key={href} href={href} target={href.startsWith('mailto') ? undefined : '_blank'} rel="noopener noreferrer"
+                    aria-label={label}
                     className="text-muted-foreground hover:text-primary transition-colors">
-                    <Icon className="w-5 h-5" />
+                    <Icon className="w-5 h-5" aria-hidden="true" />
                   </a>
                 ))}
               </motion.div>
@@ -186,7 +196,7 @@ export default function Index() {
       </section>
 
       {/* ═══════ SKILLS & TECHNOLOGIES ═══════ */}
-      <section id="skills" className="py-20 border-t border-border/40">
+      <section id="skills" aria-label="Skills and Technologies" className="py-20 border-t border-border/40">
         <SectionReveal className="container max-w-6xl mx-auto px-4">
           <div className="text-center mb-14">
             <RevealLabel text="Arsenal" />
@@ -218,7 +228,7 @@ export default function Index() {
       </section>
 
       {/* ═══════ PROJECTS ═══════ */}
-      <section id="projects" className="py-20 border-t border-border/40">
+      <section id="projects" aria-label="Featured Projects" className="py-20 border-t border-border/40">
         <SectionReveal className="container max-w-6xl mx-auto px-4">
           <div className="text-center mb-14">
             <RevealLabel text="Work" />
@@ -247,7 +257,7 @@ export default function Index() {
       </section>
 
       {/* ═══════ EXPERIENCE & EDUCATION ═══════ */}
-      <section id="experience" className="py-20 border-t border-border/40 relative overflow-hidden">
+      <section id="experience" aria-label="Experience and Education" className="py-20 border-t border-border/40 relative overflow-hidden">
         
         <SectionReveal className="container max-w-5xl mx-auto relative z-10 px-4">
           <div className="text-center mb-4">
@@ -261,7 +271,7 @@ export default function Index() {
       </section>
 
       {/* ═══════ CONTACT ═══════ */}
-      <section id="contact" className="py-20 border-t border-border/40">
+      <section id="contact" aria-label="Contact" className="py-20 border-t border-border/40">
         <SectionReveal className="container max-w-6xl mx-auto px-4">
           <div className="text-center mb-4">
             <RevealLabel text="Connect" />

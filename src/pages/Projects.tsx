@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Search, Lock, Github } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { Helmet } from 'react-helmet-async';
 import { useProjects } from '@/hooks/useProjects';
 import { useAuth } from '@/hooks/useAuth';
 import projectsData from '@/data/projects.json';
@@ -62,6 +63,11 @@ export default function Projects() {
 
   return (
     <div className="min-h-[100dvh] py-20">
+      <Helmet>
+        <title>Projects | Vijaysingh Puwar</title>
+        <meta name="description" content="Cybersecurity projects: Linux fleet hardening, HTTP scanning with Nmap NSE, Windows dev-environment baselines, and security automation." />
+        <link rel="canonical" href="https://vijaysinghpuwar.com/projects" />
+      </Helmet>
       <div className="container max-w-6xl mx-auto">
         <div className="text-center mb-12">
           <p className="section-heading">Portfolio</p>
