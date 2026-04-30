@@ -108,9 +108,9 @@ export default function Index() {
   };
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-[100dvh]">
       {/* ═══════ HERO ═══════ */}
-      <section id="home" className="relative flex flex-col overflow-hidden hero-grid-bg lg:min-h-screen lg:justify-center">
+      <section id="home" className="relative flex flex-col overflow-hidden hero-grid-bg lg:min-h-[100dvh] lg:justify-center">
         <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] via-transparent to-background" />
 
         {/* Status indicators */}

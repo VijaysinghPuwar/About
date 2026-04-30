@@ -45,7 +45,7 @@ export default function Projects() {
 
   if (!user) {
     return (
-      <div className="min-h-screen py-20 flex items-center justify-center">
+      <div className="min-h-[100dvh] py-20 flex items-center justify-center">
         <div className="glass-card rounded-lg max-w-lg w-full mx-4 p-8 text-center">
           <Lock className="w-10 h-10 text-primary mx-auto mb-4" />
           <h2 className="font-semibold text-foreground text-xl mb-2">Portfolio Access Required</h2>
@@ -61,7 +61,7 @@ export default function Projects() {
   }
 
   return (
-    <div className="min-h-screen py-20">
+    <div className="min-h-[100dvh] py-20">
       <div className="container max-w-6xl mx-auto">
         <div className="text-center mb-12">
           <p className="section-heading">Portfolio</p>

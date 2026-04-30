@@ -41,7 +41,7 @@ const App = () => (
           <KonamiCode />
           <Toaster />
           <Sonner />
-          <div className="min-h-screen bg-background">
+          <div className="min-h-[100dvh] bg-background">
             <BrowserRouter>
               <ThreatLevelIndicator />
               <CommandPalette />

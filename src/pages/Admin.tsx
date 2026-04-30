@@ -276,7 +276,7 @@ export default function Admin() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-[100dvh] flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
@@ -349,7 +349,7 @@ export default function Admin() {
   };
 
   return (
-    <div className="min-h-screen py-12">
+    <div className="min-h-[100dvh] py-12">
       <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent" />
       <div className="absolute inset-0 cyber-grid opacity-20" />
 

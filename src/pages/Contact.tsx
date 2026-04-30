@@ -42,7 +42,7 @@ export default function Contact() {
   };
 
   return (
-    <div className="min-h-screen py-20">
+    <div className="min-h-[100dvh] py-20">
       <div className="container max-w-6xl mx-auto">
         <div className="text-center mb-12">
           <p className="section-heading">Contact</p>
