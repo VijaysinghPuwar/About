@@ -15,12 +15,12 @@ import projectsData from '@/data/projects.json';
 import { useAuth } from '@/hooks/useAuth';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
-import { HeroShield } from '@/components/HeroShield';
 import { SectionReveal, RevealLabel } from '@/components/SectionReveal';
 
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
+const HeroShield = lazy(() => import('@/components/HeroShield').then(m => ({ default: m.HeroShield })));
 const SkillsRadar = lazy(() => import('@/components/SkillsRadar').then(m => ({ default: m.SkillsRadar })));
 const SkillCategories = lazy(() => import('@/components/SkillCategories').then(m => ({ default: m.SkillCategories })));
 const ExperienceTimeline = lazy(() => import('@/components/ExperienceTimeline').then(m => ({ default: m.ExperienceTimeline })));
@@ -161,7 +161,9 @@ export default function Index() {
             <motion.div initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }}
               transition={{ type: 'spring', stiffness: 80, damping: 15, delay: 0.5 }}
               className="order-1 lg:order-2 hidden lg:flex relative h-[460px] items-center justify-center">
-              <HeroShield />
+              <Suspense fallback={<div className="w-full h-full" aria-hidden="true" />}>
+                <HeroShield />
+              </Suspense>
             </motion.div>
           </div>
         </div>
