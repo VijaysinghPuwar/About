@@ -20,7 +20,20 @@ export default defineConfig(({ mode }) => ({
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
-          if (id.includes("@radix-ui")) return "radix-vendor";
+          // React + Radix must share a chunk. Radix calls React.forwardRef at
+          // module-evaluation time; if a separate radix-vendor chunk is parsed
+          // before react-vendor, React is undefined and the page crashes in
+          // production (this happened on the first deploy of PR #2).
+          // Combining them guarantees React is initialized first.
+          if (
+            id.includes("@radix-ui") ||
+            id.includes("/react/") ||
+            id.includes("/react-dom/") ||
+            id.includes("/react-router") ||
+            id.includes("/scheduler/")
+          ) {
+            return "react-radix-vendor";
+          }
           if (
             id.includes("@supabase") ||
             id.includes("@tanstack/react-query") ||
@@ -30,14 +43,6 @@ export default defineConfig(({ mode }) => ({
           }
           if (id.includes("/recharts/") || id.includes("/d3-")) return "charts-vendor";
           if (id.includes("/framer-motion/")) return "motion-vendor";
-          if (
-            id.includes("/react/") ||
-            id.includes("/react-dom/") ||
-            id.includes("/react-router") ||
-            id.includes("/scheduler/")
-          ) {
-            return "react-vendor";
-          }
         },
       },
     },
