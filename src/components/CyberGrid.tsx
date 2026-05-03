@@ -32,6 +32,8 @@ export function CyberGrid() {
   const dotsRef = useRef<GridDot[]>([]);
   const ripplesRef = useRef<Ripple[]>([]);
   const mouseRef = useRef({ x: -9999, y: -9999 });
+  const pointerActiveUntilRef = useRef(0);
+  const pageVisibleRef = useRef(true);
   const scrollRef = useRef(0);
   const rafRef = useRef(0);
   const isMobile = useIsMobile();
@@ -51,7 +53,7 @@ export function CyberGrid() {
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
     const mobile = window.innerWidth < 768;
-    const spacing = mobile ? 40 : 60;
+    const spacing = mobile ? 40 : window.innerWidth >= 1600 ? 72 : 60;
     spacingRef.current = spacing;
 
     const buildGrid = () => {
@@ -94,12 +96,19 @@ export function CyberGrid() {
     };
     const onMove = (e: MouseEvent) => {
       pendingMouse = { x: e.clientX, y: e.clientY };
+      pointerActiveUntilRef.current = performance.now() + 180;
       if (!mouseRafQueued) {
         mouseRafQueued = true;
         requestAnimationFrame(flushMouse);
       }
     };
     if (!mobile) window.addEventListener('mousemove', onMove, { passive: true });
+
+    const onVisibilityChange = () => {
+      pageVisibleRef.current = !document.hidden;
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    onVisibilityChange();
 
     // Click / tap ripple — disabled when user prefers reduced motion
     const spawnRipple = (x: number, y: number) => {
@@ -115,10 +124,20 @@ export function CyberGrid() {
     if (mobile) window.addEventListener('touchstart', onTouch, { passive: true });
 
     let lastTime = 0;
+    const frameInterval = mobile ? 1000 / 24 : 1000 / 30;
 
     const animate = (ts: number) => {
       rafRef.current = requestAnimationFrame(animate);
-      const dt = ts - lastTime;
+      if (!pageVisibleRef.current) {
+        lastTime = ts;
+        return;
+      }
+
+      if (lastTime !== 0 && ts - lastTime < frameInterval) {
+        return;
+      }
+
+      const dt = lastTime === 0 ? frameInterval : ts - lastTime;
       lastTime = ts;
 
       const w = canvas.width;
@@ -195,7 +214,8 @@ export function CyberGrid() {
       }
 
       // Proximity glow (desktop only, skip on slow frames or reduced-motion preference)
-      const skipProximity = mobile || dt > 20 || reducedMotion;
+      const pointerActive = ts < pointerActiveUntilRef.current;
+      const skipProximity = mobile || dt > 24 || reducedMotion || !pointerActive;
       const glowingDots: number[] = [];
 
       if (!skipProximity) {
@@ -262,6 +282,7 @@ export function CyberGrid() {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('click', onClick);
       window.removeEventListener('touchstart', onTouch);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [isMobile, reducedMotion]);
 

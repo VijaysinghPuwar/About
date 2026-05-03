@@ -1,269 +1,305 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
-import { Lock, Terminal, Cloud, Shield, CheckCircle } from 'lucide-react';
+import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { CheckCircle, Cloud, Lock, Shield, Terminal } from 'lucide-react';
 import { useReducedMotion } from 'framer-motion';
 
-/* ── Hexagon SVG path generator ── */
+interface LayerConfig {
+  size: number;
+  stroke: string;
+  opacity: number;
+  baseRotation: number;
+  idleSpeed: number;
+  reverse?: boolean;
+  fill?: boolean;
+  path: string;
+}
+
+interface OrbitItemConfig {
+  Icon: typeof Terminal;
+  offsetDeg: number;
+  speed: number;
+  reverse?: boolean;
+}
+
 function hexPath(size: number): string {
-  const r = size / 2;
-  const cx = 0, cy = 0;
-  return Array.from({ length: 6 }, (_, i) => {
-    const angle = (Math.PI / 3) * i - Math.PI / 2;
-    const x = cx + r * Math.cos(angle);
-    const y = cy + r * Math.sin(angle);
-    return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
+  const radius = size / 2;
+  return Array.from({ length: 6 }, (_, index) => {
+    const angle = (Math.PI / 3) * index - Math.PI / 2;
+    const x = radius * Math.cos(angle);
+    const y = radius * Math.sin(angle);
+    return `${index === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
   }).join(' ') + ' Z';
 }
 
-/* ── Layer config ── */
-const layers = [
-  { size: 380, stroke: '#00e5ff', opacity: 0.15, baseRotation: 0,  tiltMul: 1.0, idleSpeed: 30,  idleDir: 1  },
-  { size: 280, stroke: '#a855f7', opacity: 0.2,  baseRotation: 15, tiltMul: 0.7, idleSpeed: 25,  idleDir: -1 },
-  { size: 180, stroke: '#00e5ff', opacity: 0.3,  baseRotation: 30, tiltMul: 0.4, idleSpeed: 20,  idleDir: 1  },
-  { size: 100, stroke: '#00e5ff', opacity: 0.1,  baseRotation: 0,  tiltMul: 0.2, idleSpeed: 0,   idleDir: 0, fill: true },
+const layers: LayerConfig[] = [
+  { size: 360, stroke: '#00e5ff', opacity: 0.14, baseRotation: 0, idleSpeed: 42, path: hexPath(324) },
+  { size: 274, stroke: '#a855f7', opacity: 0.18, baseRotation: 14, idleSpeed: 34, reverse: true, path: hexPath(246.6) },
+  { size: 186, stroke: '#00e5ff', opacity: 0.24, baseRotation: 28, idleSpeed: 28, path: hexPath(167.4) },
+  { size: 108, stroke: '#00e5ff', opacity: 0.12, baseRotation: 0, idleSpeed: 6, fill: true, path: hexPath(97.2) },
 ];
 
-/* ── Orbit icon config ── */
-const orbitItems = [
-  { Icon: Terminal, offsetDeg: 0,   speed: 20 },
-  { Icon: Shield,   offsetDeg: 90,  speed: 25 },
-  { Icon: Cloud,    offsetDeg: 180, speed: 22 },
-  { Icon: Lock,     offsetDeg: 270, speed: 28 },
+const orbitItems: OrbitItemConfig[] = [
+  { Icon: Terminal, offsetDeg: 0, speed: 24 },
+  { Icon: Shield, offsetDeg: 90, speed: 30, reverse: true },
+  { Icon: Cloud, offsetDeg: 180, speed: 27 },
+  { Icon: Lock, offsetDeg: 270, speed: 33, reverse: true },
 ];
 
-const ORBIT_RADIUS = 190;
-const SCATTER_EXTRA = 40;
+const ORBIT_RADIUS = 168;
+const MAX_TILT = 8;
+const TILT_LERP = 0.12;
+const TILT_EPSILON = 0.08;
 
-function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
+function clampTilt(value: number) {
+  return Math.max(-MAX_TILT, Math.min(MAX_TILT, value));
+}
 
-export function HeroShield() {
+export const HeroShield = memo(function HeroShield() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const rafRef = useRef<number>(0);
-  const tiltTarget = useRef({ x: 0, y: 0 });
+  const sceneRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<number | null>(null);
   const tiltCurrent = useRef({ x: 0, y: 0 });
-  const isHovering = useRef(false);
-  const isMobile = useRef(false);
-  const startTime = useRef(Date.now());
+  const tiltTarget = useRef({ x: 0, y: 0 });
+  const timersRef = useRef<number[]>([]);
+  const canHoverRef = useRef(false);
 
-  const [hovering, setHovering] = useState(false);
-  const [tilt, setTilt] = useState({ x: 0, y: 0 });
-  const [orbitPositions, setOrbitPositions] = useState<{ x: number; y: number }[]>(
-    orbitItems.map(() => ({ x: 0, y: 0 }))
-  );
-  const [pulses, setPulses] = useState<number[]>([]);
   const [flashing, setFlashing] = useState(false);
   const [showCheck, setShowCheck] = useState(false);
+  const [pulses, setPulses] = useState<number[]>([]);
+  const [isVisible, setIsVisible] = useState(true);
   const reducedMotion = useReducedMotion();
 
-  useEffect(() => {
-    isMobile.current = window.matchMedia('(max-width: 767px)').matches;
+  const canAnimate = !reducedMotion && isVisible;
+
+  const clearTimers = useCallback(() => {
+    timersRef.current.forEach(window.clearTimeout);
+    timersRef.current = [];
   }, []);
 
-  /* ── RAF loop: tilt lerp + orbit positions ── */
-  useEffect(() => {
-    if (reducedMotion) return;
-    const loop = () => {
-      // Lerp tilt
-      const lf = 0.08;
-      tiltCurrent.current.x = lerp(tiltCurrent.current.x, tiltTarget.current.x, lf);
-      tiltCurrent.current.y = lerp(tiltCurrent.current.y, tiltTarget.current.y, lf);
+  const setSceneTilt = useCallback((x: number, y: number) => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    scene.style.setProperty('--hero-tilt-x', `${x.toFixed(2)}deg`);
+    scene.style.setProperty('--hero-tilt-y', `${y.toFixed(2)}deg`);
+  }, []);
 
-      const snapThreshold = 0.01;
-      if (
-        Math.abs(tiltCurrent.current.x - tilt.x) > snapThreshold ||
-        Math.abs(tiltCurrent.current.y - tilt.y) > snapThreshold
-      ) {
-        setTilt({ x: tiltCurrent.current.x, y: tiltCurrent.current.y });
+  const stopTiltLoop = useCallback(() => {
+    if (frameRef.current !== null) {
+      cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    }
+  }, []);
+
+  const updateTilt = useCallback(() => {
+    const nextX = tiltCurrent.current.x + (tiltTarget.current.x - tiltCurrent.current.x) * TILT_LERP;
+    const nextY = tiltCurrent.current.y + (tiltTarget.current.y - tiltCurrent.current.y) * TILT_LERP;
+
+    tiltCurrent.current = { x: nextX, y: nextY };
+    setSceneTilt(nextX, nextY);
+
+    const settled =
+      Math.abs(tiltTarget.current.x - nextX) < TILT_EPSILON &&
+      Math.abs(tiltTarget.current.y - nextY) < TILT_EPSILON;
+
+    if (settled) {
+      tiltCurrent.current = { ...tiltTarget.current };
+      setSceneTilt(tiltTarget.current.x, tiltTarget.current.y);
+      if (tiltTarget.current.x === 0 && tiltTarget.current.y === 0) {
+        stopTiltLoop();
+        return;
       }
+    }
 
-      // Orbit positions
-      const elapsed = (Date.now() - startTime.current) / 1000;
-      const scatterMul = isHovering.current ? 1 : 0;
-      const newPos = orbitItems.map(({ offsetDeg, speed }) => {
-        const angle = (offsetDeg * Math.PI) / 180 + (elapsed * 2 * Math.PI) / speed;
-        const r = ORBIT_RADIUS + (scatterMul * SCATTER_EXTRA);
-        return { x: Math.cos(angle) * r, y: Math.sin(angle) * r };
-      });
-      setOrbitPositions(newPos);
+    frameRef.current = requestAnimationFrame(updateTilt);
+  }, [setSceneTilt, stopTiltLoop]);
 
-      rafRef.current = requestAnimationFrame(loop);
-    };
-    rafRef.current = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [reducedMotion]); // eslint-disable-line react-hooks/exhaustive-deps
+  const startTiltLoop = useCallback(() => {
+    if (!canAnimate || frameRef.current !== null) return;
+    frameRef.current = requestAnimationFrame(updateTilt);
+  }, [canAnimate, updateTilt]);
 
-  /* ── Mouse handlers ── */
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (isMobile.current) return;
+  useEffect(() => {
+    canHoverRef.current = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  }, []);
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsVisible(entry.isIntersecting),
+      { threshold: 0.25 }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (canAnimate) return;
+    tiltCurrent.current = { x: 0, y: 0 };
+    tiltTarget.current = { x: 0, y: 0 };
+    stopTiltLoop();
+    setSceneTilt(0, 0);
+  }, [canAnimate, setSceneTilt, stopTiltLoop]);
+
+  useEffect(() => () => {
+    stopTiltLoop();
+    clearTimers();
+  }, [clearTimers, stopTiltLoop]);
+
+  const queueTimer = useCallback((fn: () => void, delay: number) => {
+    const id = window.setTimeout(() => {
+      timersRef.current = timersRef.current.filter(timerId => timerId !== id);
+      fn();
+    }, delay);
+    timersRef.current.push(id);
+  }, []);
+
+  const handleMouseMove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!canAnimate || !canHoverRef.current) return;
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    tiltTarget.current = {
-      x: Math.max(-20, Math.min(20, ((e.clientY - cy) / rect.height) * 20)),
-      y: Math.max(-20, Math.min(20, ((e.clientX - cx) / rect.width) * -20)),
-    };
-  }, []);
 
-  const handleMouseEnter = useCallback(() => {
-    isHovering.current = true;
-    setHovering(true);
-  }, []);
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    tiltTarget.current = {
+      x: clampTilt(((event.clientY - centerY) / rect.height) * MAX_TILT * 1.35),
+      y: clampTilt(((centerX - event.clientX) / rect.width) * MAX_TILT * 1.35),
+    };
+
+    startTiltLoop();
+  }, [canAnimate, startTiltLoop]);
 
   const handleMouseLeave = useCallback(() => {
-    isHovering.current = false;
-    setHovering(false);
     tiltTarget.current = { x: 0, y: 0 };
-  }, []);
+    startTiltLoop();
+  }, [startTiltLoop]);
 
-  /* ── Click scan pulse ── */
   const triggerPulse = useCallback(() => {
-    const id = Date.now();
-    setPulses(prev => [...prev, id]);
+    const pulseId = Date.now();
+    setPulses(current => [...current, pulseId]);
     setFlashing(true);
     setShowCheck(true);
-    setTimeout(() => setFlashing(false), 200);
-    setTimeout(() => setShowCheck(false), 1000);
-    setTimeout(() => setPulses(prev => prev.filter(p => p !== id)), 800);
-  }, []);
 
-  const handleClick = useCallback(() => triggerPulse(), [triggerPulse]);
+    queueTimer(() => setFlashing(false), 180);
+    queueTimer(() => setShowCheck(false), 950);
+    queueTimer(() => {
+      setPulses(current => current.filter(id => id !== pulseId));
+    }, 760);
+  }, [queueTimer]);
 
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const handler = (e: TouchEvent) => { e.preventDefault(); triggerPulse(); };
-    el.addEventListener('touchstart', handler, { passive: false });
-    return () => el.removeEventListener('touchstart', handler);
-  }, [triggerPulse]);
+  const sceneStyle = {
+    '--hero-orbit-radius': `${ORBIT_RADIUS}px`,
+  } as CSSProperties;
 
   return (
     <div
       ref={containerRef}
-      className="theme-glow relative w-full h-full flex items-center justify-center cursor-pointer md:scale-100 scale-[0.6]"
+      className="hero-shield theme-glow relative flex h-full w-full cursor-pointer items-center justify-center md:scale-100 scale-[0.6]"
       onMouseMove={handleMouseMove}
-      onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      onClick={handleClick}
-      style={{ perspective: '800px' }}
+      onClick={triggerPulse}
+      style={{ perspective: '900px' }}
     >
-      {/* Glow backdrops */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] rounded-full bg-primary/[0.06] blur-[100px] pointer-events-none" />
-      <div className="absolute top-1/3 left-2/3 w-[200px] h-[200px] rounded-full bg-secondary/[0.05] blur-[80px] pointer-events-none" />
+      <div className="hero-shield__glow hero-shield__glow--primary" />
+      <div className="hero-shield__glow hero-shield__glow--secondary" />
 
-      {/* Hexagon layers */}
-      {layers.map((layer, i) => {
-        const tx = tilt.x * layer.tiltMul;
-        const ty = tilt.y * layer.tiltMul;
-        const idleRotateStyle: React.CSSProperties = reducedMotion
-          ? {}
-          : !hovering && layer.idleSpeed > 0
-          ? {
-              animation: `hero-hex-spin ${layer.idleSpeed}s linear infinite${layer.idleDir < 0 ? ' reverse' : ''}`,
-            }
-          : layer.idleSpeed === 0 && !hovering
-          ? { animation: 'hero-hex-pulse 3s ease-in-out infinite' }
-          : {};
-
-        return (
-          <div
-            key={i}
-            className="absolute top-1/2 left-1/2 pointer-events-none"
-            style={{
-              width: layer.size,
-              height: layer.size,
-              marginLeft: -layer.size / 2,
-              marginTop: -layer.size / 2,
-              transform: `rotateX(${tx}deg) rotateY(${ty}deg)`,
-              transition: hovering ? 'none' : 'transform 0.6s ease-out',
-              ...idleRotateStyle,
-              animationPlayState: hovering && layer.idleSpeed > 0 ? 'paused' : 'running',
-            }}
-          >
-            <svg
-              viewBox={`${-layer.size / 2} ${-layer.size / 2} ${layer.size} ${layer.size}`}
-              width={layer.size}
-              height={layer.size}
-              aria-hidden="true"
-              focusable="false"
-              className="w-full h-full"
-            >
-              <defs>
-                <linearGradient id={`hex-grad-${i}`} x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#00e5ff" />
-                  <stop offset="100%" stopColor="#a855f7" />
-                </linearGradient>
-              </defs>
-              <path
-                d={hexPath(layer.size * 0.9)}
-                fill={layer.fill ? `url(#hex-grad-${i})` : 'none'}
-                fillOpacity={layer.fill ? 0.1 : 0}
-                stroke={layer.fill ? 'none' : layer.stroke}
-                strokeWidth={1.5}
-                opacity={flashing ? Math.min(1, layer.opacity + 0.4) : layer.opacity}
-                style={{
-                  transform: `rotate(${layer.baseRotation}deg)`,
-                  transformOrigin: 'center',
-                  transition: 'opacity 0.15s ease',
-                }}
-              />
-            </svg>
-          </div>
-        );
-      })}
-
-      {/* Center icon */}
       <div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-10"
-        style={{
-          transform: `translate(-50%, -50%) rotateX(${tilt.x * 0.2}deg) rotateY(${tilt.y * 0.2}deg)`,
-        }}
+        ref={sceneRef}
+        className="hero-shield__scene absolute inset-0 flex items-center justify-center"
+        data-animate={canAnimate ? 'true' : 'false'}
+        style={sceneStyle}
       >
-        {showCheck ? (
-          <CheckCircle className="w-8 h-8 text-[#22d3ee]" strokeWidth={1.5} />
-        ) : (
-          <Lock className="w-8 h-8 text-white/60" strokeWidth={1.5} />
-        )}
-      </div>
-
-      {/* Orbiting icons */}
-      {orbitItems.map(({ Icon }, i) => {
-        const pos = orbitPositions[i];
-        const tiltShiftX = tilt.y * 0.5;
-        const tiltShiftY = tilt.x * 0.5;
-        return (
-          <div
-            key={i}
-            className="absolute top-1/2 left-1/2 pointer-events-none z-10"
-            style={{
-              transform: `translate(${pos.x + tiltShiftX - 18}px, ${pos.y + tiltShiftY - 18}px)`,
-              transition: 'transform 0.3s ease-out',
-            }}
-          >
+        {layers.map((layer, index) => {
+          const animationClass = layer.fill ? 'hero-shield__layer--pulse' : 'hero-shield__layer--spin';
+          return (
             <div
-              className="w-9 h-9 rounded-lg flex items-center justify-center backdrop-blur-sm"
+              key={layer.size}
+              className={`hero-shield__layer ${animationClass} absolute top-1/2 left-1/2 pointer-events-none`}
               style={{
-                background: 'rgba(15, 23, 42, 0.5)',
-                border: '1px solid rgba(100, 220, 255, 0.15)',
+                width: layer.size,
+                height: layer.size,
+                marginLeft: -(layer.size / 2),
+                marginTop: -(layer.size / 2),
+                animationDuration: `${layer.idleSpeed}s`,
+                animationDirection: layer.reverse ? 'reverse' : 'normal',
+                animationPlayState: canAnimate ? 'running' : 'paused',
               }}
             >
-              <Icon className="w-4 h-4 text-primary/70" />
+              <svg
+                viewBox={`${-layer.size / 2} ${-layer.size / 2} ${layer.size} ${layer.size}`}
+                width={layer.size}
+                height={layer.size}
+                aria-hidden="true"
+                focusable="false"
+                className="h-full w-full"
+              >
+                <defs>
+                  <linearGradient id={`hex-grad-${index}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#00e5ff" />
+                    <stop offset="100%" stopColor="#a855f7" />
+                  </linearGradient>
+                </defs>
+                <path
+                  d={layer.path}
+                  fill={layer.fill ? `url(#hex-grad-${index})` : 'none'}
+                  fillOpacity={layer.fill ? 0.08 : 0}
+                  stroke={layer.fill ? 'none' : layer.stroke}
+                  strokeWidth={1.5}
+                  opacity={flashing ? Math.min(1, layer.opacity + 0.3) : layer.opacity}
+                  style={{
+                    transform: `rotate(${layer.baseRotation}deg)`,
+                    transformOrigin: 'center',
+                    transition: 'opacity 150ms ease-out',
+                  }}
+                />
+              </svg>
+            </div>
+          );
+        })}
+
+        {orbitItems.map(({ Icon, offsetDeg, speed, reverse }) => (
+          <div
+            key={`${Icon.displayName || Icon.name}-${offsetDeg}`}
+            className="absolute top-1/2 left-1/2 pointer-events-none z-10"
+            style={{ transform: `translate(-50%, -50%) rotate(${offsetDeg}deg)` }}
+          >
+            <div
+              className="hero-shield__orbit"
+              style={{
+                animationDuration: `${speed}s`,
+                animationDirection: reverse ? 'reverse' : 'normal',
+                animationPlayState: canAnimate ? 'running' : 'paused',
+              }}
+            >
+              <div className="hero-shield__orbit-chip">
+                <Icon className="h-4 w-4 text-primary/70" />
+              </div>
             </div>
           </div>
-        );
-      })}
+        ))}
 
-      {/* Scan pulse rings */}
-      {pulses.map(id => (
+        <div className="pointer-events-none absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+          {showCheck ? (
+            <CheckCircle className="h-8 w-8 text-[#22d3ee]" strokeWidth={1.5} />
+          ) : (
+            <Lock className="h-8 w-8 text-white/60" strokeWidth={1.5} />
+          )}
+        </div>
+      </div>
+
+      {pulses.map(pulseId => (
         <div
-          key={id}
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none rounded-full"
+          key={pulseId}
+          className="hero-shield__pulse absolute top-1/2 left-1/2 pointer-events-none rounded-full"
           style={{
-            animation: 'hero-scan-pulse 0.8s ease-out forwards',
-            border: '2px solid',
-            borderImage: 'linear-gradient(135deg, #00e5ff, #a855f7) 1',
+            animationPlayState: canAnimate ? 'running' : 'paused',
+            border: '1.5px solid rgba(0, 229, 255, 0.45)',
+            boxShadow: '0 0 18px rgba(0, 229, 255, 0.12)',
           }}
         />
       ))}
     </div>
   );
-}
+});

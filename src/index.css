@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
 
 @layer base {
   :root, .theme-blue {
@@ -417,6 +417,82 @@ html.theme-shifting .theme-glow {
   100% { transform: rotate(360deg); }
 }
 
+.hero-shield {
+  contain: layout paint;
+  isolation: isolate;
+}
+
+.hero-shield__scene {
+  --hero-tilt-x: 0deg;
+  --hero-tilt-y: 0deg;
+  --hero-orbit-radius: 168px;
+  transform: rotateX(var(--hero-tilt-x)) rotateY(var(--hero-tilt-y));
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.hero-shield__glow {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 9999px;
+  opacity: 0.85;
+}
+
+.hero-shield__glow--primary {
+  top: 50%;
+  left: 50%;
+  width: 320px;
+  height: 320px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, hsl(var(--primary) / 0.18) 0%, transparent 72%);
+  filter: blur(72px);
+}
+
+.hero-shield__glow--secondary {
+  top: 34%;
+  left: 66%;
+  width: 184px;
+  height: 184px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, hsl(var(--secondary) / 0.14) 0%, transparent 74%);
+  filter: blur(56px);
+}
+
+.hero-shield__layer {
+  transform-style: preserve-3d;
+}
+
+.hero-shield__layer--spin {
+  animation-name: hero-hex-spin;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.hero-shield__layer--pulse {
+  animation-name: hero-hex-pulse;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+.hero-shield__orbit {
+  animation-name: orbit;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.hero-shield__orbit-chip {
+  display: flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  transform: translateX(var(--hero-orbit-radius));
+  background: rgba(8, 17, 32, 0.82);
+  border: 1px solid rgba(100, 220, 255, 0.14);
+  box-shadow: 0 0 14px rgba(0, 229, 255, 0.08);
+}
+
 /* Hero hexagon idle spin */
 @keyframes hero-hex-spin {
   0% { transform: rotate(0deg); }
@@ -426,13 +502,19 @@ html.theme-shifting .theme-glow {
 /* Hero hexagon center pulse */
 @keyframes hero-hex-pulse {
   0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
+  50% { transform: scale(1.03); }
 }
 
 /* Hero scan pulse ring */
 @keyframes hero-scan-pulse {
-  0% { width: 0; height: 0; opacity: 0.6; }
-  100% { width: 500px; height: 500px; opacity: 0; }
+  0% { transform: translate(-50%, -50%) scale(0.35); opacity: 0.55; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+}
+
+.hero-shield__pulse {
+  width: 420px;
+  height: 420px;
+  animation: hero-scan-pulse 0.75s ease-out forwards;
 }
 
 /* Cyber pulse */
@@ -515,6 +597,14 @@ html.theme-shifting .theme-glow {
 
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
+  .hero-shield__scene,
+  .hero-shield__layer,
+  .hero-shield__orbit,
+  .hero-shield__pulse {
+    animation: none !important;
+    transform: none !important;
+  }
+
   .section-reveal * {
     animation: none !important;
     transition: none !important;
