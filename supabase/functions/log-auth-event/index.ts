@@ -31,6 +31,27 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // Require a valid user JWT and confirm it matches the user_id being logged.
+    // Without this, anyone could forge auth_events / suspicious-login notifications
+    // for arbitrary users (the function uses the service role and bypasses RLS).
+    const authHeader = req.headers.get("Authorization");
+    const token = authHeader?.startsWith("Bearer ")
+      ? authHeader.slice("Bearer ".length)
+      : null;
+    if (!token) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const { data: userData, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !userData?.user || userData.user.id !== user_id) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Check for suspicious patterns
     let flagged_suspicious = false;
     let risk_level = "normal";
