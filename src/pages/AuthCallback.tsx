@@ -2,17 +2,35 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  parseOAuthErrorFromUrl,
+  isIdentityConflictError,
+  IDENTITY_CONFLICT_MESSAGE,
+} from '@/lib/auth-errors';
 
 export default function AuthCallback() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
+  const [isConflict, setIsConflict] = useState(false);
 
   useEffect(() => {
+    // First, check for OAuth errors in the URL (hash or search). If present,
+    // surface immediately and skip the session-wait — there's no session coming.
+    const oauthError = parseOAuthErrorFromUrl();
+    if (oauthError) {
+      const conflict = isIdentityConflictError(oauthError.errorCode, oauthError.errorDescription);
+      setIsConflict(conflict);
+      setError(
+        conflict
+          ? IDENTITY_CONFLICT_MESSAGE
+          : oauthError.errorDescription || oauthError.error || 'Sign-in failed.',
+      );
+      return;
+    }
+
     let cancelled = false;
     let timeoutId: number | undefined;
 
-    // detectSessionInUrl: true on the supabase client parses the OAuth/magic-link
-    // tokens automatically. Here we just wait for the resulting session, then route.
     const finish = (hasSession: boolean) => {
       if (cancelled) return;
       if (timeoutId) window.clearTimeout(timeoutId);
@@ -48,7 +66,9 @@ export default function AuthCallback() {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center px-4">
         <div className="max-w-md text-center space-y-4">
-          <h1 className="text-xl font-semibold text-foreground">Sign-in failed</h1>
+          <h1 className="text-xl font-semibold text-foreground">
+            {isConflict ? 'Account already exists' : 'Sign-in failed'}
+          </h1>
           <p className="text-sm text-muted-foreground">{error}</p>
           <Link to="/login" className="text-primary hover:underline underline-offset-4 text-sm">
             Back to sign in
