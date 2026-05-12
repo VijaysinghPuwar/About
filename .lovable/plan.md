@@ -1,36 +1,43 @@
-# Fix Auth: Restore Real Supabase Client Config
+# Fix OAuth sign-in (Google + GitHub)
 
-## Audit of current state
+## Diagnosis
 
-- **`src/integrations/supabase/client.ts`** — Already reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` (correct names). Already has placeholder fallback. **Missing**: `detectSessionInUrl: true`, and uses `console.warn` instead of `console.error`.
-- **`src/pages/AuthCallback.tsx`** — Already exists, calls `exchangeCodeForSession(window.location.href)`, redirects to `/` on success and `/login` on failure with toast. Route registered in `src/App.tsx` at `/auth/callback`. ✅ Correct.
-- **`src/pages/Login.tsx`** — GitHub OAuth uses `redirectTo: ${window.location.origin}/auth/callback`. Magic link uses `emailRedirectTo: ${window.location.origin}/auth/callback`. ✅ Correct.
-- **Google sign-in** — Goes through `lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin })` (managed Lovable Cloud flow, not raw Supabase). This is the recommended path and should not be changed.
+**Env vars (preview build):** `.env` in the sandbox contains `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and `VITE_SUPABASE_PROJECT_ID` — all set. So the **preview** build has them. The published site at `vijaysinghpuwar.com` is a separate deploy and may be stale.
 
-## Single change required
+### SYMPTOM 2 — GitHub "placeholder.supabase.co" / NXDOMAIN
+Root cause: the failing browser is hitting a **stale published build** that was created before the Supabase env vars existed. In `src/integrations/supabase/client.ts` we deliberately fall back to `https://placeholder.supabase.co` when the vars are missing, exactly to avoid a hard module-eval crash. That fallback URL is what's producing NXDOMAIN. The GitHub button code itself is correct (`provider: 'github'`, `redirectTo: ${window.location.origin}/auth/callback`). The fix is a fresh **Publish** after env vars were added — no code change required for GitHub itself, beyond the diagnostic logs we'll add.
 
-Edit **`src/integrations/supabase/client.ts`**:
+### SYMPTOM 1 — Google lands on `/` unauthenticated
+Two real bugs cooperating:
 
-1. Switch the missing-env-var log from `console.warn` to `console.error` with the exact message specified:
-   `[supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY. Auth and database calls will fail. Check Lovable Cloud → Secrets.`
-2. Add `detectSessionInUrl: true` to the `auth` options so PKCE/magic-link tokens are parsed automatically on the callback route.
-3. Keep the placeholder fallback (`https://placeholder.supabase.co` / `placeholder-anon-key`) and the `??` operators so module evaluation never throws.
-4. Keep the auto-generated header comment and existing `storage` / `persistSession` / `autoRefreshToken` options.
+1. **Callback fights with `detectSessionInUrl`.** `client.ts` has `detectSessionInUrl: true`, and `src/pages/AuthCallback.tsx` *also* calls `supabase.auth.exchangeCodeForSession(window.location.href)`. Whichever runs second sees an already-consumed `code` and errors → callback toasts "Sign-in failed" and bounces to `/login`, OR (for the Lovable-managed Google flow) the browser is redirected back to `window.location.origin` (i.e. `/`, **not** `/auth/callback`), so the callback handler never runs at all and the home page renders before the async `setSession` from the Lovable SDK completes.
 
-## Already correct — no changes
+2. **Google uses the Lovable-managed flow** (`lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin })`). That SDK posts tokens and calls `supabase.auth.setSession(...)` itself — but only on the return navigation, and `Login.tsx`'s redirect `useEffect` already moved the user to `/` before `onAuthStateChange` fires. Net effect: home page renders with `user === null`.
 
-- Env var names (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`)
-- `/auth/callback` route and its `exchangeCodeForSession` logic
-- GitHub `signInWithOAuth` redirectTo
-- Magic link `signInWithOtp` emailRedirectTo
-- Google sign-in via `lovable.auth.signInWithOAuth`
+The clean fix is to let `detectSessionInUrl` do its job and make the `/auth/callback` route a passive waiter that just polls `getSession()` once, then routes. No `exchangeCodeForSession` call.
 
-## Verification after rebuild
+## Code changes (minimal, scoped)
 
-- Console shows no `[supabase] Missing ...` error.
-- Network tab: Google / GitHub / magic-link requests target `https://hveucrpuystdvuubaocv.supabase.co/auth/v1/...` (or the Lovable OAuth broker for Google, which is expected for the managed flow).
-- Callback at `/auth/callback?code=...` resolves session and lands on `/`.
+1. **`src/integrations/supabase/client.ts`** — add module-load diagnostic logs (booleans only, no values):
+   ```ts
+   console.log('[supabase] URL set:', !!import.meta.env.VITE_SUPABASE_URL);
+   console.log('[supabase] KEY set:', !!import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+   ```
+   Leave `detectSessionInUrl: true` and the placeholder fallback as-is.
 
-## Constraints respected
+2. **`src/pages/AuthCallback.tsx`** — remove the `exchangeCodeForSession` call. New behavior: render a loading spinner, wait for `supabase.auth.getSession()` (and one `onAuthStateChange` tick) to confirm a session, then `navigate('/', { replace: true })`. On error or timeout (~5 s), show an inline error with a link back to `/login` instead of silently redirecting.
 
-No UI changes. No new dependencies. No renamed secrets. No other files modified.
+3. **`src/hooks/useAuth.tsx`** — keep `loading` true until *both* the initial `getSession()` resolves *and* the first `onAuthStateChange` event has fired with the resulting session. This closes the race that lets `Login.tsx` and `ProtectedRoute` decide before the Lovable SDK's `setSession` lands. (`ProtectedRoute` already gates on `loading`, so this is the right place.)
+
+4. **`src/pages/Login.tsx`** — in the redirect `useEffect`, additionally guard on `!authLoading` (already there) and ensure no redirect happens until `profile` is fetched. Currently OK; verify only.
+
+No UI changes. No new deps. No changes to `lovable/index.ts`, route table, or migrations.
+
+## Verification (after changes)
+
+- Reload preview → console shows `[supabase] URL set: true`, `KEY set: true`.
+- Click "Continue with Google" → return to `/` → `useAuth` finishes loading → `Login.tsx` redirect (or home page) shows authenticated state.
+- Click "Continue with GitHub" in **preview** → redirects to `github.com/login/oauth/...` (real Supabase URL), not `placeholder.supabase.co`.
+- For the live site: user must click **Publish → Update** so `vijaysinghpuwar.com` picks up the env vars and new code.
+
+Diagnostic `console.log`s stay until the user confirms end-to-end sign-in works.
