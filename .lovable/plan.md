@@ -1,77 +1,36 @@
-## Sign-In Page Enhancement — GitHub OAuth + Magic Link
+# Fix Auth: Restore Real Supabase Client Config
 
-### Heads-up on GitHub
-GitHub OAuth is not natively supported by Lovable Cloud's managed social auth (only Google/Apple are). I'll wire the UI and the `signInWithOAuth({ provider: 'github' })` call as requested, but the button will surface an error toast until GitHub is enabled at the Supabase backend level (which on Lovable Cloud is not exposed in the UI). The Google and magic link flows will work fully.
+## Audit of current state
 
-### Files Modified
-| File | Change |
-|------|--------|
-| `src/pages/Login.tsx` | Add GitHub button, "or" divider, email input + magic link button, success state |
-| `src/pages/AuthCallback.tsx` | NEW — handles OAuth + magic link redirect, exchanges code for session, routes user by profile status |
-| `src/App.tsx` | Register `/auth/callback` route |
+- **`src/integrations/supabase/client.ts`** — Already reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` (correct names). Already has placeholder fallback. **Missing**: `detectSessionInUrl: true`, and uses `console.warn` instead of `console.error`.
+- **`src/pages/AuthCallback.tsx`** — Already exists, calls `exchangeCodeForSession(window.location.href)`, redirects to `/` on success and `/login` on failure with toast. Route registered in `src/App.tsx` at `/auth/callback`. ✅ Correct.
+- **`src/pages/Login.tsx`** — GitHub OAuth uses `redirectTo: ${window.location.origin}/auth/callback`. Magic link uses `emailRedirectTo: ${window.location.origin}/auth/callback`. ✅ Correct.
+- **Google sign-in** — Goes through `lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin })` (managed Lovable Cloud flow, not raw Supabase). This is the recommended path and should not be changed.
 
-No new dependencies. No database changes. No design system changes.
+## Single change required
 
-### `src/pages/Login.tsx` changes
+Edit **`src/integrations/supabase/client.ts`**:
 
-Layout inside existing `.glass-card` (top-to-bottom):
-1. Keep VJ logo + "Welcome" heading. Update subtitle to: *"Sign in to request access to the full portfolio."*
-2. Existing "Continue with Google" button (unchanged).
-3. NEW "Continue with GitHub" button:
-   - Same width/height/radius as Google button (`w-full h-12 rounded-md`)
-   - Dark style: `bg-[#1F1F1F] text-white hover:bg-[#2A2A2A]` (kept as raw values per spec since these are brand-specific GitHub button colors, not theme tokens)
-   - `Github` icon from `lucide-react`
-   - Loading spinner state via local `githubLoading` state
-   - `aria-label="Continue with GitHub"`
-   - Handler: `supabase.auth.signInWithOAuth({ provider: 'github', options: { redirectTo: \`${window.location.origin}/auth/callback\` } })`; toast on error
-4. NEW "or" divider:
-   - Flex row: `<Separator />` left, muted text "or" center, `<Separator />` right
-   - Uses existing `@/components/ui/separator` and `text-muted-foreground text-xs uppercase tracking-wider`
-5. NEW magic link form:
-   - `<label htmlFor="email" class="sr-only">Email</label>`
-   - shadcn `<Input id="email" type="email" placeholder="you@example.com" />` (already used in Contact page)
-   - Inline error `<p role="alert" class="text-destructive text-xs">` shown when invalid
-   - Primary button "Email me a sign-in link" — same `w-full h-12` shape, uses `bg-primary text-primary-foreground hover:bg-primary/90`
-   - Validation: zod `z.string().trim().email().max(255)` before submit
-   - Handler: `supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: \`${window.location.origin}/auth/callback\`, shouldCreateUser: true } })`
-   - Success: replace input+button area with centered success block:
-     - `CheckCircle2` icon (lucide, `text-primary w-12 h-12`)
-     - Heading "Check your email"
-     - Body: `We sent a sign-in link to <bold>{email}</bold>. Click the link to continue.`
-     - Text-button "Use a different email" → resets `sent` state and clears the email field
-   - Error: `toast.error(error.message)`; form stays usable
-6. Keep existing footer text unchanged.
+1. Switch the missing-env-var log from `console.warn` to `console.error` with the exact message specified:
+   `[supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY. Auth and database calls will fail. Check Lovable Cloud → Secrets.`
+2. Add `detectSessionInUrl: true` to the `auth` options so PKCE/magic-link tokens are parsed automatically on the callback route.
+3. Keep the placeholder fallback (`https://placeholder.supabase.co` / `placeholder-anon-key`) and the `??` operators so module evaluation never throws.
+4. Keep the auto-generated header comment and existing `storage` / `persistSession` / `autoRefreshToken` options.
 
-State additions:
-```ts
-const [email, setEmail] = useState('');
-const [emailError, setEmailError] = useState<string | null>(null);
-const [emailLoading, setEmailLoading] = useState(false);
-const [emailSent, setEmailSent] = useState(false);
-const [githubLoading, setGithubLoading] = useState(false);
-```
+## Already correct — no changes
 
-### `src/pages/AuthCallback.tsx` (new)
+- Env var names (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`)
+- `/auth/callback` route and its `exchangeCodeForSession` logic
+- GitHub `signInWithOAuth` redirectTo
+- Magic link `signInWithOtp` emailRedirectTo
+- Google sign-in via `lovable.auth.signInWithOAuth`
 
-- Mounts a centered `Loader2` spinner.
-- On mount, calls `supabase.auth.exchangeCodeForSession(window.location.href)` — handles both the OAuth `?code=…` redirect (Google, GitHub) and the magic link's `?code=…` token.
-- On success: rely on the existing `useAuth` provider's `onAuthStateChange` to pick up the session; this page simply navigates to `/` once `user && profile` are present. ProtectedRoute / Login's existing redirect logic already routes by profile status (approved → `/`, pending → `/pending`, blocked → `/blocked`), so we just `navigate('/', { replace: true })` and let downstream redirects handle it.
-- On error: `toast.error(error.message)` and `navigate('/login', { replace: true })`.
+## Verification after rebuild
 
-### `src/App.tsx` changes
+- Console shows no `[supabase] Missing ...` error.
+- Network tab: Google / GitHub / magic-link requests target `https://hveucrpuystdvuubaocv.supabase.co/auth/v1/...` (or the Lovable OAuth broker for Google, which is expected for the managed flow).
+- Callback at `/auth/callback?code=...` resolves session and lands on `/`.
 
-- Import `AuthCallback` (regular import; this page is tiny).
-- Add `<Route path="/auth/callback" element={<AuthCallback />} />` inside the existing `<Routes>` block, before the `*` catch-all.
+## Constraints respected
 
-### Accessibility
-- All buttons have visible text or `aria-label`.
-- Email input has associated `<label>` (sr-only) and `aria-invalid` when error is shown.
-- Inline error uses `role="alert"`.
-- Tab order: Google → GitHub → email input → magic link button → footer.
-
-### Verification after build
-1. `/login` renders with three buttons + email field, no console errors.
-2. Click GitHub → spinner shows; will return an error toast on current backend (expected per heads-up above).
-3. Enter invalid email → inline error appears, button submit blocked.
-4. Enter valid email → button disables, success block replaces form, "Use a different email" resets.
-5. `/auth/callback?code=...` resolves session and redirects (manually testable by hitting the route directly).
+No UI changes. No new dependencies. No renamed secrets. No other files modified.

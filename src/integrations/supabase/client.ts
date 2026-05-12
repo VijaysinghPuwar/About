@@ -11,8 +11,9 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 // by their own error handlers.
 if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
   // eslint-disable-next-line no-console
-  console.warn(
-    '[supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY at build time. Auth and database calls will be disabled.'
+  console.error(
+    '[supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY. ' +
+      'Auth and database calls will fail. Check Lovable Cloud → Secrets.'
   );
 }
 
@@ -20,13 +21,14 @@ if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
 // import { supabase } from "@/integrations/supabase/client";
 
 export const supabase = createClient<Database>(
-  SUPABASE_URL || 'https://placeholder.supabase.co',
-  SUPABASE_PUBLISHABLE_KEY || 'placeholder-anon-key',
+  SUPABASE_URL ?? 'https://placeholder.supabase.co',
+  SUPABASE_PUBLISHABLE_KEY ?? 'placeholder-anon-key',
   {
     auth: {
       storage: typeof window !== 'undefined' ? localStorage : undefined,
       persistSession: true,
       autoRefreshToken: true,
+      detectSessionInUrl: true,
     },
   }
 );
