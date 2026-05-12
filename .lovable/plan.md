@@ -1,87 +1,77 @@
-## Restore Lovable Preview — Root Cause & Targeted Fix
+## Sign-In Page Enhancement — GitHub OAuth + Magic Link
 
-### Root cause
+### Heads-up on GitHub
+GitHub OAuth is not natively supported by Lovable Cloud's managed social auth (only Google/Apple are). I'll wire the UI and the `signInWithOAuth({ provider: 'github' })` call as requested, but the button will surface an error toast until GitHub is enabled at the Supabase backend level (which on Lovable Cloud is not exposed in the UI). The Google and magic link flows will work fully.
 
-Claude's recent PRs hardened `.gitignore`. It now contains:
-
-```
-.env
-.env.local
-.env.*.local
-```
-
-This project is a **classic Vite + Lovable Cloud** stack. The Supabase client at `src/integrations/supabase/client.ts` reads:
-
-```ts
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-```
-
-Lovable manages `.env` for this stack and expects it to live in the repo. With `.env` git-ignored, the file never reaches the published build, so `createClient(undefined, undefined)` throws at module-eval time. Every page that imports the client (Index, Auth provider, etc.) crashes before render → **blank dark screen**.
-
-The local sandbox preview still has a leftover `.env` on disk, which is why the dev server returns HTML — but the deployed/published preview has nothing, matching the user's report.
-
-### Fix (minimal, no feature loss)
-
-**1. `.gitignore` — un-ignore `.env`**
-Remove the three `.env*` lines. Lovable's managed env state must be committed for Vite builds to inline `import.meta.env.VITE_*` values. This is the documented Lovable + Vite contract.
-
-```diff
-- # Local env files — never commit secrets or per-environment config
-- .env
-- .env.local
-- .env.*.local
-+ # NOTE: .env is managed by Lovable Cloud and must be committed so Vite
-+ # can inline VITE_* vars at build time. Only the publishable anon key
-+ # lives there — no service-role secrets.
-```
-
-**2. `src/integrations/supabase/client.ts` — defensive guard**
-Today, missing env vars cause a hard crash on import. Add a fail-safe so a misconfigured deployment shows the portfolio (public, static) instead of a blank screen, and only auth-gated calls fail:
-
-- If both vars are present → behave exactly as today.
-- If either is missing → log a console warning and create the client with safe placeholder strings so module-eval doesn't throw. Public pages render; auth/db calls will error individually (caught by existing try/catch in `useAuth`, `useProjects`, etc.).
-
-This is purely additive — does not change behavior when env vars are present.
-
-**3. `index.html` — fix stale preconnect**
-Line 14 preconnects to an old Supabase ref `hveucrpuystdvuubaocv.supabase.co` that no longer belongs to this project. Replace with the current ref `xyhyqukvfcshqwengxth.supabase.co`. Cosmetic, but avoids a wasted DNS handshake and a confusing entry in Network tab.
-
-### What is preserved (no changes)
-
-- Mobile hero rework, status-indicator padding fix
-- Theme transformation (Blue ↔ Red), `ThemeTransition`, cyber-click sound, glitch layer
-- Security migrations, JWT validation in `log-auth-event`
-- Auth flow, RLS, admin hub, contact form, all components
-- Design system, fonts, Deep Space palette
-- All routes, all gated content
-
-### What is NOT changed
-
-- No code reverted from Claude's PRs
-- No feature deletions
-- No design changes
-- No new dependencies
-- No backend / migration changes
-- No router or build-config changes
-
-### Files touched
-
+### Files Modified
 | File | Change |
 |------|--------|
-| `.gitignore` | Remove `.env`, `.env.local`, `.env.*.local` lines |
-| `src/integrations/supabase/client.ts` | Add fallback so missing env vars don't crash render |
-| `index.html` | Update stale Supabase preconnect host |
+| `src/pages/Login.tsx` | Add GitHub button, "or" divider, email input + magic link button, success state |
+| `src/pages/AuthCallback.tsx` | NEW — handles OAuth + magic link redirect, exchanges code for session, routes user by profile status |
+| `src/App.tsx` | Register `/auth/callback` route |
 
-### Validation steps
+No new dependencies. No database changes. No design system changes.
 
-1. Confirm dev server still serves `/` (curl already returns 200).
-2. Open `/` in preview → portfolio renders, no blank screen.
-3. Check console: no `supabaseUrl is required` error.
-4. Verify mobile (390×844) and desktop (1025×900) layouts unchanged.
-5. Toggle theme → Blue ↔ Red transformation still plays.
-6. After republish: production site loads (env now present in build).
+### `src/pages/Login.tsx` changes
 
-### Risk
+Layout inside existing `.glass-card` (top-to-bottom):
+1. Keep VJ logo + "Welcome" heading. Update subtitle to: *"Sign in to request access to the full portfolio."*
+2. Existing "Continue with Google" button (unchanged).
+3. NEW "Continue with GitHub" button:
+   - Same width/height/radius as Google button (`w-full h-12 rounded-md`)
+   - Dark style: `bg-[#1F1F1F] text-white hover:bg-[#2A2A2A]` (kept as raw values per spec since these are brand-specific GitHub button colors, not theme tokens)
+   - `Github` icon from `lucide-react`
+   - Loading spinner state via local `githubLoading` state
+   - `aria-label="Continue with GitHub"`
+   - Handler: `supabase.auth.signInWithOAuth({ provider: 'github', options: { redirectTo: \`${window.location.origin}/auth/callback\` } })`; toast on error
+4. NEW "or" divider:
+   - Flex row: `<Separator />` left, muted text "or" center, `<Separator />` right
+   - Uses existing `@/components/ui/separator` and `text-muted-foreground text-xs uppercase tracking-wider`
+5. NEW magic link form:
+   - `<label htmlFor="email" class="sr-only">Email</label>`
+   - shadcn `<Input id="email" type="email" placeholder="you@example.com" />` (already used in Contact page)
+   - Inline error `<p role="alert" class="text-destructive text-xs">` shown when invalid
+   - Primary button "Email me a sign-in link" — same `w-full h-12` shape, uses `bg-primary text-primary-foreground hover:bg-primary/90`
+   - Validation: zod `z.string().trim().email().max(255)` before submit
+   - Handler: `supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: \`${window.location.origin}/auth/callback\`, shouldCreateUser: true } })`
+   - Success: replace input+button area with centered success block:
+     - `CheckCircle2` icon (lucide, `text-primary w-12 h-12`)
+     - Heading "Check your email"
+     - Body: `We sent a sign-in link to <bold>{email}</bold>. Click the link to continue.`
+     - Text-button "Use a different email" → resets `sent` state and clears the email field
+   - Error: `toast.error(error.message)`; form stays usable
+6. Keep existing footer text unchanged.
 
-Low. The `.gitignore` change re-aligns the repo with the Lovable-managed `.env` workflow that the project was originally built under. The client guard is additive. The preconnect change is metadata only.
+State additions:
+```ts
+const [email, setEmail] = useState('');
+const [emailError, setEmailError] = useState<string | null>(null);
+const [emailLoading, setEmailLoading] = useState(false);
+const [emailSent, setEmailSent] = useState(false);
+const [githubLoading, setGithubLoading] = useState(false);
+```
+
+### `src/pages/AuthCallback.tsx` (new)
+
+- Mounts a centered `Loader2` spinner.
+- On mount, calls `supabase.auth.exchangeCodeForSession(window.location.href)` — handles both the OAuth `?code=…` redirect (Google, GitHub) and the magic link's `?code=…` token.
+- On success: rely on the existing `useAuth` provider's `onAuthStateChange` to pick up the session; this page simply navigates to `/` once `user && profile` are present. ProtectedRoute / Login's existing redirect logic already routes by profile status (approved → `/`, pending → `/pending`, blocked → `/blocked`), so we just `navigate('/', { replace: true })` and let downstream redirects handle it.
+- On error: `toast.error(error.message)` and `navigate('/login', { replace: true })`.
+
+### `src/App.tsx` changes
+
+- Import `AuthCallback` (regular import; this page is tiny).
+- Add `<Route path="/auth/callback" element={<AuthCallback />} />` inside the existing `<Routes>` block, before the `*` catch-all.
+
+### Accessibility
+- All buttons have visible text or `aria-label`.
+- Email input has associated `<label>` (sr-only) and `aria-invalid` when error is shown.
+- Inline error uses `role="alert"`.
+- Tab order: Google → GitHub → email input → magic link button → footer.
+
+### Verification after build
+1. `/login` renders with three buttons + email field, no console errors.
+2. Click GitHub → spinner shows; will return an error toast on current backend (expected per heads-up above).
+3. Enter invalid email → inline error appears, button submit blocked.
+4. Enter valid email → button disables, success block replaces form, "Use a different email" resets.
+5. `/auth/callback?code=...` resolves session and redirects (manually testable by hitting the route directly).
