@@ -3,18 +3,22 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+// Resolution order: VITE_* env vars (preferred — set via .env.local locally,
+// or Lovable Cloud → Secrets in deploy) → hardcoded literals (resilience
+// against build pipelines that fail to inject env vars; publishable key is
+// safe by design) → placeholder fallback in createClient below (last-resort
+// so module-eval never throws).
+const SUPABASE_URL =
+  import.meta.env.VITE_SUPABASE_URL ?? 'https://hveucrpuystdvuubaocv.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY =
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ??
+  'sb_publishable_-qkXIExDAmPoZLFirWiHhw_yjTGdkzW';
 
-// Defensive fallback: if the build is missing env vars (e.g. .env not bundled),
-// fall back to harmless placeholders so module-eval doesn't throw and the public
-// portfolio still renders. Auth/db calls will fail individually and be caught
-// by their own error handlers.
-if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) {
   // eslint-disable-next-line no-console
-  console.error(
-    '[supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY. ' +
-      'Auth and database calls will fail. Check Lovable Cloud → Secrets.'
+  console.warn(
+    '[supabase] VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY missing at build time. ' +
+      'Using hardcoded literal fallback. Check Lovable Cloud → Secrets if this is unexpected.'
   );
 }
 
