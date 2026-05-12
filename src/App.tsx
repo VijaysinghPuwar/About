@@ -34,6 +34,7 @@ const CommandPalette = lazy(() =>
 
 import Index from "./pages/Index";
 import Login from "./pages/Login";
+import AuthCallback from "./pages/AuthCallback";
 import Pending from "./pages/Pending";
 import Blocked from "./pages/Blocked";
 import Admin from "./pages/Admin";
