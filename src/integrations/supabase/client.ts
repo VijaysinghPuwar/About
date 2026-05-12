@@ -17,6 +17,12 @@ if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
   );
 }
 
+// Temporary diagnostics — remove once OAuth sign-in is confirmed end-to-end.
+// eslint-disable-next-line no-console
+console.log('[supabase] URL set:', !!import.meta.env.VITE_SUPABASE_URL);
+// eslint-disable-next-line no-console
+console.log('[supabase] KEY set:', !!import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
