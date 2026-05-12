@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { lovable } from '@/integrations/lovable/index';
+import { isIdentityConflictError, IDENTITY_CONFLICT_MESSAGE } from '@/lib/auth-errors';
 
 interface Profile {
   id: string;
@@ -130,7 +131,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         redirect_uri: window.location.origin,
       });
       if (result.error) {
-        return { error: result.error instanceof Error ? result.error : new Error(String(result.error)) };
+        const raw = result.error;
+        const code = (raw as { code?: string; error_code?: string })?.code
+          ?? (raw as { error_code?: string })?.error_code;
+        const description = (raw as { error_description?: string })?.error_description
+          ?? (raw instanceof Error ? raw.message : String(raw));
+        if (isIdentityConflictError(code, description)) {
+          return { error: new Error(IDENTITY_CONFLICT_MESSAGE) };
+        }
+        return { error: raw instanceof Error ? raw : new Error(String(raw)) };
       }
       return { error: null };
     } catch (err) {
