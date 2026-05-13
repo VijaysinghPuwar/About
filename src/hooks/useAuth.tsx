@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
+import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { lovable } from '@/integrations/lovable/index';
 import { isIdentityConflictError, IDENTITY_CONFLICT_MESSAGE } from '@/lib/auth-errors';
@@ -18,10 +19,12 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   profile: Profile | null;
+  profileError: Error | null;
   loading: boolean;
   isAdmin: boolean;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  refetchProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileError, setProfileError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -47,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }, 0);
         } else {
           setProfile(null);
+          setProfileError(null);
           setIsAdmin(false);
           setLoading(false);
         }
@@ -68,7 +73,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchProfile = async (userId: string) => {
+  // Three outcomes:
+  //   1. row found            → data truthy, error null  → success
+  //   2. no row exists        → data null,  error null   → legit "not provisioned yet"
+  //                                                        falls through to existing /login
+  //                                                        redirect in ProtectedRoute
+  //   3. Supabase / net error → error truthy or thrown   → toast + one retry; if retry
+  //                                                        also fails, set profileError so
+  //                                                        ProtectedRoute renders an
+  //                                                        inline error UI instead of
+  //                                                        silently redirecting to /login.
+  const fetchProfile = async (userId: string, isRetry = false) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -78,15 +93,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.error('Error fetching profile:', error);
+        if (!isRetry) {
+          toast.error("Couldn't load your profile, retrying…");
+          setTimeout(() => { void fetchProfile(userId, true); }, 1000);
+          return;
+        }
+        setProfileError(new Error(error.message || 'Failed to fetch profile'));
         setProfile(null);
-      } else {
-        setProfile(data as Profile | null);
+        setLoading(false);
+        return;
       }
+
+      setProfile(data as Profile | null);
+      setProfileError(null);
+      setLoading(false);
     } catch (err) {
       console.error('Error in fetchProfile:', err);
-    } finally {
+      if (!isRetry) {
+        toast.error("Couldn't load your profile, retrying…");
+        setTimeout(() => { void fetchProfile(userId, true); }, 1000);
+        return;
+      }
+      setProfileError(err instanceof Error ? err : new Error(String(err)));
+      setProfile(null);
       setLoading(false);
     }
+  };
+
+  const refetchProfile = async () => {
+    if (!user) return;
+    setProfileError(null);
+    setLoading(true);
+    await fetchProfile(user.id);
   };
 
   const checkAdminRole = async (userId: string) => {
@@ -150,11 +188,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     await supabase.auth.signOut();
     setProfile(null);
+    setProfileError(null);
     setIsAdmin(false);
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, profile, loading, isAdmin, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, session, profile, profileError, loading, isAdmin, signInWithGoogle, signOut, refetchProfile }}>
       {children}
     </AuthContext.Provider>
   );
