@@ -21,7 +21,16 @@ export function parseOAuthErrorFromUrl(): ParsedOAuthError | null {
 
   const error = pick('error');
   const errorCode = pick('error_code');
-  const errorDescription = decodeURIComponent((pick('error_description') || '').replace(/\+/g, ' '));
+  const rawDescription = (pick('error_description') || '').replace(/\+/g, ' ');
+  let errorDescription = rawDescription;
+  try {
+    errorDescription = decodeURIComponent(rawDescription);
+  } catch {
+    // Malformed percent-encoding (e.g. a literal "%" in the provider's
+    // message) makes decodeURIComponent throw URIError. Fall back to the
+    // raw string rather than crashing the callback UI.
+    errorDescription = rawDescription;
+  }
 
   if (!error && !errorCode && !errorDescription) return null;
   return { error, errorCode, errorDescription };
