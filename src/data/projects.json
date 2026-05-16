@@ -1,5 +1,75 @@
 [
   {
+    "id": "vaultsnake-platform",
+    "title": "VAULTSNAKE — Secure Vault & Access Monitoring Platform",
+    "description": "A full-stack security platform with Google OAuth, Fernet-encrypted vaults, RBAC, audit logging, and automated threat detection.",
+    "category": "Application Security",
+    "tech": ["Next.js 15", "NextAuth/Auth.js", "TypeScript", "Tailwind", "SWR", "FastAPI", "Python 3.11", "SQLAlchemy 2.0", "PostgreSQL", "Pydantic", "python-jose (JWT)", "cryptography (Fernet)", "Vercel", "Railway"],
+    "year": "2026",
+    "status": "completed",
+    "featured": true,
+    "keyResults": [
+      "Server-side JWT validation enforced on every API endpoint",
+      "Fernet (AES-128-CBC + HMAC-SHA256) encryption for vault data at rest",
+      "Role-enforced backend middleware separating user and admin dashboards",
+      "Automated threat engine flags brute-force, rapid vault ops, and escalation attempts",
+      "Dynamic 24h risk score derived from detected security events"
+    ],
+    "links": {
+      "github": "https://github.com/VijaysinghPuwar/VAULTSNAKE",
+      "writeup": null,
+      "demo": "https://vaultsnake.vercel.app"
+    },
+    "image": "",
+    "tags": ["OAuth 2.0", "JWT", "RBAC", "Encryption at rest", "Audit trail", "Threat detection", "Risk scoring", "Defense in depth"]
+  },
+  {
+    "id": "cutmox",
+    "title": "cutmox",
+    "description": "A browser-based audio tool built on WebAssembly for fast, fully client-side processing.",
+    "category": "Application Development",
+    "tech": ["TypeScript", "TanStack Start", "Vite", "WebAssembly", "Cloudflare Workers", "Bun", "Tailwind"],
+    "year": "2026",
+    "status": "in-progress",
+    "featured": true,
+    "keyResults": [
+      "Phase 1: WebAssembly viability proof completed",
+      "Phase 2: settings and upload flow in active development",
+      "All audio processing runs in-browser — no server upload of user audio",
+      "Built on the TanStack Start template, deployed via Cloudflare Workers (wrangler)"
+    ],
+    "links": {
+      "github": null,
+      "writeup": null,
+      "demo": "https://cutmox.vercel.app"
+    },
+    "image": "",
+    "tags": ["WebAssembly", "Audio", "Client-side", "Cloudflare Workers"]
+  },
+  {
+    "id": "iptables-hardening",
+    "title": "Hardening Linux Servers with iptables — Rate Limiting & NAT",
+    "description": "A reproducible defense lab using iptables to neutralize SSH brute-force, ICMP/SYN floods, and expose internal services via DNAT.",
+    "category": "Network Security",
+    "tech": ["Linux", "Ubuntu", "Kali", "iptables", "netfilter", "Bash", "hping3", "hydra", "Apache", "GitHub Actions (shellcheck)"],
+    "year": "2026",
+    "status": "completed",
+    "featured": true,
+    "keyResults": [
+      "94,671 flood packets absorbed; CPU returned to idle",
+      "SSH brute-force attack rate collapsed 6.00 → 1.00 attempts/min (6×)",
+      "SYN half-open connections capped at 3 concurrent",
+      "Hydra recovered the password in ~5s pre-defense, then stalled after"
+    ],
+    "links": {
+      "github": "https://github.com/VijaysinghPuwar/hardening-linux-servers-with-iptables",
+      "writeup": null,
+      "demo": null
+    },
+    "image": "",
+    "tags": ["Linux", "iptables", "Network Security", "Firewall"]
+  },
+  {
     "id": "secure-ubuntu-fleet",
     "title": "Secure Ubuntu Fleet Hardening",
     "description": "Automated Ubuntu server hardening toolkit for fleet-wide security baseline enforcement. Covers SSH hardening, firewall configuration, user access controls, and system auditing.",

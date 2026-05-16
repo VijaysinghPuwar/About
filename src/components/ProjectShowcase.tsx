@@ -109,6 +109,18 @@ const categoryColors: Record<string, string> = {
 };
 
 const enrichedData: Record<string, { description: string; features: string[] }> = {
+  'vaultsnake-platform': {
+    description: 'Cybersecurity Master’s final project. A full-stack security platform where users authenticate via Google OAuth, store Fernet-encrypted secrets in a personal vault, and monitor account security events, while admins get platform-wide visibility. Implements defense-in-depth: server-side JWT validation on every endpoint, encryption at rest, role-enforced backend middleware, and an automated threat engine that derives a dynamic 24h risk score.',
+    features: ['Google OAuth + server-side JWT', 'Fernet-encrypted vault at rest', 'RBAC user/admin dashboards', 'Automated threat detection & 24h risk score'],
+  },
+  'cutmox': {
+    description: 'A browser-based audio tool built on WebAssembly for fast, fully client-side processing. Built on the TanStack Start template with Vite and deployed via Cloudflare Workers (wrangler). Currently in active build — Phase 1 proved WASM viability, Phase 2 adds settings and upload. No user audio is ever uploaded to a server.',
+    features: ['Fully client-side WASM processing', 'No server upload of audio', 'TanStack Start + Vite', 'Cloudflare Workers deploy'],
+  },
+  'iptables-hardening': {
+    description: 'CYB623 Network Security term project (Pace University, Spring 2026). A two-VM VirtualBox host-only lab — Kali attacker vs Ubuntu defender — building and quantitatively measuring three defensive layers: SSH brute-force defense with the recent module, ICMP/SYN flood mitigation with the limit module, and DNAT port forwarding for service hiding. All steps scripted, idempotent, and shellcheck-linted in CI.',
+    features: ['SSH brute-force defense (recent module)', 'ICMP/SYN flood mitigation (limit module)', 'DNAT :80 → internal :8080', 'Idempotent scripts, shellcheck CI'],
+  },
   'win-dev-sec-bootstrap': {
     description: 'Idempotent PowerShell bootstrap for provisioning complete Windows development and security environments. One command sets up security tools, WSL2, Docker, and all development dependencies from scratch.',
     features: ['One-command setup', 'Idempotent execution', 'WSL2 + Docker config', 'Security tool chain'],
@@ -165,6 +177,7 @@ const filterCategories = [
 ];
 
 const featuredIds = new Set([
+  'vaultsnake-platform', 'cutmox', 'iptables-hardening',
   'win-dev-sec-bootstrap', 'automating-infosec', 'aws-cloud-security',
   'cs601c-capstone', 'secure-ubuntu-fleet', 'http-hardening-nmap-nse',
 ]);
