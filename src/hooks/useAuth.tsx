@@ -2,8 +2,6 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { User, Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { lovable } from '@/integrations/lovable/index';
-import { isIdentityConflictError, IDENTITY_CONFLICT_MESSAGE } from '@/lib/auth-errors';
 
 interface Profile {
   id: string;
@@ -163,21 +161,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Native Supabase OAuth (same path as GitHub). Supabase redirects to
+  // /auth/callback with a session hash that detectSessionInUrl consumes;
+  // identity conflicts surface there via parseOAuthErrorFromUrl. This does
+  // not depend on Lovable Cloud, so it works regardless of Cloud balance.
   const signInWithGoogle = async () => {
     try {
-      const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: `${window.location.origin}/auth/callback`,
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: `${window.location.origin}/auth/callback` },
       });
-      if (result.error) {
-        const raw = result.error;
-        const code = (raw as { code?: string; error_code?: string })?.code
-          ?? (raw as { error_code?: string })?.error_code;
-        const description = (raw as { error_description?: string })?.error_description
-          ?? (raw instanceof Error ? raw.message : String(raw));
-        if (isIdentityConflictError(code, description)) {
-          return { error: new Error(IDENTITY_CONFLICT_MESSAGE) };
-        }
-        return { error: raw instanceof Error ? raw : new Error(String(raw)) };
+      if (error) {
+        return { error: error instanceof Error ? error : new Error(String(error)) };
       }
       return { error: null };
     } catch (err) {
