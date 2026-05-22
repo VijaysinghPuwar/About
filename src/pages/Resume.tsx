@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Download, Mail, Github, Linkedin, GraduationCap, Award, Briefcase } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
+import { meCourseGroups, type CourseGroup } from '@/data/me-coursework';
 
 const skills = {
   "Security": ["IAM / Active Directory", "SIEM (Splunk)", "IDS/IPS", "Vulnerability Assessment", "Penetration Testing", "Threat Intelligence", "Incident Response", "Endpoint Hardening", "Security Management (NIST / ISO 27001)"],
