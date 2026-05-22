@@ -62,13 +62,26 @@ const experience = [
 
 const education = [
   {
-    school: "Pace University", degree: "M.S. Cybersecurity", location: "New York, NY",
-    gpa: "GPA: 4.00", status: "Expected Dec 2026",
-    coursework: ["Computational Statistics", "Introduction to Cybersecurity", "Information Security Management", "Network Security & Defense", "Ethical Hacking & Penetration Testing", "Automating InfoSec with Python & Shell", "Cyber Intelligence Analysis & Modeling", "Operating Systems Theory & Administration"],
+    school: "Pace University — Seidenberg School of CSIS", degree: "M.S. Cybersecurity", location: "New York, NY",
+    gpa: "GPA: 3.91", status: "Expected Dec 2026",
+    coursework: [
+      "Introduction to Cybersecurity",
+      "Operating Systems Theory & Administration",
+      "Information Security Management",
+      "Network Security & Defense",
+      "Ethical Hacking & Penetration Testing",
+      "Automating InfoSec with Python & Shell",
+      "Cyber Intelligence Analysis & Modeling",
+      "Computational Statistics",
+      "Algorithms & Computing Theory",
+      "Business Data Communications",
+      "Introduction to Coding",
+    ],
+    inProgress: ["Data Science I: Intro to Data", "Cybersecurity Capstone Project"],
   },
   {
     school: "G.H. Patel College of Engineering & Technology", degree: "B.E. Mechanical Engineering",
-    location: "Gujarat, India", gpa: "CGPA: 7.11", status: "Completed Aug 2023", coursework: [],
+    location: "Gujarat, India", gpa: "CGPA: 7.11", status: "Completed Aug 2023", coursework: [], inProgress: [],
   },
 ];
 
