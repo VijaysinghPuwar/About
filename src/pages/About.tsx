@@ -287,6 +287,22 @@ export default function About() {
                         ))}
                       </div>
                     </>
+                  {edu.courseGroups && edu.courseGroups.length > 0 && (
+                    <>
+                      <p className="text-xs font-semibold text-foreground mb-2">Relevant Coursework</p>
+                      <div className="space-y-3">
+                        {edu.courseGroups.map(group => (
+                          <div key={group.label}>
+                            <p className="text-[11px] font-semibold text-primary mb-1.5 uppercase tracking-wider font-mono">{group.label}</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {group.items.map(c => (
+                                <span key={c} className="text-xs px-2 py-0.5 rounded-full glass-card text-muted-foreground">{c}</span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               </motion.div>
