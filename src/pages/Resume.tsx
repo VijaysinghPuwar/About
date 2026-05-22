@@ -53,8 +53,8 @@ const education = [
     inProgress: ["Data Science I: Intro to Data", "Cybersecurity Capstone Project"],
   },
   {
-    school: "G.H. Patel College of Engineering & Technology", degree: "B.E. Mechanical Engineering",
-    location: "Gujarat, India", gpa: "CGPA: 7.11", status: "Completed Aug 2023", coursework: [], inProgress: [],
+    school: "G. H. Patel College of Engineering & Technology", degree: "B.E. Mechanical Engineering",
+    location: "Gujarat Technological University, Ahmedabad", gpa: "CGPA: 7.11 / 10", status: "Completed Aug 2023", coursework: [], inProgress: [],
   },
 ];
 
