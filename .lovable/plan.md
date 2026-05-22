@@ -1,36 +1,35 @@
 ## Scope
 
-Update only the B.E. Mechanical Engineering education entry across the three places it appears. No layout, styling, or unrelated content changes.
+Add grouped Mechanical Engineering coursework to the B.E. entry across all three render sites, and remove the previous cybersecurity-framing sentence per the explicit instruction "Do not connect this section to cybersecurity."
 
 ## Edits
 
-1. **`src/components/ExperienceTimeline.tsx`** — `be-mech` entry
-   - `subtitle`: `G. H. Patel College of Engineering & Technology · Gujarat Technological University, Ahmedabad`
-   - `period`: `Completed Aug 2023`
-   - Expanded content: `CGPA: 7.11 / 10` (highlighted) + one polished sentence:
-     > "Bachelor of Engineering in Mechanical Engineering — a strong technical foundation in engineering problem-solving, systems thinking, and structured project execution that now informs a security-focused mindset."
+1. **`src/components/ExperienceTimeline.tsx`** — `be-mech` expanded content
+   - Keep: title, subtitle, period, `CGPA: 7.11 / 10`
+   - **Remove** the sentence "A strong technical foundation … cybersecurity."
+   - Replace with a "Relevant Coursework" block using 6 collapsible/grouped sections (one heading per group, courses as chips below). Use the same `glass-card` chip style already used for the M.S. coursework — no new components.
+   - Groups: Core Mechanical Engineering, Manufacturing and Design, Engineering Mathematics and Science, Management Quality and Modern Engineering, Projects / Practical, General / Professional Development (full lists per user).
 
-2. **`src/pages/About.tsx`** — Education card for the B.E.
-   - `school`: `G. H. Patel College of Engineering & Technology`
-   - Add new field `affiliation`: `Gujarat Technological University, Ahmedabad` rendered as a small muted line under the school
-   - `gpa`: `CGPA: 7.11 / 10`
-   - `status`: `Completed Aug 2023`
-   - Branch already conveyed via `degree: "B.E. Mechanical Engineering"`
+2. **`src/pages/About.tsx`** — Education data + render
+   - Populate `coursework` on the B.E. entry; introduce a new optional `courseGroups` field shaped as `{ label, items }[]` so the render block can show grouped subheadings instead of one flat blob.
+   - Render: under the existing GPA badges, show a "Relevant Coursework" label, then iterate `courseGroups` rendering each group as a small subheading + chip row. Reuse existing chip class. Keep responsive (chips wrap; on mobile each group stacks).
+   - Leave the M.S. entry untouched (its existing `coursework` flat list still renders the same way for that card).
 
-3. **`src/pages/Resume.tsx`** — Same B.E. card updates as About (school, affiliation line, `CGPA: 7.11 / 10`, `Completed Aug 2023`).
+3. **`src/pages/Resume.tsx`** — Same `courseGroups` pattern as About (subheading + Badge rows), reusing existing Badge styling. Ensure two-column education grid still works; the B.E. card will simply grow taller — that's expected and acceptable.
 
-4. **About page intro paragraph (one sentence addition only)** — If an "About" narrative exists near the top of `src/pages/About.tsx`, append:
-   > "My engineering background strengthens how I analyze complex systems, troubleshoot technical issues, and approach cybersecurity challenges with a structured problem-solving mindset."
-   If no suitable paragraph exists, skip this rather than invent new structure.
+## Privacy
 
-## Out of scope
+- No enrollment number, token, barcode, seat number, marks, or semester table rendered anywhere.
+- Only course titles, degree, college, university, completion date, CGPA shown.
 
-- No transcript numbers, enrollment IDs, semester tables, or document scans shown.
-- No changes to M.S. Cybersecurity entry, projects, contact, auth, animations, SEO, or styling.
-- No PDF regeneration.
+## Responsive / build safety
+
+- Chips use `flex-wrap gap-1.5` already present — no overflow risk.
+- No new dependencies, routes, or layout changes.
+- Other sections (projects, contact, auth, animations, navbar, SEO) untouched.
 
 ## Verification
 
-- `rg "Mechanical Engineering"` in `src/` — spelled correctly everywhere.
-- `rg "7.11"` — appears as `7.11 / 10` in all three locations.
-- Visually check `/`, `/about`, `/resume` at mobile (≤640px) and desktop widths — cards still single-column on mobile, two-column on desktop, no overflow from the longer school/affiliation string.
+- `rg "cybersecurity" src/components/ExperienceTimeline.tsx` → no match in the `be-mech` block.
+- `rg "Gujarat Technological University"` → present in all three files.
+- Spot-check `/`, `/about`, `/resume` at 375px and 1280px viewports — chip rows wrap cleanly, group headings stack on mobile.
