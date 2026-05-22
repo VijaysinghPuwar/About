@@ -151,8 +151,16 @@ export default function Resume() {
                     {edu.coursework.length > 0 && (
                       <>
                         <p className="text-xs font-semibold text-foreground mb-1.5">Selected Coursework</p>
-                        <div className="flex flex-wrap gap-1">
+                        <div className="flex flex-wrap gap-1 mb-3">
                           {edu.coursework.map(c => <Badge key={c} variant="secondary" className="text-xs bg-muted text-muted-foreground border-0">{c}</Badge>)}
+                        </div>
+                      </>
+                    )}
+                    {edu.inProgress && edu.inProgress.length > 0 && (
+                      <>
+                        <p className="text-xs font-semibold text-foreground mb-1.5">In Progress</p>
+                        <div className="flex flex-wrap gap-1">
+                          {edu.inProgress.map(c => <Badge key={c} variant="outline" className="text-xs border-primary/40 text-primary">{c}</Badge>)}
                         </div>
                       </>
                     )}
