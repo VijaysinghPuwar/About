@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Download, Mail, Github, Linkedin, GraduationCap, Award, Briefcase } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
+import { meCourseGroups, type CourseGroup } from '@/data/me-coursework';
 
 const skills = {
   "Security": ["IAM / Active Directory", "SIEM (Splunk)", "IDS/IPS", "Vulnerability Assessment", "Penetration Testing", "Threat Intelligence", "Incident Response", "Endpoint Hardening", "Security Management (NIST / ISO 27001)"],
@@ -51,10 +52,11 @@ const education = [
       "Introduction to Coding",
     ],
     inProgress: ["Data Science I: Intro to Data", "Cybersecurity Capstone Project"],
+    courseGroups: [] as CourseGroup[],
   },
   {
     school: "G. H. Patel College of Engineering & Technology", degree: "B.E. Mechanical Engineering",
-    location: "Gujarat Technological University, Ahmedabad", gpa: "CGPA: 7.11 / 10", status: "Completed Aug 2023", coursework: [], inProgress: [],
+    location: "Gujarat Technological University, Ahmedabad", gpa: "CGPA: 7.11 / 10", status: "Completed Aug 2023", coursework: [], inProgress: [], courseGroups: meCourseGroups as CourseGroup[],
   },
 ];
 
@@ -161,6 +163,21 @@ export default function Resume() {
                         <p className="text-xs font-semibold text-foreground mb-1.5">In Progress</p>
                         <div className="flex flex-wrap gap-1">
                           {edu.inProgress.map(c => <Badge key={c} variant="outline" className="text-xs border-primary/40 text-primary">{c}</Badge>)}
+                        </div>
+                      </>
+                    )}
+                    {edu.courseGroups && edu.courseGroups.length > 0 && (
+                      <>
+                        <p className="text-xs font-semibold text-foreground mb-1.5">Relevant Coursework</p>
+                        <div className="space-y-3">
+                          {edu.courseGroups.map(group => (
+                            <div key={group.label}>
+                              <p className="text-[11px] font-semibold text-primary mb-1.5 uppercase tracking-wider">{group.label}</p>
+                              <div className="flex flex-wrap gap-1">
+                                {group.items.map(c => <Badge key={c} variant="secondary" className="text-xs bg-muted text-muted-foreground border-0">{c}</Badge>)}
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </>
                     )}

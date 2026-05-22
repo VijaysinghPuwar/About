@@ -5,6 +5,7 @@ import { Shield, Terminal, Cloud, Mail, Github, Linkedin, CheckCircle2, Download
 import { motion, useInView } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 import { useRef, useEffect, useState } from 'react';
+import { meCourseGroups, type CourseGroup } from '@/data/me-coursework';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -78,10 +79,11 @@ const education = [
       "Introduction to Coding",
     ],
     inProgress: ["Data Science I: Intro to Data", "Cybersecurity Capstone Project"],
+    courseGroups: [] as CourseGroup[],
   },
   {
     school: "G. H. Patel College of Engineering & Technology", degree: "B.E. Mechanical Engineering",
-    location: "Gujarat Technological University, Ahmedabad", gpa: "CGPA: 7.11 / 10", status: "Completed Aug 2023", coursework: [], inProgress: [],
+    location: "Gujarat Technological University, Ahmedabad", gpa: "CGPA: 7.11 / 10", status: "Completed Aug 2023", coursework: [], inProgress: [], courseGroups: meCourseGroups as CourseGroup[],
   },
 ];
 
@@ -282,6 +284,23 @@ export default function About() {
                       <div className="flex flex-wrap gap-1.5">
                         {edu.inProgress.map(c => (
                           <span key={c} className="text-xs px-2 py-0.5 rounded-full border border-primary/30 text-primary">{c}</span>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {edu.courseGroups && edu.courseGroups.length > 0 && (
+                    <>
+                      <p className="text-xs font-semibold text-foreground mb-2">Relevant Coursework</p>
+                      <div className="space-y-3">
+                        {edu.courseGroups.map(group => (
+                          <div key={group.label}>
+                            <p className="text-[11px] font-semibold text-primary mb-1.5 uppercase tracking-wider font-mono">{group.label}</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {group.items.map(c => (
+                                <span key={c} className="text-xs px-2 py-0.5 rounded-full glass-card text-muted-foreground">{c}</span>
+                              ))}
+                            </div>
+                          </div>
                         ))}
                       </div>
                     </>
