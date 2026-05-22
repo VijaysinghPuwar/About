@@ -1,53 +1,36 @@
 ## Scope
 
-Update academic content only — no design, layout, or auth changes. Preserve cybersecurity visual identity, responsive fixes, and performance optimizations.
+Update only the B.E. Mechanical Engineering education entry across the three places it appears. No layout, styling, or unrelated content changes.
 
-## Files to update
+## Edits
 
-1. **`src/components/ExperienceTimeline.tsx`** (M.S. Cybersecurity entry)
-   - GPA: `4.00` → `3.91`
-   - Status: keep `Expected Dec 2026`
-   - Replace coursework chips with completed + in-progress courses (grouped):
-     - **Completed**: Introduction to Cybersecurity, Operating Systems Theory & Administration, Information Security Management, Network Security & Defense, Ethical Hacking & Penetration Testing, Automating InfoSec with Python & Shell, Cyber Intelligence Analysis & Modeling, Computational Statistics, Introduction to Coding, Business Data Communications, Algorithms & Computing Theory
-     - **In Progress**: Data Science I: Intro to Data, Cybersecurity Capstone Project
-   - Add small line: `39 credits applied · Seidenberg School of CSIS, NYC`
+1. **`src/components/ExperienceTimeline.tsx`** — `be-mech` entry
+   - `subtitle`: `G. H. Patel College of Engineering & Technology · Gujarat Technological University, Ahmedabad`
+   - `period`: `Completed Aug 2023`
+   - Expanded content: `CGPA: 7.11 / 10` (highlighted) + one polished sentence:
+     > "Bachelor of Engineering in Mechanical Engineering — a strong technical foundation in engineering problem-solving, systems thinking, and structured project execution that now informs a security-focused mindset."
 
-2. **`src/pages/About.tsx`** (education card)
-   - GPA: `4.00` → `3.91`
-   - Replace `coursework` array with the 11 completed courses above
-   - Add a second small `inProgress` field (Data Science I, Capstone) shown as a separate badge row labeled "In Progress"
+2. **`src/pages/About.tsx`** — Education card for the B.E.
+   - `school`: `G. H. Patel College of Engineering & Technology`
+   - Add new field `affiliation`: `Gujarat Technological University, Ahmedabad` rendered as a small muted line under the school
+   - `gpa`: `CGPA: 7.11 / 10`
+   - `status`: `Completed Aug 2023`
+   - Branch already conveyed via `degree: "B.E. Mechanical Engineering"`
 
-3. **`src/pages/Resume.tsx`** (resume page)
-   - Same GPA + coursework + in-progress update as About
-   - Sharpen skill mapping in the `skills` object to reflect completed coursework:
-     - **Security**: keep + add `Penetration Testing`, `Threat Intelligence`, `Security Management (NIST/ISO 27001)`
-     - **Automation**: keep (Python/PowerShell/Shell already accurate)
-     - **Cloud & Network**: keep
-     - **Tools**: keep
-   - No bullet-point experience changes (transcript doesn't affect work history)
+3. **`src/pages/Resume.tsx`** — Same B.E. card updates as About (school, affiliation line, `CGPA: 7.11 / 10`, `Completed Aug 2023`).
 
-4. **`public/sitemap.xml`, SEO meta**: no change needed (no GPA in meta).
-
-5. **Resume PDF (`public/resume.pdf`)**: out of scope to regenerate binary — will flag in summary so user can update separately. Website content structure will match what the new PDF should contain.
-
-## Wording polish (light)
-
-- Education subtitle stays factual; no marketing fluff.
-- Add the campus/school line once in the timeline expanded view for ATS keyword coverage ("Seidenberg School of Computer Science and Information Systems").
+4. **About page intro paragraph (one sentence addition only)** — If an "About" narrative exists near the top of `src/pages/About.tsx`, append:
+   > "My engineering background strengthens how I analyze complex systems, troubleshoot technical issues, and approach cybersecurity challenges with a structured problem-solving mindset."
+   If no suitable paragraph exists, skip this rather than invent new structure.
 
 ## Out of scope
 
-- No changes to auth flow, project cards, theme, animations, or layout.
-- No new components, routes, or dependencies.
-- Resume PDF binary not regenerated.
+- No transcript numbers, enrollment IDs, semester tables, or document scans shown.
+- No changes to M.S. Cybersecurity entry, projects, contact, auth, animations, SEO, or styling.
+- No PDF regeneration.
 
 ## Verification
 
-- Grep for `4.00` and `4\.0` in `src/` returns no matches after edit.
-- Preview `/`, `/about`, `/resume` — all three show GPA 3.91 and the updated course list.
-
-## Post-update report to user
-
-- List of changed sections (timeline, About education, Resume education + skills).
-- Outdated items found (old GPA 4.00 in 3 places; coursework missing 3 newly completed courses).
-- Recommendations (regenerate `public/resume.pdf` to match; consider adding Capstone project to Projects page once underway).
+- `rg "Mechanical Engineering"` in `src/` — spelled correctly everywhere.
+- `rg "7.11"` — appears as `7.11 / 10` in all three locations.
+- Visually check `/`, `/about`, `/resume` at mobile (≤640px) and desktop widths — cards still single-column on mobile, two-column on desktop, no overflow from the longer school/affiliation string.
