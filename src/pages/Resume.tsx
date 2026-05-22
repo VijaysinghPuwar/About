@@ -166,6 +166,21 @@ export default function Resume() {
                         </div>
                       </>
                     )}
+                    {edu.courseGroups && edu.courseGroups.length > 0 && (
+                      <>
+                        <p className="text-xs font-semibold text-foreground mb-1.5">Relevant Coursework</p>
+                        <div className="space-y-3">
+                          {edu.courseGroups.map(group => (
+                            <div key={group.label}>
+                              <p className="text-[11px] font-semibold text-primary mb-1.5 uppercase tracking-wider">{group.label}</p>
+                              <div className="flex flex-wrap gap-1">
+                                {group.items.map(c => <Badge key={c} variant="secondary" className="text-xs bg-muted text-muted-foreground border-0">{c}</Badge>)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>
