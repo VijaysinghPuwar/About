@@ -109,26 +109,16 @@ const entries: TimelineEntry[] = [
     id: 'be-mech',
     type: 'education',
     title: 'B.E. Mechanical Engineering',
-    subtitle: 'G.H. Patel College of Engineering & Technology — Gujarat, India',
+    subtitle: 'G. H. Patel College of Engineering & Technology · Gujarat Technological University, Ahmedabad',
     period: 'Completed Aug 2023',
     expandedContent: (
       <div>
         <p className="text-sm text-muted-foreground mb-3">
-          CGPA: {highlightMetric('7.11')}
+          CGPA: {highlightMetric('7.11 / 10')}
         </p>
-        <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider font-mono">
-          Selected Coursework
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          A strong technical foundation in engineering problem-solving, systems thinking, and structured project execution — a discipline that now informs a methodical, analytical approach to cybersecurity.
         </p>
-        <div className="flex flex-wrap gap-1.5">
-          {[
-            'Engineering Design & Analysis', 'Manufacturing Systems',
-            'Thermodynamics & Fluid Mechanics', 'Technical Documentation',
-          ].map(c => (
-            <span key={c} className="text-xs px-2.5 py-1 rounded-full glass-card text-muted-foreground">
-              {c}
-            </span>
-          ))}
-        </div>
       </div>
     ),
   },
