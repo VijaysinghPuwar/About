@@ -1,51 +1,53 @@
-## Goal
+## Scope
 
-When a user tries to sign in with one provider but their email is already registered with another, surface a clear error instead of silently bouncing to home.
+Update academic content only — no design, layout, or auth changes. Preserve cybersecurity visual identity, responsive fixes, and performance optimizations.
 
-## Changes
+## Files to update
 
-### 1. `src/pages/AuthCallback.tsx`
+1. **`src/components/ExperienceTimeline.tsx`** (M.S. Cybersecurity entry)
+   - GPA: `4.00` → `3.91`
+   - Status: keep `Expected Dec 2026`
+   - Replace coursework chips with completed + in-progress courses (grouped):
+     - **Completed**: Introduction to Cybersecurity, Operating Systems Theory & Administration, Information Security Management, Network Security & Defense, Ethical Hacking & Penetration Testing, Automating InfoSec with Python & Shell, Cyber Intelligence Analysis & Modeling, Computational Statistics, Introduction to Coding, Business Data Communications, Algorithms & Computing Theory
+     - **In Progress**: Data Science I: Intro to Data, Cybersecurity Capstone Project
+   - Add small line: `39 credits applied · Seidenberg School of CSIS, NYC`
 
-Before waiting on session, parse OAuth errors from both `window.location.hash` (fragment, used by implicit OAuth flows) and `window.location.search` (used by PKCE/code flows):
+2. **`src/pages/About.tsx`** (education card)
+   - GPA: `4.00` → `3.91`
+   - Replace `coursework` array with the 11 completed courses above
+   - Add a second small `inProgress` field (Data Science I, Capstone) shown as a separate badge row labeled "In Progress"
 
-- Read `error`, `error_code`, and `error_description` from each.
-- Detect identity-conflict cases by checking `error_code` for values like `identity_already_exists`, `email_exists`, `provider_email_needs_verification`, or `error_description` matching `/already (registered|exists|linked)|identity.*exist/i`.
-- If detected, render a dedicated message:
-  > "This email is already linked to a different sign-in method. Please continue with the provider you originally used to create the account."
-  Plus a generic fallback that shows `error_description` for any other OAuth error.
-- If any OAuth error present, do NOT start the session-wait timer; render the error UI immediately with the existing "Back to sign in" link to `/login`.
-- Keep the existing success path (session detected → `navigate('/')`) and the 6 s "could not complete" timeout untouched for the no-error case.
+3. **`src/pages/Resume.tsx`** (resume page)
+   - Same GPA + coursework + in-progress update as About
+   - Sharpen skill mapping in the `skills` object to reflect completed coursework:
+     - **Security**: keep + add `Penetration Testing`, `Threat Intelligence`, `Security Management (NIST/ISO 27001)`
+     - **Automation**: keep (Python/PowerShell/Shell already accurate)
+     - **Cloud & Network**: keep
+     - **Tools**: keep
+   - No bullet-point experience changes (transcript doesn't affect work history)
 
-### 2. `src/hooks/useAuth.tsx`
+4. **`public/sitemap.xml`, SEO meta**: no change needed (no GPA in meta).
 
-In `signInWithGoogle`:
+5. **Resume PDF (`public/resume.pdf`)**: out of scope to regenerate binary — will flag in summary so user can update separately. Website content structure will match what the new PDF should contain.
 
-- After `lovable.auth.signInWithOAuth(...)`, inspect `result.error` and `result.error_description` (or `.message`) for the same identity-conflict patterns.
-- If matched, return `{ error: new Error('This email is already registered with a different sign-in provider. Please use that provider to sign in.') }` so `Login.tsx`'s existing `toast.error` shows a meaningful message before any redirect.
-- Non-conflict errors keep their original message.
+## Wording polish (light)
 
-Add a small helper `isIdentityConflictError(code?, description?)` at module scope (shared with AuthCallback via a new tiny util `src/lib/auth-errors.ts`) so both files use the same detection logic.
-
-### 3. `src/lib/auth-errors.ts` (new)
-
-Exports:
-- `parseOAuthErrorFromUrl()` — reads hash + search, returns `{ error, errorCode, errorDescription } | null`.
-- `isIdentityConflictError(code?, description?)` — boolean.
-- `IDENTITY_CONFLICT_MESSAGE` — the user-facing copy.
-
-### 4. GitHub sign-in
-
-`Login.tsx` calls `supabase.auth.signInWithOAuth({ provider: 'github' })` directly. That call only errors for client-side issues; identity conflicts surface only after the GitHub redirect lands back on `/auth/callback`. The AuthCallback URL parsing in change #1 already covers GitHub. No change needed in `Login.tsx`.
+- Education subtitle stays factual; no marketing fluff.
+- Add the campus/school line once in the timeline expanded view for ATS keyword coverage ("Seidenberg School of Computer Science and Information Systems").
 
 ## Out of scope
 
-- No UI redesign of the login page or callback spinner.
-- No changes to successful sign-in routing.
-- No changes to Supabase config, RLS, or providers.
-- No new dependencies.
+- No changes to auth flow, project cards, theme, animations, or layout.
+- No new components, routes, or dependencies.
+- Resume PDF binary not regenerated.
 
 ## Verification
 
-- Manually append `#error=server_error&error_code=identity_already_exists&error_description=Identity+already+exists` to `/auth/callback` URL → see the inline conflict message and "Back to sign in" link, no redirect.
-- Normal Google sign-in still lands on `/`.
-- Normal GitHub sign-in still lands on `/`.
+- Grep for `4.00` and `4\.0` in `src/` returns no matches after edit.
+- Preview `/`, `/about`, `/resume` — all three show GPA 3.91 and the updated course list.
+
+## Post-update report to user
+
+- List of changed sections (timeline, About education, Resume education + skills).
+- Outdated items found (old GPA 4.00 in 3 places; coursework missing 3 newly completed courses).
+- Recommendations (regenerate `public/resume.pdf` to match; consider adding Capstone project to Projects page once underway).

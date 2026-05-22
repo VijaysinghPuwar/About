@@ -62,13 +62,26 @@ const experience = [
 
 const education = [
   {
-    school: "Pace University", degree: "M.S. Cybersecurity", location: "New York, NY",
-    gpa: "GPA: 4.00", status: "Expected Dec 2026",
-    coursework: ["Computational Statistics", "Introduction to Cybersecurity", "Information Security Management", "Network Security & Defense", "Ethical Hacking & Penetration Testing", "Automating InfoSec with Python & Shell", "Cyber Intelligence Analysis & Modeling", "Operating Systems Theory & Administration"],
+    school: "Pace University — Seidenberg School of CSIS", degree: "M.S. Cybersecurity", location: "New York, NY",
+    gpa: "GPA: 3.91", status: "Expected Dec 2026",
+    coursework: [
+      "Introduction to Cybersecurity",
+      "Operating Systems Theory & Administration",
+      "Information Security Management",
+      "Network Security & Defense",
+      "Ethical Hacking & Penetration Testing",
+      "Automating InfoSec with Python & Shell",
+      "Cyber Intelligence Analysis & Modeling",
+      "Computational Statistics",
+      "Algorithms & Computing Theory",
+      "Business Data Communications",
+      "Introduction to Coding",
+    ],
+    inProgress: ["Data Science I: Intro to Data", "Cybersecurity Capstone Project"],
   },
   {
     school: "G.H. Patel College of Engineering & Technology", degree: "B.E. Mechanical Engineering",
-    location: "Gujarat, India", gpa: "CGPA: 7.11", status: "Completed Aug 2023", coursework: [],
+    location: "Gujarat, India", gpa: "CGPA: 7.11", status: "Completed Aug 2023", coursework: [], inProgress: [],
   },
 ];
 
@@ -256,9 +269,19 @@ export default function About() {
                   {edu.coursework.length > 0 && (
                     <>
                       <p className="text-xs font-semibold text-foreground mb-2">Selected Coursework</p>
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className="flex flex-wrap gap-1.5 mb-3">
                         {edu.coursework.map(c => (
                           <span key={c} className="text-xs px-2 py-0.5 rounded-full glass-card text-muted-foreground">{c}</span>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {edu.inProgress && edu.inProgress.length > 0 && (
+                    <>
+                      <p className="text-xs font-semibold text-foreground mb-2">In Progress</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {edu.inProgress.map(c => (
+                          <span key={c} className="text-xs px-2 py-0.5 rounded-full border border-primary/30 text-primary">{c}</span>
                         ))}
                       </div>
                     </>
