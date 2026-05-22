@@ -5,6 +5,7 @@ import { Shield, Terminal, Cloud, Mail, Github, Linkedin, CheckCircle2, Download
 import { motion, useInView } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 import { useRef, useEffect, useState } from 'react';
+import { meCourseGroups, type CourseGroup } from '@/data/me-coursework';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
