@@ -79,6 +79,7 @@ const education = [
       "Introduction to Coding",
     ],
     inProgress: ["Data Science I: Intro to Data", "Cybersecurity Capstone Project"],
+    courseGroups: [] as CourseGroup[],
   },
   {
     school: "G. H. Patel College of Engineering & Technology", degree: "B.E. Mechanical Engineering",
