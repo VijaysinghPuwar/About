@@ -82,7 +82,7 @@ const education = [
   },
   {
     school: "G. H. Patel College of Engineering & Technology", degree: "B.E. Mechanical Engineering",
-    location: "Gujarat Technological University, Ahmedabad", gpa: "CGPA: 7.11 / 10", status: "Completed Aug 2023", coursework: [], inProgress: [],
+    location: "Gujarat Technological University, Ahmedabad", gpa: "CGPA: 7.11 / 10", status: "Completed Aug 2023", coursework: [], inProgress: [], courseGroups: meCourseGroups as CourseGroup[],
   },
 ];
 
