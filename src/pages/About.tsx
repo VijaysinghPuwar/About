@@ -287,6 +287,7 @@ export default function About() {
                         ))}
                       </div>
                     </>
+                  )}
                   {edu.courseGroups && edu.courseGroups.length > 0 && (
                     <>
                       <p className="text-xs font-semibold text-foreground mb-2">Relevant Coursework</p>
