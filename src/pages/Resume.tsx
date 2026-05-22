@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 
 const skills = {
-  "Security": ["IAM / Active Directory", "SIEM (Splunk)", "IDS/IPS", "Vulnerability Assessment", "Incident Response", "Endpoint Hardening"],
+  "Security": ["IAM / Active Directory", "SIEM (Splunk)", "IDS/IPS", "Vulnerability Assessment", "Penetration Testing", "Threat Intelligence", "Incident Response", "Endpoint Hardening", "Security Management (NIST / ISO 27001)"],
   "Automation": ["Python", "PowerShell", "Shell Scripting", "Ansible"],
   "Cloud & Network": ["AWS (EC2, VPC, IAM, CloudWatch)", "Cisco (Routing, Switching, VLANs)", "Firewalls", "TCP/IP"],
   "Tools": ["Wireshark", "Nmap", "Metasploit", "Burp Suite", "Git", "Docker", "Linux"],
