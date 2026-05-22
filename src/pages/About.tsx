@@ -148,7 +148,7 @@ export default function About() {
             </div>
 
             <p className="text-muted-foreground leading-relaxed mb-5 max-w-xl">
-              I'm a cybersecurity engineer specializing in identity security, security automation, and cloud defense. I focus on building practical security solutions using Python, PowerShell, and modern security tools. With a foundation in both engineering and security, I approach problems methodically — automating what can be automated and hardening what needs to be protected.
+              I'm a cybersecurity engineer specializing in identity security, security automation, and cloud defense. I focus on building practical security solutions using Python, PowerShell, and modern security tools. My engineering background strengthens how I analyze complex systems, troubleshoot technical issues, and approach cybersecurity challenges with a structured problem-solving mindset.
             </p>
 
             <ul className="space-y-1.5 mb-5">
