@@ -22,24 +22,44 @@ const entries: TimelineEntry[] = [
     id: 'ms-cyber',
     type: 'education',
     title: 'M.S. Cybersecurity',
-    subtitle: 'Pace University — New York, NY',
+    subtitle: 'Pace University, Seidenberg School of CSIS — New York, NY',
     period: 'Expected Dec 2026',
     expandedContent: (
       <div>
-        <p className="text-sm text-muted-foreground mb-3">
-          GPA: {highlightMetric('4.00')}
+        <p className="text-sm text-muted-foreground mb-1">
+          GPA: {highlightMetric('3.91')} · {highlightMetric('39')} credits applied
+        </p>
+        <p className="text-xs text-muted-foreground mb-3 font-mono">
+          Seidenberg School of Computer Science & Information Systems
         </p>
         <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider font-mono">
-          Selected Coursework
+          Completed Coursework
         </p>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5 mb-4">
           {[
-            'Computational Statistics', 'Introduction to Cybersecurity',
-            'Information Security Management', 'Network Security & Defense',
-            'Ethical Hacking & Penetration Testing', 'Automating InfoSec with Python & Shell',
-            'Cyber Intelligence Analysis & Modeling', 'Operating Systems Theory & Administration',
+            'Introduction to Cybersecurity',
+            'Operating Systems Theory & Administration',
+            'Information Security Management',
+            'Network Security & Defense',
+            'Ethical Hacking & Penetration Testing',
+            'Automating InfoSec with Python & Shell',
+            'Cyber Intelligence Analysis & Modeling',
+            'Computational Statistics',
+            'Algorithms & Computing Theory',
+            'Business Data Communications',
+            'Introduction to Coding',
           ].map(c => (
             <span key={c} className="text-xs px-2.5 py-1 rounded-full glass-card text-muted-foreground">
+              {c}
+            </span>
+          ))}
+        </div>
+        <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider font-mono">
+          In Progress
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {['Data Science I: Intro to Data', 'Cybersecurity Capstone Project'].map(c => (
+            <span key={c} className="text-xs px-2.5 py-1 rounded-full border border-primary/40 text-primary">
               {c}
             </span>
           ))}
