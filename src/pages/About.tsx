@@ -269,9 +269,19 @@ export default function About() {
                   {edu.coursework.length > 0 && (
                     <>
                       <p className="text-xs font-semibold text-foreground mb-2">Selected Coursework</p>
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className="flex flex-wrap gap-1.5 mb-3">
                         {edu.coursework.map(c => (
                           <span key={c} className="text-xs px-2 py-0.5 rounded-full glass-card text-muted-foreground">{c}</span>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {edu.inProgress && edu.inProgress.length > 0 && (
+                    <>
+                      <p className="text-xs font-semibold text-foreground mb-2">In Progress</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {edu.inProgress.map(c => (
+                          <span key={c} className="text-xs px-2 py-0.5 rounded-full border border-primary/30 text-primary">{c}</span>
                         ))}
                       </div>
                     </>
