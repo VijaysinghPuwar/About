@@ -151,7 +151,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('role', 'admin')
         .maybeSingle();
 
-      setIsAdmin(!error && !!data);
+      if (error) {
+        // Missing table or any other error → not admin, stay silent.
+        setIsAdmin(false);
+        return;
+      }
+      setIsAdmin(!!data);
     } catch {
       setIsAdmin(false);
     }
@@ -159,24 +164,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateLastLogin = async (userId: string, email: string) => {
     try {
-      await supabase
+      const { error } = await supabase
         .from('profiles')
         .update({ last_login_at: new Date().toISOString() })
         .eq('user_id', userId);
+      if (error && !isMissingTableError(error)) {
+        // non-critical; do not surface
+      }
 
-      // Log auth event for suspicious login detection
-      await supabase.functions.invoke('log-auth-event', {
-        body: {
-          user_id: userId,
-          email,
-          event_type: 'login',
-          user_agent: navigator.userAgent,
-        },
-      });
+      // Log auth event for suspicious login detection — silent on failure.
+      try {
+        await supabase.functions.invoke('log-auth-event', {
+          body: {
+            user_id: userId,
+            email,
+            event_type: 'login',
+            user_agent: navigator.userAgent,
+          },
+        });
+      } catch {
+        // silent
+      }
     } catch {
       // silent fail — don't block login
     }
   };
+
 
   // Native Supabase OAuth (same path as GitHub). Supabase redirects to
   // /auth/callback with a session hash that detectSessionInUrl consumes;
