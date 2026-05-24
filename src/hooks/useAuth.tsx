@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
 interface Profile {
@@ -81,6 +80,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   //                                                        ProtectedRoute renders an
   //                                                        inline error UI instead of
   //                                                        silently redirecting to /login.
+  const isMissingTableError = (e: unknown): boolean => {
+    const err = e as { code?: string; message?: string } | null;
+    if (!err) return false;
+    return err.code === 'PGRST205' || /schema cache/i.test(err.message || '');
+  };
+
   const fetchProfile = async (userId: string, isRetry = false) => {
     try {
       const { data, error } = await supabase
@@ -90,9 +95,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (error) {
-        console.error('Error fetching profile:', error);
+        // Backend not provisioned with profiles table — treat as "no profile",
+        // do not toast, do not retry. Public portfolio still renders fine.
+        if (isMissingTableError(error)) {
+          setProfile(null);
+          setProfileError(null);
+          setLoading(false);
+          return;
+        }
+        console.warn('Profile fetch failed:', error.message || error);
         if (!isRetry) {
-          toast.error("Couldn't load your profile, retrying…");
           setTimeout(() => { void fetchProfile(userId, true); }, 1000);
           return;
         }
@@ -106,9 +118,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfileError(null);
       setLoading(false);
     } catch (err) {
-      console.error('Error in fetchProfile:', err);
+      if (isMissingTableError(err)) {
+        setProfile(null);
+        setProfileError(null);
+        setLoading(false);
+        return;
+      }
+      console.warn('Profile fetch threw:', err);
       if (!isRetry) {
-        toast.error("Couldn't load your profile, retrying…");
         setTimeout(() => { void fetchProfile(userId, true); }, 1000);
         return;
       }

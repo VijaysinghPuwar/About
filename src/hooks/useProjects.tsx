@@ -42,8 +42,16 @@ export function useProjects() {
       setProjects(data as Project[] || []);
       setError(null);
     } catch (err) {
-      console.error('Error fetching projects:', err);
-      setError('Failed to load projects');
+      const e = err as { code?: string; message?: string } | null;
+      // Backend not provisioned with projects table — fall back silently to
+      // static data merged in Index.tsx. No console noise, no error state.
+      if (e && (e.code === 'PGRST205' || /schema cache/i.test(e.message || ''))) {
+        setProjects([]);
+        setError(null);
+      } else {
+        console.warn('Projects fetch failed:', e?.message || err);
+        setError('Failed to load projects');
+      }
     } finally {
       setLoading(false);
     }
