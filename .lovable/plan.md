@@ -1,35 +1,38 @@
-## Scope
+# Fix Supabase Missing-Table Errors & Toast Spam
 
-Add grouped Mechanical Engineering coursework to the B.E. entry across all three render sites, and remove the previous cybersecurity-framing sentence per the explicit instruction "Do not connect this section to cybersecurity."
+## Root cause
 
-## Edits
+The published site loads against a Supabase project whose schema cache does not contain `public.projects` or `public.profiles` (error code `PGRST205`). Two pieces of code react badly:
 
-1. **`src/components/ExperienceTimeline.tsx`** — `be-mech` expanded content
-   - Keep: title, subtitle, period, `CGPA: 7.11 / 10`
-   - **Remove** the sentence "A strong technical foundation … cybersecurity."
-   - Replace with a "Relevant Coursework" block using 6 collapsible/grouped sections (one heading per group, courses as chips below). Use the same `glass-card` chip style already used for the M.S. coursework — no new components.
-   - Groups: Core Mechanical Engineering, Manufacturing and Design, Engineering Mathematics and Science, Management Quality and Modern Engineering, Projects / Practical, General / Professional Development (full lists per user).
+1. `src/hooks/useAuth.tsx` (`fetchProfile`) — on any error, calls `toast.error("Couldn't load your profile, retrying…")` and schedules a retry. For a signed-in visitor on a misconfigured backend this fires every auth event → the stack of red toasts seen in the screenshot.
+2. `src/hooks/useProjects.tsx` — on error, sets `error` state and logs `Error fetching projects:` to the console. It is invoked on the homepage even for anonymous visitors (via `Index.tsx` → `useProjects()`), so every page load logs the PGRST205 error. `Index.tsx` already falls back to `projectsData` from `@/data/projects.json`, so the UI is fine — only the noise is the problem.
 
-2. **`src/pages/About.tsx`** — Education data + render
-   - Populate `coursework` on the B.E. entry; introduce a new optional `courseGroups` field shaped as `{ label, items }[]` so the render block can show grouped subheadings instead of one flat blob.
-   - Render: under the existing GPA badges, show a "Relevant Coursework" label, then iterate `courseGroups` rendering each group as a small subheading + chip row. Reuse existing chip class. Keep responsive (chips wrap; on mobile each group stacks).
-   - Leave the M.S. entry untouched (its existing `coursework` flat list still renders the same way for that card).
+The homepage does **not** actually need Supabase data to render. The static `projects.json` already covers the "Featured Projects" gate copy for anonymous users.
 
-3. **`src/pages/Resume.tsx`** — Same `courseGroups` pattern as About (subheading + Badge rows), reusing existing Badge styling. Ensure two-column education grid still works; the B.E. card will simply grow taller — that's expected and acceptable.
+## Changes
 
-## Privacy
+### 1. `src/hooks/useAuth.tsx` — silent profile fetch
+- Remove both `toast.error("Couldn't load your profile, retrying…")` calls (lines ~95 and ~111).
+- Keep the single silent retry and the `profileError` state (so `ProtectedRoute` can still render its inline error UI for authenticated routes — unchanged behavior there).
+- Detect the "table missing" case (`error.code === 'PGRST205'` or message includes `schema cache`) and treat it like "no profile row": set `profile = null`, clear `profileError`, skip the retry. This prevents the retry loop entirely when the backend simply doesn't have the table.
+- Downgrade `console.error('Error fetching profile:', error)` to a single `console.warn` only when it's not the schema-cache case; suppress entirely for PGRST205.
 
-- No enrollment number, token, barcode, seat number, marks, or semester table rendered anywhere.
-- Only course titles, degree, college, university, completion date, CGPA shown.
+### 2. `src/hooks/useProjects.tsx` — silent project fetch
+- Same PGRST205 / schema-cache detection: when the table is missing, set `projects = []`, `error = null`, and return without logging. `Index.tsx`'s merge with `projectsData` then renders the static list.
+- For real errors, keep a single `console.warn` (not `console.error`) so it doesn't show as a red error and doesn't trip Lovable's runtime-error overlay.
 
-## Responsive / build safety
-
-- Chips use `flex-wrap gap-1.5` already present — no overflow risk.
-- No new dependencies, routes, or layout changes.
-- Other sections (projects, contact, auth, animations, navbar, SEO) untouched.
+### 3. No other files changed
+- `Index.tsx`, `ProjectShowcase`, `Admin`, `ProtectedRoute`, design, mobile, animation, contact, resume — untouched.
+- No schema migrations. The site must work against either Supabase project (with or without these tables) without code changes.
+- `client.ts` and `types.ts` left alone (auto-generated).
 
 ## Verification
 
-- `rg "cybersecurity" src/components/ExperienceTimeline.tsx` → no match in the `be-mech` block.
-- `rg "Gujarat Technological University"` → present in all three files.
-- Spot-check `/`, `/about`, `/resume` at 375px and 1280px viewports — chip rows wrap cleanly, group headings stack on mobile.
+- Reload `/` while signed out → no red toasts, no `Error fetching projects` in console, featured-projects gate still shows the "Sign in" card.
+- Reload `/` while signed in → no profile toasts, projects render from static JSON if DB tables missing, from DB otherwise.
+- `/admin` still functions when tables exist (Admin.tsx unchanged).
+- `ProtectedRoute` still shows its inline "Couldn't load your profile" screen if a genuine network error occurs on an authenticated route (not the missing-table case).
+
+## Out of scope
+
+Design, layout, education/coursework content, resume PDF, contact form, auth flow, RLS, migrations.
