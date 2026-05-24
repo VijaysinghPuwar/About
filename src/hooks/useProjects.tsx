@@ -90,8 +90,14 @@ export function useProject(id: string | undefined) {
         setProject(data as Project);
         setError(null);
       } catch (err) {
-        console.error('Error fetching project:', err);
-        setError('Failed to load project');
+        const e = err as { code?: string; message?: string } | null;
+        if (e && (e.code === 'PGRST205' || /schema cache/i.test(e.message || ''))) {
+          setProject(null);
+          setError(null);
+        } else {
+          console.warn('Project fetch failed:', e?.message || err);
+          setError('Failed to load project');
+        }
       } finally {
         setLoading(false);
       }
