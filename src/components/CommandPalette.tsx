@@ -28,7 +28,7 @@ const CATEGORY_ICONS: Record<string, typeof Compass> = {
   Projects: Folder,
 };
 
-function buildCommands(): Command[] {
+function buildCommands(isAuthed: boolean, goLogin: () => void): Command[] {
   const nav: Command[] = [
     { category: 'Navigation', label: 'Go to Home', keywords: 'hero top', action: () => scrollTo('home') },
     { category: 'Navigation', label: 'Go to Skills', keywords: 'tech stack', action: () => scrollTo('skills') },
@@ -41,7 +41,22 @@ function buildCommands(): Command[] {
     { category: 'Actions', label: 'Download Resume', keywords: 'cv pdf', action: () => alert('Resume download coming soon.') },
     { category: 'Actions', label: 'Open GitHub', keywords: 'code repo', action: () => window.open('https://github.com/vijaysinghpuwar', '_blank') },
     { category: 'Actions', label: 'Open LinkedIn', keywords: 'social profile', action: () => window.open('https://linkedin.com/in/vijaysinghpuwar', '_blank') },
-    { category: 'Actions', label: 'Send Email', keywords: 'contact mail', action: () => { window.location.href = 'mailto:contact@vijaysinghpuwar.com'; } },
+    isAuthed
+      ? {
+          category: 'Actions',
+          label: 'Send Email',
+          keywords: 'contact mail',
+          action: () => {
+            // Reassemble locally; never embedded in static DOM.
+            window.location.href = `mailto:${'contact'}@${'vijaysinghpuwar.com'}`;
+          },
+        }
+      : {
+          category: 'Actions',
+          label: 'Sign in to email',
+          keywords: 'contact mail login',
+          action: goLogin,
+        },
   ];
 
   const skillCounts: Record<string, number> = {};
@@ -73,6 +88,8 @@ function buildCommands(): Command[] {
 }
 
 export function CommandPalette() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
