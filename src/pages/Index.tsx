@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  Github, Linkedin, Mail, ArrowRight, Shield, Terminal, Cloud,
+  Github, Linkedin, ArrowRight, Shield, Terminal, Cloud,
   Radar, Download, Lock,
   Loader2, CheckCircle2, User,
 } from 'lucide-react';
@@ -18,6 +18,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
 import { SectionReveal, RevealLabel } from '@/components/SectionReveal';
+import { ProtectedEmail } from '@/components/ProtectedEmail';
 
 import { supabase } from '@/integrations/supabase/client';
 
@@ -152,18 +153,18 @@ export default function Index() {
 
               {/* Social icons */}
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.5 }}
-                className="flex gap-5 mt-4 sm:mt-6">
+                className="flex gap-5 mt-4 sm:mt-6 items-center">
                 {[
                   { href: 'https://github.com/vijaysinghpuwar', icon: Github, label: 'GitHub' },
                   { href: 'https://linkedin.com/in/vijaysinghpuwar', icon: Linkedin, label: 'LinkedIn' },
-                  { href: 'mailto:contact@vijaysinghpuwar.com', icon: Mail, label: 'Email' },
                 ].map(({ href, icon: Icon, label }) => (
-                  <a key={href} href={href} target={href.startsWith('mailto') ? undefined : '_blank'} rel="noopener noreferrer"
+                  <a key={href} href={href} target="_blank" rel="noopener noreferrer"
                     aria-label={label}
                     className="text-muted-foreground hover:text-primary transition-colors">
                     <Icon className="w-5 h-5" aria-hidden="true" />
                   </a>
                 ))}
+                <ProtectedEmail variant="icon" className="text-muted-foreground hover:text-primary [&_svg]:w-5 [&_svg]:h-5" />
               </motion.div>
             </div>
 
@@ -293,12 +294,12 @@ export default function Index() {
                   </div>
                 </div>
                 <div className="space-y-1">
+                  <ProtectedEmail variant="row" compactHint />
                   {[
-                    { href: 'mailto:contact@vijaysinghpuwar.com', icon: Mail, label: 'contact@vijaysinghpuwar.com' },
-                    { href: 'https://github.com/vijaysinghpuwar', icon: Github, label: 'github.com/vijaysinghpuwar', external: true },
-                    { href: 'https://linkedin.com/in/vijaysinghpuwar', icon: Linkedin, label: 'linkedin.com/in/vijaysinghpuwar', external: true },
-                  ].map(({ href, icon: Icon, label, external }) => (
-                    <a key={href} href={href} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined}
+                    { href: 'https://github.com/vijaysinghpuwar', icon: Github, label: 'github.com/vijaysinghpuwar' },
+                    { href: 'https://linkedin.com/in/vijaysinghpuwar', icon: Linkedin, label: 'linkedin.com/in/vijaysinghpuwar' },
+                  ].map(({ href, icon: Icon, label }) => (
+                    <a key={href} href={href} target="_blank" rel="noopener noreferrer"
                       className="group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:shadow-[inset_0_0_20px_hsl(var(--primary)/0.05)] transition-all">
                       <Icon className="w-4 h-4 text-primary" />
                       {label}

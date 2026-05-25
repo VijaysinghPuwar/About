@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Shield, Terminal, Cloud, Mail, Github, Linkedin, CheckCircle2, Download, Briefcase, GraduationCap, Award } from 'lucide-react';
+import { Shield, Terminal, Cloud, Github, Linkedin, CheckCircle2, Download, Briefcase, GraduationCap, Award } from 'lucide-react';
 import { motion, useInView } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 import { useRef, useEffect, useState } from 'react';
 import { meCourseGroups, type CourseGroup } from '@/data/me-coursework';
+import { ProtectedEmail } from '@/components/ProtectedEmail';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -161,18 +162,18 @@ export default function About() {
               ))}
             </ul>
 
-            <div className="flex justify-center md:justify-start gap-3">
+            <div className="flex justify-center md:justify-start gap-3 items-center">
               {[
                 { href: 'https://github.com/vijaysinghpuwar', icon: Github, label: 'GitHub' },
                 { href: 'https://linkedin.com/in/vijaysinghpuwar', icon: Linkedin, label: 'LinkedIn' },
-                { href: 'mailto:contact@vijaysinghpuwar.com', icon: Mail, label: 'Email' },
               ].map(s => (
-                <a key={s.label} href={s.href} target={s.label !== 'Email' ? '_blank' : undefined}
-                  rel={s.label !== 'Email' ? 'noopener noreferrer' : undefined}
+                <a key={s.label} href={s.href} target="_blank"
+                  rel="noopener noreferrer"
                   className="p-2 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors" aria-label={s.label}>
                   <s.icon className="w-5 h-5" />
                 </a>
               ))}
+              <ProtectedEmail variant="icon" className="p-2 rounded-md hover:bg-primary/10" />
             </div>
           </div>
         </motion.div>

@@ -1,19 +1,19 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Mail, Github, Linkedin, Loader2, CheckCircle2, User, Lock } from 'lucide-react';
+import { Github, Linkedin, Loader2, CheckCircle2, User } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { ProtectedEmail } from '@/components/ProtectedEmail';
 
 export default function Contact() {
   const { user, profile } = useAuth();
-  const navigate = useNavigate();
+  
   const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -72,37 +72,8 @@ export default function Contact() {
             </div>
 
             <div className="glass-card rounded-lg p-6 space-y-4">
-              {user ? (
-                <a
-                  href="mailto:contact@vijaysinghpuwar.com"
-                  aria-label="Email Vijaysingh"
-                  className="group flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-all duration-500"
-                >
-                  <Mail className="w-4 h-4 text-primary" />
-                  <span className="transition-[filter,opacity] duration-500 opacity-100 blur-0">
-                    contact@vijaysinghpuwar.com
-                  </span>
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => navigate('/login')}
-                  aria-label="Sign in to reveal email"
-                  className="group w-full text-left flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-colors min-h-[44px]"
-                >
-                  <Mail className="w-4 h-4 text-primary" aria-hidden="true" />
-                  <span
-                    className="font-mono select-none blur-[5px] group-hover:blur-[3px] transition-[filter] duration-300"
-                    aria-hidden="true"
-                  >
-                    cont••••@vijaysinghpuwar.com
-                  </span>
-                  <span className="ml-auto flex items-center gap-1.5 text-[11px] font-mono text-primary/80 group-hover:text-primary transition-colors">
-                    <Lock className="w-3 h-3" aria-hidden="true" />
-                    <span className="hidden sm:inline">Sign in to unlock</span>
-                  </span>
-                </button>
-              )}
+              <ProtectedEmail variant="row" compactHint className="px-0" />
+
               <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
                 <Github className="w-4 h-4 text-primary" /> github.com/vijaysinghpuwar
               </a>
