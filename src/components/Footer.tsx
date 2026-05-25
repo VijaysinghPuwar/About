@@ -44,9 +44,8 @@ export function Footer() {
         </nav>
 
         <div className="flex items-center gap-5">
-          <a href="mailto:contact@vijaysinghpuwar.com" className="text-muted-foreground hover:text-primary transition-colors" aria-label="Email">
-            <Mail className="w-4 h-4" aria-hidden="true" />
-          </a>
+          <ProtectedEmail variant="icon" />
+
           <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors" aria-label="GitHub">
             <Github className="w-4 h-4" aria-hidden="true" />
           </a>
