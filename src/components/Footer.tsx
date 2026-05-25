@@ -1,6 +1,7 @@
-import { Github, Linkedin, Mail } from 'lucide-react';
+import { Github, Linkedin } from 'lucide-react';
 import { useCallback } from 'react';
 import { LogoIcon } from '@/components/LogoIcon';
+import { ProtectedEmail } from '@/components/ProtectedEmail';
 
 const navLinks = [
   { label: 'Skills', id: 'skills' },
