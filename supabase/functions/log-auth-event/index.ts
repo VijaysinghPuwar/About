@@ -21,6 +21,34 @@ Deno.serve(async (req) => {
       );
     }
 
+    const VALID_EVENT_TYPES = [
+      "login",
+      "logout",
+      "signup",
+      "token_refresh",
+      "password_reset",
+      "failed_login",
+      "suspicious_activity",
+    ];
+    if (typeof event_type !== "string" || !VALID_EVENT_TYPES.includes(event_type)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid event type" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (typeof user_id !== "string" || typeof email !== "string") {
+      return new Response(
+        JSON.stringify({ error: "Invalid field types" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (email.length > 255 || (user_agent && typeof user_agent === "string" && user_agent.length > 1000)) {
+      return new Response(
+        JSON.stringify({ error: "Field too long" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const ip_address =
       req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       req.headers.get("cf-connecting-ip") ||
