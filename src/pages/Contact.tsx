@@ -72,9 +72,37 @@ export default function Contact() {
             </div>
 
             <div className="glass-card rounded-lg p-6 space-y-4">
-              <a href="mailto:contact@vijaysinghpuwar.com" className="flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
-                <Mail className="w-4 h-4 text-primary" /> contact@vijaysinghpuwar.com
-              </a>
+              {user ? (
+                <a
+                  href="mailto:contact@vijaysinghpuwar.com"
+                  aria-label="Email Vijaysingh"
+                  className="group flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-all duration-500"
+                >
+                  <Mail className="w-4 h-4 text-primary" />
+                  <span className="transition-[filter,opacity] duration-500 opacity-100 blur-0">
+                    contact@vijaysinghpuwar.com
+                  </span>
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => navigate('/login')}
+                  aria-label="Sign in to reveal email"
+                  className="group w-full text-left flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-colors min-h-[44px]"
+                >
+                  <Mail className="w-4 h-4 text-primary" aria-hidden="true" />
+                  <span
+                    className="font-mono select-none blur-[5px] group-hover:blur-[3px] transition-[filter] duration-300"
+                    aria-hidden="true"
+                  >
+                    cont••••@vijaysinghpuwar.com
+                  </span>
+                  <span className="ml-auto flex items-center gap-1.5 text-[11px] font-mono text-primary/80 group-hover:text-primary transition-colors">
+                    <Lock className="w-3 h-3" aria-hidden="true" />
+                    <span className="hidden sm:inline">Sign in to unlock</span>
+                  </span>
+                </button>
+              )}
               <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
                 <Github className="w-4 h-4 text-primary" /> github.com/vijaysinghpuwar
               </a>
