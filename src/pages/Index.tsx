@@ -153,18 +153,18 @@ export default function Index() {
 
               {/* Social icons */}
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.5 }}
-                className="flex gap-5 mt-4 sm:mt-6">
+                className="flex gap-5 mt-4 sm:mt-6 items-center">
                 {[
                   { href: 'https://github.com/vijaysinghpuwar', icon: Github, label: 'GitHub' },
                   { href: 'https://linkedin.com/in/vijaysinghpuwar', icon: Linkedin, label: 'LinkedIn' },
-                  { href: 'mailto:contact@vijaysinghpuwar.com', icon: Mail, label: 'Email' },
                 ].map(({ href, icon: Icon, label }) => (
-                  <a key={href} href={href} target={href.startsWith('mailto') ? undefined : '_blank'} rel="noopener noreferrer"
+                  <a key={href} href={href} target="_blank" rel="noopener noreferrer"
                     aria-label={label}
                     className="text-muted-foreground hover:text-primary transition-colors">
                     <Icon className="w-5 h-5" aria-hidden="true" />
                   </a>
                 ))}
+                <ProtectedEmail variant="icon" className="text-muted-foreground hover:text-primary [&_svg]:w-5 [&_svg]:h-5" />
               </motion.div>
             </div>
 
