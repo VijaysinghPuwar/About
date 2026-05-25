@@ -18,6 +18,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
 import { SectionReveal, RevealLabel } from '@/components/SectionReveal';
+import { ProtectedEmail } from '@/components/ProtectedEmail';
 
 import { supabase } from '@/integrations/supabase/client';
 
