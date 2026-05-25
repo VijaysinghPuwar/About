@@ -294,12 +294,12 @@ export default function Index() {
                   </div>
                 </div>
                 <div className="space-y-1">
+                  <ProtectedEmail variant="row" compactHint />
                   {[
-                    { href: 'mailto:contact@vijaysinghpuwar.com', icon: Mail, label: 'contact@vijaysinghpuwar.com' },
-                    { href: 'https://github.com/vijaysinghpuwar', icon: Github, label: 'github.com/vijaysinghpuwar', external: true },
-                    { href: 'https://linkedin.com/in/vijaysinghpuwar', icon: Linkedin, label: 'linkedin.com/in/vijaysinghpuwar', external: true },
-                  ].map(({ href, icon: Icon, label, external }) => (
-                    <a key={href} href={href} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined}
+                    { href: 'https://github.com/vijaysinghpuwar', icon: Github, label: 'github.com/vijaysinghpuwar' },
+                    { href: 'https://linkedin.com/in/vijaysinghpuwar', icon: Linkedin, label: 'linkedin.com/in/vijaysinghpuwar' },
+                  ].map(({ href, icon: Icon, label }) => (
+                    <a key={href} href={href} target="_blank" rel="noopener noreferrer"
                       className="group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:shadow-[inset_0_0_20px_hsl(var(--primary)/0.05)] transition-all">
                       <Icon className="w-4 h-4 text-primary" />
                       {label}
