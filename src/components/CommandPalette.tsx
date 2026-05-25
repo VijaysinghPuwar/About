@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Compass, Zap, Code, Folder, FileQuestion } from 'lucide-react';
 import projects from '@/data/projects.json';
+import { useAuth } from '@/hooks/useAuth';
 
 interface Command {
   category: 'Navigation' | 'Actions' | 'Skills' | 'Projects';
