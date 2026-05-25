@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Mail, Github, Linkedin, Loader2, CheckCircle2, User, Lock } from 'lucide-react';
+import { Github, Linkedin, Loader2, CheckCircle2, User } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { ProtectedEmail } from '@/components/ProtectedEmail';
 
 export default function Contact() {
   const { user, profile } = useAuth();
