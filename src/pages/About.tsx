@@ -162,18 +162,18 @@ export default function About() {
               ))}
             </ul>
 
-            <div className="flex justify-center md:justify-start gap-3">
+            <div className="flex justify-center md:justify-start gap-3 items-center">
               {[
                 { href: 'https://github.com/vijaysinghpuwar', icon: Github, label: 'GitHub' },
                 { href: 'https://linkedin.com/in/vijaysinghpuwar', icon: Linkedin, label: 'LinkedIn' },
-                { href: 'mailto:contact@vijaysinghpuwar.com', icon: Mail, label: 'Email' },
               ].map(s => (
-                <a key={s.label} href={s.href} target={s.label !== 'Email' ? '_blank' : undefined}
-                  rel={s.label !== 'Email' ? 'noopener noreferrer' : undefined}
+                <a key={s.label} href={s.href} target="_blank"
+                  rel="noopener noreferrer"
                   className="p-2 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors" aria-label={s.label}>
                   <s.icon className="w-5 h-5" />
                 </a>
               ))}
+              <ProtectedEmail variant="icon" className="p-2 rounded-md hover:bg-primary/10 [&>svg]:w-5 [&>svg]:h-5" />
             </div>
           </div>
         </motion.div>
