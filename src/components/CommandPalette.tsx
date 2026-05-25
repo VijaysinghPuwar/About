@@ -97,7 +97,11 @@ export function CommandPalette() {
   const listRef = useRef<HTMLDivElement>(null);
   const prevFocusRef = useRef<HTMLElement | null>(null);
 
-  const commands = useMemo(buildCommands, []);
+  const isAuthed = !!user;
+  const commands = useMemo(
+    () => buildCommands(isAuthed, () => navigate('/login')),
+    [isAuthed, navigate],
+  );
 
   const filtered = useMemo(() => {
     if (!query) return commands;
