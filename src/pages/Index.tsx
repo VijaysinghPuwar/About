@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  Github, Linkedin, Mail, ArrowRight, Shield, Terminal, Cloud,
+  Github, Linkedin, ArrowRight, Shield, Terminal, Cloud,
   Radar, Download, Lock,
   Loader2, CheckCircle2, User,
 } from 'lucide-react';
