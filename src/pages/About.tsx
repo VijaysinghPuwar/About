@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Shield, Terminal, Cloud, Mail, Github, Linkedin, CheckCircle2, Download, Briefcase, GraduationCap, Award } from 'lucide-react';
+import { Shield, Terminal, Cloud, Github, Linkedin, CheckCircle2, Download, Briefcase, GraduationCap, Award } from 'lucide-react';
 import { motion, useInView } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 import { useRef, useEffect, useState } from 'react';
 import { meCourseGroups, type CourseGroup } from '@/data/me-coursework';
+import { ProtectedEmail } from '@/components/ProtectedEmail';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
