@@ -13,7 +13,7 @@ import { ProtectedEmail } from '@/components/ProtectedEmail';
 
 export default function Contact() {
   const { user, profile } = useAuth();
-  const navigate = useNavigate();
+  
   const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
