@@ -173,7 +173,7 @@ export default function About() {
                   <s.icon className="w-5 h-5" />
                 </a>
               ))}
-              <ProtectedEmail variant="icon" className="p-2 rounded-md hover:bg-primary/10 [&>svg]:w-5 [&>svg]:h-5" />
+              <ProtectedEmail variant="icon" className="p-2 rounded-md hover:bg-primary/10" />
             </div>
           </div>
         </motion.div>
