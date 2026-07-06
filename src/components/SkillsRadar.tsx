@@ -207,6 +207,9 @@ export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
           const angle = (360 / N) * i;
           const pointR = RADIUS * (animatedValues[i] / 100);
           const { x: px, y: py } = polarToCart(angle, pointR);
+          // Static anchor for the hit area — must not move with the hover animation,
+          // otherwise the target slides out from under the cursor
+          const { x: hx, y: hy } = polarToCart(angle, RADIUS * (skill.value / 100));
           const { x: lx, y: ly } = polarToCart(angle, RADIUS + 28);
           const isHov = hovered === i;
           const isHighlighted = tabHighlight === skill.tabKey;
@@ -227,6 +230,10 @@ export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
                 fontFamily="ui-monospace, monospace"
                 fill={isHov || isHighlighted ? 'hsl(var(--foreground))' : 'hsl(var(--muted-foreground))'}
                 opacity={labelVisible ? 1 : 0}
+                className="cursor-pointer"
+                onMouseEnter={() => handleAxisHover(i)}
+                onMouseLeave={() => handleAxisHover(null)}
+                onClick={() => handleAxisClick(i)}
                 style={{ transition: 'opacity 0.3s ease-out, fill 0.2s ease-out' }}
               >
                 {lines.map((line, li) => (
@@ -234,9 +241,25 @@ export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
                 ))}
               </text>
 
-              {/* Hit area */}
+              {/* Visible dot — opacity pulse instead of transform scale */}
               <circle
-                cx={px} cy={py} r={20}
+                cx={px} cy={py}
+                r={isHov ? 10 : 6}
+                fill="#00e5ff"
+                opacity={dotVisible ? 1 : 0}
+                pointerEvents="none"
+                style={{
+                  transition: `opacity 0.2s ease-out ${dotDelay}s`,
+                  filter: isHov ? 'drop-shadow(0 0 8px #00e5ff)' : 'none',
+                  ...(isIdle && dotVisible ? {
+                    animation: `dotPulseOpacity 2s ease-in-out ${i * 0.3}s infinite`,
+                  } : {}),
+                }}
+              />
+
+              {/* Hit area — static position, rendered above the dot so it always catches the mouse */}
+              <circle
+                cx={hx} cy={hy} r={28}
                 fill="transparent"
                 className="cursor-pointer"
                 onMouseEnter={() => handleAxisHover(i)}
@@ -248,25 +271,10 @@ export function SkillsRadar({ activeTab, onAxisClick }: SkillsRadarProps) {
                 }}
               />
 
-              {/* Visible dot — opacity pulse instead of transform scale */}
-              <circle
-                cx={px} cy={py}
-                r={isHov ? 10 : 6}
-                fill="#00e5ff"
-                opacity={dotVisible ? 1 : 0}
-                style={{
-                  transition: `opacity 0.2s ease-out ${dotDelay}s`,
-                  filter: isHov ? 'drop-shadow(0 0 8px #00e5ff)' : 'none',
-                  ...(isIdle && dotVisible ? {
-                    animation: `dotPulseOpacity 2s ease-in-out ${i * 0.3}s infinite`,
-                  } : {}),
-                }}
-              />
-
               {/* Tooltip */}
               {isHov && (
-                <g style={{ animation: 'tooltipIn 0.2s ease-out' }}>
-                  <foreignObject x={px - 70} y={py - 60} width={140} height={52}>
+                <g style={{ animation: 'tooltipIn 0.2s ease-out' }} pointerEvents="none">
+                  <foreignObject x={px - 70} y={py - 60} width={140} height={52} pointerEvents="none">
                     <div
                       style={{
                         background: 'rgba(15,23,42,0.9)',
