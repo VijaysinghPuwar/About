@@ -46,8 +46,8 @@ export function ProtectedEmail({ variant = 'row', className, compactHint = false
           className,
         )}
       >
-        <Mail className="w-4 h-4 text-primary" aria-hidden="true" />
-        <span className="transition-[filter,opacity] duration-500 opacity-100 blur-0">
+        <Mail className="w-4 h-4 text-primary shrink-0" aria-hidden="true" />
+        <span className="min-w-0 truncate transition-[filter,opacity] duration-500 opacity-100 blur-0">
           {EMAIL}
         </span>
       </a>
@@ -85,16 +85,16 @@ export function ProtectedEmail({ variant = 'row', className, compactHint = false
         className,
       )}
     >
-      <Mail className="w-4 h-4 text-primary" aria-hidden="true" />
+      <Mail className="w-4 h-4 text-primary shrink-0" aria-hidden="true" />
       <span
-        className="font-mono select-none blur-[5px] group-hover:blur-[3px] transition-[filter] duration-300"
+        className="min-w-0 truncate font-mono select-none blur-[5px] group-hover:blur-[3px] transition-[filter] duration-300"
         aria-hidden="true"
       >
         {MASKED}
       </span>
       <span
         className={cn(
-          'ml-auto flex items-center gap-1.5 text-[11px] font-mono text-primary/80 group-hover:text-primary transition-colors',
+          'ml-auto shrink-0 flex items-center gap-1.5 text-[11px] font-mono text-primary/80 group-hover:text-primary transition-colors',
         )}
       >
         <Lock className="w-3 h-3" aria-hidden="true" />

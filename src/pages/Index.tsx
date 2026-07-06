@@ -1,13 +1,11 @@
 import { useState, useMemo, useRef, useEffect, lazy, Suspense } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  Github, Linkedin, ArrowRight, Shield, Terminal, Cloud,
-  Radar, Download, Lock,
+  Github, Linkedin, ArrowRight, Shield, Lock,
   Loader2, CheckCircle2, User,
 } from 'lucide-react';
 import { motion, AnimatePresence, useInView, useReducedMotion } from 'framer-motion';
@@ -143,7 +141,7 @@ export default function Index() {
         </div>
 
         <div className="container relative max-w-6xl mx-auto pt-6 pb-10 sm:pt-36 sm:pb-24">
-          <div className="grid lg:grid-cols-[3fr_2fr] gap-10 lg:gap-6 items-center">
+          <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-10 lg:gap-6 items-center">
             {/* Left: Terminal */}
             <div className="order-2 lg:order-1">
               <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
@@ -205,7 +203,7 @@ export default function Index() {
           </div>
 
           <Suspense fallback={<div className="h-64" />}>
-            <div className="grid lg:grid-cols-2 gap-10 items-start mb-14">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start mb-14">
               <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}>
                 <SkillsRadar activeTab={skillTab} onAxisClick={setSkillTab} />
               </motion.div>
@@ -217,11 +215,15 @@ export default function Index() {
 
           <div className="rounded-lg glass-card py-4 overflow-hidden">
             <div className="marquee-track">
-              {[...['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'ISC2 Candidate', 'Google AI Essentials'], ...['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'ISC2 Candidate', 'Google AI Essentials']].map((cert, i) => (
-                <span key={`${cert}-${i}`} className="flex items-center gap-2 font-mono text-sm text-muted-foreground px-6 whitespace-nowrap">
-                  <Shield className="w-3.5 h-3.5 text-primary shrink-0" />
-                  {cert}
-                </span>
+              {[false, true].map(isClone => (
+                <div key={String(isClone)} className="flex" aria-hidden={isClone || undefined}>
+                  {['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'ISC2 Candidate', 'Google AI Essentials'].map(cert => (
+                    <span key={cert} className="flex items-center gap-2 font-mono text-sm text-muted-foreground px-6 whitespace-nowrap">
+                      <Shield className="w-3.5 h-3.5 text-primary shrink-0" />
+                      {cert}
+                    </span>
+                  ))}
+                </div>
               ))}
             </div>
           </div>
@@ -282,7 +284,7 @@ export default function Index() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8 mt-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
             {/* Left — Digital Business Card */}
             <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0} className="space-y-6">
               <div className="glass-card rounded-xl p-6 space-y-5 hover:border-primary/30 transition-colors">
@@ -343,7 +345,7 @@ export default function Index() {
                       </div>
                     )}
                     <form onSubmit={handleSubmit} className="space-y-4">
-                      <div className={user ? '' : 'grid sm:grid-cols-2 gap-4'}>
+                      <div className={user ? '' : 'grid grid-cols-1 sm:grid-cols-2 gap-4'}>
                         <div>
                           <Label htmlFor="name" className="text-sm">Name</Label>
                           <Input id="name" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
