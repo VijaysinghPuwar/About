@@ -623,7 +623,7 @@ export default function Admin() {
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
                         <p className="text-xs text-muted-foreground">{new Date(msg.created_at).toLocaleString()}</p>
                         <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
-                          <a href={`mailto:${msg.email}?subject=Re: ${encodeURIComponent(msg.subject)}`}>
+                          <a href={`mailto:${encodeURIComponent(msg.email)}?subject=${encodeURIComponent('Re: ' + msg.subject)}`}>
                             <Mail className="w-3 h-3 mr-1" />Reply
                           </a>
                         </Button>
