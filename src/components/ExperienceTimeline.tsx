@@ -76,7 +76,7 @@ const entries: TimelineEntry[] = [
     expandedContent: (
       <div>
         <p className="text-sm text-muted-foreground mb-4">
-          IT Infrastructure & Network Operations Intern supporting enterprise systems, network connectivity, endpoint security, user access, and operational technology environments for MTA Staten Island Railway. Focus on enterprise IT reliability, secure infrastructure operations, troubleshooting, and system availability.
+          Supporting enterprise IT infrastructure, network operations, endpoint systems, and secure technology services for MTA Staten Island Railway, focusing on system reliability, troubleshooting, and operational efficiency.
         </p>
         <ul className="space-y-2 mb-5">
           {[
