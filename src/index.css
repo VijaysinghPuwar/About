@@ -1,5 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
-
+/* Google Fonts are loaded via <link> in index.html so the request starts
+   before the CSS bundle finishes, instead of chaining behind an @import. */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -608,5 +608,17 @@ html.theme-shifting .theme-glow {
   .section-reveal * {
     animation: none !important;
     transition: none !important;
+  }
+
+  .marquee-track,
+  .timeline-line-gradient,
+  .animate-logo-rotate,
+  .animate-shield-rotate,
+  .animate-cyber-pulse {
+    animation: none !important;
+  }
+
+  html {
+    scroll-behavior: auto;
   }
 }
