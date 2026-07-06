@@ -1,43 +1,42 @@
-## Objective
-Add the latest MTA (Staten Island Railway) internship to the portfolio's Experience section, positioning it as the most recent work entry with cybersecurity-aligned impact points and technology skill tags.
+## Goal
+Replace the MTA experience card text in the Experience timeline with a shorter, premium, recruiter-friendly version. No layout, design, animation, or other data changes.
 
-## Files to Change
+## Scope
+- **File:** `src/components/ExperienceTimeline.tsx`
+- **Target:** The `expandedContent` block inside the `mta-sirtoa` timeline entry (lines ~76-136).
+- **Untouched:** Title, subtitle, period, card styling, animations, mobile/desktop layout, other timeline entries, technology badge component structure.
 
-### 1. `src/components/ExperienceTimeline.tsx`
-- Insert new work entry `mta-sirtoa` as the second item in the `entries` array (index 1, left-side desktop placement), after the M.S. education entry.
-- **Title:** IT Infrastructure & Network Operations Intern
-- **Subtitle:** Metropolitan Transportation Authority (MTA) — Staten Island Railway (SIRTOA), NYCT - SIRTOA Operations Support
-- **Period:** June 2026 – Present
-- **Type:** work
-- **Expanded content:**
-  - Opening summary line about supporting enterprise IT infrastructure across Staten Island Railway environments.
-  - Bulleted responsibilities using existing `highlightMetric` pattern where applicable (e.g., "enterprise endpoints", "daily system verification checks").
-  - Security alignment subsection with 3 security-focused bullets (endpoint configuration, CIS systems support, incident response workflows).
-  - Technology skill tags using the existing `glass-card` rounded-full badge pattern, grouped by category: Networking, Systems, Tools, Infrastructure, Cybersecurity.
+## Changes
 
-### 2. `src/pages/About.tsx`
-- Insert MTA entry at the top of the `experience` array.
-- Same role title, company, period.
-- 4–5 high-impact bullets matching the Timeline entry, focused on enterprise scale, troubleshooting, network connectivity, endpoint management, and security operations.
+### Summary paragraph
+Replace the long opening paragraph with:
+> "Supporting enterprise IT infrastructure, network operations, endpoint systems, and secure technology services for MTA Staten Island Railway, focusing on system reliability, troubleshooting, and operational efficiency."
 
-### 3. Global search confirmation
-- Search for any old references to "IT/OT Network Intern", "Information Technology, Emerging Talent Intern", or "Emerging Talent Intern" across the codebase.
-- If found, replace with "IT Infrastructure & Network Operations Intern" for display consistency.
+### Bullet points (5 total)
+Replace the 10-bullet list with:
+1. Supported enterprise IT operations by resolving ServiceNow incidents, troubleshooting system issues, and coordinating with cross-functional MTA technology teams.
+2. Deployed and maintained Windows endpoints, Microsoft 365 services, user access, printers, mobile devices, and enterprise applications across railway environments.
+3. Performed network and infrastructure troubleshooting including LAN connectivity, device communication, shared resources, and operational system availability.
+4. Assisted with Active Directory access management, endpoint security practices, asset lifecycle tracking, and technical documentation.
+5. Supported enterprise platforms including HxGN EAM, ArcGIS, and internal databases while improving workflow reliability and operational efficiency.
 
-## What Stays Unchanged
-- Existing timeline layout, alternating left/right logic, mobile responsive layout, and animation behavior.
-- All other entries: R.S. Infotech, L&T-Sargent & Lundy, B.E. Mechanical Engineering, Elecon Engineering.
-- Certifications section.
-- No redesign of visual theme or component structure.
+### Security Alignment
+Reduce from 3 bullets to 1 sentence:
+> "Supported secure infrastructure operations through endpoint management, access control, system verification, and enterprise technology support."
 
-## Verification Steps
-- Run `bun run build` to confirm TypeScript compiles cleanly.
-- Use Playwright to screenshot the Experience section on both desktop and mobile viewport to confirm:
-  - MTA card renders correctly in timeline position.
-  - Expanded state shows bullets and tech tags properly.
-  - No layout shifts or truncation on mobile.
+### Technology badges
+Reorganize into 4 cleaner groups (no new badge styling):
+- **Networking:** TCP/IP, LAN Troubleshooting, Enterprise Networks
+- **Systems:** Windows Administration, Active Directory, Microsoft 365, Endpoint Management
+- **Security:** Access Management, Endpoint Security, System Verification
+- **Tools:** ServiceNow, ArcGIS, HxGN EAM
 
-## Recruiter Impact Recommendations (post-implementation)
-- Lead bullet with enterprise scale: "Supported enterprise IT infrastructure operations across Staten Island Railway environments..."
-- Include quantifiable scope where possible: endpoints, facilities, daily checks.
-- Security subsection explicitly ties operational IT work to cybersecurity analyst/SOC analyst vocabulary: endpoint security, access management, system verification, operational technology.
+### Removed
+- All 10 original long bullet points
+- Original 3 Security Alignment bullets
+- "Infrastructure" and "Cybersecurity" badge groups (consolidated into cleaner groups above)
+
+## Verification
+- Build passes without errors.
+- Screenshot confirmation that card layout, spacing, and animations remain identical.
+- No other timeline entries modified.
