@@ -99,11 +99,10 @@ const entries: TimelineEntry[] = [
           Supported secure infrastructure operations through endpoint management, access control, system verification, and enterprise technology support.
         </p>
         {[
-          { label: 'Networking', items: ['LAN/WAN Troubleshooting', 'TCP/IP', 'Network Connectivity', 'Enterprise Networks'] },
-          { label: 'Systems', items: ['Windows Administration', 'Microsoft 365', 'Active Directory', 'Group Policy', 'Endpoint Management'] },
-          { label: 'Tools', items: ['ServiceNow', 'HxGN EAM', 'ArcGIS', 'Remote Support Tools'] },
-          { label: 'Infrastructure', items: ['Asset Management', 'Hardware Lifecycle', 'Printers', 'Mobile Device Support', 'Thin Clients'] },
-          { label: 'Cybersecurity', items: ['Access Management', 'Endpoint Security', 'System Verification', 'Security Operations Support'] },
+          { label: 'Networking', items: ['TCP/IP', 'LAN Troubleshooting', 'Enterprise Networks'] },
+          { label: 'Systems', items: ['Windows Administration', 'Active Directory', 'Microsoft 365', 'Endpoint Management'] },
+          { label: 'Security', items: ['Access Management', 'Endpoint Security', 'System Verification'] },
+          { label: 'Tools', items: ['ServiceNow', 'ArcGIS', 'HxGN EAM'] },
         ].map(group => (
           <div key={group.label} className="mb-3 last:mb-0">
             <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider font-mono">
