@@ -80,16 +80,11 @@ const entries: TimelineEntry[] = [
         </p>
         <ul className="space-y-2 mb-5">
           {[
-            <>Supported enterprise IT infrastructure operations across Staten Island Railway environments, ensuring reliable connectivity, system availability, and secure technology services</>,
-            <>Managed ServiceNow incidents and service requests, coordinating with MTA IT teams to troubleshoot and resolve technical issues</>,
-            <>Configured, deployed, and maintained enterprise endpoints including Windows PCs, thin clients/Wyse devices, mobile devices, printers, desk phones, and business applications</>,
-            <>Supported LAN connectivity, network troubleshooting, device communication issues, and enterprise access problems across railway facilities</>,
-            <>Assisted with user account access, Microsoft 365 services, shared folders, application permissions, and enterprise resource availability</>,
-            <>Performed hardware/software inventory management, lifecycle tracking, endpoint documentation, and technology asset control</>,
-            <>Coordinated with enterprise vendors including Dell, HP, and technology partners to resolve hardware and system issues</>,
-            <>Assisted with HxGN EAM and ArcGIS enterprise application support, including access management, device synchronization issues, and performance troubleshooting</>,
-            <>Performed daily system verification checks, documenting infrastructure status, issues, and resolutions</>,
-            <>Supported database development and maintenance initiatives to automate workflows and improve operational efficiency</>,
+            <>Supported enterprise IT operations by resolving ServiceNow incidents, troubleshooting system issues, and coordinating with cross-functional MTA technology teams.</>,
+            <>Deployed and maintained Windows endpoints, Microsoft 365 services, user access, printers, mobile devices, and enterprise applications across railway environments.</>,
+            <>Performed network and infrastructure troubleshooting including LAN connectivity, device communication, shared resources, and operational system availability.</>,
+            <>Assisted with Active Directory access management, endpoint security practices, asset lifecycle tracking, and technical documentation.</>,
+            <>Supported enterprise platforms including HxGN EAM, ArcGIS, and internal databases while improving workflow reliability and operational efficiency.</>,
           ].map((bullet, i) => (
             <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
               <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
