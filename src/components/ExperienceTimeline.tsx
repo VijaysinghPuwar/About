@@ -95,18 +95,9 @@ const entries: TimelineEntry[] = [
         <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider font-mono">
           Security Alignment
         </p>
-        <ul className="space-y-2 mb-5">
-          {[
-            <>Supported secure enterprise infrastructure by assisting with endpoint configuration, access control, system monitoring, and operational technology support</>,
-            <>Assisted with Security / CIS systems supporting railway technology operations</>,
-            <>Helped maintain reliability and availability of critical IT systems through verification checks and incident response workflows</>,
-          ].map((bullet, i) => (
-            <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-              <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-secondary flex-shrink-0" />
-              <span>{bullet}</span>
-            </li>
-          ))}
-        </ul>
+        <p className="text-sm text-muted-foreground mb-5">
+          Supported secure infrastructure operations through endpoint management, access control, system verification, and enterprise technology support.
+        </p>
         {[
           { label: 'Networking', items: ['LAN/WAN Troubleshooting', 'TCP/IP', 'Network Connectivity', 'Enterprise Networks'] },
           { label: 'Systems', items: ['Windows Administration', 'Microsoft 365', 'Active Directory', 'Group Policy', 'Endpoint Management'] },
