@@ -83,7 +83,7 @@ export function Navigation() {
         : "bg-transparent border-b border-transparent"
     )}>
       <div className="container flex h-14 items-center justify-between">
-        <button onClick={() => scrollTo('home')} className="flex items-center gap-1 hover:opacity-80 transition-opacity">
+        <button onClick={() => scrollTo('home')} aria-label="Vijaysingh Puwar — back to top" className="flex items-center gap-1 hover:opacity-80 transition-opacity">
           <LogoIcon size={36} />
         </button>
 
@@ -159,8 +159,8 @@ export function Navigation() {
               document.body.style.overflow = open ? 'hidden' : '';
             }}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="sm" className="w-9 px-0">
-                <Menu className="w-5 h-5" />
+              <Button variant="ghost" size="sm" className="w-9 px-0" aria-label="Open navigation menu">
+                <Menu className="w-5 h-5" aria-hidden="true" />
               </Button>
             </SheetTrigger>
             <SheetContent side="right" className="w-[280px] glass-card border-border/40">

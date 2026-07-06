@@ -55,7 +55,7 @@ export function Footer() {
           <span className="hidden sm:inline-flex items-center gap-1 font-mono text-[11px]" style={{ color: '#475569' }}>
             Press{' '}
             <kbd className="inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[10px]" style={{ background: 'rgba(100,220,255,0.1)', border: '1px solid rgba(100,220,255,0.15)' }}>
-              {typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'}K
+              {typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl+'}K
             </kbd>
             {' '}to navigate
           </span>

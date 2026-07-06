@@ -169,27 +169,26 @@ const entries: TimelineEntry[] = [
         <p className="text-sm text-muted-foreground mb-4">
           CGPA: {highlightMetric('7.11 / 10')}
         </p>
-        {[
-          { label: 'Core Mechanical Engineering', items: ['Basic Mechanical Engineering','Engineering Thermodynamics','Applied Thermodynamics','Fluid Mechanics & Hydraulics','Heat Transfer','Kinematics & Theory of Machines','Dynamics of Machinery','Fundamentals of Machine Design','Design of Machine Elements','Refrigeration & Air Conditioning','Internal Combustion Engine','Power Plant Engineering'] },
-          { label: 'Manufacturing & Design', items: ['Workshop / Manufacturing Practices','Engineering Graphics & Design','Manufacturing Processes','Manufacturing Technology','Computer Aided Design','Computer Aided Manufacturing','Mechanical Measurement & Metrology','Material Science & Metallurgy'] },
-          { label: 'Engineering Mathematics & Science', items: ['Mathematics I','Mathematics II','Complex Variables & Partial Differential Equations','Physics','Environmental Sciences'] },
-          { label: 'Management, Quality & Modern Engineering', items: ['Operation Research','Quality & Reliability Engineering','Energy Conservation & Management','Industry 4.0','Nanotechnology & Surface Engineering','Hydraulics & Pneumatics','Organisational Behaviour'] },
-          { label: 'Projects / Practical', items: ['Design Engineering I-A','Design Engineering I-B','Design Engineering II-A','Design Engineering II-B','Summer Internship','Internship / Project'] },
-          { label: 'General / Professional Development', items: ['Programming for Problem Solving','English','Effective Technical Communication','Integrated Personality Development','Indian Constitution','Induction Program'] },
-        ].map(group => (
-          <div key={group.label} className="mb-3 last:mb-0">
-            <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider font-mono">
-              {group.label}
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {group.items.map(c => (
-                <span key={c} className="text-xs px-2.5 py-1 rounded-full glass-card text-muted-foreground">
-                  {c}
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
+        <p className="text-sm text-muted-foreground mb-3">
+          Engineering foundation in systems thinking, design, and problem solving — later pivoted to cybersecurity.
+        </p>
+        <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider font-mono">
+          Selected Coursework
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            'Programming for Problem Solving',
+            'Operation Research',
+            'Quality & Reliability Engineering',
+            'Industry 4.0',
+            'Computer Aided Design & Manufacturing',
+            'Engineering Mathematics',
+          ].map(c => (
+            <span key={c} className="text-xs px-2.5 py-1 rounded-full glass-card text-muted-foreground">
+              {c}
+            </span>
+          ))}
+        </div>
       </div>
     ),
   },
@@ -266,6 +265,8 @@ function TimelineNode({ entry, index, expandedId, onToggle }: {
       <div className="hidden md:flex flex-col items-center">
         <motion.button
           onClick={() => onToggle(entry.id)}
+          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${entry.title}`}
+          aria-expanded={isExpanded}
           initial={{ scale: 0 }}
           animate={isInView ? { scale: 1 } : {}}
           transition={{ type: 'spring', stiffness: 200, damping: 15, delay: index * 0.15 }}
@@ -304,6 +305,8 @@ function TimelineNode({ entry, index, expandedId, onToggle }: {
         <div className="flex flex-col items-center">
           <motion.button
             onClick={() => onToggle(entry.id)}
+            aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${entry.title}`}
+            aria-expanded={isExpanded}
             initial={{ scale: 0 }}
             animate={isInView ? { scale: 1 } : {}}
             transition={{ type: 'spring', stiffness: 200, damping: 15, delay: index * 0.15 }}
@@ -342,6 +345,15 @@ function NodeCard({ entry, isExpanded, onToggle, pointerSide }: {
   return (
     <div
       onClick={() => onToggle(entry.id)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onToggle(entry.id);
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-expanded={isExpanded}
       className={`relative bg-[rgba(15,23,42,0.5)] backdrop-blur-xl rounded-lg p-5 cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${
         isExpanded
           ? 'border border-primary/40 shadow-[0_0_24px_hsl(var(--primary)/0.12)]'
