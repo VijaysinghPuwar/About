@@ -15,6 +15,16 @@ const skills = {
 
 const experience = [
   {
+    company: "MTA", role: "IT Infrastructure & Network Operations Intern", period: "Jun 2026 – Present",
+    bullets: [
+      "Support enterprise IT infrastructure and network operations for Staten Island Railway, ensuring system availability and secure connectivity across facilities",
+      "Manage incidents and service requests through ServiceNow, troubleshooting endpoints, networks, and business applications with MTA IT teams",
+      "Configure and maintain enterprise endpoints including Windows PCs, thin clients, mobile devices, printers, and desk phones; track hardware inventory and lifecycle",
+      "Assist with user access management, Microsoft 365 services, shared folders, and enterprise application support including HxGN EAM and ArcGIS",
+      "Perform daily system verification checks, document infrastructure status, and support database automation initiatives to improve operational efficiency",
+    ],
+  },
+  {
     company: "R.S. Infotech", role: "System Engineer", period: "Feb 2023 – Aug 2024",
     bullets: [
       "Secured 150+ enterprise endpoints with group policies, antivirus, and patch management",
