@@ -76,20 +76,15 @@ const entries: TimelineEntry[] = [
     expandedContent: (
       <div>
         <p className="text-sm text-muted-foreground mb-4">
-          IT Infrastructure & Network Operations Intern supporting enterprise systems, network connectivity, endpoint security, user access, and operational technology environments for MTA Staten Island Railway. Focus on enterprise IT reliability, secure infrastructure operations, troubleshooting, and system availability.
+          Supporting enterprise IT infrastructure, network operations, endpoint systems, and secure technology services for MTA Staten Island Railway, focusing on system reliability, troubleshooting, and operational efficiency.
         </p>
         <ul className="space-y-2 mb-5">
           {[
-            <>Supported enterprise IT infrastructure operations across Staten Island Railway environments, ensuring reliable connectivity, system availability, and secure technology services</>,
-            <>Managed ServiceNow incidents and service requests, coordinating with MTA IT teams to troubleshoot and resolve technical issues</>,
-            <>Configured, deployed, and maintained enterprise endpoints including Windows PCs, thin clients/Wyse devices, mobile devices, printers, desk phones, and business applications</>,
-            <>Supported LAN connectivity, network troubleshooting, device communication issues, and enterprise access problems across railway facilities</>,
-            <>Assisted with user account access, Microsoft 365 services, shared folders, application permissions, and enterprise resource availability</>,
-            <>Performed hardware/software inventory management, lifecycle tracking, endpoint documentation, and technology asset control</>,
-            <>Coordinated with enterprise vendors including Dell, HP, and technology partners to resolve hardware and system issues</>,
-            <>Assisted with HxGN EAM and ArcGIS enterprise application support, including access management, device synchronization issues, and performance troubleshooting</>,
-            <>Performed daily system verification checks, documenting infrastructure status, issues, and resolutions</>,
-            <>Supported database development and maintenance initiatives to automate workflows and improve operational efficiency</>,
+            <>Supported enterprise IT operations by resolving ServiceNow incidents, troubleshooting system issues, and coordinating with cross-functional MTA technology teams.</>,
+            <>Deployed and maintained Windows endpoints, Microsoft 365 services, user access, printers, mobile devices, and enterprise applications across railway environments.</>,
+            <>Performed network and infrastructure troubleshooting including LAN connectivity, device communication, shared resources, and operational system availability.</>,
+            <>Assisted with Active Directory access management, endpoint security practices, asset lifecycle tracking, and technical documentation.</>,
+            <>Supported enterprise platforms including HxGN EAM, ArcGIS, and internal databases while improving workflow reliability and operational efficiency.</>,
           ].map((bullet, i) => (
             <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
               <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
@@ -100,24 +95,14 @@ const entries: TimelineEntry[] = [
         <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider font-mono">
           Security Alignment
         </p>
-        <ul className="space-y-2 mb-5">
-          {[
-            <>Supported secure enterprise infrastructure by assisting with endpoint configuration, access control, system monitoring, and operational technology support</>,
-            <>Assisted with Security / CIS systems supporting railway technology operations</>,
-            <>Helped maintain reliability and availability of critical IT systems through verification checks and incident response workflows</>,
-          ].map((bullet, i) => (
-            <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-              <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-secondary flex-shrink-0" />
-              <span>{bullet}</span>
-            </li>
-          ))}
-        </ul>
+        <p className="text-sm text-muted-foreground mb-5">
+          Supported secure infrastructure operations through endpoint management, access control, system verification, and enterprise technology support.
+        </p>
         {[
-          { label: 'Networking', items: ['LAN/WAN Troubleshooting', 'TCP/IP', 'Network Connectivity', 'Enterprise Networks'] },
-          { label: 'Systems', items: ['Windows Administration', 'Microsoft 365', 'Active Directory', 'Group Policy', 'Endpoint Management'] },
-          { label: 'Tools', items: ['ServiceNow', 'HxGN EAM', 'ArcGIS', 'Remote Support Tools'] },
-          { label: 'Infrastructure', items: ['Asset Management', 'Hardware Lifecycle', 'Printers', 'Mobile Device Support', 'Thin Clients'] },
-          { label: 'Cybersecurity', items: ['Access Management', 'Endpoint Security', 'System Verification', 'Security Operations Support'] },
+          { label: 'Networking', items: ['TCP/IP', 'LAN Troubleshooting', 'Enterprise Networks'] },
+          { label: 'Systems', items: ['Windows Administration', 'Active Directory', 'Microsoft 365', 'Endpoint Management'] },
+          { label: 'Security', items: ['Access Management', 'Endpoint Security', 'System Verification'] },
+          { label: 'Tools', items: ['ServiceNow', 'ArcGIS', 'HxGN EAM'] },
         ].map(group => (
           <div key={group.label} className="mb-3 last:mb-0">
             <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider font-mono">
