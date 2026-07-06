@@ -38,7 +38,24 @@ function buildCommands(isAuthed: boolean, goLogin: () => void): Command[] {
   ];
 
   const actions: Command[] = [
-    { category: 'Actions', label: 'Download Resume', keywords: 'cv pdf', action: () => alert('Resume download coming soon.') },
+    isAuthed
+      ? {
+          category: 'Actions',
+          label: 'Download Resume',
+          keywords: 'cv pdf',
+          action: () => {
+            const a = document.createElement('a');
+            a.href = '/resume.pdf';
+            a.download = '';
+            a.click();
+          },
+        }
+      : {
+          category: 'Actions',
+          label: 'Sign in to download resume',
+          keywords: 'cv pdf resume login',
+          action: goLogin,
+        },
     { category: 'Actions', label: 'Open GitHub', keywords: 'code repo', action: () => window.open('https://github.com/vijaysinghpuwar', '_blank') },
     { category: 'Actions', label: 'Open LinkedIn', keywords: 'social profile', action: () => window.open('https://linkedin.com/in/vijaysinghpuwar', '_blank') },
     isAuthed
@@ -208,6 +225,9 @@ export function CommandPalette() {
 
           {/* Modal */}
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Command palette"
             className="relative w-[95vw] md:w-[90vw] max-w-[560px] h-fit rounded-2xl overflow-hidden"
             style={{
               background: 'rgba(15,23,42,0.95)',
@@ -228,6 +248,7 @@ export function CommandPalette() {
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 placeholder="Type a command or search..."
+                aria-label="Search commands"
                 className="flex-1 bg-transparent text-[15px] text-foreground placeholder:text-muted-foreground outline-none"
               />
               <span
