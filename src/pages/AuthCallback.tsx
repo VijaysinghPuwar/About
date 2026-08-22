@@ -35,7 +35,7 @@ export default function AuthCallback() {
       if (cancelled) return;
       if (timeoutId) window.clearTimeout(timeoutId);
       if (hasSession) {
-        navigate('/', { replace: true });
+        navigate(consumeNext() ?? '/', { replace: true });
       } else {
         setError('We could not complete sign-in. Please try again.');
       }
