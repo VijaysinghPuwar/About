@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 import { Loader2, Github, CheckCircle2, Mail } from 'lucide-react';
@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { consumeNext, storeNext } from '@/lib/auth-redirect';
 
 const emailSchema = z
   .string()
