@@ -13,6 +13,7 @@ import {
 import { Menu, LogIn, LogOut, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { loginHref } from '@/lib/auth-redirect';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { LogoIcon } from '@/components/LogoIcon';
 
@@ -146,7 +147,7 @@ export function Navigation() {
             </DropdownMenu>
           ) : (
             <Button size="sm" variant="ghost" asChild>
-              <Link to="/login"><LogIn className="w-4 h-4 mr-1" /> Sign In</Link>
+              <Link to={loginHref()}><LogIn className="w-4 h-4 mr-1" /> Sign In</Link>
             </Button>
           )}
         </div>
@@ -201,7 +202,7 @@ export function Navigation() {
                     </div>
                   ) : (
                     <Button size="sm" className="w-full gradient-btn" asChild onClick={() => setIsOpen(false)}>
-                      <Link to="/login"><LogIn className="w-4 h-4 mr-2" /> Sign In</Link>
+                      <Link to={loginHref()}><LogIn className="w-4 h-4 mr-2" /> Sign In</Link>
                     </Button>
                   )}
                 </div>

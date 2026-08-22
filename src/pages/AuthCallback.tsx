@@ -7,6 +7,7 @@ import {
   isIdentityConflictError,
   IDENTITY_CONFLICT_MESSAGE,
 } from '@/lib/auth-errors';
+import { consumeNext } from '@/lib/auth-redirect';
 
 export default function AuthCallback() {
   const navigate = useNavigate();
@@ -35,7 +36,7 @@ export default function AuthCallback() {
       if (cancelled) return;
       if (timeoutId) window.clearTimeout(timeoutId);
       if (hasSession) {
-        navigate('/', { replace: true });
+        navigate(consumeNext() ?? '/', { replace: true });
       } else {
         setError('We could not complete sign-in. Please try again.');
       }

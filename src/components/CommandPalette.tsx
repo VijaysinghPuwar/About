@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Compass, Zap, Code, Folder, FileQuestion } from 'lucide-react';
 import projects from '@/data/projects.json';
+import { loginHref } from '@/lib/auth-redirect';
 import { useAuth } from '@/hooks/useAuth';
 
 interface Command {
@@ -116,7 +117,7 @@ export function CommandPalette() {
 
   const isAuthed = !!user;
   const commands = useMemo(
-    () => buildCommands(isAuthed, () => navigate('/login')),
+    () => buildCommands(isAuthed, () => navigate(loginHref())),
     [isAuthed, navigate],
   );
 

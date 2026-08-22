@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 import { Loader2, Github, CheckCircle2, Mail } from 'lucide-react';
@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { consumeNext, storeNext } from '@/lib/auth-redirect';
 
 const emailSchema = z
   .string()
@@ -27,10 +28,16 @@ export default function Login() {
 
   const { user, profile, loading: authLoading, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Remember where the visitor was headed; /auth/callback consumes it.
+  useEffect(() => {
+    storeNext(searchParams.get('next'));
+  }, [searchParams]);
 
   useEffect(() => {
     if (!authLoading && user && profile) {
-      if (profile.status === 'approved') navigate('/');
+      if (profile.status === 'approved') navigate(consumeNext() ?? '/');
       else if (profile.status === 'blocked') navigate('/blocked');
       else navigate('/pending');
     }
@@ -131,14 +138,16 @@ export default function Login() {
               <span className="text-2xl font-bold gradient-text">VJ</span>
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-foreground">Welcome</h1>
-              <p className="text-muted-foreground text-sm mt-1">
-                Sign in to request access to the full portfolio.
+              <h1 className="text-2xl font-bold font-mono tracking-[0.18em] uppercase gradient-text">
+                Secure Access
+              </h1>
+              <p className="text-muted-foreground text-sm mt-2">
+                Authentication is handled securely through Google.
               </p>
             </div>
           </div>
 
-          {/* OAuth buttons */}
+          {/* Primary: Google */}
           <div className="space-y-3">
             <button
               onClick={handleGoogleSignIn}
@@ -158,28 +167,31 @@ export default function Login() {
               )}
               Continue with Google
             </button>
-
-            <button
-              onClick={handleGithubSignIn}
-              disabled={googleLoading || githubLoading || emailLoading}
-              aria-label="Continue with GitHub"
-              className="w-full h-12 rounded-md font-medium text-base bg-[#1F1F1F] text-white hover:bg-[#2A2A2A] transition-colors inline-flex items-center justify-center disabled:opacity-50 border border-white/10"
-            >
-              {githubLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin mr-2" />
-              ) : (
-                <Github className="w-5 h-5 mr-2" aria-hidden="true" />
-              )}
-              Continue with GitHub
-            </button>
           </div>
 
           {/* Divider */}
-          <div className="flex items-center gap-3" role="separator" aria-label="or">
+          <div className="flex items-center gap-3" role="separator" aria-label="Other options">
             <Separator className="flex-1" />
-            <span className="text-muted-foreground text-xs uppercase tracking-wider">or</span>
+            <span className="text-muted-foreground text-[11px] font-mono uppercase tracking-wider">
+              Other options
+            </span>
             <Separator className="flex-1" />
           </div>
+
+          <button
+            onClick={handleGithubSignIn}
+            disabled={googleLoading || githubLoading || emailLoading}
+            aria-label="Continue with GitHub"
+            className="w-full h-11 rounded-md font-medium text-sm bg-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors inline-flex items-center justify-center disabled:opacity-50 border border-border"
+          >
+            {githubLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            ) : (
+              <Github className="w-4 h-4 mr-2" aria-hidden="true" />
+            )}
+            Continue with GitHub
+          </button>
+
 
           {/* Magic link */}
           {emailSent ? (
@@ -228,7 +240,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={emailLoading || googleLoading || githubLoading}
-                className="w-full h-12 rounded-md font-medium text-base bg-primary text-primary-foreground hover:bg-primary/90 transition-colors inline-flex items-center justify-center disabled:opacity-50"
+                className="w-full h-11 rounded-md font-medium text-sm bg-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-border transition-colors inline-flex items-center justify-center disabled:opacity-50"
               >
                 {emailLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin mr-2" />

@@ -1,6 +1,7 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { loginHref } from '@/lib/auth-redirect';
 import { Button } from '@/components/ui/button';
 
 interface ProtectedRouteProps {
@@ -10,6 +11,8 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
   const { user, profile, profileError, loading, isAdmin, refetchProfile, signOut } = useAuth();
+  const location = useLocation();
+  const signInPath = loginHref(location.pathname + location.search + location.hash);
 
   if (loading) {
     return (
@@ -19,7 +22,7 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
     );
   }
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to={signInPath} replace />;
 
   if (profileError) {
     return (
@@ -36,7 +39,7 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
     );
   }
 
-  if (!profile) return <Navigate to="/login" replace />;
+  if (!profile) return <Navigate to={signInPath} replace />;
   if (profile.status === 'blocked') return <Navigate to="/blocked" replace />;
   if (profile.status === 'pending') return <Navigate to="/pending" replace />;
   if (requireAdmin && !isAdmin) return <Navigate to="/" replace />;

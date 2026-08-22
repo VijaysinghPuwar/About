@@ -7,10 +7,10 @@ import type { Database } from './types';
 // against build pipelines that fail to inject env vars; publishable key is
 // safe by design).
 const SUPABASE_URL =
-  import.meta.env.VITE_SUPABASE_URL ?? 'https://hveucrpuystdvuubaocv.supabase.co';
+  import.meta.env.VITE_SUPABASE_URL ?? 'https://xyhyqukvfcshqwengxth.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY =
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ??
-  'sb_publishable_-qkXIExDAmPoZLFirWiHhw_yjTGdkzW';
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh5aHlxdWt2ZmNzaHF3ZW5neHRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MzMzNTEsImV4cCI6MjA4NTEwOTM1MX0.sc9oWFOHr4x4SUZeG3ClNi0038rtpwSBkrI7MTpWsDo';
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
