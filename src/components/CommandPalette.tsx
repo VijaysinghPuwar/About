@@ -116,7 +116,7 @@ export function CommandPalette() {
 
   const isAuthed = !!user;
   const commands = useMemo(
-    () => buildCommands(isAuthed, () => navigate('/login')),
+    () => buildCommands(isAuthed, () => navigate(loginHref())),
     [isAuthed, navigate],
   );
 
