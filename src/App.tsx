@@ -37,6 +37,7 @@ import Login from "./pages/Login";
 import AuthCallback from "./pages/AuthCallback";
 import Pending from "./pages/Pending";
 import Blocked from "./pages/Blocked";
+import OAuthConsent from "./pages/OAuthConsent";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
@@ -78,6 +79,7 @@ const App = () => (
                   <Route path="/" element={<Index />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/auth/callback" element={<AuthCallback />} />
+                  <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
                   <Route path="/pending" element={<Pending />} />
                   <Route path="/blocked" element={<Blocked />} />
                   <Route path="/admin" element={<ProtectedRoute requireAdmin><Admin /></ProtectedRoute>} />
