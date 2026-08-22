@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { loginHref } from '@/lib/auth-redirect';
 import { cn } from '@/lib/utils';
 
 // Split to avoid trivial source-grep harvesting; never assembled in DOM

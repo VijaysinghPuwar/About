@@ -7,6 +7,7 @@ import {
   isIdentityConflictError,
   IDENTITY_CONFLICT_MESSAGE,
 } from '@/lib/auth-errors';
+import { consumeNext } from '@/lib/auth-redirect';
 
 export default function AuthCallback() {
   const navigate = useNavigate();
