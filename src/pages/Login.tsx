@@ -28,10 +28,16 @@ export default function Login() {
 
   const { user, profile, loading: authLoading, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Remember where the visitor was headed; /auth/callback consumes it.
+  useEffect(() => {
+    storeNext(searchParams.get('next'));
+  }, [searchParams]);
 
   useEffect(() => {
     if (!authLoading && user && profile) {
-      if (profile.status === 'approved') navigate('/');
+      if (profile.status === 'approved') navigate(consumeNext() ?? '/');
       else if (profile.status === 'blocked') navigate('/blocked');
       else navigate('/pending');
     }
