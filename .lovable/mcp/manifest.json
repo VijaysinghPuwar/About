@@ -1,0 +1,144 @@
+{
+  "version": 1,
+  "sdk_version": "0.26.3",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://xyhyqukvfcshqwengxth.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "vijaysinghpuwar",
+      "version": "0.1.0",
+      "title": "vijaysinghpuwar"
+    },
+    "tools": [
+      {
+        "name": "list_projects",
+        "title": "List security projects",
+        "description": "List Vijay's cybersecurity portfolio projects, optionally filtered by category or featured status.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Filter by project category."
+            },
+            "featured": {
+              "type": "boolean",
+              "description": "Only return featured projects when true."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "description": "Maximum number of projects (default 20)."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_project",
+        "title": "Get project details",
+        "description": "Fetch the full details of a single portfolio project by its id.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The project id."
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_my_access",
+        "title": "Get my access status",
+        "description": "Return the signed-in user's portfolio profile and access status (pending, approved, or blocked).",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "send_contact_message",
+        "title": "Send a contact message",
+        "description": "Send Vijay a message through the portfolio contact inbox as the signed-in user.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "description": "Sender name."
+            },
+            "email": {
+              "type": "string",
+              "format": "email",
+              "maxLength": 255,
+              "description": "Sender email address for the reply."
+            },
+            "subject": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 150,
+              "description": "Short subject line."
+            },
+            "message": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 4000,
+              "description": "Message body."
+            }
+          },
+          "required": [
+            "name",
+            "email",
+            "subject",
+            "message"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
