@@ -60,7 +60,7 @@ export function ProtectedEmail({ variant = 'row', className, compactHint = false
     return (
       <button
         type="button"
-        onClick={() => navigate('/login')}
+        onClick={() => navigate(loginHref())}
         aria-label="Sign in to email Vijaysingh"
         className={cn(
           'relative text-muted-foreground hover:text-primary transition-colors',
@@ -79,7 +79,7 @@ export function ProtectedEmail({ variant = 'row', className, compactHint = false
   return (
     <button
       type="button"
-      onClick={() => navigate('/login')}
+      onClick={() => navigate(loginHref())}
       aria-label="Sign in to reveal email"
       className={cn(
         'group w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-primary/5 transition-all min-h-[44px]',
