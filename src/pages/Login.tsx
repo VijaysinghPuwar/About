@@ -240,7 +240,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={emailLoading || googleLoading || githubLoading}
-                className="w-full h-12 rounded-md font-medium text-base bg-primary text-primary-foreground hover:bg-primary/90 transition-colors inline-flex items-center justify-center disabled:opacity-50"
+                className="w-full h-11 rounded-md font-medium text-sm bg-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-border transition-colors inline-flex items-center justify-center disabled:opacity-50"
               >
                 {emailLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin mr-2" />
