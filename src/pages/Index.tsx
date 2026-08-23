@@ -75,33 +75,8 @@ export default function Index() {
   const [skillTab, setSkillTab] = useState('security');
 
 
-  /* contact form */
-  const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
 
-  useEffect(() => {
-    if (profile?.full_name) setFormData(prev => ({ ...prev, name: profile.full_name || '' }));
-  }, [profile]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    try {
-      const body = user
-        ? { name: formData.name, subject: formData.subject, message: formData.message }
-        : { name: formData.name, email: formData.email, subject: formData.subject, message: formData.message };
-      const { error } = await supabase.functions.invoke('send-contact-email', { body });
-      if (error) throw error;
-      setSubmitted(true);
-      setFormData({ name: '', email: '', subject: '', message: '' });
-      toast.success('Message sent', { description: "Thank you — I'll get back to you soon." });
-    } catch {
-      toast.error('Failed to send', { description: 'Please try again or email me directly.' });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const handleProtectedAction = (e: React.MouseEvent, _target: string) => {
     if (!user) { e.preventDefault(); navigate('/login'); }
@@ -284,8 +259,8 @@ export default function Index() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
-            {/* Left — Digital Business Card */}
+          <div className="max-w-xl mx-auto mt-12">
+            {/* Digital Business Card */}
             <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0} className="space-y-6">
               <div className="glass-card rounded-xl p-6 space-y-5 hover:border-primary/30 transition-colors">
                 <div className="flex items-center gap-4">
@@ -321,64 +296,8 @@ export default function Index() {
                 ))}
               </div>
             </motion.div>
-
-            {/* Right — Contact Form */}
-            <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={1}>
-              <AnimatePresence mode="wait">
-                {submitted ? (
-                  <motion.div key="success" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
-                    className="glass-card rounded-xl text-center py-16 px-6">
-                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200, damping: 12, delay: 0.1 }}>
-                      <CheckCircle2 className="w-14 h-14 text-success mx-auto mb-4" />
-                    </motion.div>
-                    <h3 className="text-xl font-semibold text-foreground mb-2">Message Sent!</h3>
-                    <p className="text-muted-foreground mb-6">Thanks for reaching out. I'll respond within 24–48 hours.</p>
-                    <Button variant="outline" onClick={() => setSubmitted(false)} className="border-border/60">Send Another</Button>
-                  </motion.div>
-                ) : (
-                  <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="glass-card rounded-xl p-6">
-                    {user && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4 pb-4 border-b border-border/40">
-                        <User className="w-4 h-4 text-primary" />
-                        <span>Signed in as <span className="text-foreground font-medium">{user.email}</span></span>
-                      </div>
-                    )}
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                      <div className={user ? '' : 'grid grid-cols-1 sm:grid-cols-2 gap-4'}>
-                        <div>
-                          <Label htmlFor="name" className="text-sm">Name</Label>
-                          <Input id="name" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
-                            className="bg-background/50 border-border/40 mt-1 focus:border-primary/60 focus:shadow-[0_0_12px_hsl(var(--primary)/0.15)] transition-shadow" />
-                        </div>
-                        {!user && (
-                          <div>
-                            <Label htmlFor="email" className="text-sm">Email</Label>
-                            <Input id="email" type="email" required value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })}
-                              className="bg-background/50 border-border/40 mt-1 focus:border-primary/60 focus:shadow-[0_0_12px_hsl(var(--primary)/0.15)] transition-shadow" />
-                          </div>
-                        )}
-                      </div>
-                      <div>
-                        <Label htmlFor="subject" className="text-sm">Subject</Label>
-                        <Input id="subject" required value={formData.subject} onChange={e => setFormData({ ...formData, subject: e.target.value })}
-                          className="bg-background/50 border-border/40 mt-1 focus:border-primary/60 focus:shadow-[0_0_12px_hsl(var(--primary)/0.15)] transition-shadow" />
-                      </div>
-                      <div>
-                        <Label htmlFor="message" className="text-sm">Message</Label>
-                        <Textarea id="message" required rows={5} value={formData.message} onChange={e => setFormData({ ...formData, message: e.target.value })}
-                          className="bg-background/50 border-border/40 mt-1 focus:border-primary/60 focus:shadow-[0_0_12px_hsl(var(--primary)/0.15)] transition-shadow" />
-                      </div>
-                      <button type="submit" disabled={isSubmitting}
-                        className="w-full h-11 rounded-md text-sm font-medium gradient-btn inline-flex items-center justify-center disabled:opacity-50">
-                        {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending...</> : 'Send Message'}
-                      </button>
-                    </form>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.div>
           </div>
+
         </SectionReveal>
       </section>
     </div>
