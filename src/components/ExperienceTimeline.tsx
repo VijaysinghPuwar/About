@@ -76,8 +76,8 @@ const entries: TimelineEntry[] = [
   {
     id: 'mta-sirtoa',
     type: 'work',
-    title: 'Network Intern',
-    subtitle: 'Metropolitan Transportation Authority (MTA) — Staten Island Railway (SIRTOA) · IT Infrastructure & Network Operations · Staten Island, New York',
+    title: 'IT Emerging Talent Intern',
+    subtitle: 'Metropolitan Transportation Authority (MTA) — Staten Island Railway (SIRTOA) · IT Infrastructure & Network Operations · New York City',
     period: 'June 2026 – Present',
     expandedContent: (
       <div>
@@ -86,11 +86,10 @@ const entries: TimelineEntry[] = [
         </p>
         <ul className="space-y-2 mb-5">
           {[
-            <>Supported enterprise IT operations by resolving ServiceNow incidents, troubleshooting system issues, and coordinating with cross-functional MTA technology teams.</>,
-            <>Deployed and maintained Windows endpoints, Microsoft 365 services, user access, printers, mobile devices, and enterprise applications across railway environments.</>,
-            <>Performed network and infrastructure troubleshooting including LAN connectivity, device communication, shared resources, and operational system availability.</>,
-            <>Assisted with Active Directory access management, endpoint security practices, asset lifecycle tracking, and technical documentation.</>,
-            <>Supported enterprise platforms including HxGN EAM, ArcGIS, and internal databases while improving workflow reliability and operational efficiency.</>,
+            <>Configure Cisco Catalyst switching — VLANs, access and trunk ports — and support OSPF and BGP routing on production network devices.</>,
+            <>Administer zero-trust and identity access: Zscaler ZPA application groups, DUO multi-factor enrollment, Active Directory groups, and provisioning and revocation as staff join, move, and leave.</>,
+            <>Own incidents end to end in ServiceNow from triage through closure, maintain a daily System Verification Log, and deploy endpoint hardware at remote facilities.</>,
+            <>Designed a Power Automate and SharePoint intake application and root-caused a trigger-versus-Compose defect in testing; deployed a Python NTP clock-correction service for a Rail Control Center workstation.</>,
           ].map((bullet, i) => (
             <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
               <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
@@ -135,11 +134,10 @@ const entries: TimelineEntry[] = [
     expandedContent: (
       <ul className="space-y-2">
         {[
-          <>Secured {highlightMetric('150+')} enterprise endpoints with group policies, antivirus, and patch management</>,
-          <>Managed Active Directory identity hygiene and enforced MFA via PowerShell automation</>,
-          <>Automated log analysis and reporting with Python, reducing manual effort by {highlightMetric('70%')}</>,
-          <>Maintained firewalls, IDS/IPS, reducing security breaches by {highlightMetric('20%')}</>,
-          <>Provided Tier 1/2 incident response and escalation support</>,
+          <>Configured production firewall rules and supported IDS/IPS, reviewing traffic and system logs to remediate misconfigurations and suspicious activity</>,
+          <>Hardened {highlightMetric('150+')} Windows and Linux production endpoints — baselines, patching, post-change validation — with Windows Server, Active Directory, and Group Policy administration</>,
+          <>Built automation in Python, PowerShell, and Bash for log analysis, configuration-compliance checking, and inventory</>,
+          <>Investigated failed-authentication patterns with Splunk SPL</>,
         ].map((bullet, i) => (
           <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
             <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
@@ -150,26 +148,11 @@ const entries: TimelineEntry[] = [
     ),
   },
   {
-    id: 'lt-sargent',
-    type: 'work',
-    title: 'Systems Intern',
-    subtitle: 'L&T-Sargent & Lundy',
-    period: 'Jan 2023 – Apr 2023',
-    expandedContent: (
-      <ul className="space-y-2">
-        <li className="text-sm text-muted-foreground flex items-start gap-2">
-          <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-          <span>Designed and optimized HVAC systems with {highlightMetric('100%')} adherence to ASHRAE standards compliance</span>
-        </li>
-      </ul>
-    ),
-  },
-  {
     id: 'be-mech',
     type: 'education',
     title: 'B.E. Mechanical Engineering',
-    subtitle: 'G. H. Patel College of Engineering & Technology · Gujarat Technological University, Ahmedabad',
-    period: 'Completed Aug 2023',
+    subtitle: 'G H Patel College of Engineering and Technology — Anand, India',
+    period: 'Completed Jan 2024',
     expandedContent: (
       <div>
         <p className="text-sm text-muted-foreground mb-4">
@@ -196,21 +179,6 @@ const entries: TimelineEntry[] = [
           ))}
         </div>
       </div>
-    ),
-  },
-  {
-    id: 'elecon',
-    type: 'work',
-    title: 'Design Intern',
-    subtitle: 'Elecon Engineering',
-    period: 'Jan 2022 – Jun 2022',
-    expandedContent: (
-      <ul className="space-y-2">
-        <li className="text-sm text-muted-foreground flex items-start gap-2">
-          <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-          <span>CAD modeling and engineering documentation for industrial systems</span>
-        </li>
-      </ul>
     ),
   },
 ];

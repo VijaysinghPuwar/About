@@ -92,7 +92,7 @@ export const COMMANDS: CommandSpec[] = [
     summary: 'Who I am and what I do.',
     run: () => [
       plain('Vijaysingh Puwar — Cybersecurity Engineer, New York'),
-      muted('Network Intern at the MTA. M.S. Cybersecurity at Pace (GPA 3.92).'),
+      muted('IT Emerging Talent Intern at the MTA. M.S. Cybersecurity at Pace (GPA 3.92).'),
       muted('Security+, CySA+, CCNA.'),
     ],
   },

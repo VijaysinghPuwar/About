@@ -16,7 +16,7 @@ const skills = {
 
 const experience = [
   {
-    company: "MTA", role: "IT Infrastructure & Network Operations Intern", period: "Jun 2026 – Present",
+    company: "MTA — Staten Island Railway (SIRTOA)", role: "IT Emerging Talent Intern", period: "Jun 2026 – Present",
     bullets: [
       "Support enterprise IT infrastructure and network operations for Staten Island Railway, ensuring system availability and secure connectivity across facilities",
       "Manage incidents and service requests through ServiceNow, troubleshooting endpoints, networks, and business applications with MTA IT teams",

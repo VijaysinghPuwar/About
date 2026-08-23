@@ -43,7 +43,7 @@ const skills = {
 
 const experience = [
   {
-    company: "Metropolitan Transportation Authority (MTA)", role: "IT Infrastructure & Network Operations Intern", period: "June 2026 – Present",
+    company: "Metropolitan Transportation Authority (MTA)", role: "IT Emerging Talent Intern", period: "June 2026 – Present",
     bullets: [
       "Supported enterprise IT infrastructure operations across Staten Island Railway environments, ensuring reliable connectivity, system availability, and secure technology services",
       "Managed ServiceNow incidents and service requests, coordinating with MTA IT teams to troubleshoot and resolve technical issues",
