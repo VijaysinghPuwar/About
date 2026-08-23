@@ -75,33 +75,8 @@ export default function Index() {
   const [skillTab, setSkillTab] = useState('security');
 
 
-  /* contact form */
-  const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
 
-  useEffect(() => {
-    if (profile?.full_name) setFormData(prev => ({ ...prev, name: profile.full_name || '' }));
-  }, [profile]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    try {
-      const body = user
-        ? { name: formData.name, subject: formData.subject, message: formData.message }
-        : { name: formData.name, email: formData.email, subject: formData.subject, message: formData.message };
-      const { error } = await supabase.functions.invoke('send-contact-email', { body });
-      if (error) throw error;
-      setSubmitted(true);
-      setFormData({ name: '', email: '', subject: '', message: '' });
-      toast.success('Message sent', { description: "Thank you — I'll get back to you soon." });
-    } catch {
-      toast.error('Failed to send', { description: 'Please try again or email me directly.' });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const handleProtectedAction = (e: React.MouseEvent, _target: string) => {
     if (!user) { e.preventDefault(); navigate('/login'); }
