@@ -104,7 +104,7 @@ const education = [
   },
 ];
 
-const certifications = ["CompTIA Security+", "CompTIA CySA+", "Cisco CCNA", "ISC2 Candidate", "Google AI Essentials"];
+const certifications = ["CompTIA Security+", "CompTIA CySA+", "Cisco CCNA", "Google AI Essentials", "Cisco CCNP Enterprise (in progress)"];
 
 function AnimatedCounter({ target, suffix }: { target: number; suffix: string }) {
   const ref = useRef<HTMLSpanElement>(null);

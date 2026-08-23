@@ -210,7 +210,7 @@ export default function Index() {
             <div className="marquee-track">
               {[false, true].map(isClone => (
                 <div key={String(isClone)} className="flex" aria-hidden={isClone || undefined}>
-                  {['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'ISC2 Candidate', 'Google AI Essentials'].map(cert => (
+                  {['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'Google AI Essentials', 'Cisco CCNP Enterprise (in progress)'].map(cert => (
                     <span key={cert} className="flex items-center gap-2 font-mono text-sm text-muted-foreground px-6 whitespace-nowrap">
                       <Shield className="w-3.5 h-3.5 text-primary shrink-0" />
                       {cert}

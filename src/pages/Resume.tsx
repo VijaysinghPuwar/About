@@ -18,7 +18,7 @@ import { ProtectedEmail } from '@/components/ProtectedEmail';
  */
 
 const PROFILE =
-  'Engineer working across two halves of the same stack: the network and systems infrastructure underneath, and the AI-powered applications running on top. Supports enterprise routing, switching, and zero-trust access for a transit operating agency, and separately designs, ships, and operates production platforms with paying users — multi-provider LLM pipelines, REST backends, and relational data layers, backed by 1,280+ automated tests.';
+  'Engineer working across two halves of the same stack: the network and systems infrastructure underneath, and the AI-powered applications running on top. Supports enterprise routing, switching, and zero-trust access for a transit operating agency, and separately designs, ships, and operates production platforms with paying users: multi-provider LLM pipelines, REST backends, and relational data layers, backed by 1,280+ automated tests.';
 
 interface Role {
   org: string;
@@ -71,8 +71,8 @@ const PROJECTS: ResumeProject[] = [
     href: 'https://recapverse.com',
     label: 'recapverse.com',
     bullets: [
-      'Operate a paying multi-tenant platform on a multi-provider LLM pipeline (Claude Opus and Sonnet, GPT, Gemini) with bring-your-own-key isolation and AES-GCM encrypted per-user credentials — a 19-router FastAPI backend on Google Cloud Run across 353 deployments, with 900+ tests run before every release.',
-      'Architected the pipeline as vision observation, then a deterministic five-stage resolver, then narration with Chain-of-Density rolling summaries, then deterministic post-processing. The design judgment is which stages a model may own and which must not be probabilistic.',
+      'Operate a paying multi-tenant platform on a multi-provider LLM pipeline (Claude Opus and Sonnet, GPT, Gemini) with bring-your-own-key isolation and AES-GCM encrypted per-user credentials, on a 19-router FastAPI backend deployed to Google Cloud Run across 353 deployments, with 900+ tests run before every release.',
+      'Architected the pipeline as vision observation, then a deterministic five-stage resolver, then narration with Chain-of-Density rolling summaries, then deterministic post-processing, where the design judgment is which stages a model may own and which must not be probabilistic.',
       'Instrumented it for measurement: an evaluation harness, A/B feature flags pitting a pipeline stage against its predecessor, reservoir-sampled model observations for telemetry replay, and capture of human edits against AI output.',
     ],
   },
@@ -120,7 +120,7 @@ const EDUCATION = [
 const SKILLS: { label: string; items: string }[] = [
   {
     label: 'Certifications',
-    items: 'Cisco CCNA, CompTIA Security+, CompTIA CySA+, Google AI Essentials; Cisco CCNP Enterprise (in progress); TryHackMe — top 7% globally, 69 rooms',
+    items: 'Cisco CCNA, CompTIA Security+, CompTIA CySA+, Google AI Essentials; Cisco CCNP Enterprise (in progress); TryHackMe, top 7% globally, 69 rooms',
   },
   {
     label: 'Networking',

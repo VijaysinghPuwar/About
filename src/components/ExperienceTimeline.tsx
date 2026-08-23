@@ -187,7 +187,7 @@ const certifications = [
   { name: 'CompTIA Security+', org: 'CompTIA' },
   { name: 'CompTIA CySA+', org: 'CompTIA' },
   { name: 'Cisco CCNA', org: 'Cisco' },
-  { name: 'ISC2 Candidate', org: 'ISC2' },
+  { name: 'Cisco CCNP Enterprise', org: 'Cisco · in progress' },
   { name: 'Google AI Essentials', org: 'Google' },
 ];
 
