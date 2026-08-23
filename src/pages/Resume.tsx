@@ -1,214 +1,339 @@
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Download, Github, Linkedin, GraduationCap, Award, Briefcase } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Download } from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
-import { meCourseGroups, type CourseGroup } from '@/data/me-coursework';
 import { ProtectedEmail } from '@/components/ProtectedEmail';
 
-const skills = {
-  "Security": ["IAM / Active Directory", "SIEM (Splunk)", "IDS/IPS", "Vulnerability Assessment", "Penetration Testing", "Threat Intelligence", "Incident Response", "Endpoint Hardening", "Security Management (NIST / ISO 27001)"],
-  "Automation": ["Python", "PowerShell", "Shell Scripting", "Ansible"],
-  "Cloud & Network": ["AWS (EC2, VPC, IAM, CloudWatch)", "Cisco (Routing, Switching, VLANs)", "Firewalls", "TCP/IP"],
-  "Tools": ["Wireshark", "Nmap", "Metasploit", "Burp Suite", "Git", "Docker", "Linux"],
-};
+/**
+ * Web resume.
+ *
+ * Content is transcribed from the canonical PDF at /resume.pdf (2026-08-22) and
+ * must not drift from it — a recruiter who reads this page and then downloads
+ * the PDF should find the same claims. Nothing here is inferred or generated.
+ *
+ * The previous version of this page was never routed, which is why it still
+ * carried a 3.91 GPA, the wrong institution for the B.E., an "ISC2 Candidate"
+ * line, and two retired metrics. All of that is gone.
+ *
+ * Deliberately not a PDF facsimile inside a card: one column, real type
+ * hierarchy, hairline rules instead of borders, and it prints cleanly.
+ */
 
-const experience = [
+const PROFILE =
+  'Engineer working across two halves of the same stack: the network and systems infrastructure underneath, and the AI-powered applications running on top. Supports enterprise routing, switching, and zero-trust access for a transit operating agency, and separately designs, ships, and operates production platforms with paying users — multi-provider LLM pipelines, REST backends, and relational data layers, backed by 1,280+ automated tests.';
+
+interface Role {
+  org: string;
+  title: string;
+  period: string;
+  location: string;
+  bullets: string[];
+}
+
+const EXPERIENCE: Role[] = [
   {
-    company: "MTA — Staten Island Railway (SIRTOA)", role: "IT Emerging Talent Intern", period: "Jun 2026 – Present",
+    org: 'MTA Staten Island Railway (SIRTOA)',
+    title: 'IT Emerging Talent Intern',
+    period: 'June 2026 – Present',
+    location: 'New York City',
     bullets: [
-      "Support enterprise IT infrastructure and network operations for Staten Island Railway, ensuring system availability and secure connectivity across facilities",
-      "Manage incidents and service requests through ServiceNow, troubleshooting endpoints, networks, and business applications with MTA IT teams",
-      "Configure and maintain enterprise endpoints including Windows PCs, thin clients, mobile devices, printers, and desk phones; track hardware inventory and lifecycle",
-      "Assist with user access management, Microsoft 365 services, shared folders, and enterprise application support including HxGN EAM and ArcGIS",
-      "Perform daily system verification checks, document infrastructure status, and support database automation initiatives to improve operational efficiency",
+      'Configure Cisco Catalyst switching (VLANs, access and trunk ports) and support OSPF and BGP routing on production network devices.',
+      'Administer zero-trust and identity access: Zscaler ZPA application groups, DUO multi-factor enrollment, Active Directory groups, and provisioning and revocation as staff join, move, and leave.',
+      'Own incidents end to end in ServiceNow from triage through closure, maintain a daily System Verification Log, and deploy endpoint hardware at remote facilities.',
+      'Designed a Power Automate and SharePoint intake application and root-caused a trigger-versus-Compose defect in testing; deployed a Python NTP clock-correction service for a Rail Control Center workstation.',
     ],
   },
   {
-    company: "R.S. Infotech", role: "System Engineer", period: "Feb 2023 – Aug 2024",
+    org: 'R.S. Infotech',
+    title: 'System Engineer',
+    period: 'February 2023 – August 2024',
+    location: 'Vadodara, India',
     bullets: [
-      "Secured 150+ enterprise endpoints with group policies, antivirus, and patch management",
-      "Managed Active Directory identity hygiene and enforced MFA via PowerShell",
-      "Automated log analysis and reporting with Python, reducing manual effort by 70%",
-      "Maintained firewalls, IDS/IPS, contributing to 20% reduction in security breaches",
-      "Provided Tier 1/2 incident response and escalation support",
+      'Configured production firewall rules and supported IDS/IPS, reviewing traffic and system logs to remediate misconfigurations and suspicious activity.',
+      'Hardened 150+ Windows and Linux production endpoints (baselines, patching, post-change validation) with Windows Server, Active Directory, and Group Policy administration.',
+      'Built automation in Python, PowerShell, and Bash for log analysis, configuration-compliance checking, and inventory; investigated failed-authentication patterns with Splunk SPL.',
     ],
-  },
-  {
-    company: "L&T-Sargent & Lundy", role: "Systems Intern", period: "Jan 2023 – Apr 2023",
-    bullets: ["Designed and optimized HVAC systems with 100% ASHRAE standards compliance"],
-  },
-  {
-    company: "Elecon Engineering", role: "Design Intern", period: "Jan 2022 – Jun 2022",
-    bullets: ["CAD modeling and engineering documentation for industrial systems"],
   },
 ];
 
-const education = [
+interface ResumeProject {
+  name: string;
+  discipline: string;
+  stack: string;
+  href: string;
+  label: string;
+  bullets: string[];
+}
+
+const PROJECTS: ResumeProject[] = [
   {
-    school: "Pace University — Seidenberg School of CSIS", degree: "M.S. Cybersecurity", location: "New York, NY",
-    gpa: "GPA: 3.92", status: "Expected Dec 2026",
-    coursework: [
-      "Introduction to Cybersecurity",
-      "Operating Systems Theory & Administration",
-      "Information Security Management",
-      "Network Security & Defense",
-      "Ethical Hacking & Penetration Testing",
-      "Automating InfoSec with Python & Shell",
-      "Cyber Intelligence Analysis & Modeling",
-      "Computational Statistics",
-      "Algorithms & Computing Theory",
-      "Business Data Communications",
-      "Data Science I: Intro to Data",
-      "Introduction to Coding",
+    name: 'Recap Verse',
+    discipline: 'AI engineering',
+    stack: 'Python, FastAPI, multi-provider LLMs, MongoDB, Cloud Run',
+    href: 'https://recapverse.com',
+    label: 'recapverse.com',
+    bullets: [
+      'Operate a paying multi-tenant platform on a multi-provider LLM pipeline (Claude Opus and Sonnet, GPT, Gemini) with bring-your-own-key isolation and AES-GCM encrypted per-user credentials — a 19-router FastAPI backend on Google Cloud Run across 353 deployments, with 900+ tests run before every release.',
+      'Architected the pipeline as vision observation, then a deterministic five-stage resolver, then narration with Chain-of-Density rolling summaries, then deterministic post-processing. The design judgment is which stages a model may own and which must not be probabilistic.',
+      'Instrumented it for measurement: an evaluation harness, A/B feature flags pitting a pipeline stage against its predecessor, reservoir-sampled model observations for telemetry replay, and capture of human edits against AI output.',
     ],
-    inProgress: ["Cybersecurity Capstone Project"],
-    courseGroups: [] as CourseGroup[],
   },
   {
-    school: "G. H. Patel College of Engineering & Technology", degree: "B.E. Mechanical Engineering",
-    location: "Gujarat Technological University, Ahmedabad", gpa: "CGPA: 7.11 / 10", status: "Completed Aug 2023", coursework: [], inProgress: [], courseGroups: meCourseGroups as CourseGroup[],
+    name: 'Web Audio TV',
+    discipline: 'Full stack',
+    stack: 'TypeScript, React, PostgreSQL, PL/pgSQL, Deno',
+    href: 'https://webaudiotv.com',
+    label: 'webaudiotv.com',
+    bullets: [
+      'Own the data layer behind a live platform serving 843 users: 40+ tables, 52 SQL functions, 11 triggers, 93 versioned migrations, and 190+ row-level access policies across 24 edge functions.',
+      'Built an append-only rewards ledger enforced by database trigger, Stripe and PayPal billing with webhook verification and scheduled reconciliation, and an abuse-detection console with named heuristics and behavioral baselining. 389 tests across 39 files.',
+    ],
+  },
+  {
+    name: 'Networking & Security Labs',
+    discipline: 'Infrastructure',
+    stack: 'Cisco, Linux, Nmap NSE',
+    href: 'https://github.com/VijaysinghPuwar',
+    label: 'github.com/VijaysinghPuwar',
+    bullets: [
+      'Dual-ISP assessment and remediation: diagnosed a split-brain network with overlapping RFC1918 subnets via multi-vantage-point discovery, remediated it, and documented the result with topology diagrams and a written report.',
+      'Rapid-PVST campus lab (per-VLAN root load balancing, PortFast, BPDU Guard, Root Guard), iptables hardening with default-deny and brute-force rate limiting under CI, and a custom Nmap NSE script checking HSTS, CSP, and X-Frame-Options.',
+    ],
   },
 ];
 
-const certifications = ["CompTIA Security+", "CompTIA CySA+", "Cisco CCNA", "ISC2 Candidate", "Google AI Essentials"];
+const EDUCATION = [
+  {
+    school: 'Pace University — Seidenberg School of Computer Science and Information Systems',
+    location: 'New York, NY',
+    degree: 'M.S. Cybersecurity, GPA 3.92 / 4.0',
+    detail: 'Network Security & Defense, Ethical Hacking, Algorithms, Data Science',
+    period: 'December 2026',
+  },
+  {
+    school: 'G H Patel College of Engineering and Technology',
+    location: 'Anand, India',
+    degree: 'B.E. Mechanical Engineering',
+    detail: null,
+    period: 'January 2024',
+  },
+];
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 20 },
-  visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.08, duration: 0.4 } })
-};
+const SKILLS: { label: string; items: string }[] = [
+  {
+    label: 'Certifications',
+    items: 'Cisco CCNA, CompTIA Security+, CompTIA CySA+, Google AI Essentials; Cisco CCNP Enterprise (in progress); TryHackMe — top 7% globally, 69 rooms',
+  },
+  {
+    label: 'Networking',
+    items: 'Routing and switching, OSPF, BGP, VLANs and trunking, Rapid-PVST, TCP/IP, DNS, NTP, HTTP/TLS, subnetting, Cisco IOS, firewalls, IDS/IPS, VPN, zero-trust access',
+  },
+  {
+    label: 'AI Engineering',
+    items: 'Multi-provider LLM integration (Anthropic, OpenAI, Google), prompt design, deterministic stages around model output, evaluation harnesses, A/B feature flags, telemetry sampling',
+  },
+  {
+    label: 'Programming',
+    items: 'Python, TypeScript, JavaScript, SQL, PL/pgSQL, PowerShell, Bash, Lua',
+  },
+  {
+    label: 'Software Engineering',
+    items: 'FastAPI, REST API design, Next.js, React, Pydantic and Zod validation, PostgreSQL, MongoDB, Redis job queues, Docker, Cloud Run, Vercel, AWS, GitHub Actions CI, Windows Server, Active Directory, Linux, ServiceNow',
+  },
+  {
+    label: 'Security',
+    items: 'Authorization design, least privilege, secure architecture review, input validation, SSRF defense, secrets management, Nmap NSE',
+  },
+];
+
+/** Section heading plus the hairline rule the print layout also uses. */
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-primary font-mono pb-2 mb-5 border-b border-border/50">
+      {children}
+    </h2>
+  );
+}
+
+/** Title on the left, dates/location on the right; stacks on narrow screens. */
+function EntryHead({ left, right }: { left: React.ReactNode; right: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+      <div className="min-w-0">{left}</div>
+      <div className="shrink-0 text-xs text-muted-foreground font-mono sm:text-right">{right}</div>
+    </div>
+  );
+}
+
+function Bullets({ items }: { items: string[] }) {
+  return (
+    <ul className="mt-2.5 space-y-1.5">
+      {items.map(b => (
+        <li key={b} className="flex gap-2.5 text-sm leading-relaxed text-muted-foreground">
+          <span aria-hidden="true" className="mt-[0.55rem] h-1 w-1 shrink-0 rounded-full bg-primary/70" />
+          <span>{b}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export default function Resume() {
   return (
-    <div className="min-h-[100dvh] py-20">
+    <div className="py-14 sm:py-20">
       <Helmet>
         <title>Resume | Vijaysingh Puwar</title>
-        <meta name="description" content="Resume of Vijaysingh Puwar, Cybersecurity Engineer — experience, education, certifications, and core skills." />
+        <meta
+          name="description"
+          content="Resume of Vijaysingh Puwar — cybersecurity and infrastructure engineer in New York. Enterprise networking at the MTA, production AI and full-stack platforms, M.S. Cybersecurity at Pace University."
+        />
         <link rel="canonical" href="https://vijaysinghpuwar.com/resume" />
       </Helmet>
-      <div className="container max-w-4xl mx-auto">
-        <div className="text-center mb-12">
-          <h1 className="section-title mb-2">Vijaysingh Puwar</h1>
-          <p className="text-xl text-primary font-medium mb-4">Cybersecurity Engineer</p>
-          <div className="flex flex-wrap justify-center gap-3 text-sm text-muted-foreground mb-6">
-            {/* Was two plaintext copies of the address. Harmless while this page
-                was unrouted; the moment /resume was registered they shipped in the
-                bundle, defeating contact-email.ts. Use the same gate as everywhere
-                else — the resume is public, the address is not. */}
+
+      <article className="container max-w-3xl mx-auto px-4 sm:px-6">
+        {/* ── Header ── */}
+        <header className="mb-10">
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
+            Vijaysingh Puwar
+          </h1>
+          <p className="mt-1 text-base sm:text-lg text-primary font-medium">
+            Cybersecurity Engineer — networks, systems, and the software on top
+          </p>
+
+          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
+            <span>New York, NY</span>
             <ProtectedEmail variant="row" compactHint />
-            <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-foreground transition-colors">
-              <Github className="w-4 h-4" /> GitHub
+            <a
+              href="https://github.com/VijaysinghPuwar"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-foreground transition-colors underline-offset-4 hover:underline"
+            >
+              GitHub
             </a>
-            <a href="https://linkedin.com/in/vijaysinghpuwar" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-foreground transition-colors">
-              <Linkedin className="w-4 h-4" /> LinkedIn
+            <a
+              href="https://linkedin.com/in/vijaysinghpuwar"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-foreground transition-colors underline-offset-4 hover:underline"
+            >
+              LinkedIn
             </a>
           </div>
-          <Button asChild>
-            <a href="/resume.pdf" download><Download className="w-4 h-4 mr-2" /> Download Resume</a>
-          </Button>
-        </div>
 
-        <motion.section initial="hidden" whileInView="visible" viewport={{ once: true }} className="mb-12">
-          <h2 className="text-xl font-bold text-foreground mb-4">Skills</h2>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {Object.entries(skills).map(([category, items], i) => (
-              <motion.div key={category} variants={fadeUp} custom={i}>
-                <Card className="border-border/40 bg-card">
-                  <CardContent className="pt-4">
-                    <h3 className="text-sm font-semibold text-primary mb-2">{category}</h3>
-                    <div className="flex flex-wrap gap-1.5">
-                      {items.map(s => <Badge key={s} variant="secondary" className="text-xs bg-muted text-muted-foreground border-0">{s}</Badge>)}
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
+          <p className="mt-5 text-sm sm:text-base leading-relaxed text-muted-foreground">
+            {PROFILE}
+          </p>
+
+          <a
+            href="/resume.pdf"
+            download
+            className="print:hidden mt-6 inline-flex items-center justify-center h-10 px-5 rounded-md text-sm font-medium gradient-btn"
+          >
+            <Download className="w-4 h-4 mr-2" aria-hidden="true" />
+            Download PDF
+          </a>
+        </header>
+
+        {/* ── Experience ── */}
+        <section className="mb-10">
+          <SectionHeading>Experience</SectionHeading>
+          <div className="space-y-7">
+            {EXPERIENCE.map(role => (
+              <div key={role.org}>
+                <EntryHead
+                  left={
+                    <>
+                      <h3 className="text-base font-semibold text-foreground">{role.title}</h3>
+                      <p className="text-sm text-muted-foreground">{role.org}</p>
+                    </>
+                  }
+                  right={
+                    <>
+                      <div>{role.period}</div>
+                      <div>{role.location}</div>
+                    </>
+                  }
+                />
+                <Bullets items={role.bullets} />
+              </div>
             ))}
           </div>
-        </motion.section>
+        </section>
 
-        <motion.section initial="hidden" whileInView="visible" viewport={{ once: true }} className="mb-12">
-          <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2"><Briefcase className="w-5 h-5 text-primary" /> Experience</h2>
-          <div className="space-y-6">
-            {experience.map((job, i) => (
-              <motion.div key={job.company} variants={fadeUp} custom={i} className="pl-5 border-l-2 border-border/60 relative">
-                <div className="absolute -left-[5px] top-2 w-2 h-2 rounded-full bg-primary" />
-                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-                  <h3 className="font-semibold text-foreground">{job.company}</h3>
-                  <span className="text-sm text-muted-foreground">— {job.role}</span>
-                </div>
-                <p className="text-xs text-muted-foreground mb-2">{job.period}</p>
-                <ul className="space-y-1">
-                  {job.bullets.map((b, j) => (
-                    <li key={j} className="text-sm text-muted-foreground flex items-start gap-2">
-                      <span className="mt-2 w-1 h-1 rounded-full bg-muted-foreground flex-shrink-0" />{b}
-                    </li>
-                  ))}
-                </ul>
-              </motion.div>
+        {/* ── Projects ── */}
+        <section className="mb-10">
+          <SectionHeading>Projects</SectionHeading>
+          <div className="space-y-7">
+            {PROJECTS.map(p => (
+              <div key={p.name}>
+                <EntryHead
+                  left={
+                    <>
+                      <h3 className="text-base font-semibold text-foreground">
+                        {p.name}
+                        <span className="ml-2 text-sm font-normal text-muted-foreground">
+                          {p.discipline}
+                        </span>
+                      </h3>
+                      <p className="text-xs text-muted-foreground font-mono">{p.stack}</p>
+                    </>
+                  }
+                  right={
+                    <a
+                      href={p.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline underline-offset-4"
+                    >
+                      {p.label}
+                    </a>
+                  }
+                />
+                <Bullets items={p.bullets} />
+              </div>
             ))}
           </div>
-        </motion.section>
+        </section>
 
-        <motion.section initial="hidden" whileInView="visible" viewport={{ once: true }} className="mb-12">
-          <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2"><GraduationCap className="w-5 h-5 text-primary" /> Education</h2>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {education.map((edu, i) => (
-              <motion.div key={edu.school} variants={fadeUp} custom={i}>
-                <Card className="h-full border-border/40 bg-card">
-                  <CardContent className="pt-4">
-                    <h3 className="font-semibold text-foreground mb-1">{edu.degree}</h3>
-                    <p className="text-sm text-muted-foreground">{edu.school}</p>
-                    <p className="text-sm text-muted-foreground mb-2">{edu.location}</p>
-                    <div className="flex gap-2 mb-3">
-                      <Badge variant="outline" className="text-xs">{edu.gpa}</Badge>
-                      <Badge variant="outline" className="text-xs">{edu.status}</Badge>
-                    </div>
-                    {edu.coursework.length > 0 && (
-                      <>
-                        <p className="text-xs font-semibold text-foreground mb-1.5">Selected Coursework</p>
-                        <div className="flex flex-wrap gap-1 mb-3">
-                          {edu.coursework.map(c => <Badge key={c} variant="secondary" className="text-xs bg-muted text-muted-foreground border-0">{c}</Badge>)}
-                        </div>
-                      </>
-                    )}
-                    {edu.inProgress && edu.inProgress.length > 0 && (
-                      <>
-                        <p className="text-xs font-semibold text-foreground mb-1.5">In Progress</p>
-                        <div className="flex flex-wrap gap-1">
-                          {edu.inProgress.map(c => <Badge key={c} variant="outline" className="text-xs border-primary/40 text-primary">{c}</Badge>)}
-                        </div>
-                      </>
-                    )}
-                    {edu.courseGroups && edu.courseGroups.length > 0 && (
-                      <>
-                        <p className="text-xs font-semibold text-foreground mb-1.5">Relevant Coursework</p>
-                        <div className="space-y-3">
-                          {edu.courseGroups.map(group => (
-                            <div key={group.label}>
-                              <p className="text-[11px] font-semibold text-primary mb-1.5 uppercase tracking-wider">{group.label}</p>
-                              <div className="flex flex-wrap gap-1">
-                                {group.items.map(c => <Badge key={c} variant="secondary" className="text-xs bg-muted text-muted-foreground border-0">{c}</Badge>)}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
-              </motion.div>
+        {/* ── Education ── */}
+        <section className="mb-10">
+          <SectionHeading>Education</SectionHeading>
+          <div className="space-y-5">
+            {EDUCATION.map(e => (
+              <EntryHead
+                key={e.school}
+                left={
+                  <>
+                    <h3 className="text-base font-semibold text-foreground">{e.degree}</h3>
+                    <p className="text-sm text-muted-foreground">{e.school}</p>
+                    {e.detail && <p className="mt-0.5 text-xs text-muted-foreground">{e.detail}</p>}
+                  </>
+                }
+                right={
+                  <>
+                    <div>{e.period}</div>
+                    <div>{e.location}</div>
+                  </>
+                }
+              />
             ))}
           </div>
-        </motion.section>
+        </section>
 
-        <motion.section initial="hidden" whileInView="visible" viewport={{ once: true }}>
-          <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2"><Award className="w-5 h-5 text-primary" /> Certifications</h2>
-          <div className="flex flex-wrap gap-2">
-            {certifications.map(cert => <Badge key={cert} variant="outline" className="px-3 py-1.5 text-sm text-foreground border-border/60">{cert}</Badge>)}
-          </div>
-        </motion.section>
-      </div>
+        {/* ── Skills ── */}
+        <section>
+          <SectionHeading>Skills &amp; Certifications</SectionHeading>
+          <dl className="space-y-3">
+            {SKILLS.map(s => (
+              <div key={s.label} className="sm:flex sm:gap-4">
+                <dt className="text-sm font-semibold text-foreground sm:w-44 sm:shrink-0">
+                  {s.label}
+                </dt>
+                <dd className="text-sm leading-relaxed text-muted-foreground">{s.items}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      </article>
     </div>
   );
 }
