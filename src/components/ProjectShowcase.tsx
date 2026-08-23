@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, forwardRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Github, X, ExternalLink, Shield, ArrowRight, Columns2 } from 'lucide-react';
+import { Github, X, ExternalLink, Shield, ArrowRight, Columns2, Lock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Link } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
+import { loginHref } from '@/lib/auth-redirect';
 
 const IMPACT_DIFFS: Record<string, { before: string[]; after: string[] }> = {
   'secure-ubuntu-fleet': {
@@ -176,13 +179,23 @@ const filterCategories = [
   'Application Security', 'Research', 'Automation', 'Application Development',
 ];
 
-const featuredIds = new Set([
+// Declaration order is the display order of the featured grid, so the headline
+// project leads regardless of where it came from (database rows or projects.json).
+const FEATURED_ORDER = [
+  'recap-verse',
   'vaultsnake-platform', 'cutmox', 'iptables-hardening',
   'win-dev-sec-bootstrap', 'automating-infosec', 'aws-cloud-security',
   'cs601c-capstone', 'secure-ubuntu-fleet', 'http-hardening-nmap-nse',
-]);
+];
+const featuredIds = new Set(FEATURED_ORDER);
+const featuredRank = (id: string) => {
+  const i = FEATURED_ORDER.indexOf(id);
+  return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+};
 
 export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
+  const { user } = useAuth();
+  const isAuthed = Boolean(user);
   const [activeFilter, setActiveFilter] = useState('All');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [showDiff, setShowDiff] = useState(false);
@@ -194,7 +207,9 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
     ? projects
     : projects.filter(p => p.category === activeFilter || (activeFilter === 'Application Security' && p.category === 'Python Tools'));
 
-  const featured = filtered.filter(p => featuredIds.has(p.id));
+  const featured = filtered
+    .filter(p => featuredIds.has(p.id))
+    .sort((a, b) => featuredRank(a.id) - featuredRank(b.id));
   const secondary = filtered.filter(p => !featuredIds.has(p.id));
 
   const closeModal = useCallback(() => setSelectedProject(null), []);
@@ -236,7 +251,7 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
           <AnimatePresence mode="popLayout">
             {featured.map(project => (
               <ProjectCard key={project.id} project={project} gradient={getGradient(project.category)}
-                onClick={() => setSelectedProject(project)} />
+                isAuthed={isAuthed} onClick={() => setSelectedProject(project)} />
             ))}
           </AnimatePresence>
         </div>
@@ -363,15 +378,34 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
                       </div>
                     )}
 
-                    {selectedProject.links.github && (
+                    {selectedProject.links.demo && (
                       <a
-                        href={selectedProject.links.github}
+                        href={selectedProject.links.demo}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-medium gradient-btn"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 mr-3 rounded-md text-sm font-medium border border-border/60 text-foreground hover:border-primary/40 hover:text-primary transition-colors"
                       >
-                        <Github className="w-4 h-4" /> View on GitHub <ExternalLink className="w-3.5 h-3.5" />
+                        Live demo <ExternalLink className="w-3.5 h-3.5" />
                       </a>
+                    )}
+                    {selectedProject.links.github && (
+                      user ? (
+                        <a
+                          href={selectedProject.links.github}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-medium gradient-btn"
+                        >
+                          <Github className="w-4 h-4" /> View on GitHub <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      ) : (
+                        <Link
+                          to={loginHref()}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-medium gradient-btn"
+                        >
+                          <Lock className="w-4 h-4" /> Sign in to view the repository
+                        </Link>
+                      )
                     )}
                   </motion.div>
                 ) : diffData ? (
@@ -466,9 +500,11 @@ function DiffView({ before, after }: { before: string[]; after: string[] }) {
 
 /* ── Card Components ── */
 
-function ProjectCard({ project, gradient, onClick }: { project: Project; gradient: string; onClick: () => void }) {
+const ProjectCard = forwardRef<HTMLDivElement, { project: Project; gradient: string; onClick: () => void; isAuthed: boolean }>(
+  function ProjectCard({ project, gradient, onClick, isAuthed }, ref) {
   return (
     <motion.div
+      ref={ref}
       layoutId={`card-${project.id}`}
       layout
       initial={{ opacity: 0, y: 20 }}
@@ -484,15 +520,26 @@ function ProjectCard({ project, gradient, onClick }: { project: Project; gradien
       <div className="p-5 flex flex-col flex-1 relative">
         {/* GitHub link */}
         {project.links.github && (
-          <a
-            href={project.links.github}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={e => e.stopPropagation()}
-            className="absolute top-4 right-4 text-muted-foreground/50 hover:text-primary transition-colors"
-          >
-            <Github className="w-4 h-4" />
-          </a>
+          isAuthed ? (
+            <a
+              href={project.links.github}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              aria-label={`${project.title} on GitHub`}
+              className="absolute top-4 right-4 text-muted-foreground/50 hover:text-primary transition-colors"
+            >
+              <Github className="w-4 h-4" />
+            </a>
+          ) : (
+            <span
+              title="Sign in to view the repository"
+              aria-label="Sign in to view the repository"
+              className="absolute top-4 right-4 text-muted-foreground/30"
+            >
+              <Lock className="w-3.5 h-3.5" aria-hidden="true" />
+            </span>
+          )
         )}
 
         <div className="flex items-center gap-2 mb-3">
@@ -529,11 +576,13 @@ function ProjectCard({ project, gradient, onClick }: { project: Project; gradien
       </div>
     </motion.div>
   );
-}
+});
 
-function ProjectCardCompact({ project, gradient, onClick }: { project: Project; gradient: string; onClick: () => void }) {
+const ProjectCardCompact = forwardRef<HTMLDivElement, { project: Project; gradient: string; onClick: () => void }>(
+  function ProjectCardCompact({ project, gradient, onClick }, ref) {
   return (
     <motion.div
+      ref={ref}
       layoutId={`card-${project.id}`}
       layout
       initial={{ opacity: 0, y: 15 }}
@@ -564,4 +613,4 @@ function ProjectCardCompact({ project, gradient, onClick }: { project: Project; 
       </div>
     </motion.div>
   );
-}
+});

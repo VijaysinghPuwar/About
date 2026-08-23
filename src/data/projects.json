@@ -1,10 +1,70 @@
 [
   {
+    "id": "recap-verse",
+    "title": "Recap Verse — Production Multi-LLM AI Platform",
+    "description": "A production AI platform I designed, built, and operate end to end. Routes three LLM providers through a deterministic 5-stage pipeline, with security layered in by default rather than bolted on.",
+    "category": "Application Security",
+    "tech": [
+      "Python",
+      "FastAPI",
+      "TypeScript",
+      "Next.js",
+      "MongoDB",
+      "Redis",
+      "Google Cloud Run",
+      "Vercel",
+      "Anthropic Claude",
+      "OpenAI GPT",
+      "Google Gemini"
+    ],
+    "year": "2026",
+    "status": "completed",
+    "featured": true,
+    "keyResults": [
+      "Integrates three LLM providers (Anthropic Claude, OpenAI GPT, Google Gemini) behind a deterministic 5-stage pipeline",
+      "AES-GCM encrypted BYOK (bring-your-own-key) credentials, encrypted per user",
+      "JWT authentication with per-user ownership scoping enforced on every route, not trusted at the gateway",
+      "Upload hardening: MIME allow-list, magic-byte validation, and size caps",
+      "Rate-limited endpoints and a self-run OWASP audit with the findings remediated"
+    ],
+    "links": {
+      "github": null,
+      "writeup": null,
+      "demo": "https://recapverse.com"
+    },
+    "image": "",
+    "tags": [
+      "Secure by default",
+      "BYOK encryption",
+      "AES-GCM",
+      "JWT",
+      "Ownership scoping",
+      "Upload hardening",
+      "Rate limiting",
+      "OWASP"
+    ]
+  },
+  {
     "id": "vaultsnake-platform",
     "title": "VAULTSNAKE — Secure Vault & Access Monitoring Platform",
     "description": "A full-stack security platform with Google OAuth, Fernet-encrypted vaults, RBAC, audit logging, and automated threat detection.",
     "category": "Application Security",
-    "tech": ["Next.js 15", "NextAuth/Auth.js", "TypeScript", "Tailwind", "SWR", "FastAPI", "Python 3.11", "SQLAlchemy 2.0", "PostgreSQL", "Pydantic", "python-jose (JWT)", "cryptography (Fernet)", "Vercel", "Railway"],
+    "tech": [
+      "Next.js 15",
+      "NextAuth/Auth.js",
+      "TypeScript",
+      "Tailwind",
+      "SWR",
+      "FastAPI",
+      "Python 3.11",
+      "SQLAlchemy 2.0",
+      "PostgreSQL",
+      "Pydantic",
+      "python-jose (JWT)",
+      "cryptography (Fernet)",
+      "Vercel",
+      "Railway"
+    ],
     "year": "2026",
     "status": "completed",
     "featured": true,
@@ -21,14 +81,31 @@
       "demo": "https://vaultsnake.vercel.app"
     },
     "image": "",
-    "tags": ["OAuth 2.0", "JWT", "RBAC", "Encryption at rest", "Audit trail", "Threat detection", "Risk scoring", "Defense in depth"]
+    "tags": [
+      "OAuth 2.0",
+      "JWT",
+      "RBAC",
+      "Encryption at rest",
+      "Audit trail",
+      "Threat detection",
+      "Risk scoring",
+      "Defense in depth"
+    ]
   },
   {
     "id": "cutmox",
     "title": "cutmox",
     "description": "A browser-based audio tool built on WebAssembly for fast, fully client-side processing.",
     "category": "Application Development",
-    "tech": ["TypeScript", "TanStack Start", "Vite", "WebAssembly", "Cloudflare Workers", "Bun", "Tailwind"],
+    "tech": [
+      "TypeScript",
+      "TanStack Start",
+      "Vite",
+      "WebAssembly",
+      "Cloudflare Workers",
+      "Bun",
+      "Tailwind"
+    ],
     "year": "2026",
     "status": "in-progress",
     "featured": true,
@@ -44,14 +121,30 @@
       "demo": "https://cutmox.vercel.app"
     },
     "image": "",
-    "tags": ["WebAssembly", "Audio", "Client-side", "Cloudflare Workers"]
+    "tags": [
+      "WebAssembly",
+      "Audio",
+      "Client-side",
+      "Cloudflare Workers"
+    ]
   },
   {
     "id": "iptables-hardening",
     "title": "Hardening Linux Servers with iptables — Rate Limiting & NAT",
     "description": "A reproducible defense lab using iptables to neutralize SSH brute-force, ICMP/SYN floods, and expose internal services via DNAT.",
     "category": "Network Security",
-    "tech": ["Linux", "Ubuntu", "Kali", "iptables", "netfilter", "Bash", "hping3", "hydra", "Apache", "GitHub Actions (shellcheck)"],
+    "tech": [
+      "Linux",
+      "Ubuntu",
+      "Kali",
+      "iptables",
+      "netfilter",
+      "Bash",
+      "hping3",
+      "hydra",
+      "Apache",
+      "GitHub Actions (shellcheck)"
+    ],
     "year": "2026",
     "status": "completed",
     "featured": true,
@@ -67,14 +160,25 @@
       "demo": null
     },
     "image": "",
-    "tags": ["Linux", "iptables", "Network Security", "Firewall"]
+    "tags": [
+      "Linux",
+      "iptables",
+      "Network Security",
+      "Firewall"
+    ]
   },
   {
     "id": "secure-ubuntu-fleet",
     "title": "Secure Ubuntu Fleet Hardening",
     "description": "Automated Ubuntu server hardening toolkit for fleet-wide security baseline enforcement. Covers SSH hardening, firewall configuration, user access controls, and system auditing.",
     "category": "Security Automation",
-    "tech": ["Bash", "Linux", "SSH", "UFW", "Ansible"],
+    "tech": [
+      "Bash",
+      "Linux",
+      "SSH",
+      "UFW",
+      "Ansible"
+    ],
     "year": "2024",
     "status": "completed",
     "featured": true,
@@ -89,14 +193,25 @@
       "demo": null
     },
     "image": "",
-    "tags": ["Linux", "Hardening", "Automation", "Fleet Security"]
+    "tags": [
+      "Linux",
+      "Hardening",
+      "Automation",
+      "Fleet Security"
+    ]
   },
   {
     "id": "http-hardening-nmap-nse",
     "title": "HTTP Hardening with Nmap NSE",
     "description": "Custom Nmap NSE scripts for automated HTTP security header analysis and hardening verification. Checks for missing security headers, weak configurations, and compliance gaps.",
     "category": "Security Automation",
-    "tech": ["Nmap", "NSE", "Lua", "HTTP", "Linux"],
+    "tech": [
+      "Nmap",
+      "NSE",
+      "Lua",
+      "HTTP",
+      "Linux"
+    ],
     "year": "2024",
     "status": "completed",
     "featured": true,
@@ -111,14 +226,24 @@
       "demo": null
     },
     "image": "",
-    "tags": ["Nmap", "HTTP", "Security Headers", "Automation"]
+    "tags": [
+      "Nmap",
+      "HTTP",
+      "Security Headers",
+      "Automation"
+    ]
   },
   {
     "id": "win-dev-sec-bootstrap",
     "title": "Windows Dev + Cybersecurity Bootstrap",
     "description": "Idempotent PowerShell bootstrap for setting up a complete Windows development and cybersecurity stack including winget, WSL2, Docker, pipx, and VS Code.",
     "category": "Security Automation",
-    "tech": ["PowerShell", "WSL2", "Docker", "Windows"],
+    "tech": [
+      "PowerShell",
+      "WSL2",
+      "Docker",
+      "Windows"
+    ],
     "year": "2024",
     "status": "completed",
     "featured": true,
@@ -133,14 +258,23 @@
       "demo": null
     },
     "image": "",
-    "tags": ["PowerShell", "Automation", "Windows", "DevOps"]
+    "tags": [
+      "PowerShell",
+      "Automation",
+      "Windows",
+      "DevOps"
+    ]
   },
   {
     "id": "automating-infosec",
     "title": "Automating Information Security",
     "description": "Comprehensive Python and PowerShell projects covering security automation, log analysis, and system hardening for CYB 631 coursework.",
     "category": "Security Automation",
-    "tech": ["Python", "PowerShell", "Shell Scripting"],
+    "tech": [
+      "Python",
+      "PowerShell",
+      "Shell Scripting"
+    ],
     "year": "2024",
     "status": "completed",
     "featured": false,
@@ -155,14 +289,25 @@
       "demo": null
     },
     "image": "",
-    "tags": ["Python", "PowerShell", "Automation", "Security"]
+    "tags": [
+      "Python",
+      "PowerShell",
+      "Automation",
+      "Security"
+    ]
   },
   {
     "id": "aws-cloud-security",
     "title": "Configuring Cloud Security in AWS",
     "description": "Hands-on cloud security project configuring Amazon EC2 instances with layered network protection using Security Groups and NACLs, integrated with CloudWatch and SNS.",
     "category": "Cloud Security",
-    "tech": ["AWS", "EC2", "CloudWatch", "Security Groups", "NACLs"],
+    "tech": [
+      "AWS",
+      "EC2",
+      "CloudWatch",
+      "Security Groups",
+      "NACLs"
+    ],
     "year": "2024",
     "status": "completed",
     "featured": false,
@@ -177,14 +322,24 @@
       "demo": null
     },
     "image": "",
-    "tags": ["AWS", "Cloud Security", "Monitoring", "Network Security"]
+    "tags": [
+      "AWS",
+      "Cloud Security",
+      "Monitoring",
+      "Network Security"
+    ]
   },
   {
     "id": "cs601c-capstone",
     "title": "Cybersecurity Cost Modeling Analytics",
     "description": "Reproducible analytics pipeline for graduate capstone covering cybersecurity cost modeling, statistical analysis, and predictive modeling.",
     "category": "Research",
-    "tech": ["Python", "R", "Statistics", "Data Analysis"],
+    "tech": [
+      "Python",
+      "R",
+      "Statistics",
+      "Data Analysis"
+    ],
     "year": "2024",
     "status": "completed",
     "featured": false,
@@ -199,14 +354,24 @@
       "demo": null
     },
     "image": "",
-    "tags": ["Data Science", "Statistics", "Python", "Research"]
+    "tags": [
+      "Data Science",
+      "Statistics",
+      "Python",
+      "Research"
+    ]
   },
   {
     "id": "rapid-pvst-campus-lab",
     "title": "Cisco Rapid-PVST Campus Network Lab",
     "description": "Advanced Cisco Packet Tracer lab implementing Rapid-PVST with dual-homed access, per-VLAN root load-balancing, PortFast, BPDU Guard, and Root Guard.",
     "category": "Network Security",
-    "tech": ["Cisco", "Packet Tracer", "VLANs", "Spanning Tree"],
+    "tech": [
+      "Cisco",
+      "Packet Tracer",
+      "VLANs",
+      "Spanning Tree"
+    ],
     "year": "2024",
     "status": "completed",
     "featured": false,
@@ -221,14 +386,24 @@
       "demo": null
     },
     "image": "",
-    "tags": ["Cisco", "Network Security", "VLANs", "Spanning Tree"]
+    "tags": [
+      "Cisco",
+      "Network Security",
+      "VLANs",
+      "Spanning Tree"
+    ]
   },
   {
     "id": "inter-vlan-roas-lab",
     "title": "Inter-VLAN Routing with ROAS",
     "description": "Packet Tracer exercise demonstrating Router-on-a-Stick configuration for inter-VLAN routing and network segmentation.",
     "category": "Network Security",
-    "tech": ["Cisco", "Packet Tracer", "VLANs", "Routing"],
+    "tech": [
+      "Cisco",
+      "Packet Tracer",
+      "VLANs",
+      "Routing"
+    ],
     "year": "2024",
     "status": "completed",
     "featured": false,
@@ -243,14 +418,24 @@
       "demo": null
     },
     "image": "",
-    "tags": ["Cisco", "VLANs", "Routing", "Network Design"]
+    "tags": [
+      "Cisco",
+      "VLANs",
+      "Routing",
+      "Network Design"
+    ]
   },
   {
     "id": "x86-64-assembly-lab",
     "title": "x86-64 Assembly Programming Lab",
     "description": "Hands-on lab for NASM on Ubuntu 24.04 containing three beginner x86-64 programs with detailed documentation and Makefile.",
     "category": "Research",
-    "tech": ["Assembly", "NASM", "Linux", "WSL2"],
+    "tech": [
+      "Assembly",
+      "NASM",
+      "Linux",
+      "WSL2"
+    ],
     "year": "2024",
     "status": "completed",
     "featured": false,
@@ -265,14 +450,24 @@
       "demo": null
     },
     "image": "",
-    "tags": ["Assembly", "Low-Level", "Linux", "Security Research"]
+    "tags": [
+      "Assembly",
+      "Low-Level",
+      "Linux",
+      "Security Research"
+    ]
   },
   {
     "id": "vaultsnake",
     "title": "VaultSnake - Secure Login with Game",
     "description": "Secure login GUI using Tkinter with encrypted credentials storage and a classic Snake game reward for authenticated users.",
     "category": "Python Tools",
-    "tech": ["Python", "Tkinter", "Encryption", "Authentication"],
+    "tech": [
+      "Python",
+      "Tkinter",
+      "Encryption",
+      "Authentication"
+    ],
     "year": "2024",
     "status": "completed",
     "featured": false,
@@ -287,14 +482,24 @@
       "demo": null
     },
     "image": "",
-    "tags": ["Python", "Security", "Encryption", "GUI"]
+    "tags": [
+      "Python",
+      "Security",
+      "Encryption",
+      "GUI"
+    ]
   },
   {
     "id": "kokorotts",
     "title": "KokoroTTS - Offline Text-to-Speech",
     "description": "Desktop app for offline Kokoro TTS (ONNX) with 4 voices, speed control, play/stop, and WAV export. Windows-ready with one-click installers.",
     "category": "Python Tools",
-    "tech": ["Python", "ONNX", "TTS", "Windows"],
+    "tech": [
+      "Python",
+      "ONNX",
+      "TTS",
+      "Windows"
+    ],
     "year": "2024",
     "status": "completed",
     "featured": false,
@@ -309,14 +514,24 @@
       "demo": null
     },
     "image": "",
-    "tags": ["Python", "TTS", "Desktop App", "Windows"]
+    "tags": [
+      "Python",
+      "TTS",
+      "Desktop App",
+      "Windows"
+    ]
   },
   {
     "id": "toc-extractor",
     "title": "TOC Extractor - Web Scraping Tool",
     "description": "GUI tool to extract chapter pages from a Table of Contents using Playwright + Tkinter with headful browser support for authentication.",
     "category": "Python Tools",
-    "tech": ["Python", "Playwright", "Tkinter", "Web Scraping"],
+    "tech": [
+      "Python",
+      "Playwright",
+      "Tkinter",
+      "Web Scraping"
+    ],
     "year": "2024",
     "status": "completed",
     "featured": false,
@@ -331,6 +546,390 @@
       "demo": null
     },
     "image": "",
-    "tags": ["Python", "Automation", "Web Scraping", "GUI"]
+    "tags": [
+      "Python",
+      "Automation",
+      "Web Scraping",
+      "GUI"
+    ]
+  },
+  {
+    "id": "web-audio-tv",
+    "title": "WebAudioTV — Audiobook Streaming Platform",
+    "description": "Streaming platform for audiobooks and long-form audio drama. Listeners play a three-level catalogue in a player that survives navigation and earn XP as they listen, publishers apply for a scoped workspace, and a PRO subscription unlocks downloads and early-access releases.",
+    "category": "Application Security",
+    "tech": [
+      "React 18.3",
+      "TypeScript",
+      "Vite",
+      "Tailwind",
+      "TanStack Query",
+      "Supabase (Postgres/Auth)",
+      "Deno Edge Functions",
+      "Cloudflare R2",
+      "PayPal REST",
+      "Stripe",
+      "Vitest"
+    ],
+    "year": "2026",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "979 commits; roughly 35,000 lines across 33 routes, 24 Deno edge functions and 93 migrations",
+      "192 Row-Level Security policies over 40 tables, with roles kept in a separate user_roles table so a self-service profile edit can never grant admin",
+      "Audio never streams from a URL carrying a Supabase JWT: an HMAC token bound to (user_id, track_id, exp) is issued from an Authorization header, re-verified at the second hop, then SigV4-signed against a private Cloudflare R2 bucket",
+      "tracks.drive_file_url revoked at the column level from anon and authenticated, handed back only through a SECURITY DEFINER function that checks ownership in SQL",
+      "Non-R2 media fetches revalidate every redirect hop against an SSRF blocklist covering loopback, private ranges, link-local and cloud metadata addresses",
+      "389 tests across 39 files, including guard tests that read deployed edge-function source and assert the removed ?token= JWT parameter has not reappeared"
+    ],
+    "links": {
+      "github": "https://github.com/VijaysinghPuwar/web-audio-tv",
+      "writeup": null,
+      "demo": "https://webaudiotv.com"
+    },
+    "image": "",
+    "tags": [
+      "Row-Level Security",
+      "Column privileges",
+      "HMAC tokens",
+      "SigV4",
+      "SSRF defense",
+      "Defense in depth",
+      "Edge functions",
+      "Streaming"
+    ]
+  },
+  {
+    "id": "setuptts",
+    "title": "SetupTTS — Cross-Platform Text-to-Speech Desktop App",
+    "description": "Desktop app that converts text to MP3 using Microsoft's Neural voices — 300+ voices across 70+ languages, no API key required. Most of its code exists to make silent truncation of a long export impossible.",
+    "category": "Python Tools",
+    "tech": [
+      "Python",
+      "PySide6",
+      "Qt 6",
+      "edge-tts",
+      "platformdirs",
+      "SQLite",
+      "PyInstaller",
+      "GitHub Actions"
+    ],
+    "year": "2026",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "61 tracked files and roughly 10,300 LOC at version 1.5.6, with 42 tests running in CI and four verified installers produced per release",
+      "About 4,400 of those 10,300 lines exist to prevent a finished export from silently missing a chapter: chunk planning, a warm-up ramp, preflight, retry classification, staging and a coverage proof",
+      "Chunk limits tuned per writing system across 14 scripts — Han caps at 3,100 characters where Latin gets 10,500, because a CJK character is three UTF-8 bytes",
+      "Eight independent coverage checks before assembly (contiguity, gaps, overlaps, duplicate indexes, missing files, byte counts, per-chunk and source text hashes); anything short of a contiguous 0 to total raises CoverageError and preserves the staging directory",
+      "Two no_audio failures stop retrying and subdivide the request instead of re-sending it; transient errors back off 2, 4, 8 and 16 seconds",
+      "Three runtime dependencies and no ffmpeg — MP3 duration is read by a 123-line MPEG frame parser written for the purpose"
+    ],
+    "links": {
+      "github": "https://github.com/VijaysinghPuwar/setuptts",
+      "writeup": null,
+      "demo": null
+    },
+    "image": "",
+    "tags": [
+      "Python",
+      "TTS",
+      "Desktop App",
+      "Cross-platform",
+      "CI",
+      "Data integrity",
+      "Unicode"
+    ]
+  },
+  {
+    "id": "txttranslation",
+    "title": "txttranslation — BYOK Translation & Narration Workspace",
+    "description": "Next.js workspace where each user supplies their own Google Cloud service-account credential. The credential is validated with a live API call before it is ever stored, encrypted at rest, and used server-side for both Cloud Translation and Cloud Text-to-Speech.",
+    "category": "Application Security",
+    "tech": [
+      "Next.js 16",
+      "React 19",
+      "NextAuth",
+      "Prisma 7",
+      "PostgreSQL",
+      "Google Cloud Translation",
+      "Google Cloud TTS",
+      "msedge-tts",
+      "Stripe",
+      "PayPal REST",
+      "zod",
+      "Tailwind 4"
+    ],
+    "year": "2026",
+    "status": "in-progress",
+    "featured": false,
+    "keyResults": [
+      "86 tracked files and roughly 10,100 source lines over 30 commits from March to August 2026; no test runner yet",
+      "Per-user service-account JSON encrypted with AES-256-GCM from node:crypto, with only projectId and clientEmail retained in clear for display",
+      "The only project here shipping a full security-header set including a real Content-Security-Policy — HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy and Permissions-Policy on every response",
+      "PayPal subscription ids are re-fetched from PayPal server-side, checked for plan match and active status, and refused if already linked to another account",
+      "Every environment misconfiguration produces two messages side by side — a precise technical fault for the log and a plain-language instruction for the settings page",
+      "Translates up to 1,000,000 characters per request through backend-only routes; narration offers 25 Google Neural2 voices or 21 keyless Edge TTS voices",
+      "Currently deployed with ADMIN_ONLY_MODE enabled, billing disabled and access limited to a two-address allowlist"
+    ],
+    "links": {
+      "github": null,
+      "writeup": null,
+      "demo": null
+    },
+    "image": "",
+    "tags": [
+      "BYOK",
+      "AES-256-GCM",
+      "CSP",
+      "Security headers",
+      "Payment verification",
+      "Encryption at rest"
+    ]
+  },
+  {
+    "id": "dual-isp-subnet-remediation",
+    "title": "Dual-ISP Network Assessment & Subnet Remediation",
+    "description": "Assessment of a home network running two independent routers on two separate internet plans with a Synology NAS bridging both, where both routers were configured on the same LAN subnet with the same gateway IP. Documents the discovery, the diagnosis and the remediation.",
+    "category": "Network Security",
+    "tech": [
+      "PowerShell",
+      "Bash",
+      "nmap",
+      "Synology DSM",
+      "TP-Link",
+      "RFC1918 subnetting",
+      "Network diagnostics"
+    ],
+    "year": "2026",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "Both routers were running 192.168.0.0/24 with the same gateway IP 192.168.0.1 — two physically separate LANs distinguishable only by router MAC address",
+      "Diagnosis required three separate scanning vantage points, because no single host could see both LANs: two machines behind Router A and one behind Router B",
+      "Mapped a dual-homed Synology DS423+ present on both LANs at 192.168.0.2 and 192.168.0.242, exposing SSH 22, HTTP 80, NetBIOS 139, HTTPS 443, SMB 445, DSM 5000/5001 and Synology Drive 6690",
+      "Remediated by moving Router B to 192.168.20.1/24 and its NAS interface to 192.168.20.2, separating the collision domains and disambiguating the gateway",
+      "Deliverables include two inventory scanners (PowerShell and macOS shell), per-machine scan output, five topology diagrams, an IEEE-style PDF report and a slide deck",
+      "Scope was limited to inventory and connectivity on an authorized private network — the tooling performs no exploits and makes no configuration changes"
+    ],
+    "links": {
+      "github": "https://github.com/VijaysinghPuwar/Dual-ISP-Network-Assessment-and-Subnet-Remediation",
+      "writeup": null,
+      "demo": null
+    },
+    "image": "",
+    "tags": [
+      "Subnetting",
+      "RFC1918",
+      "Network discovery",
+      "Dual-homed hosts",
+      "Broadcast domains",
+      "Remediation"
+    ]
+  },
+  {
+    "id": "jee-test-simulator",
+    "title": "JEE Test Simulator — BYOK Exam Engine",
+    "description": "Upload a JEE Main question paper and answer key as PDFs, have a vision-capable LLM of your choosing turn them into 75 structured questions, then sit the paper in a reproduction of the NTA exam portal. There is no database anywhere in the system.",
+    "category": "Application Security",
+    "tech": [
+      "Next.js",
+      "TypeScript",
+      "pdfjs-dist",
+      "Zustand",
+      "zod",
+      "KaTeX",
+      "Anthropic Claude",
+      "OpenAI",
+      "Google Gemini",
+      "Vercel"
+    ],
+    "year": "2026",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "49 tracked files and roughly 4,240 source lines across 10 commits, all landed on 2026-06-17",
+      "BYOK credential encrypted with AES-256-GCM using the user id as additional authenticated data, so a cookie lifted from one account and replayed into another fails the tag check and returns null",
+      "No database at all: sessions are JWTs, the provider key is an httpOnly cookie, the live exam is Zustand backed by sessionStorage, saved papers are localStorage, and rate-limit buckets are an in-memory Map — five environment variables and nothing to provision",
+      "Counts Private Use Area glyphs to decide a page needs rasterising (a Symbol-typeface pi extracts as U+F070, an integral as U+F0F2) and names the nine specific code points in the prompt so the model reads the image instead",
+      "Quality gate beyond schema validation: isWeakQuestion rejects plausible-but-useless parses, the route demands 25 questions per subject with at most 2 weak, and saving refuses to persist fewer than 75",
+      "Seven of the ten commits are attempts to fit vision transcription of a 75-question paper inside Vercel's 60-second function ceiling, resolved by issuing three separate per-subject requests of about 55 seconds each"
+    ],
+    "links": {
+      "github": "https://github.com/VijaysinghPuwar/jee-test-simulator",
+      "writeup": null,
+      "demo": "https://jee-test-simulator.vercel.app"
+    },
+    "image": "",
+    "tags": [
+      "BYOK",
+      "AES-256-GCM",
+      "AAD binding",
+      "Stateless design",
+      "Vision LLM",
+      "PDF extraction"
+    ]
+  },
+  {
+    "id": "novelsin",
+    "title": "Novelsin — Serialized Fiction Platform",
+    "description": "A platform for reading and writing serialized fiction — readers follow novels chapter by chapter, authors publish and schedule them, admins moderate — built so that Postgres row-level security, not application code, is the real authorization boundary.",
+    "category": "Application Security",
+    "tech": [
+      "Next.js 16",
+      "React",
+      "TypeScript",
+      "Supabase",
+      "PostgreSQL",
+      "Row-Level Security",
+      "Server Actions",
+      "zod",
+      "Tailwind",
+      "Vercel"
+    ],
+    "year": "2026",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "182 tracked files and roughly 20,950 source LOC over 19 tables, 72 idempotent RLS policies and 13 migrations",
+      "server-only acts as a compiler fence: importing data-access code into a Client Component is a build error rather than a runtime leak",
+      "createAdmin() is never called anywhere in the app — admin power comes from policies, not from a privileged client that bypasses RLS",
+      "XSS is designed out rather than sanitized: the rich-text component emits React children and anchors whose href is regex-constrained to http(s), and no dangerouslySetInnerHTML exists in the repo",
+      "The is_admin() helper is SECURITY DEFINER and pins search_path, avoiding both RLS recursion and search-path hijacking",
+      "Admin routes return 404 rather than 403 to non-admins, so their existence is never disclosed; roles are derived from behaviour rather than assigned through an upgrade flow"
+    ],
+    "links": {
+      "github": null,
+      "writeup": null,
+      "demo": null
+    },
+    "image": "",
+    "tags": [
+      "Row-Level Security",
+      "Authorization",
+      "XSS prevention",
+      "Server Actions",
+      "Least privilege",
+      "Postgres"
+    ]
+  },
+  {
+    "id": "splitforge-local",
+    "title": "SplitForge Local — Browser Text Chunker",
+    "description": "Paste a large text file, split it into numbered chunks under a character limit, and save them to a real folder or a ZIP — entirely in the browser, with a Web Worker doing the work and splitting that is safe across Unicode code points.",
+    "category": "Application Development",
+    "tech": [
+      "Next.js",
+      "React",
+      "TypeScript",
+      "Web Workers",
+      "File System Access API",
+      "fflate",
+      "Vitest"
+    ],
+    "year": "2026",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "30 tracked files, roughly 1,615 lines of source plus 167 lines of tests; 41 tests across 3 suites pass in 0.4 seconds",
+      "Every operation runs on an array of code points rather than the raw string, so an emoji is never left as a lone surrogate across two files — asserted directly in the suite",
+      "Tests assert invariants rather than outputs: rejoined chunks equal the input across five tests including a 65,000-character case, and every chunk stays under the limit across four more",
+      "Smart mode searches backwards for a paragraph break, then a newline, then a space, but never past a 60 percent floor — without which a stray early newline produces a 40-character file and wrecks the packing",
+      "The live preview truncates its input rather than its output, so typing into a 10 MB paste stays responsive",
+      "Four runtime dependencies, no server, no database and no telemetry — nothing leaves the browser"
+    ],
+    "links": {
+      "github": "https://github.com/VijaysinghPuwar/splitforge-local",
+      "writeup": null,
+      "demo": "https://splitforge-local-desktop.vercel.app"
+    },
+    "image": "",
+    "tags": [
+      "Web Workers",
+      "Unicode",
+      "Client-side only",
+      "Testing",
+      "File System Access API"
+    ]
+  },
+  {
+    "id": "resghost-jobradar",
+    "title": "ResGhost JobRadar — AI Job Discovery Pipeline",
+    "description": "A single-user AI job finder: upload a resume, search five job sources plus an OpenAI web-search path in parallel, dedupe and rank the results, tailor a resume variant per job, and track which exact resume went where.",
+    "category": "Application Development",
+    "tech": [
+      "Next.js 16",
+      "TypeScript",
+      "NextAuth v5",
+      "OpenAI",
+      "Vercel KV",
+      "Vercel Blob",
+      "Web Crypto",
+      "SerpAPI"
+    ],
+    "year": "2026",
+    "status": "in-progress",
+    "featured": false,
+    "keyResults": [
+      "91 tracked files and roughly 11,150 source LOC over 17 commits, with a 4,420-line lib layer across six modules",
+      "All 18 API routes re-check authorization independently instead of trusting middleware, which has historically been bypassable in Next.js",
+      "Ranking combines nine weighted factors summing to exactly 1.00 — match 0.50, freshness 0.12, source quality 0.10, domain relevance 0.10, location 0.08, type 0.04, work mode 0.02, salary 0.02, duplicate confidence 0.02",
+      "The source-quality table scores the app's own AI web-search path at 68, below every named ATS — an honest self-assessment encoded inside the ranking function",
+      "The zero-result diagnostic reports which filter eliminated everything, with counts and samples, turning the least debuggable complaint in a search product into a one-line answer",
+      "Sources are fetched under Promise.allSettled so one dead API degrades the search rather than failing it, and the SerpAPI budget is capped in code at six calls per run",
+      "PBKDF2-SHA256 through Web Crypto at 100,000 iterations with a per-user salt; the base resume is never overwritten and each application records the variant id that was sent"
+    ],
+    "links": {
+      "github": null,
+      "writeup": null,
+      "demo": null
+    },
+    "image": "",
+    "tags": [
+      "Defense in depth",
+      "Ranking",
+      "Deduplication",
+      "PBKDF2",
+      "Serverless KV",
+      "OpenAI"
+    ]
+  },
+  {
+    "id": "zelqorix-corporate-showcase",
+    "title": "Zelqorix Corporate Showcase — Hardened Static Site",
+    "description": "Static corporate website for an AI product and software engineering company, with a frontend security-hardening pass written specifically for static hosting.",
+    "category": "Application Development",
+    "tech": [
+      "Vite",
+      "React",
+      "TypeScript",
+      "Tailwind CSS",
+      "Vitest",
+      "Vercel"
+    ],
+    "year": "2026",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "65 commits, with the hero and company positioning reworked in July 2026",
+      "Strict Content-Security-Policy with a static-host-compatible meta fallback, plus a generated deployment header file for hosts that support custom headers",
+      "Referrer, framing, permissions, MIME-type and cross-origin hardening headers shipped in vercel.json alongside an SPA fallback route",
+      "The external Google Fonts dependency was removed, so no third-party origin is contacted at runtime",
+      "The CSP hash dependency for JSON-LD blocks is documented, so SEO structured data does not force unsafe-inline back into the policy",
+      "Five-breakpoint responsive layout, SEO metadata with canonical, robots, sitemap and JSON-LD, and a production-safe error fallback instead of client-visible failures"
+    ],
+    "links": {
+      "github": "https://github.com/VijaysinghPuwar/zelqorix-corporate-showcase",
+      "writeup": null,
+      "demo": null
+    },
+    "image": "",
+    "tags": [
+      "CSP",
+      "Security headers",
+      "Static hosting",
+      "SEO",
+      "Responsive design"
+    ]
   }
 ]

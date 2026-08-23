@@ -12,6 +12,21 @@ const SUPABASE_PUBLISHABLE_KEY =
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ??
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh5aHlxdWt2ZmNzaHF3ZW5neHRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MzMzNTEsImV4cCI6MjA4NTEwOTM1MX0.sc9oWFOHr4x4SUZeG3ClNi0038rtpwSBkrI7MTpWsDo';
 
+// Retired project refs. These must never reach a build: Vite inlines env vars
+// at build time, so a stale `.env*` value is baked into the bundle and cannot be
+// corrected at runtime — which is exactly how production previously ended up
+// talking to a dead backend. Fail loudly instead of shipping it.
+const RETIRED_PROJECT_REFS = ['hveucrpuystdvuubaocv'];
+
+const retired = RETIRED_PROJECT_REFS.find(ref => SUPABASE_URL.includes(ref));
+if (retired) {
+  throw new Error(
+    `Supabase is configured against retired project "${retired}". ` +
+      'Set VITE_SUPABASE_URL to the active project (xyhyqukvfcshqwengxth) — ' +
+      'check .env.local, and the deploy environment if this appears in a build.',
+  );
+}
+
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 

@@ -5,6 +5,7 @@ import { Search, Compass, Zap, Code, Folder, FileQuestion } from 'lucide-react';
 import projects from '@/data/projects.json';
 import { loginHref } from '@/lib/auth-redirect';
 import { useAuth } from '@/hooks/useAuth';
+import { contactEmail } from '@/lib/contact-email';
 
 interface Command {
   category: 'Navigation' | 'Actions' | 'Skills' | 'Projects';
@@ -65,8 +66,8 @@ function buildCommands(isAuthed: boolean, goLogin: () => void): Command[] {
           label: 'Send Email',
           keywords: 'contact mail',
           action: () => {
-            // Reassemble locally; never embedded in static DOM.
-            window.location.href = `mailto:${'contact'}@${'vijaysinghpuwar.com'}`;
+            // Assembled at call time so the address is not a bundle literal.
+            window.location.href = `mailto:${contactEmail()}`;
           },
         }
       : {
