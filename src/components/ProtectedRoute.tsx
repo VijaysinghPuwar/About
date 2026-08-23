@@ -39,9 +39,7 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
     );
   }
 
-  if (!profile) return <Navigate to={signInPath} replace />;
-  if (profile.status === 'blocked') return <Navigate to="/blocked" replace />;
-  if (profile.status === 'pending') return <Navigate to="/pending" replace />;
+  if (profile?.status === 'blocked') return <Navigate to="/blocked" replace />;
   if (requireAdmin && !isAdmin) return <Navigate to="/" replace />;
 
   return <>{children}</>;
