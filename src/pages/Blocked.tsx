@@ -13,8 +13,7 @@ export default function Blocked() {
   useEffect(() => {
     if (!loading) {
       if (!user) navigate('/login');
-      else if (profile?.status === 'approved') navigate('/');
-      else if (profile?.status === 'pending') navigate('/pending');
+      else if (profile && profile.status !== 'blocked') navigate('/');
     }
   }, [user, profile, loading, navigate]);
 
