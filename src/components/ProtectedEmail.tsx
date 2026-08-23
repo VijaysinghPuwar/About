@@ -3,13 +3,12 @@ import { Mail, Lock } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { loginHref } from '@/lib/auth-redirect';
 import { cn } from '@/lib/utils';
+import { contactEmail, maskedContactEmail } from '@/lib/contact-email';
 
-// Split to avoid trivial source-grep harvesting; never assembled in DOM
-// for logged-out visitors.
-const LOCAL = 'contact';
-const DOMAIN = 'vijaysinghpuwar.com';
-const EMAIL = `${LOCAL}@${DOMAIN}`;
-const MASKED = `${LOCAL.slice(0, 4)}••••@${DOMAIN}`;
+// Assembled only when an authenticated user is rendering it — see
+// `@/lib/contact-email` for why this is not written as a single literal.
+const EMAIL = contactEmail();
+const MASKED = maskedContactEmail();
 
 interface ProtectedEmailProps {
   variant?: 'row' | 'icon';

@@ -27,7 +27,7 @@ const entries: TimelineEntry[] = [
     expandedContent: (
       <div>
         <p className="text-sm text-muted-foreground mb-1">
-          GPA: {highlightMetric('3.91')} · {highlightMetric('39')} credits applied
+          GPA: {highlightMetric('3.92')} · {highlightMetric('39')} credits applied
         </p>
         <p className="text-xs text-muted-foreground mb-3 font-mono">
           Seidenberg School of Computer Science & Information Systems
@@ -70,8 +70,8 @@ const entries: TimelineEntry[] = [
   {
     id: 'mta-sirtoa',
     type: 'work',
-    title: 'IT Infrastructure & Network Operations Intern',
-    subtitle: 'Metropolitan Transportation Authority (MTA) — Staten Island Railway (SIRTOA), NYCT - SIRTOA Operations Support · Staten Island, New York',
+    title: 'Network Intern',
+    subtitle: 'Metropolitan Transportation Authority (MTA) — Staten Island Railway (SIRTOA) · IT Infrastructure & Network Operations · Staten Island, New York',
     period: 'June 2026 – Present',
     expandedContent: (
       <div>

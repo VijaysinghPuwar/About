@@ -1,24 +1,15 @@
-import { useState, useMemo, useRef, useEffect, lazy, Suspense } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Github, Linkedin, ArrowRight, Shield, Lock,
-  Loader2, CheckCircle2, User,
-} from 'lucide-react';
-import { motion, AnimatePresence, useInView, useReducedMotion } from 'framer-motion';
+import { useState, useMemo, lazy, Suspense } from 'react';
+import { Link } from 'react-router-dom';
+import { Github, Linkedin, ArrowRight, Shield, Lock } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
-import { toast } from 'sonner';
 import projectsData from '@/data/projects.json';
 import { useAuth } from '@/hooks/useAuth';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
 import { SectionReveal, RevealLabel } from '@/components/SectionReveal';
 import { ProtectedEmail } from '@/components/ProtectedEmail';
-
-import { supabase } from '@/integrations/supabase/client';
+import { loginHref } from '@/lib/auth-redirect';
 
 const HeroShield = lazy(() => import('@/components/HeroShield').then(m => ({ default: m.HeroShield })));
 const SkillsRadar = lazy(() => import('@/components/SkillsRadar').then(m => ({ default: m.SkillsRadar })));
@@ -38,21 +29,9 @@ const fadeUp = {
 
 const VP = { once: true, amount: 0.3 }; // viewport config
 
-/* section entrance animation */
-const sectionAnim = {
-  initial: { opacity: 0, y: 40 },
-  whileInView: { opacity: 1, y: 0 },
-  transition: { duration: 0.6, ease: 'easeOut' as const },
-  viewport: { once: true, amount: 0.2 },
-};
-
-
-
-
 /* ── main component ── */
 export default function Index() {
-  const { user, profile } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const reducedMotion = useReducedMotion();
 
   /* projects */
@@ -70,17 +49,8 @@ export default function Index() {
     return [...normalized, ...jsonOnly];
   }, [dbProjects]);
 
-
   /* shared skill tab state */
   const [skillTab, setSkillTab] = useState('security');
-
-
-
-
-
-  const handleProtectedAction = (e: React.MouseEvent, _target: string) => {
-    if (!user) { e.preventDefault(); navigate('/login'); }
-  };
 
   return (
     <div className="min-h-[100dvh]">
@@ -214,23 +184,26 @@ export default function Index() {
           </div>
 
           <Suspense fallback={<div className="h-64" />}>
-            {user ? (
-              <ProjectShowcase projects={allProjects} />
-            ) : (
-              <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}>
-                <div className="glass-card rounded-lg max-w-lg mx-auto p-8 text-center">
-                  <Lock className="w-10 h-10 text-primary mx-auto mb-4" />
-                  <h3 className="font-semibold text-foreground text-lg mb-2">Portfolio Access Required</h3>
-                  <p className="text-sm text-muted-foreground mb-6">
-                    Sign in with Google to view detailed projects, GitHub repositories, and download resume.
-                  </p>
-                  <Link to="/login" className="inline-flex items-center justify-center h-10 px-6 rounded-md text-sm font-medium gradient-btn">
-                    Sign In with Google
-                  </Link>
-                </div>
-              </motion.div>
-            )}
+            <ProjectShowcase projects={allProjects} />
           </Suspense>
+
+          {/* Project detail is public; repositories and the resume stay gated. */}
+          {!user && (
+            <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}>
+              <div className="glass-card rounded-lg max-w-2xl mx-auto mt-10 px-6 py-5 flex flex-col sm:flex-row items-center justify-center gap-4 text-center sm:text-left">
+                <Lock className="w-5 h-5 text-primary shrink-0" aria-hidden="true" />
+                <p className="text-sm text-muted-foreground flex-1">
+                  Sign in to open the source repositories and download my resume.
+                </p>
+                <Link
+                  to={loginHref()}
+                  className="inline-flex items-center justify-center h-10 px-5 rounded-md text-sm font-medium gradient-btn shrink-0"
+                >
+                  Sign in with Google
+                </Link>
+              </div>
+            </motion.div>
+          )}
         </SectionReveal>
       </section>
 

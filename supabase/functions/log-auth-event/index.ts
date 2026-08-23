@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
       .limit(10);
 
     if (recentEvents && recentEvents.length > 0 && user_agent) {
-      const knownAgents = new Set(recentEvents.map((e: any) => e.user_agent).filter(Boolean));
+      const knownAgents = new Set(recentEvents.map((e: { user_agent: string | null }) => e.user_agent).filter(Boolean));
       if (knownAgents.size > 0 && !knownAgents.has(user_agent)) {
         flagged_suspicious = true;
         risk_level = "medium";

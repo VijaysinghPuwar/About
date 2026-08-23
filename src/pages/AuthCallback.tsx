@@ -30,6 +30,8 @@ export default function AuthCallback() {
     }
 
     let cancelled = false;
+    // Assigned once below, but `finish` closes over it first, so it cannot be `const`.
+    // eslint-disable-next-line prefer-const
     let timeoutId: number | undefined;
 
     const finish = (hasSession: boolean) => {

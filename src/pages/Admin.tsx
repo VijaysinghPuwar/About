@@ -23,10 +23,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
+type AccessLevel = 'public' | 'basic' | 'admin';
+
 interface Project {
   id: string;
   title: string;
-  access_level: 'public' | 'basic' | 'admin';
+  access_level: AccessLevel;
 }
 
 interface UserProfile {
@@ -76,7 +78,7 @@ interface AuthEvent {
   user_agent: string | null;
   risk_level: string | null;
   flagged_suspicious: boolean;
-  metadata: any;
+  metadata: { reasons?: string[] } | null;
   created_at: string;
 }
 
@@ -92,6 +94,10 @@ const projectSchema = z.object({
 
 type ProjectFormData = z.infer<typeof projectSchema>;
 
+/** Supabase throws `Error`-shaped objects; fall back for anything else. */
+const errorMessage = (err: unknown): string | undefined =>
+  err instanceof Error ? err.message : typeof err === 'string' ? err : undefined;
+
 export default function Admin() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -101,7 +107,6 @@ export default function Admin() {
   const [projectAccess, setProjectAccess] = useState<Record<string, ProjectAccess[]>>({});
   const [loading, setLoading] = useState(true);
   const [isAddingProject, setIsAddingProject] = useState(false);
-  const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [searchUser, setSearchUser] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [showSuspiciousOnly, setShowSuspiciousOnly] = useState(false);
@@ -172,8 +177,8 @@ export default function Admin() {
       if (error) throw error;
       toast.success('Status Updated', { description: `User status changed to ${newStatus}` });
       fetchData();
-    } catch (err: any) {
-      toast.error('Error', { description: err.message || 'Failed to update status' });
+    } catch (err) {
+      toast.error('Error', { description: errorMessage(err) || 'Failed to update status' });
     } finally {
       setUpdatingStatus(null);
     }
@@ -205,21 +210,21 @@ export default function Admin() {
       toast.success('Project Created', { description: `${data.title} has been added.` });
       form.reset();
       fetchData();
-    } catch (err: any) {
-      toast.error('Error', { description: err.message || 'Failed to create project' });
+    } catch (err) {
+      toast.error('Error', { description: errorMessage(err) || 'Failed to create project' });
     } finally {
       setIsAddingProject(false);
     }
   };
 
-  const handleUpdateAccessLevel = async (projectId: string, newLevel: 'public' | 'basic' | 'admin') => {
+  const handleUpdateAccessLevel = async (projectId: string, newLevel: AccessLevel) => {
     try {
       const { error } = await supabase.from('projects').update({ access_level: newLevel }).eq('id', projectId);
       if (error) throw error;
       setProjects(projects.map(p => p.id === projectId ? { ...p, access_level: newLevel } : p));
       toast.success('Access Updated', { description: `Project access level changed to ${newLevel}` });
-    } catch (err: any) {
-      toast.error('Error', { description: err.message });
+    } catch (err) {
+      toast.error('Error', { description: errorMessage(err) });
     }
   };
 
@@ -234,8 +239,8 @@ export default function Admin() {
       }
       toast.success('Access Granted');
       fetchData();
-    } catch (err: any) {
-      toast.error('Error', { description: err.message });
+    } catch (err) {
+      toast.error('Error', { description: errorMessage(err) });
     }
   };
 
@@ -245,8 +250,8 @@ export default function Admin() {
       if (error) throw error;
       toast.success('Access Revoked');
       fetchData();
-    } catch (err: any) {
-      toast.error('Error', { description: err.message });
+    } catch (err) {
+      toast.error('Error', { description: errorMessage(err) });
     }
   };
 
@@ -257,8 +262,8 @@ export default function Admin() {
       if (error) throw error;
       toast.success('Project Deleted');
       fetchData();
-    } catch (err: any) {
-      toast.error('Error', { description: err.message });
+    } catch (err) {
+      toast.error('Error', { description: errorMessage(err) });
     }
   };
 
@@ -271,6 +276,7 @@ export default function Admin() {
   const approvedUsers = users.filter(u => u.status === 'approved');
   const blockedUsers = users.filter(u => u.status === 'blocked');
   const unreadMessages = contactMessages.filter(m => !m.read).length;
+  const unreadNotifications = notifications.filter(n => !n.read).length;
   const suspiciousEvents = authEvents.filter(e => e.flagged_suspicious);
   const displayedAuthEvents = showSuspiciousOnly ? suspiciousEvents : authEvents;
 
@@ -386,6 +392,14 @@ export default function Admin() {
               {unreadMessages > 0 && (
                 <Badge className="bg-primary text-primary-foreground text-xs h-5 min-w-5 flex items-center justify-center">
                   {unreadMessages}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="notifications" className="flex items-center gap-2">
+              <Bell className="w-4 h-4" /> Alerts
+              {unreadNotifications > 0 && (
+                <Badge className="bg-primary text-primary-foreground text-xs h-5 min-w-5 flex items-center justify-center">
+                  {unreadNotifications}
                 </Badge>
               )}
             </TabsTrigger>
@@ -506,7 +520,7 @@ export default function Admin() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Select value={project.access_level} onValueChange={(val) => handleUpdateAccessLevel(project.id, val as any)}>
+                            <Select value={project.access_level} onValueChange={(val) => handleUpdateAccessLevel(project.id, val as AccessLevel)}>
                               <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="public">Public</SelectItem>
@@ -516,7 +530,7 @@ export default function Admin() {
                             </Select>
                             <Dialog>
                               <DialogTrigger asChild>
-                                <Button variant="outline" size="sm" onClick={() => setSelectedProject(project.id)}>
+                                <Button variant="outline" size="sm" aria-label={`Manage access for ${project.title}`}>
                                   <UserPlus className="w-4 h-4" />
                                 </Button>
                               </DialogTrigger>
@@ -636,6 +650,48 @@ export default function Admin() {
           </TabsContent>
 
           {/* Security / Auth Events Tab */}
+          <TabsContent value="notifications">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
+              <div className="p-4 border-b border-border/50 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-primary" />
+                  <h3 className="font-semibold text-foreground">Notifications ({notifications.length})</h3>
+                </div>
+                {unreadNotifications > 0 && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={markNotificationsRead}>
+                    <CheckCircle className="w-3 h-3 mr-1" />Mark all read
+                  </Button>
+                )}
+              </div>
+              <div className="divide-y divide-border/50">
+                {notifications.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground">No notifications yet.</div>
+                ) : notifications.map((note) => (
+                  <div key={note.id} className={cn("p-4 transition-colors", !note.read && "bg-primary/5")}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-center gap-2">
+                          {!note.read && <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />}
+                          <p className="font-medium text-foreground text-sm">{note.type}</p>
+                        </div>
+                        {note.message && <p className="text-sm text-muted-foreground">{note.message}</p>}
+                        {(note.user_name || note.user_email) && (
+                          <p className="text-xs text-muted-foreground truncate">
+                            {note.user_name || 'Unknown'}{note.user_email ? ` (${note.user_email})` : ''}
+                          </p>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground flex-shrink-0">
+                        {new Date(note.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </TabsContent>
+
           <TabsContent value="security">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
