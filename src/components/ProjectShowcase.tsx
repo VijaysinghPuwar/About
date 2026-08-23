@@ -385,7 +385,7 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 px-5 py-2.5 mr-3 rounded-md text-sm font-medium border border-border/60 text-foreground hover:border-primary/40 hover:text-primary transition-colors"
                       >
-                        Live demo <ExternalLink className="w-3.5 h-3.5" />
+                        Visit site <ExternalLink className="w-3.5 h-3.5" />
                       </a>
                     )}
                     {selectedProject.links.github && (
