@@ -39,24 +39,20 @@ function buildCommands(isAuthed: boolean, goLogin: () => void): Command[] {
   ];
 
   const actions: Command[] = [
-    isAuthed
-      ? {
-          category: 'Actions',
-          label: 'Download Resume',
-          keywords: 'cv pdf',
-          action: () => {
-            const a = document.createElement('a');
-            a.href = '/resume.pdf';
-            a.download = '';
-            a.click();
-          },
-        }
-      : {
-          category: 'Actions',
-          label: 'Sign in to download resume',
-          keywords: 'cv pdf resume login',
-          action: goLogin,
-        },
+    // The resume is deliberately public: a recruiter should never have to make
+    // an account to read it. The email below stays gated — that is anti-scraping,
+    // not evaluation friction.
+    {
+      category: 'Actions',
+      label: 'Download Resume',
+      keywords: 'cv pdf resume',
+      action: () => {
+        const a = document.createElement('a');
+        a.href = '/resume.pdf';
+        a.download = '';
+        a.click();
+      },
+    },
     { category: 'Actions', label: 'Open GitHub', keywords: 'code repo', action: () => window.open('https://github.com/vijaysinghpuwar', '_blank') },
     { category: 'Actions', label: 'Open LinkedIn', keywords: 'social profile', action: () => window.open('https://linkedin.com/in/vijaysinghpuwar', '_blank') },
     isAuthed

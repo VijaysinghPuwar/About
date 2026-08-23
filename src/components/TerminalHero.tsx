@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, Lock, ArrowRight } from 'lucide-react';
+import { Download, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { loginHref } from '@/lib/auth-redirect';
@@ -308,22 +308,15 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
                 >
                   <ArrowRight className="w-4 h-4 mr-2" />View My Work
                 </button>
-                {user ? (
-                  <a
-                    href="/resume.pdf"
-                    download
-                    className="inline-flex items-center justify-center h-10 px-6 rounded-md text-sm font-medium border border-border/60 text-foreground hover:border-primary/40 hover:text-primary transition-colors"
-                  >
-                    <Download className="w-4 h-4 mr-2" />Download Resume
-                  </a>
-                ) : (
-                  <button
-                    onClick={() => navigate(loginHref())}
-                    className="inline-flex items-center justify-center h-10 px-6 rounded-md text-sm font-medium border border-border/60 text-foreground hover:border-primary/40 hover:text-primary transition-colors"
-                  >
-                    <Lock className="w-4 h-4 mr-2" />Download Resume
-                  </button>
-                )}
+                {/* Public. A recruiter should never have to make an account to read
+                    a resume — the direct contact details stay gated instead. */}
+                <a
+                  href="/resume.pdf"
+                  download
+                  className="inline-flex items-center justify-center h-10 px-6 rounded-md text-sm font-medium border border-border/60 text-foreground hover:border-primary/40 hover:text-primary transition-colors"
+                >
+                  <Download className="w-4 h-4 mr-2" />Download Resume
+                </a>
               </motion.div>
             )}
           </AnimatePresence>

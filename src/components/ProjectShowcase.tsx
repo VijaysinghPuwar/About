@@ -1,11 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, forwardRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Github, X, ExternalLink, Shield, ArrowRight, Columns2, Lock, ChevronDown } from 'lucide-react';
+import { Github, X, ExternalLink, Shield, ArrowRight, Columns2, ChevronDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Link } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
 import { onOpenProject, scrollToSection } from '@/lib/portfolio-events';
-import { loginHref } from '@/lib/auth-redirect';
 
 const IMPACT_DIFFS: Record<string, { before: string[]; after: string[] }> = {
   'secure-ubuntu-fleet': {
@@ -207,8 +204,6 @@ const featuredRank = (id: string) => {
 };
 
 export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: ProjectShowcaseProps) {
-  const { user } = useAuth();
-  const isAuthed = Boolean(user);
   const [activeFilter, setActiveFilter] = useState('All');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [showDiff, setShowDiff] = useState(false);
@@ -325,7 +320,7 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
           <AnimatePresence initial={false}>
             {featured.map(project => (
               <ProjectCard key={project.id} project={project} gradient={getGradient(project.category)}
-                isAuthed={isAuthed} onClick={() => setSelectedProject(project)} />
+                onClick={() => setSelectedProject(project)} />
             ))}
           </AnimatePresence>
         </div>
@@ -482,24 +477,19 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
                         Visit site <ExternalLink className="w-3.5 h-3.5" />
                       </a>
                     )}
+                    {/* Repository links are public. links.github is only ever set for
+                        repositories that are public on GitHub — private ones carry null
+                        and render nothing, so there is no repo to gate and no private
+                        URL in the shipped data. Those projects lead with their live site. */}
                     {selectedProject.links.github && (
-                      user ? (
-                        <a
-                          href={selectedProject.links.github}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-medium gradient-btn"
-                        >
-                          <Github className="w-4 h-4" /> View on GitHub <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                      ) : (
-                        <Link
-                          to={loginHref()}
-                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-medium gradient-btn"
-                        >
-                          <Lock className="w-4 h-4" /> Sign in to view the repository
-                        </Link>
-                      )
+                      <a
+                        href={selectedProject.links.github}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-medium gradient-btn"
+                      >
+                        <Github className="w-4 h-4" /> View Source <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
                     )}
                   </motion.div>
                 ) : diffData ? (
@@ -594,8 +584,8 @@ function DiffView({ before, after }: { before: string[]; after: string[] }) {
 
 /* ── Card Components ── */
 
-const ProjectCard = forwardRef<HTMLDivElement, { project: Project; gradient: string; onClick: () => void; isAuthed: boolean }>(
-  function ProjectCard({ project, gradient, onClick, isAuthed }, ref) {
+const ProjectCard = forwardRef<HTMLDivElement, { project: Project; gradient: string; onClick: () => void }>(
+  function ProjectCard({ project, gradient, onClick }, ref) {
   return (
     <motion.div
       ref={ref}
@@ -612,26 +602,16 @@ const ProjectCard = forwardRef<HTMLDivElement, { project: Project; gradient: str
       <div className="p-5 flex flex-col flex-1 relative">
         {/* GitHub link */}
         {project.links.github && (
-          isAuthed ? (
-            <a
-              href={project.links.github}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={e => e.stopPropagation()}
-              aria-label={`${project.title} on GitHub`}
-              className="absolute top-4 right-4 text-muted-foreground/50 hover:text-primary transition-colors"
-            >
-              <Github className="w-4 h-4" />
-            </a>
-          ) : (
-            <span
-              title="Sign in to view the repository"
-              aria-label="Sign in to view the repository"
-              className="absolute top-4 right-4 text-muted-foreground/30"
-            >
-              <Lock className="w-3.5 h-3.5" aria-hidden="true" />
-            </span>
-          )
+          <a
+            href={project.links.github}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            aria-label={`${project.title} source on GitHub`}
+            className="absolute top-4 right-4 text-muted-foreground/50 hover:text-primary transition-colors"
+          >
+            <Github className="w-4 h-4" />
+          </a>
         )}
 
         <div className="flex items-center gap-2 mb-3">

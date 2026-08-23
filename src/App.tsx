@@ -38,6 +38,7 @@ import AuthCallback from "./pages/AuthCallback";
 import Blocked from "./pages/Blocked";
 import OAuthConsent from "./pages/OAuthConsent";
 import Admin from "./pages/Admin";
+import Resume from "./pages/Resume";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -80,6 +81,10 @@ const App = () => (
                   <Route path="/auth/callback" element={<AuthCallback />} />
                   <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
                   <Route path="/blocked" element={<Blocked />} />
+                  {/* Public on purpose. Resume.tsx canonicalises this URL and the
+                      hero links to it, but it was never registered, so /resume
+                      fell through to NotFound. No ProtectedRoute here. */}
+                  <Route path="/resume" element={<Resume />} />
                   <Route path="/admin" element={<ProtectedRoute requireAdmin><Admin /></ProtectedRoute>} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
