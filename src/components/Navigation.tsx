@@ -17,11 +17,12 @@ import { loginHref } from '@/lib/auth-redirect';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { LogoIcon } from '@/components/LogoIcon';
 
+// Order mirrors the page: work first, then the record, then supporting detail.
 const sections = [
   { name: 'Home', id: 'home' },
-  { name: 'Skills', id: 'skills' },
   { name: 'Projects', id: 'projects' },
   { name: 'Experience', id: 'experience' },
+  { name: 'Skills', id: 'skills' },
   { name: 'Contact', id: 'contact' },
 ];
 

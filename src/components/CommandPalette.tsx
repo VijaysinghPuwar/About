@@ -33,7 +33,6 @@ const CATEGORY_ICONS: Record<string, typeof Compass> = {
 function buildCommands(isAuthed: boolean, goLogin: () => void): Command[] {
   const nav: Command[] = [
     { category: 'Navigation', label: 'Go to Home', keywords: 'hero top', action: () => scrollTo('home') },
-    { category: 'Navigation', label: 'Go to Skills', keywords: 'tech stack', action: () => scrollTo('skills') },
     { category: 'Navigation', label: 'Go to Projects', keywords: 'work portfolio', action: () => scrollTo('projects') },
     { category: 'Navigation', label: 'Go to Experience', keywords: 'timeline education', action: () => scrollTo('experience') },
     { category: 'Navigation', label: 'Go to Contact', keywords: 'email message', action: () => scrollTo('contact') },

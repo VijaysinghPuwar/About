@@ -1,4 +1,4 @@
-import { useState, useMemo, lazy, Suspense } from 'react';
+import { useState, useMemo, useCallback, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import { Github, Linkedin, ArrowRight, Shield, Lock } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
@@ -12,8 +12,7 @@ import { ProtectedEmail } from '@/components/ProtectedEmail';
 import { loginHref } from '@/lib/auth-redirect';
 
 const HeroShield = lazy(() => import('@/components/HeroShield').then(m => ({ default: m.HeroShield })));
-const SkillsRadar = lazy(() => import('@/components/SkillsRadar').then(m => ({ default: m.SkillsRadar })));
-const SkillCategories = lazy(() => import('@/components/SkillCategories').then(m => ({ default: m.SkillCategories })));
+const SkillMatrix = lazy(() => import('@/components/SkillMatrix').then(m => ({ default: m.SkillMatrix })));
 const ExperienceTimeline = lazy(() => import('@/components/ExperienceTimeline').then(m => ({ default: m.ExperienceTimeline })));
 const ProjectShowcase = lazy(() => import('@/components/ProjectShowcase').then(m => ({ default: m.ProjectShowcase })));
 
@@ -49,8 +48,13 @@ export default function Index() {
     return [...normalized, ...jsonOnly];
   }, [dbProjects]);
 
-  /* shared skill tab state */
-  const [skillTab, setSkillTab] = useState('security');
+  /* Selecting a skill filters the projects section to the work that uses it. */
+  const [skillFilter, setSkillFilter] = useState<{ label: string; aliases: string[] } | null>(null);
+
+  const handleSelectSkill = useCallback((aliases: string[], label: string) => {
+    setSkillFilter(prev => (prev?.label === label ? null : { label, aliases }));
+    document.getElementById('projects')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
   return (
     <div className="min-h-[100dvh]">
@@ -139,42 +143,6 @@ export default function Index() {
         </motion.div>
       </section>
 
-      {/* ═══════ SKILLS & TECHNOLOGIES ═══════ */}
-      <section id="skills" aria-label="Skills and Technologies" className="py-20 border-t border-border/40">
-        <SectionReveal className="container max-w-6xl mx-auto px-4">
-          <div className="text-center mb-14">
-            <RevealLabel text="Arsenal" />
-            <h2 className="section-title">Skills & Technologies</h2>
-          </div>
-
-          <Suspense fallback={<div className="h-64" />}>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start mb-14">
-              <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}>
-                <SkillsRadar activeTab={skillTab} onAxisClick={setSkillTab} />
-              </motion.div>
-              <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={1}>
-                <SkillCategories activeTab={skillTab} onTabChange={setSkillTab} />
-              </motion.div>
-            </div>
-          </Suspense>
-
-          <div className="rounded-lg glass-card py-4 overflow-hidden">
-            <div className="marquee-track">
-              {[false, true].map(isClone => (
-                <div key={String(isClone)} className="flex" aria-hidden={isClone || undefined}>
-                  {['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'ISC2 Candidate', 'Google AI Essentials'].map(cert => (
-                    <span key={cert} className="flex items-center gap-2 font-mono text-sm text-muted-foreground px-6 whitespace-nowrap">
-                      <Shield className="w-3.5 h-3.5 text-primary shrink-0" />
-                      {cert}
-                    </span>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-        </SectionReveal>
-      </section>
-
       {/* ═══════ PROJECTS ═══════ */}
       <section id="projects" aria-label="Featured Projects" className="py-20 border-t border-border/40">
         <SectionReveal className="container max-w-6xl mx-auto px-4">
@@ -184,7 +152,11 @@ export default function Index() {
           </div>
 
           <Suspense fallback={<div className="h-64" />}>
-            <ProjectShowcase projects={allProjects} />
+            <ProjectShowcase
+              projects={allProjects}
+              skillFilter={skillFilter}
+              onClearSkillFilter={() => setSkillFilter(null)}
+            />
           </Suspense>
 
           {/* Project detail is public; repositories and the resume stay gated. */}
@@ -218,6 +190,41 @@ export default function Index() {
           <Suspense fallback={<div className="h-64" />}>
             <ExperienceTimeline />
           </Suspense>
+        </SectionReveal>
+      </section>
+
+      {/* ═══════ SKILLS & TECHNOLOGIES ═══════ */}
+      <section id="skills" aria-label="Skills and Technologies" className="py-20 border-t border-border/40">
+        <SectionReveal className="container max-w-6xl mx-auto px-4">
+          <div className="text-center mb-14">
+            <RevealLabel text="Arsenal" />
+            <h2 className="section-title">Skills & Technologies</h2>
+          </div>
+
+          <Suspense fallback={<div className="h-64" />}>
+            <div className="mb-14">
+              <SkillMatrix
+                projects={allProjects}
+                activeSkill={skillFilter?.label ?? null}
+                onSelectSkill={handleSelectSkill}
+              />
+            </div>
+          </Suspense>
+
+          <div className="rounded-lg glass-card py-4 overflow-hidden">
+            <div className="marquee-track">
+              {[false, true].map(isClone => (
+                <div key={String(isClone)} className="flex" aria-hidden={isClone || undefined}>
+                  {['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'ISC2 Candidate', 'Google AI Essentials'].map(cert => (
+                    <span key={cert} className="flex items-center gap-2 font-mono text-sm text-muted-foreground px-6 whitespace-nowrap">
+                      <Shield className="w-3.5 h-3.5 text-primary shrink-0" />
+                      {cert}
+                    </span>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
         </SectionReveal>
       </section>
 

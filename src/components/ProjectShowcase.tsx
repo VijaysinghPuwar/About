@@ -98,6 +98,9 @@ interface Project {
 
 interface ProjectShowcaseProps {
   projects: Project[];
+  /** Set when a skill in the matrix above is selected. */
+  skillFilter?: { label: string; aliases: string[] } | null;
+  onClearSkillFilter?: () => void;
 }
 
 const categoryColors: Record<string, string> = {
@@ -202,7 +205,7 @@ const featuredRank = (id: string) => {
   return i === -1 ? Number.MAX_SAFE_INTEGER : i;
 };
 
-export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
+export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: ProjectShowcaseProps) {
   const { user } = useAuth();
   const isAuthed = Boolean(user);
   const [activeFilter, setActiveFilter] = useState('All');
@@ -224,9 +227,17 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
     return ['All', ...[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c)];
   }, [projects]);
 
+  const bySkill = skillFilter
+    ? projects.filter(p =>
+        (p.tech || []).some(t =>
+          skillFilter.aliases.some(a => t.toLowerCase().includes(a)),
+        ),
+      )
+    : projects;
+
   const filtered = activeFilter === 'All'
-    ? projects
-    : projects.filter(p => normalizeCategory(p.category) === activeFilter);
+    ? bySkill
+    : bySkill.filter(p => normalizeCategory(p.category) === activeFilter);
 
   const featuredAll = filtered
     .filter(p => featuredIds.has(p.id))
@@ -238,7 +249,7 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
   ];
 
   // A filtered view is already small, so only the unfiltered wall collapses.
-  const collapsible = activeFilter === 'All' && !showAll;
+  const collapsible = activeFilter === 'All' && !skillFilter && !showAll;
   const secondary = collapsible ? secondaryAll.slice(0, SECONDARY_PREVIEW) : secondaryAll;
   const hiddenCount = secondaryAll.length - secondary.length;
 
@@ -259,6 +270,25 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
 
   return (
     <div>
+      {skillFilter && (
+        <div className="flex justify-center mb-6">
+          <div className="inline-flex items-center gap-3 rounded-full glass-card px-4 py-2 text-sm">
+            <span className="text-muted-foreground">
+              Showing <span className="text-foreground font-medium">{filtered.length}</span>{' '}
+              project{filtered.length === 1 ? '' : 's'} using{' '}
+              <span className="text-foreground font-medium">{skillFilter.label}</span>
+            </span>
+            <button
+              onClick={onClearSkillFilter}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              aria-label={`Clear the ${skillFilter.label} filter`}
+            >
+              <X className="w-4 h-4" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Filter Bar */}
       <div className="flex flex-wrap gap-2 mb-10 justify-center">
         {filterCategories.map(cat => (
@@ -279,7 +309,7 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
       {/* Featured Projects */}
       {featured.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          <AnimatePresence mode="popLayout">
+          <AnimatePresence initial={false}>
             {featured.map(project => (
               <ProjectCard key={project.id} project={project} gradient={getGradient(project.category)}
                 isAuthed={isAuthed} onClick={() => setSelectedProject(project)} />
@@ -291,7 +321,7 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
       {/* Secondary Projects */}
       {secondary.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <AnimatePresence mode="popLayout">
+          <AnimatePresence initial={false}>
             {secondary.map(project => (
               <ProjectCardCompact key={project.id} project={project} gradient={getGradient(project.category)}
                 onClick={() => setSelectedProject(project)} />
@@ -353,7 +383,10 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
             onClick={closeModal}
           >
             <motion.div
-              layoutId={`card-${selectedProject.id}`}
+              initial={{ opacity: 0, scale: 0.97 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.97 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
               className="relative w-screen h-screen md:w-full md:max-w-2xl md:max-h-[85vh] md:rounded-xl rounded-none overflow-y-auto glass-card border border-border/60 p-6 sm:p-8"
               onClick={e => e.stopPropagation()}
             >
@@ -553,8 +586,6 @@ const ProjectCard = forwardRef<HTMLDivElement, { project: Project; gradient: str
   return (
     <motion.div
       ref={ref}
-      layoutId={`card-${project.id}`}
-      layout
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
@@ -631,8 +662,6 @@ const ProjectCardCompact = forwardRef<HTMLDivElement, { project: Project; gradie
   return (
     <motion.div
       ref={ref}
-      layoutId={`card-${project.id}`}
-      layout
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
