@@ -1,5 +1,5 @@
-import { useState, useMemo, useRef, useEffect, lazy, Suspense } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useMemo, useEffect, lazy, Suspense } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,7 +8,7 @@ import {
   Github, Linkedin, ArrowRight, Shield, Lock,
   Loader2, CheckCircle2, User,
 } from 'lucide-react';
-import { motion, AnimatePresence, useInView, useReducedMotion } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 import { toast } from 'sonner';
 import projectsData from '@/data/projects.json';
@@ -17,6 +17,7 @@ import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
 import { SectionReveal, RevealLabel } from '@/components/SectionReveal';
 import { ProtectedEmail } from '@/components/ProtectedEmail';
+import { loginHref } from '@/lib/auth-redirect';
 
 import { supabase } from '@/integrations/supabase/client';
 
@@ -38,21 +39,12 @@ const fadeUp = {
 
 const VP = { once: true, amount: 0.3 }; // viewport config
 
-/* section entrance animation */
-const sectionAnim = {
-  initial: { opacity: 0, y: 40 },
-  whileInView: { opacity: 1, y: 0 },
-  transition: { duration: 0.6, ease: 'easeOut' as const },
-  viewport: { once: true, amount: 0.2 },
-};
-
-
-
+/** Matches the server-side cap in supabase/functions/send-contact-email. */
+const MESSAGE_MAX = 5000;
 
 /* ── main component ── */
 export default function Index() {
   const { user, profile } = useAuth();
-  const navigate = useNavigate();
   const reducedMotion = useReducedMotion();
 
   /* projects */
@@ -70,10 +62,8 @@ export default function Index() {
     return [...normalized, ...jsonOnly];
   }, [dbProjects]);
 
-
   /* shared skill tab state */
   const [skillTab, setSkillTab] = useState('security');
-
 
   /* contact form */
   const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
@@ -101,10 +91,6 @@ export default function Index() {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleProtectedAction = (e: React.MouseEvent, _target: string) => {
-    if (!user) { e.preventDefault(); navigate('/login'); }
   };
 
   return (
@@ -249,7 +235,7 @@ export default function Index() {
                   <p className="text-sm text-muted-foreground mb-6">
                     Sign in with Google to view detailed projects, GitHub repositories, and download resume.
                   </p>
-                  <Link to="/login" className="inline-flex items-center justify-center h-10 px-6 rounded-md text-sm font-medium gradient-btn">
+                  <Link to={loginHref()} className="inline-flex items-center justify-center h-10 px-6 rounded-md text-sm font-medium gradient-btn">
                     Sign In with Google
                   </Link>
                 </div>
@@ -327,6 +313,7 @@ export default function Index() {
               <AnimatePresence mode="wait">
                 {submitted ? (
                   <motion.div key="success" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+                    role="status" aria-live="polite"
                     className="glass-card rounded-xl text-center py-16 px-6">
                     <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200, damping: 12, delay: 0.1 }}>
                       <CheckCircle2 className="w-14 h-14 text-success mx-auto mb-4" />
@@ -348,25 +335,32 @@ export default function Index() {
                       <div className={user ? '' : 'grid grid-cols-1 sm:grid-cols-2 gap-4'}>
                         <div>
                           <Label htmlFor="name" className="text-sm">Name</Label>
-                          <Input id="name" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
+                          <Input id="name" required maxLength={100} autoComplete="name" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
                             className="bg-background/50 border-border/40 mt-1 focus:border-primary/60 focus:shadow-[0_0_12px_hsl(var(--primary)/0.15)] transition-shadow" />
                         </div>
                         {!user && (
                           <div>
                             <Label htmlFor="email" className="text-sm">Email</Label>
-                            <Input id="email" type="email" required value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })}
+                            <Input id="email" type="email" required maxLength={255} autoComplete="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })}
                               className="bg-background/50 border-border/40 mt-1 focus:border-primary/60 focus:shadow-[0_0_12px_hsl(var(--primary)/0.15)] transition-shadow" />
                           </div>
                         )}
                       </div>
                       <div>
                         <Label htmlFor="subject" className="text-sm">Subject</Label>
-                        <Input id="subject" required value={formData.subject} onChange={e => setFormData({ ...formData, subject: e.target.value })}
+                        <Input id="subject" required maxLength={200} value={formData.subject} onChange={e => setFormData({ ...formData, subject: e.target.value })}
                           className="bg-background/50 border-border/40 mt-1 focus:border-primary/60 focus:shadow-[0_0_12px_hsl(var(--primary)/0.15)] transition-shadow" />
                       </div>
                       <div>
-                        <Label htmlFor="message" className="text-sm">Message</Label>
-                        <Textarea id="message" required rows={5} value={formData.message} onChange={e => setFormData({ ...formData, message: e.target.value })}
+                        <div className="flex items-baseline justify-between gap-2">
+                          <Label htmlFor="message" className="text-sm">Message</Label>
+                          {formData.message.length > MESSAGE_MAX * 0.8 && (
+                            <span className="font-mono text-[10px] text-muted-foreground tabular-nums">
+                              {formData.message.length}/{MESSAGE_MAX}
+                            </span>
+                          )}
+                        </div>
+                        <Textarea id="message" required rows={5} maxLength={MESSAGE_MAX} value={formData.message} onChange={e => setFormData({ ...formData, message: e.target.value })}
                           className="bg-background/50 border-border/40 mt-1 focus:border-primary/60 focus:shadow-[0_0_12px_hsl(var(--primary)/0.15)] transition-shadow" />
                       </div>
                       <button type="submit" disabled={isSubmitting}

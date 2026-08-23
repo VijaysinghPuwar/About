@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Download, Lock, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
+import { loginHref } from '@/lib/auth-redirect';
 
 interface TerminalLine {
   type: 'command' | 'output';
@@ -190,7 +191,7 @@ export function TerminalHero() {
                   </a>
                 ) : (
                   <button
-                    onClick={() => navigate('/login')}
+                    onClick={() => navigate(loginHref())}
                     className="inline-flex items-center justify-center h-10 px-6 rounded-md text-sm font-medium border border-border/60 text-foreground hover:border-primary/40 hover:text-primary transition-colors"
                   >
                     <Lock className="w-4 h-4 mr-2" />Download Resume
