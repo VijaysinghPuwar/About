@@ -2,7 +2,7 @@
   {
     "id": "recap-verse",
     "title": "Recap Verse — Production Multi-LLM AI Platform",
-    "description": "A production AI platform I designed, built, and operate end to end. Routes three LLM providers through a deterministic 5-stage pipeline, with security layered in by default rather than bolted on.",
+    "description": "A production AI platform routing three LLM providers through a deterministic 5-stage pipeline, secure by default.",
     "category": "Application Security",
     "tech": [
       "Python",

@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, forwardRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, forwardRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Github, X, ExternalLink, Shield, ArrowRight, Columns2, Lock } from 'lucide-react';
+import { Github, X, ExternalLink, Shield, ArrowRight, Columns2, Lock, ChevronDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -174,10 +174,19 @@ const enrichedData: Record<string, { description: string; features: string[] }> 
   },
 };
 
-const filterCategories = [
-  'All', 'Security Automation', 'Cloud Security', 'Network Security',
-  'Application Security', 'Research', 'Automation', 'Application Development',
-];
+// Database rows and projects.json label the same kind of work differently
+// ('Automation' vs 'Security Automation', 'Python Tools' as its own bucket),
+// which produced eight filter chips with near-duplicates. Collapse the synonyms
+// at render time so the taxonomy stays clean without a data migration.
+const CATEGORY_ALIASES: Record<string, string> = {
+  'Automation': 'Security Automation',
+  'Python Tools': 'Security Automation',
+};
+const normalizeCategory = (category: string) => CATEGORY_ALIASES[category] ?? category;
+
+/** How many projects stay visible before the reader asks for the rest. */
+const FEATURED_LIMIT = 6;
+const SECONDARY_PREVIEW = 8;
 
 // Declaration order is the display order of the featured grid, so the headline
 // project leads regardless of where it came from (database rows or projects.json).
@@ -199,18 +208,39 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
   const [activeFilter, setActiveFilter] = useState('All');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [showDiff, setShowDiff] = useState(false);
+  const [showAll, setShowAll] = useState(false);
 
   // Reset diff view when project changes
   useEffect(() => { setShowDiff(false); }, [selectedProject]);
 
+  // Filters follow the data, so a new category in the database shows up on its
+  // own and one that disappears stops being offered. Busiest category first.
+  const filterCategories = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of projects) {
+      const c = normalizeCategory(p.category);
+      if (c) counts.set(c, (counts.get(c) ?? 0) + 1);
+    }
+    return ['All', ...[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c)];
+  }, [projects]);
+
   const filtered = activeFilter === 'All'
     ? projects
-    : projects.filter(p => p.category === activeFilter || (activeFilter === 'Application Security' && p.category === 'Python Tools'));
+    : projects.filter(p => normalizeCategory(p.category) === activeFilter);
 
-  const featured = filtered
+  const featuredAll = filtered
     .filter(p => featuredIds.has(p.id))
     .sort((a, b) => featuredRank(a.id) - featuredRank(b.id));
-  const secondary = filtered.filter(p => !featuredIds.has(p.id));
+  const featured = featuredAll.slice(0, FEATURED_LIMIT);
+  const secondaryAll = [
+    ...featuredAll.slice(FEATURED_LIMIT),
+    ...filtered.filter(p => !featuredIds.has(p.id)),
+  ];
+
+  // A filtered view is already small, so only the unfiltered wall collapses.
+  const collapsible = activeFilter === 'All' && !showAll;
+  const secondary = collapsible ? secondaryAll.slice(0, SECONDARY_PREVIEW) : secondaryAll;
+  const hiddenCount = secondaryAll.length - secondary.length;
 
   const closeModal = useCallback(() => setSelectedProject(null), []);
 
@@ -220,7 +250,8 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
     return () => window.removeEventListener('keydown', handler);
   }, [selectedProject, closeModal]);
 
-  const getGradient = (category: string) => categoryColors[category] || 'from-primary to-primary';
+  const getGradient = (category: string) =>
+    categoryColors[normalizeCategory(category)] || categoryColors[category] || 'from-primary to-primary';
   const getEnriched = (id: string) => enrichedData[id];
 
   const hasDiff = selectedProject ? selectedProject.id in IMPACT_DIFFS : false;
@@ -259,13 +290,30 @@ export function ProjectShowcase({ projects }: ProjectShowcaseProps) {
 
       {/* Secondary Projects */}
       {secondary.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <AnimatePresence mode="popLayout">
             {secondary.map(project => (
               <ProjectCardCompact key={project.id} project={project} gradient={getGradient(project.category)}
                 onClick={() => setSelectedProject(project)} />
             ))}
           </AnimatePresence>
+        </div>
+      )}
+
+      {/* Every project stays reachable; the full set is opt-in so the default
+          view is not a wall of cards. */}
+      {(hiddenCount > 0 || showAll) && activeFilter === 'All' && (
+        <div className="flex justify-center mb-10">
+          <button
+            onClick={() => setShowAll(v => !v)}
+            aria-expanded={showAll}
+            className="inline-flex items-center gap-2 px-5 py-2.5 min-h-[44px] rounded-full text-sm font-medium glass-card text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {showAll
+              ? 'Show fewer projects'
+              : `Show all ${projects.length} projects`}
+            <ChevronDown className={`w-4 h-4 transition-transform ${showAll ? 'rotate-180' : ''}`} aria-hidden="true" />
+          </button>
         </div>
       )}
 
@@ -544,7 +592,7 @@ const ProjectCard = forwardRef<HTMLDivElement, { project: Project; gradient: str
 
         <div className="flex items-center gap-2 mb-3">
           <Badge variant="outline" className="text-[10px] text-primary border-primary/20">
-            {project.category}
+            {normalizeCategory(project.category)}
           </Badge>
           <span className="text-[10px] text-muted-foreground">{project.year}</span>
         </div>
@@ -553,11 +601,11 @@ const ProjectCard = forwardRef<HTMLDivElement, { project: Project; gradient: str
           {project.title}
         </h3>
 
-        <p className="text-xs text-muted-foreground line-clamp-1 mb-3 flex-1">
+        <p className="text-xs text-muted-foreground line-clamp-2 mb-3 min-h-[2rem]">
           {project.description}
         </p>
 
-        <div className="flex flex-wrap gap-1 mb-3">
+        <div className="flex flex-wrap gap-1 mb-3 mt-auto">
           {project.tech.slice(0, 4).map(t => (
             <span key={t} className="text-[10px] px-2 py-0.5 rounded-full glass-card text-muted-foreground">
               {t}
@@ -596,7 +644,7 @@ const ProjectCardCompact = forwardRef<HTMLDivElement, { project: Project; gradie
       <div className="p-4">
         <div className="flex items-center gap-2 mb-2">
           <Badge variant="outline" className="text-[10px] text-primary border-primary/20">
-            {project.category}
+            {normalizeCategory(project.category)}
           </Badge>
           <span className="text-[10px] text-muted-foreground">{project.year}</span>
         </div>
