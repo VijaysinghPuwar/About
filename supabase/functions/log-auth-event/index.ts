@@ -72,13 +72,23 @@ Deno.serve(async (req) => {
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { data: userData, error: authError } = await supabase.auth.getUser(token);
+    // Validate the caller's JWT with an anon-key client that forwards the
+    // Authorization header. Validating on the service-role client can fail
+    // under asymmetric signing keys, which surfaced as spurious 401s.
+    const authClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: `Bearer ${token}` } } }
+    );
+    const { data: userData, error: authError } = await authClient.auth.getUser();
     if (authError || !userData?.user || userData.user.id !== user_id) {
+      console.error("Auth validation failed:", authError?.message ?? "user mismatch");
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
 
     // Check for suspicious patterns
     let flagged_suspicious = false;
