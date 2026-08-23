@@ -48,7 +48,7 @@ const experience = [
 const education = [
   {
     school: "Pace University — Seidenberg School of CSIS", degree: "M.S. Cybersecurity", location: "New York, NY",
-    gpa: "GPA: 3.91", status: "Expected Dec 2026",
+    gpa: "GPA: 3.92", status: "Expected Dec 2026",
     coursework: [
       "Introduction to Cybersecurity",
       "Operating Systems Theory & Administration",
@@ -60,9 +60,10 @@ const education = [
       "Computational Statistics",
       "Algorithms & Computing Theory",
       "Business Data Communications",
+      "Data Science I: Intro to Data",
       "Introduction to Coding",
     ],
-    inProgress: ["Data Science I: Intro to Data", "Cybersecurity Capstone Project"],
+    inProgress: ["Cybersecurity Capstone Project"],
     courseGroups: [] as CourseGroup[],
   },
   {

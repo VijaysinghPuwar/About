@@ -27,7 +27,10 @@ const entries: TimelineEntry[] = [
     expandedContent: (
       <div>
         <p className="text-sm text-muted-foreground mb-1">
-          GPA: {highlightMetric('3.92')} · {highlightMetric('39')} credits applied
+          {/* Degree audit 2026-07-19: 30 required, 39 applied — 36 completed plus
+              the 3-credit capstone in progress. Stated as completed/in-progress
+              because "39 credits applied" reads as 39 finished. */}
+          GPA: {highlightMetric('3.92')} · {highlightMetric('36')} credits completed, {highlightMetric('3')} in progress
         </p>
         <p className="text-xs text-muted-foreground mb-3 font-mono">
           Seidenberg School of Computer Science & Information Systems
@@ -44,6 +47,7 @@ const entries: TimelineEntry[] = [
             'Ethical Hacking & Penetration Testing',
             'Automating InfoSec with Python & Shell',
             'Cyber Intelligence Analysis & Modeling',
+            'Data Science I: Intro to Data',
             'Computational Statistics',
             'Algorithms & Computing Theory',
             'Business Data Communications',
@@ -58,7 +62,9 @@ const entries: TimelineEntry[] = [
           In Progress
         </p>
         <div className="flex flex-wrap gap-1.5">
-          {['Data Science I: Intro to Data', 'Cybersecurity Capstone Project'].map(c => (
+          {/* Degree audit 2026-07-19: CYB 691 is the only course still IP.
+              IS 680 completed Summer 2026. */}
+          {['Cybersecurity Capstone Project'].map(c => (
             <span key={c} className="text-xs px-2.5 py-1 rounded-full border border-primary/40 text-primary">
               {c}
             </span>
