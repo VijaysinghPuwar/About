@@ -35,7 +35,6 @@ const CommandPalette = lazy(() =>
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import AuthCallback from "./pages/AuthCallback";
-import Pending from "./pages/Pending";
 import Blocked from "./pages/Blocked";
 import OAuthConsent from "./pages/OAuthConsent";
 import Admin from "./pages/Admin";
@@ -80,7 +79,6 @@ const App = () => (
                   <Route path="/login" element={<Login />} />
                   <Route path="/auth/callback" element={<AuthCallback />} />
                   <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
-                  <Route path="/pending" element={<Pending />} />
                   <Route path="/blocked" element={<Blocked />} />
                   <Route path="/admin" element={<ProtectedRoute requireAdmin><Admin /></ProtectedRoute>} />
                   <Route path="*" element={<NotFound />} />
