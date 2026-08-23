@@ -197,18 +197,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // not depend on Lovable Cloud, so it works regardless of Cloud balance.
   const signInWithGoogle = async () => {
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: `${window.location.origin}/auth/callback` },
+      const result = await lovable.auth.signInWithOAuth('google', {
+        redirect_uri: `${window.location.origin}/auth/callback`,
       });
-      if (error) {
-        return { error: error instanceof Error ? error : new Error(String(error)) };
+      if (result.error) {
+        const err = result.error as unknown;
+        return { error: err instanceof Error ? err : new Error(String(err)) };
       }
+      // Either the browser is redirecting to Google, or the session is already set.
       return { error: null };
     } catch (err) {
       return { error: err instanceof Error ? err : new Error(String(err)) };
     }
   };
+
 
   const signOut = async () => {
     await supabase.auth.signOut();
