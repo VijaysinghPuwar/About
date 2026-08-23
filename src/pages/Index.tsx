@@ -66,29 +66,29 @@ export default function Index() {
         <span id="home-heading" className="sr-only">Hero</span>
         <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] via-transparent to-background" />
 
-        {/* Status indicators */}
-        <div className="relative mb-3 md:mb-0 md:absolute md:top-20 md:left-4 sm:md:left-8 flex flex-col gap-2 z-10 px-4 md:px-0 pt-20 md:pt-0">
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
-            className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
-            <span className="font-mono text-[10px] text-muted-foreground tracking-wider uppercase">Systems Online</span>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }}
-            className="flex items-center gap-2">
-            <span className="text-muted-foreground/60 text-xs">📍</span>
-            <span className="font-mono text-[10px] text-muted-foreground">New York, NY</span>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.6 }}
-            className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-success animate-cyber-pulse" />
-            <span className="font-mono text-[10px] text-muted-foreground">Open to opportunities</span>
-          </motion.div>
-        </div>
-
-        <div className="container relative max-w-6xl mx-auto pt-6 pb-10 sm:pt-36 sm:pb-24">
+        <div className="container relative max-w-6xl mx-auto pt-20 pb-10 sm:pt-36 sm:pb-24">
           <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-10 lg:gap-6 items-center">
             {/* Left: Terminal */}
             <div className="order-2 lg:order-1">
+              {/* Status indicators — in flow above the terminal so they track it
+                  at every width instead of colliding with it on narrow desktops. */}
+              <div className="flex flex-col gap-1.5 sm:gap-2 mb-4 sm:mb-5">
+                <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
+                  className="flex items-center gap-2 sm:gap-2.5">
+                  <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-success animate-pulse shrink-0" />
+                  <span className="font-mono text-[10px] sm:text-xs lg:text-sm text-muted-foreground tracking-wider uppercase">Systems Online</span>
+                </motion.div>
+                <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }}
+                  className="flex items-center gap-2 sm:gap-2.5">
+                  <span className="text-muted-foreground/60 text-xs sm:text-sm lg:text-base leading-none">📍</span>
+                  <span className="font-mono text-[10px] sm:text-xs lg:text-sm text-muted-foreground">New York, NY</span>
+                </motion.div>
+                <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.6 }}
+                  className="flex items-center gap-2 sm:gap-2.5">
+                  <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-success animate-cyber-pulse shrink-0" />
+                  <span className="font-mono text-[10px] sm:text-xs lg:text-sm text-muted-foreground">Open to opportunities</span>
+                </motion.div>
+              </div>
               <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ type: 'spring', stiffness: 100, damping: 15, delay: 0.3 }}>
                 <TerminalHero />
@@ -222,55 +222,57 @@ export default function Index() {
       </section>
 
       {/* ═══════ CONTACT ═══════ */}
-      <section id="contact" aria-label="Contact" className="py-20 border-t border-border/40">
-        <SectionReveal className="container max-w-6xl mx-auto px-4">
-          <div className="text-center mb-4">
+      <section id="contact" aria-label="Contact" className="py-16 sm:py-20 border-t border-border/40">
+        <SectionReveal className="container max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="text-center">
             <RevealLabel text="Connect" />
             <h2 className="section-title">Let's Work Together</h2>
-            <p className="text-sm text-muted-foreground max-w-xl mx-auto mt-3">
+            <p className="text-sm sm:text-base text-muted-foreground max-w-xl mx-auto mt-3">
               Open to cybersecurity roles, security operations, cloud security, and consulting opportunities.
             </p>
           </div>
 
-          <div className="max-w-xl mx-auto mt-12">
+          <motion.div
+            initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}
+            className="mt-10 sm:mt-12 grid gap-5 sm:gap-6 md:grid-cols-2 md:items-stretch"
+          >
             {/* Digital Business Card */}
-            <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0} className="space-y-6">
-              <div className="glass-card rounded-xl p-6 space-y-5 hover:border-primary/30 transition-colors">
-                <div className="flex items-center gap-4">
-                  <span className="gradient-text text-3xl font-bold">VJ</span>
-                  <div>
-                    <h3 className="text-lg font-bold text-foreground">Vijaysingh Puwar</h3>
-                    <p className="text-sm text-muted-foreground">Cybersecurity Engineer</p>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <ProtectedEmail variant="row" compactHint />
-                  {[
-                    { href: 'https://github.com/vijaysinghpuwar', icon: Github, label: 'github.com/vijaysinghpuwar' },
-                    { href: 'https://linkedin.com/in/vijaysinghpuwar', icon: Linkedin, label: 'linkedin.com/in/vijaysinghpuwar' },
-                  ].map(({ href, icon: Icon, label }) => (
-                    <a key={href} href={href} target="_blank" rel="noopener noreferrer"
-                      className="group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:shadow-[inset_0_0_20px_hsl(var(--primary)/0.05)] transition-all">
-                      <Icon className="w-4 h-4 text-primary" />
-                      {label}
-                    </a>
-                  ))}
+            <div className="glass-card rounded-xl p-5 sm:p-6 space-y-5 hover:border-primary/30 transition-colors">
+              <div className="flex items-center gap-4">
+                <span className="gradient-text text-3xl font-bold shrink-0">VJ</span>
+                <div className="min-w-0">
+                  <h3 className="text-base sm:text-lg font-bold text-foreground truncate">Vijaysingh Puwar</h3>
+                  <p className="text-sm text-muted-foreground">Cybersecurity Engineer</p>
                 </div>
               </div>
+              <div className="space-y-1">
+                <ProtectedEmail variant="row" compactHint />
+                {[
+                  { href: 'https://github.com/vijaysinghpuwar', icon: Github, label: 'github.com/vijaysinghpuwar' },
+                  { href: 'https://linkedin.com/in/vijaysinghpuwar', icon: Linkedin, label: 'linkedin.com/in/vijaysinghpuwar' },
+                ].map(({ href, icon: Icon, label }) => (
+                  <a key={href} href={href} target="_blank" rel="noopener noreferrer"
+                    className="group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:shadow-[inset_0_0_20px_hsl(var(--primary)/0.05)] transition-all">
+                    <Icon className="w-4 h-4 text-primary shrink-0" />
+                    <span className="truncate">{label}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
 
-              {/* Availability */}
+            {/* Availability */}
+            <div className="glass-card rounded-xl p-5 sm:p-6 space-y-4 hover:border-primary/30 transition-colors">
+              <h4 className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Availability</h4>
               <div className="space-y-3">
-                <h4 className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Availability</h4>
                 {['Cybersecurity Engineering roles', 'Security Operations positions', 'Cloud Security opportunities', 'Collaborations & Consulting'].map(item => (
-                  <div key={item} className="flex items-center gap-2.5 text-sm text-foreground/80">
-                    <span className="w-2 h-2 rounded-full bg-success animate-cyber-pulse flex-shrink-0" />
-                    {item}
+                  <div key={item} className="flex items-start gap-2.5 text-sm text-foreground/80">
+                    <span className="w-2 h-2 mt-1.5 rounded-full bg-success animate-cyber-pulse shrink-0" />
+                    <span>{item}</span>
                   </div>
                 ))}
               </div>
-            </motion.div>
-          </div>
-
+            </div>
+          </motion.div>
         </SectionReveal>
       </section>
     </div>
