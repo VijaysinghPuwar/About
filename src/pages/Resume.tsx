@@ -1,10 +1,11 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Download, Mail, Github, Linkedin, GraduationCap, Award, Briefcase } from 'lucide-react';
+import { Download, Github, Linkedin, GraduationCap, Award, Briefcase } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 import { meCourseGroups, type CourseGroup } from '@/data/me-coursework';
+import { ProtectedEmail } from '@/components/ProtectedEmail';
 
 const skills = {
   "Security": ["IAM / Active Directory", "SIEM (Splunk)", "IDS/IPS", "Vulnerability Assessment", "Penetration Testing", "Threat Intelligence", "Incident Response", "Endpoint Hardening", "Security Management (NIST / ISO 27001)"],
@@ -90,9 +91,11 @@ export default function Resume() {
           <h1 className="section-title mb-2">Vijaysingh Puwar</h1>
           <p className="text-xl text-primary font-medium mb-4">Cybersecurity Engineer</p>
           <div className="flex flex-wrap justify-center gap-3 text-sm text-muted-foreground mb-6">
-            <a href="mailto:contact@vijaysinghpuwar.com" className="flex items-center gap-1 hover:text-foreground transition-colors">
-              <Mail className="w-4 h-4" /> contact@vijaysinghpuwar.com
-            </a>
+            {/* Was two plaintext copies of the address. Harmless while this page
+                was unrouted; the moment /resume was registered they shipped in the
+                bundle, defeating contact-email.ts. Use the same gate as everywhere
+                else — the resume is public, the address is not. */}
+            <ProtectedEmail variant="row" compactHint />
             <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-foreground transition-colors">
               <Github className="w-4 h-4" /> GitHub
             </a>

@@ -38,7 +38,6 @@ import AuthCallback from "./pages/AuthCallback";
 import Blocked from "./pages/Blocked";
 import OAuthConsent from "./pages/OAuthConsent";
 import Admin from "./pages/Admin";
-import Resume from "./pages/Resume";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -81,10 +80,15 @@ const App = () => (
                   <Route path="/auth/callback" element={<AuthCallback />} />
                   <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
                   <Route path="/blocked" element={<Blocked />} />
-                  {/* Public on purpose. Resume.tsx canonicalises this URL and the
-                      hero links to it, but it was never registered, so /resume
-                      fell through to NotFound. No ProtectedRoute here. */}
-                  <Route path="/resume" element={<Resume />} />
+                  {/* NOT ROUTED ON PURPOSE — do not re-add without reading this.
+                      Resume.tsx canonicalises /resume and was never registered, so
+                      the page is dead code. Registering it publishes content that
+                      contradicts the verified record: GPA 3.91 (is 3.92), the wrong
+                      university for the B.E., an Aug 2023 completion date (is Jan
+                      2024), "ISC2 Candidate" (excluded everywhere), and two retired
+                      metrics plus the hallucinated ASHRAE bullet. The public resume
+                      is /resume.pdf, which is served directly and is current.
+                      Fix the page content first, then route it. */}
                   <Route path="/admin" element={<ProtectedRoute requireAdmin><Admin /></ProtectedRoute>} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
