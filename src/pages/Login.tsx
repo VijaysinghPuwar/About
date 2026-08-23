@@ -36,10 +36,9 @@ export default function Login() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (!authLoading && user && profile) {
-      if (profile.status === 'approved') navigate(consumeNext() ?? '/');
-      else if (profile.status === 'blocked') navigate('/blocked');
-      else navigate('/pending');
+    if (!authLoading && user) {
+      if (profile?.status === 'blocked') navigate('/blocked');
+      else navigate(consumeNext() ?? '/');
     }
   }, [user, profile, authLoading, navigate]);
 
