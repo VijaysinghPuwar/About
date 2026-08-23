@@ -1,9 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, Lock, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { loginHref } from '@/lib/auth-redirect';
+import { scrollToSection } from '@/lib/portfolio-events';
+import {
+  COMMANDS,
+  complete,
+  runCommand,
+  type OutputLine,
+  type TerminalProject,
+} from '@/lib/terminal-commands';
 
 interface TerminalLine {
   type: 'command' | 'output';
@@ -31,9 +39,84 @@ const lines: TerminalLine[] = [
   { type: 'command', text: '$ ./connect.sh', speed: 40, pauseAfter: 200 },
 ];
 
-export function TerminalHero() {
+interface TerminalHeroProps {
+  /** Backs `projects`, `open` and `skills`. */
+  projects: TerminalProject[];
+}
+
+/** One entered command and everything it printed. */
+interface HistoryEntry {
+  input: string;
+  output: OutputLine[];
+}
+
+export function TerminalHero({ projects }: TerminalHeroProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  /* ── interactive shell (starts once the intro has typed out) ── */
+  const [entries, setEntries] = useState<HistoryEntry[]>([]);
+  const [draft, setDraft] = useState('');
+  const [recall, setRecall] = useState<number | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const submitted = entries.map(e => e.input);
+
+  const submit = useCallback(() => {
+    const input = draft.trim();
+    setDraft('');
+    setRecall(null);
+    if (!input) return;
+    const output = runCommand(input, {
+      projects,
+      isAuthed: Boolean(user),
+      goToLogin: () => navigate(loginHref()),
+      clear: () => setEntries([]),
+    });
+    // `clear` empties the log itself, so don't re-append the command that ran it.
+    if (input.trim().toLowerCase() === 'clear') return;
+    setEntries(prev => [...prev, { input, output }]);
+  }, [draft, projects, user, navigate]);
+
+  const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') { e.preventDefault(); submit(); return; }
+
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const filled = complete(draft, projects);
+      if (filled) setDraft(filled);
+      return;
+    }
+
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!submitted.length) return;
+      const next = recall === null ? submitted.length - 1 : Math.max(0, recall - 1);
+      setRecall(next);
+      setDraft(submitted[next]);
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (recall === null) return;
+      const next = recall + 1;
+      if (next >= submitted.length) { setRecall(null); setDraft(''); return; }
+      setRecall(next);
+      setDraft(submitted[next]);
+      return;
+    }
+
+    if (e.key === 'c' && e.ctrlKey) { e.preventDefault(); setDraft(''); setRecall(null); return; }
+    if (e.key === 'l' && e.ctrlKey) { e.preventDefault(); setEntries([]); }
+  }, [draft, projects, recall, submit, submitted]);
+
+  // Keep the newest output in view without moving the page itself.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [entries]);
 
   // visibleLines: array of { text, type, style } that are fully rendered
   const [visibleLines, setVisibleLines] = useState<{ text: string; type: string; style: string }[]>([]);
@@ -142,7 +225,11 @@ export function TerminalHero() {
         </div>
 
         {/* Terminal body */}
-        <div className="px-4 sm:px-6 py-4 sm:py-5 min-h-[260px] sm:min-h-[380px] flex flex-col justify-start">
+        <div
+          ref={scrollRef}
+          onClick={() => inputRef.current?.focus()}
+          className="px-4 sm:px-6 py-4 sm:py-5 min-h-[260px] sm:min-h-[380px] max-h-[70vh] overflow-y-auto flex flex-col justify-start"
+        >
           {visibleLines.map((line, i) => renderLine(line, i))}
 
           {/* Currently typing line */}
@@ -153,11 +240,51 @@ export function TerminalHero() {
             </div>
           )}
 
-          {/* Blinking cursor after done */}
-          {phase === 'done' && !showButtons && (
-            <div className="font-mono text-sm text-primary">
-              <span className="animate-terminal-blink">▊</span>
-            </div>
+          {/* Interactive shell, once the intro has finished typing. */}
+          {phase === 'done' && (
+            <>
+              <div role="log" aria-live="polite" aria-label="Terminal output">
+                {entries.map((entry, i) => (
+                  <div key={i} className="mt-2 first:mt-1">
+                    <div className="font-mono text-sm text-primary break-all">
+                      <span className="text-muted-foreground">$ </span>{entry.input}
+                    </div>
+                    {entry.output.map((line, j) => (
+                      <div
+                        key={j}
+                        className={
+                          'font-mono text-[13px] leading-relaxed whitespace-pre-wrap break-words ' +
+                          (line.tone === 'muted' ? 'text-muted-foreground'
+                            : line.tone === 'accent' ? 'text-primary'
+                            : line.tone === 'success' ? 'text-success'
+                            : line.tone === 'error' ? 'text-destructive'
+                            : 'text-foreground/90')
+                        }
+                      >
+                        {line.text || '\u00a0'}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2 mt-2 font-mono text-sm">
+                <span className="text-muted-foreground shrink-0" aria-hidden="true">$</span>
+                <input
+                  ref={inputRef}
+                  value={draft}
+                  onChange={e => setDraft(e.target.value)}
+                  onKeyDown={onKeyDown}
+                  spellCheck={false}
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  aria-label="Terminal input — type help for available commands"
+                  placeholder={entries.length ? '' : "type 'help'"}
+                  className="flex-1 min-w-0 bg-transparent border-0 outline-none text-primary placeholder:text-muted-foreground/50 font-mono text-sm p-0 focus:ring-0"
+                />
+              </div>
+            </>
           )}
 
           {/* CTA buttons */}

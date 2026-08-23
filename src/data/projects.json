@@ -583,7 +583,7 @@
       "389 tests across 39 files, including guard tests that read deployed edge-function source and assert the removed ?token= JWT parameter has not reappeared"
     ],
     "links": {
-      "github": "https://github.com/VijaysinghPuwar/web-audio-tv",
+      "github": null,
       "writeup": null,
       "demo": "https://webaudiotv.com"
     },
@@ -919,9 +919,9 @@
       "Five-breakpoint responsive layout, SEO metadata with canonical, robots, sitemap and JSON-LD, and a production-safe error fallback instead of client-visible failures"
     ],
     "links": {
-      "github": "https://github.com/VijaysinghPuwar/zelqorix-corporate-showcase",
+      "github": null,
       "writeup": null,
-      "demo": null
+      "demo": "https://zelqorix.com"
     },
     "image": "",
     "tags": [

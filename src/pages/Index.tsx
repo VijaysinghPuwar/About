@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, lazy, Suspense } from 'react';
+import { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import { Github, Linkedin, ArrowRight, Shield, Lock } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
@@ -10,8 +10,8 @@ import { TerminalHero } from '@/components/TerminalHero';
 import { SectionReveal, RevealLabel } from '@/components/SectionReveal';
 import { ProtectedEmail } from '@/components/ProtectedEmail';
 import { loginHref } from '@/lib/auth-redirect';
+import { onFilterSkill } from '@/lib/portfolio-events';
 
-const HeroShield = lazy(() => import('@/components/HeroShield').then(m => ({ default: m.HeroShield })));
 const SkillMatrix = lazy(() => import('@/components/SkillMatrix').then(m => ({ default: m.SkillMatrix })));
 const ExperienceTimeline = lazy(() => import('@/components/ExperienceTimeline').then(m => ({ default: m.ExperienceTimeline })));
 const ProjectShowcase = lazy(() => import('@/components/ProjectShowcase').then(m => ({ default: m.ProjectShowcase })));
@@ -51,6 +51,10 @@ export default function Index() {
   /* Selecting a skill filters the projects section to the work that uses it. */
   const [skillFilter, setSkillFilter] = useState<{ label: string; aliases: string[] } | null>(null);
 
+  useEffect(() => onFilterSkill(({ label, aliases }) => {
+    setSkillFilter({ label, aliases });
+  }), []);
+
   const handleSelectSkill = useCallback((aliases: string[], label: string) => {
     setSkillFilter(prev => (prev?.label === label ? null : { label, aliases }));
     document.getElementById('projects')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -71,9 +75,9 @@ export default function Index() {
         <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] via-transparent to-background" />
 
         <div className="container relative max-w-6xl mx-auto pt-20 pb-10 sm:pt-36 sm:pb-24">
-          <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-10 lg:gap-6 items-center">
+          <div className="max-w-3xl">
             {/* Left: Terminal */}
-            <div className="order-2 lg:order-1">
+            <div>
               {/* Status indicators — in flow above the terminal so they track it
                   at every width instead of colliding with it on narrow desktops. */}
               <div className="flex flex-col gap-1.5 sm:gap-2 mb-4 sm:mb-5">
@@ -95,7 +99,7 @@ export default function Index() {
               </div>
               <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ type: 'spring', stiffness: 100, damping: 15, delay: 0.3 }}>
-                <TerminalHero />
+                <TerminalHero projects={allProjects} />
               </motion.div>
 
               {/* Social icons */}
@@ -114,15 +118,6 @@ export default function Index() {
                 <ProtectedEmail variant="icon" className="text-muted-foreground hover:text-primary [&_svg]:w-5 [&_svg]:h-5" />
               </motion.div>
             </div>
-
-            {/* Right: Shield (desktop only) */}
-            <motion.div initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }}
-              transition={{ type: 'spring', stiffness: 80, damping: 15, delay: 0.5 }}
-              className="order-1 lg:order-2 hidden lg:flex relative h-[460px] items-center justify-center">
-              <Suspense fallback={<div className="w-full h-full" aria-hidden="true" />}>
-                <HeroShield />
-              </Suspense>
-            </motion.div>
           </div>
         </div>
 

@@ -4,6 +4,7 @@ import { Github, X, ExternalLink, Shield, ArrowRight, Columns2, Lock, ChevronDow
 import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { onOpenProject, scrollToSection } from '@/lib/portfolio-events';
 import { loginHref } from '@/lib/auth-redirect';
 
 const IMPACT_DIFFS: Record<string, { before: string[]; after: string[] }> = {
@@ -254,6 +255,18 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
   const hiddenCount = secondaryAll.length - secondary.length;
 
   const closeModal = useCallback(() => setSelectedProject(null), []);
+
+  useEffect(() => onOpenProject(({ query }) => {
+    const needle = query.toLowerCase();
+    const hit =
+      projects.find(p => p.id.toLowerCase() === needle) ??
+      projects.find(p => p.title.toLowerCase().includes(needle));
+    if (!hit) return;
+    setActiveFilter('All');
+    setShowAll(true);          // it may be one of the collapsed entries
+    setSelectedProject(hit);
+    scrollToSection('projects');
+  }), [projects]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') closeModal(); };
