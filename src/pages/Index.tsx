@@ -115,7 +115,7 @@ export default function Index() {
                     <Icon className="w-5 h-5" aria-hidden="true" />
                   </a>
                 ))}
-                <ProtectedEmail variant="icon" className="text-muted-foreground hover:text-primary [&_svg]:w-5 [&_svg]:h-5" />
+                <ProtectedEmail variant="icon" className="text-muted-foreground hover:text-primary" iconClassName="w-5 h-5" />
               </motion.div>
             </div>
           </div>

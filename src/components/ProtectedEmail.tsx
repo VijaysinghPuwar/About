@@ -13,11 +13,18 @@ const MASKED = maskedContactEmail();
 interface ProtectedEmailProps {
   variant?: 'row' | 'icon';
   className?: string;
+  /** For icon variant: size/style the mail glyph without touching the lock badge. */
+  iconClassName?: string;
   /** For row variant: hide the "Sign in to unlock" hint on small screens. */
   compactHint?: boolean;
 }
 
-export function ProtectedEmail({ variant = 'row', className, compactHint = false }: ProtectedEmailProps) {
+export function ProtectedEmail({
+  variant = 'row',
+  className,
+  iconClassName,
+  compactHint = false,
+}: ProtectedEmailProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -29,11 +36,11 @@ export function ProtectedEmail({ variant = 'row', className, compactHint = false
           href={`mailto:${EMAIL}`}
           aria-label="Email Vijaysingh"
           className={cn(
-            'text-muted-foreground hover:text-primary transition-colors',
+            'inline-flex items-center justify-center text-muted-foreground hover:text-primary transition-colors',
             className,
           )}
         >
-          <Mail className="w-4 h-4" aria-hidden="true" />
+          <Mail className={cn('w-4 h-4', iconClassName)} aria-hidden="true" />
         </a>
       );
     }
@@ -62,15 +69,20 @@ export function ProtectedEmail({ variant = 'row', className, compactHint = false
         onClick={() => navigate(loginHref())}
         aria-label="Sign in to email Vijaysingh"
         className={cn(
-          'relative text-muted-foreground hover:text-primary transition-colors',
+          'inline-flex items-center justify-center text-muted-foreground hover:text-primary transition-colors',
           className,
         )}
       >
-        <Mail className="w-4 h-4" aria-hidden="true" />
-        <Lock
-          className="absolute -bottom-1 -right-1 w-2.5 h-2.5 text-primary/80"
-          aria-hidden="true"
-        />
+        {/* Badge anchors to the glyph, not the button box, so padded callers stay aligned. */}
+        <span className="relative inline-flex">
+          <Mail className={cn('w-4 h-4', iconClassName)} aria-hidden="true" />
+          <span
+            className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-background ring-1 ring-background"
+            aria-hidden="true"
+          >
+            <Lock className="!h-[7px] !w-[7px] text-primary/80" aria-hidden="true" />
+          </span>
+        </span>
       </button>
     );
   }
