@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
-import { Loader2, Github, CheckCircle2, Mail } from 'lucide-react';
+import { Loader2, CheckCircle2, Mail } from 'lucide-react';
 import { z } from 'zod';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
@@ -19,7 +19,6 @@ const emailSchema = z
 
 export default function Login() {
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [githubLoading, setGithubLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
   const [emailLoading, setEmailLoading] = useState(false);
@@ -53,25 +52,6 @@ export default function Login() {
     } catch {
       toast.error('Sign in failed', { description: 'An unexpected error occurred.' });
       setGoogleLoading(false);
-    }
-  };
-
-  const handleGithubSignIn = async () => {
-    setGithubLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'github',
-        options: { redirectTo: `${window.location.origin}/auth/callback` },
-      });
-      if (error) {
-        toast.error('Sign in failed', { description: error.message });
-        setGithubLoading(false);
-      }
-    } catch (err) {
-      toast.error('Sign in failed', {
-        description: err instanceof Error ? err.message : 'An unexpected error occurred.',
-      });
-      setGithubLoading(false);
     }
   };
 
@@ -150,7 +130,7 @@ export default function Login() {
           <div className="space-y-3">
             <button
               onClick={handleGoogleSignIn}
-              disabled={googleLoading || githubLoading || emailLoading}
+              disabled={googleLoading || emailLoading}
               aria-label="Continue with Google"
               className="w-full h-12 rounded-md font-medium text-base bg-foreground text-background hover:bg-foreground/90 transition-colors inline-flex items-center justify-center disabled:opacity-50"
             >
@@ -168,6 +148,12 @@ export default function Login() {
             </button>
           </div>
 
+          {/* The "Continue with GitHub" button that used to sit here was removed:
+              GitHub is not an enabled provider on this Supabase project
+              (auth/v1/settings reports external.github = false), so the button
+              could only ever return "Unsupported provider". Google and the
+              email magic link are the two flows that actually work. */}
+
           {/* Divider */}
           <div className="flex items-center gap-3" role="separator" aria-label="Other options">
             <Separator className="flex-1" />
@@ -176,20 +162,6 @@ export default function Login() {
             </span>
             <Separator className="flex-1" />
           </div>
-
-          <button
-            onClick={handleGithubSignIn}
-            disabled={googleLoading || githubLoading || emailLoading}
-            aria-label="Continue with GitHub"
-            className="w-full h-11 rounded-md font-medium text-sm bg-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors inline-flex items-center justify-center disabled:opacity-50 border border-border"
-          >
-            {githubLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin mr-2" />
-            ) : (
-              <Github className="w-4 h-4 mr-2" aria-hidden="true" />
-            )}
-            Continue with GitHub
-          </button>
 
 
           {/* Magic link */}
@@ -238,7 +210,7 @@ export default function Login() {
               )}
               <button
                 type="submit"
-                disabled={emailLoading || googleLoading || githubLoading}
+                disabled={emailLoading || googleLoading}
                 className="w-full h-11 rounded-md font-medium text-sm bg-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-border transition-colors inline-flex items-center justify-center disabled:opacity-50"
               >
                 {emailLoading ? (
@@ -251,8 +223,12 @@ export default function Login() {
             </form>
           )}
 
+          {/* The old line here promised sign-in unlocked "the full project
+              portfolio and resume". Both are public — every project, every
+              repository link and /resume need no account. */}
           <p className="text-center text-xs text-muted-foreground">
-            Sign in to access the full project portfolio and resume.
+            The projects and the résumé are public. Signing in is only for
+            account and admin access.
           </p>
         </div>
       </motion.div>

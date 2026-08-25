@@ -1,16 +1,13 @@
 import { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
-import { Link } from 'react-router-dom';
-import { Lock, Github, Linkedin } from 'lucide-react';
+import { Github, Linkedin } from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
 import projectsData from '@/data/projects.json';
-import { useAuth } from '@/hooks/useAuth';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
 import { SecurityDiagram } from '@/components/SecurityDiagram';
 import { SectionReveal, SectionRule } from '@/components/SectionReveal';
 import { ProtectedEmail } from '@/components/ProtectedEmail';
 import { LogoIcon } from '@/components/LogoIcon';
-import { loginHref } from '@/lib/auth-redirect';
 import { onFilterSkill } from '@/lib/portfolio-events';
 
 const SkillMatrix = lazy(() => import('@/components/SkillMatrix').then(m => ({ default: m.SkillMatrix })));
@@ -24,6 +21,9 @@ const ProjectShowcase = lazy(() => import('@/components/ProjectShowcase').then(m
  * by the third scroll. This takes an `align` so the rhythm can break: Work and
  * Capabilities lead centred because they introduce a wide grid, Journey runs
  * left so the page does not read as four identical slabs.
+ *
+ * `label` is optional. Journey omits it: the eyebrow said JOURNEY and the title
+ * said "Experience & education", which is the same section named twice.
  */
 function SectionHeader({
   label,
@@ -31,7 +31,7 @@ function SectionHeader({
   blurb,
   align = 'center',
 }: {
-  label: string;
+  label?: string;
   title: string;
   blurb?: string;
   align?: 'center' | 'left';
@@ -39,16 +39,14 @@ function SectionHeader({
   const centred = align === 'center';
   return (
     <div className={centred ? 'mx-auto mb-9 max-w-[640px] text-center' : 'mb-9 max-w-[640px]'}>
-      <div className="section-heading">{label}</div>
-      <h2 className="section-title mt-3">{title}</h2>
+      {label && <div className="section-heading">{label}</div>}
+      <h2 className={`section-title ${label ? 'mt-3' : ''}`}>{title}</h2>
       {blurb && <p className="mt-3 text-[15px] text-muted-foreground">{blurb}</p>}
     </div>
   );
 }
 
 export default function Index() {
-  const { user } = useAuth();
-
   /* projects */
   const { projects: dbProjects } = useProjects();
   const allProjects = useMemo(() => {
@@ -139,13 +137,13 @@ export default function Index() {
       </section>
 
       {/* ═══════ WORK ═══════ */}
-      <section id="projects" aria-label="Selected work" className="relative border-t border-border py-14 sm:py-[68px]">
+      <section id="projects" aria-label="Selected work" className="relative py-14 sm:py-[68px]">
         <SectionRule />
         <SectionReveal className="container mx-auto max-w-[1180px] px-5">
           <SectionHeader
             label="Selected work"
-            title="Systems in production"
-            blurb="Built, deployed and maintained. The full index sits below and filters by capability."
+            title="Systems in Production"
+            blurb="Built, deployed and maintained. Six case studies below, and a searchable index of the rest."
           />
 
           <Suspense fallback={<div className="h-64" />}>
@@ -156,32 +154,21 @@ export default function Index() {
             />
           </Suspense>
 
-          {/* Project detail is public; repositories and the resume stay gated. */}
-          {!user && (
-            <div className="panel mx-auto mt-10 flex max-w-2xl flex-col items-center justify-center gap-4 rounded-lg px-6 py-5 text-center sm:flex-row sm:text-left">
-              <Lock className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-              <p className="flex-1 text-sm text-muted-foreground">
-                Sign in to open the source repositories and download my resume.
-              </p>
-              <Link
-                to={loginHref()}
-                className="gradient-btn inline-flex h-10 shrink-0 items-center justify-center rounded-md px-5 text-sm"
-              >
-                Sign in with Google
-              </Link>
-            </div>
-          )}
+          {/* The sign-in panel that used to sit here claimed the repositories
+              and the resume were gated. Neither is: every repo link in the
+              detail modal is a public GitHub URL and /resume and /resume.pdf
+              are open routes. It was asking a recruiter to create an account
+              for something already in front of them. */}
         </SectionReveal>
       </section>
 
       {/* ═══════ JOURNEY ═══════ */}
-      <section id="experience" aria-label="Experience and education" className="relative border-t border-border py-14 sm:py-[68px]">
+      <section id="experience" aria-label="Experience and education" className="relative py-14 sm:py-[68px]">
         <SectionRule />
         <SectionReveal className="container mx-auto max-w-[1180px] px-5">
           <SectionHeader
             align="left"
-            label="Journey"
-            title="Experience & education"
+            title="Journey"
             blurb="Work and study in one sequence. Expand an entry for what the role actually involved."
           />
           <Suspense fallback={<div className="h-64" />}>
@@ -195,12 +182,12 @@ export default function Index() {
           certifications already render as cards at the end of the timeline
           above, and a scrolling copy of a list the reader has just seen is
           repetition, not reinforcement. */}
-      <section id="skills" aria-label="Capabilities" className="relative border-t border-border py-14 sm:py-[68px]">
+      <section id="skills" aria-label="Capabilities" className="relative py-14 sm:py-[68px]">
         <SectionRule />
         <SectionReveal className="container mx-auto max-w-[1180px] px-5">
           <SectionHeader
             label="Capabilities"
-            title="Skills, and the work that proves them"
+            title="Skills Backed by Shipped Work"
             blurb="The number on a skill is how many indexed projects actually use it. Select one to filter the work above — no ratings, no percentages."
           />
 
@@ -215,12 +202,12 @@ export default function Index() {
       </section>
 
       {/* ═══════ CONTACT ═══════ */}
-      <section id="contact" aria-label="Contact" className="relative border-t border-border py-14 sm:py-[68px]">
+      <section id="contact" aria-label="Contact" className="relative py-14 sm:py-[68px]">
         <SectionRule />
         <SectionReveal className="container mx-auto max-w-[1180px] px-5">
           <div className="mx-auto max-w-[620px] text-center">
             <div className="section-heading">Contact</div>
-            <h2 className="section-title mt-3">Open to security engineering roles</h2>
+            <h2 className="section-title mt-3">Open to Security Engineering Roles</h2>
             <p className="mt-3 text-[15px] text-muted-foreground">
               New York, NY and remote. Résumé and project detail stay public — no sign-in required.
             </p>

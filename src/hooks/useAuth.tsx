@@ -193,10 +193,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
 
-  // Native Supabase OAuth (same path as GitHub). Supabase redirects to
-  // /auth/callback with a session hash that detectSessionInUrl consumes;
-  // identity conflicts surface there via parseOAuthErrorFromUrl. This does
-  // not depend on Lovable Cloud, so it works regardless of Cloud balance.
+  // Google sign-in is brokered by Lovable Cloud, not by Supabase directly.
+  //
+  // The comment that used to sit here claimed this was "native Supabase OAuth,
+  // same path as GitHub" and did "not depend on Lovable Cloud". Both halves
+  // were wrong, and the difference is why sign-in 404s off a Lovable-hosted
+  // origin: lovable.auth.signInWithOAuth navigates to the origin-relative
+  // broker path /~oauth/initiate, which only Lovable's own host serves. On a
+  // local dev server that path falls through to the SPA and renders NotFound.
+  //
+  // It stays brokered because the native flow is not actually available:
+  // GET /auth/v1/authorize?provider=google on this project answers
+  // "Unsupported provider: missing OAuth secret" — Google is toggled on in
+  // Supabase but no client secret was ever stored there. To move this to the
+  // native flow (and get sign-in working on localhost), set the Google client
+  // ID and secret under Supabase → Authentication → Providers → Google, add
+  // every dev origin under URL Configuration → Redirect URLs, and then swap
+  // this body for supabase.auth.signInWithOAuth({ provider: 'google',
+  // options: { redirectTo: `${window.location.origin}/auth/callback` } }).
   const signInWithGoogle = async () => {
     try {
       const result = await lovable.auth.signInWithOAuth('google', {

@@ -89,6 +89,14 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Record the address on the verified token, not the one in the body. The
+    // caller could previously log its own user_id against any email it liked,
+    // and that string is what lands in the auth_events audit trail and in the
+    // admin "suspicious login" notification — an audit record an authenticated
+    // user could author. The body value is only a fallback for the rare token
+    // with no email claim.
+    const verifiedEmail = userData.user.email ?? email;
+
 
     // Check for suspicious patterns
     let flagged_suspicious = false;
@@ -132,7 +140,7 @@ Deno.serve(async (req) => {
       .from("auth_events")
       .insert({
         user_id,
-        email,
+        email: verifiedEmail,
         event_type,
         ip_address,
         user_agent,
@@ -149,9 +157,9 @@ Deno.serve(async (req) => {
     if (flagged_suspicious) {
       await supabase.from("admin_notifications").insert({
         type: "suspicious_login",
-        user_email: email,
+        user_email: verifiedEmail,
         user_id,
-        message: `⚠️ Suspicious login: ${email} — ${reasons.join(", ")}. IP: ${ip_address}`,
+        message: `⚠️ Suspicious login: ${verifiedEmail} — ${reasons.join(", ")}. IP: ${ip_address}`,
       });
     }
 

@@ -30,11 +30,12 @@ function useEnteredView(ref: React.RefObject<HTMLElement>, skip: boolean) {
 /**
  * The divider that draws itself across the top of a section and then fades.
  *
- * Render it as the first child of a `relative` section that carries the static
- * `border-t`; the rule sits exactly on that border, so once it fades the plain
- * hairline is what remains. One solid accent — the original swept a
- * primary-to-violet gradient, which put a second hue on screen four times per
- * scroll.
+ * Render it as the first child of a `relative` section. The section carries no
+ * `border-t`: it used to, and the hairline that stayed behind after the rule
+ * faded read as a seam cutting the page into slabs. Spacing separates the
+ * sections now, and the rule leaves nothing behind. One solid accent — the
+ * original swept a primary-to-violet gradient, which put a second hue on screen
+ * four times per scroll.
  */
 export function SectionRule() {
   const ref = useRef<HTMLSpanElement>(null);

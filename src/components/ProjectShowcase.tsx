@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, forwardRef } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Github, X, ExternalLink, ArrowRight, Columns2, Search } from 'lucide-react';
 import { onOpenProject, scrollToSection } from '@/lib/portfolio-events';
@@ -284,7 +285,8 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
     scrollToSection('projects');
   }), [projects]);
 
-  // Escape closes whichever layer is on top.
+  // Escape closes whichever layer is on top, and the page behind an open layer
+  // stops scrolling — the wheel used to scroll the section under the overlay.
   useEffect(() => {
     if (!selectedProject && !indexOpen) return;
     const handler = (e: KeyboardEvent) => {
@@ -293,7 +295,12 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
       else closeIndex();
     };
     window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handler);
+      document.body.style.overflow = previousOverflow;
+    };
   }, [selectedProject, indexOpen, closeModal, closeIndex]);
 
   const getEnriched = (id: string) => enrichedData[id];
@@ -324,7 +331,7 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
       )}
 
       {/* Category filter */}
-      <div className="mb-9 flex flex-wrap justify-center gap-2">
+      <div className="mb-7 flex flex-wrap justify-center gap-2">
         {filterCategories.map(cat => (
           <button
             key={cat}
@@ -344,7 +351,7 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
 
       {/* Tier one: deeply presented, two per row. */}
       {featured.length > 0 && (
-        <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <AnimatePresence initial={false}>
             {featured.map(project => (
               <FeaturedCard
@@ -363,42 +370,50 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
           feel endless — you scrolled past a wall of hairlines to reach the next
           heading. The full set now opens as a searchable index over the page,
           so the section has a bottom again and nothing is buried. */}
-      {indexAll.length > featured.length && (
-        <div className="mt-6 flex justify-center">
+      {filtered.length === 0 && (
+        <div className="py-16 text-center text-muted-foreground">No projects found in this category.</div>
+      )}
+
+      {/* One footer row, two exits.
+
+          This used to be a centred button, then a full-width bordered panel
+          reading "18+ public repositories" with a second button inside it —
+          three stacked blocks closing a section that was already long. Both
+          exits sit on one line now and the repository count rides on the link
+          that goes there. */}
+      <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
+        {indexAll.length > featured.length && (
           <button
             onClick={() => setIndexOpen(true)}
-            className="btn-outline inline-flex min-h-[44px] items-center gap-2.5 rounded-md px-5 text-[14px] font-medium"
+            className="btn-outline inline-flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-md px-5 text-[14px] font-medium sm:w-auto"
           >
             Browse all {indexAll.length} projects
             <span className="font-mono text-[11px] text-muted-dim">INDEX</span>
             <span className="font-mono" aria-hidden="true">&#8594;</span>
           </button>
-        </div>
-      )}
-
-      {filtered.length === 0 && (
-        <div className="py-16 text-center text-muted-foreground">No projects found in this category.</div>
-      )}
-
-      {/* Bottom strip */}
-      <div className="panel mt-9 flex flex-col items-center justify-between gap-4 rounded-lg px-6 py-4 sm:flex-row">
-        <div className="flex items-center gap-2.5">
-          <Github className="h-4 w-4 text-primary" aria-hidden="true" />
-          <span className="font-mono text-[13px] text-muted-foreground">18+ public repositories</span>
-        </div>
+        )}
         <a
           href="https://github.com/vijaysinghpuwar"
           target="_blank"
           rel="noopener noreferrer"
-          className="btn-outline inline-flex h-10 items-center gap-2 rounded-md px-4 text-[13.5px] font-medium"
+          className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md px-5 text-[14px] font-medium text-muted-foreground transition-colors hover:text-primary sm:w-auto"
         >
-          View all on GitHub <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          <Github className="h-4 w-4" aria-hidden="true" />
+          18+ repositories on GitHub
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </a>
       </div>
 
-      {/* Index modal — the full set, searchable, one row per project. */}
-      <AnimatePresence>
-        {indexOpen && (
+      {/* Index modal — the full set, searchable, one row per project.
+
+          Portalled to <body>. The router's <main> carries `relative z-[1]`,
+          which opens a stacking context: a `z-50` overlay rendered inside it
+          still resolves under the `z-50` fixed navigation, so the nav sat on
+          top of the dialog, undimmed and clickable. Escaping to the body puts
+          both layers back in the same stacking context. */}
+      {createPortal(
+        <AnimatePresence>
+          {indexOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -465,11 +480,14 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
+        </AnimatePresence>,
+        document.body,
+      )}
 
-      {/* Modal */}
-      <AnimatePresence>
-        {selectedProject && (
+      {/* Detail modal — portalled for the same reason as the index above. */}
+      {createPortal(
+        <AnimatePresence>
+          {selectedProject && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -581,7 +599,9 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
+        </AnimatePresence>,
+        document.body,
+      )}
     </div>
   );
 }
@@ -625,10 +645,18 @@ function DiffView({ before, after }: { before: string[]; after: string[] }) {
  * same weight, so nothing led. This one has a single focal point: the first key
  * result, set brighter and marked with an accent rule. That is the outcome, and
  * it is the reason to keep reading. Everything else is support.
+ *
+ * Stack and status used to be two full definition rows with a hairline each,
+ * which cost about seventy vertical pixels a card and gave a stack list the same
+ * structural weight as the outcome. They are one mono line and one word now.
+ * The card is also `h-full` with the action row pushed down by `mt-auto`, so a
+ * two-line title next to a one-line title no longer leaves a hole in the shorter
+ * card — every footer in a row lands on the same baseline.
  */
 const FeaturedCard = forwardRef<HTMLDivElement, { project: Project; onClick: () => void }>(
   function FeaturedCard({ project, onClick }, ref) {
     const outcome = project.keyResults?.[0];
+    const inProgress = project.status === 'in-progress';
 
     return (
       <motion.article
@@ -638,33 +666,34 @@ const FeaturedCard = forwardRef<HTMLDivElement, { project: Project; onClick: () 
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2, ease: 'easeOut' }}
         onClick={onClick}
-        className="panel panel-hover flex cursor-pointer flex-col rounded-lg p-6"
+        className="panel panel-hover flex h-full cursor-pointer flex-col rounded-lg p-5"
       >
         <div className="flex items-baseline justify-between gap-3">
-          <span className="meta-label">{normalizeCategory(project.category)}</span>
-          <span className="font-mono text-[10.5px] text-muted-dim">{project.year}</span>
+          <span className="meta-label truncate">{normalizeCategory(project.category)}</span>
+          <span className={`shrink-0 font-mono text-[10.5px] ${inProgress ? 'text-primary' : 'text-muted-dim'}`}>
+            {project.year} · {statusLabel(project.status)}
+          </span>
         </div>
 
-        <h3 className="mt-3 text-[21px] font-semibold tracking-[-0.02em] text-foreground">
+        <h3 className="mt-2.5 text-[19px] font-semibold leading-[1.25] tracking-[-0.02em] text-foreground">
           {project.title}
         </h3>
 
-        <p className="mt-2.5 line-clamp-2 text-[14.5px] leading-[1.58] text-muted-foreground">
+        <p className="mt-2 line-clamp-2 text-[14px] leading-[1.55] text-muted-foreground">
           {project.description}
         </p>
 
         {outcome && (
-          <p className="mt-4 border-l-2 border-primary pl-3.5 text-[13.5px] leading-[1.5] text-foreground">
+          <p className="mt-3.5 line-clamp-2 border-l-2 border-primary pl-3 text-[13px] leading-[1.5] text-foreground">
             {outcome}
           </p>
         )}
 
-        <dl className="mt-4 border-t border-border">
-          <MetaRow label="Stack" value={project.tech.slice(0, 4).join(' · ')} />
-          <MetaRow label="Status" value={statusLabel(project.status)} />
-        </dl>
+        <p className="mt-3.5 truncate font-mono text-[11px] text-muted-dim">
+          {project.tech.slice(0, 4).join(' · ')}
+        </p>
 
-        <div className="mt-4 flex items-center gap-5 text-[14px] font-medium">
+        <div className="mt-auto flex items-center justify-between gap-4 border-t border-border pt-3.5 text-[13.5px] font-medium">
           <span className="flex items-center gap-2 text-primary">
             View details <span className="font-mono" aria-hidden="true">&#8594;</span>
           </span>
@@ -675,7 +704,7 @@ const FeaturedCard = forwardRef<HTMLDivElement, { project: Project; onClick: () 
               rel="noopener noreferrer"
               onClick={e => e.stopPropagation()}
               aria-label={`${project.title} source on GitHub`}
-              className="ml-auto text-muted-dim transition-colors hover:text-primary"
+              className="text-muted-dim transition-colors hover:text-primary"
             >
               <Github className="h-4 w-4" aria-hidden="true" />
             </a>

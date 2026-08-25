@@ -51,9 +51,33 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Type before length. `name.length` on a non-string is undefined, and
+    // `undefined > 100` is false, so a JSON object or number slipped past the
+    // size guard entirely and went to the insert as-is.
+    if (
+      typeof name !== "string" ||
+      typeof senderEmail !== "string" ||
+      typeof subject !== "string" ||
+      typeof message !== "string"
+    ) {
+      return new Response(
+        JSON.stringify({ error: "Invalid field types" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     if (name.length > 100 || senderEmail.length > 255 || subject.length > 200 || message.length > 5000) {
       return new Response(
         JSON.stringify({ error: "Input too long" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // The hourly cap is keyed on this address, so an unvalidated one was also a
+    // way around the cap: any junk string counted as a fresh sender.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(senderEmail)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid email address" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
