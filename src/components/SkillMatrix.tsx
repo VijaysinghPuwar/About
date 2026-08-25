@@ -119,11 +119,20 @@ export function SkillMatrix({ projects, onSelectSkill, activeSkill }: SkillMatri
     return out;
   }, [projects]);
 
+  // Five cards never divide evenly, so the last row used to leave a hole. The
+  // grid is sized in six tracks and each card is told how many to take:
+  //   two columns  → 2 + 2 + 1-wide-as-2   (the fifth spans the row)
+  //   six columns  → 3 + 2                 (last two take three tracks each)
+  const spanFor = (i: number) =>
+    [i === GROUPS.length - 1 ? 'md:col-span-2' : '', i < 3 ? 'xl:col-span-2' : 'xl:col-span-3']
+      .filter(Boolean)
+      .join(' ');
+
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {GROUPS.map(group => {
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
+      {GROUPS.map((group, i) => {
         return (
-          <div key={group.key} className="panel flex flex-col rounded-lg p-[22px]">
+          <div key={group.key} className={`panel flex flex-col rounded-lg p-[22px] ${spanFor(i)}`}>
             <div className="flex items-center gap-2.5">
               {/* One mark for all five groups. Five different lucide glyphs
                   implied five different kinds of thing; they are all just

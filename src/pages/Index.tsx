@@ -1,14 +1,15 @@
 import { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
-import { Lock } from 'lucide-react';
+import { Lock, Github, Linkedin } from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
 import projectsData from '@/data/projects.json';
 import { useAuth } from '@/hooks/useAuth';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
 import { SecurityDiagram } from '@/components/SecurityDiagram';
-import { SectionReveal } from '@/components/SectionReveal';
+import { SectionReveal, SectionRule } from '@/components/SectionReveal';
 import { ProtectedEmail } from '@/components/ProtectedEmail';
+import { LogoIcon } from '@/components/LogoIcon';
 import { loginHref } from '@/lib/auth-redirect';
 import { onFilterSkill } from '@/lib/portfolio-events';
 
@@ -37,7 +38,7 @@ function SectionHeader({
 }) {
   const centred = align === 'center';
   return (
-    <div className={centred ? 'mx-auto mb-10 max-w-[640px] text-center' : 'mb-10 max-w-[640px]'}>
+    <div className={centred ? 'mx-auto mb-9 max-w-[640px] text-center' : 'mb-9 max-w-[640px]'}>
       <div className="section-heading">{label}</div>
       <h2 className="section-title mt-3">{title}</h2>
       {blurb && <p className="mt-3 text-[15px] text-muted-foreground">{blurb}</p>}
@@ -89,7 +90,7 @@ export default function Index() {
       <section id="home" aria-labelledby="home-heading" className="relative">
         <span id="home-heading" className="sr-only">Hero</span>
 
-        <div className="container mx-auto max-w-[1180px] px-5 pb-16 pt-24 sm:pb-24 sm:pt-32">
+        <div className="container mx-auto max-w-[1180px] px-5 pb-10 pt-24 sm:pb-14 sm:pt-28">
           {/* Terminal left, schematic right. The right column is the proof the
               first screen previously had none of: what the work is, where it
               happens now, and whether he is available — all checkable. */}
@@ -97,24 +98,38 @@ export default function Index() {
             <div>
               <TerminalHero projects={allProjects} />
 
-              <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-[12px]">
+              {/* Signature row: the mark, then one icon per channel. These were
+                  spelled-out URLs in monospace, which put two long strings of
+                  low-value text directly under the terminal and competed with
+                  it. The icons carry accessible names and titles instead. */}
+              <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2.5">
+                <LogoIcon size={22} />
+                <span className="h-4 w-px bg-border-strong" aria-hidden="true" />
                 <a
                   href="https://github.com/vijaysinghpuwar"
                   target="_blank"
                   rel="noopener noreferrer"
+                  aria-label="GitHub — vijaysinghpuwar"
+                  title="github.com/vijaysinghpuwar"
                   className="text-muted-foreground transition-colors hover:text-primary"
                 >
-                  github.com/vijaysinghpuwar
+                  <Github className="h-[18px] w-[18px]" aria-hidden="true" />
                 </a>
                 <a
                   href="https://linkedin.com/in/vijaysinghpuwar"
                   target="_blank"
                   rel="noopener noreferrer"
+                  aria-label="LinkedIn — vijaysinghpuwar"
+                  title="linkedin.com/in/vijaysinghpuwar"
                   className="text-muted-foreground transition-colors hover:text-primary"
                 >
-                  linkedin.com/in/vijaysinghpuwar
+                  <Linkedin className="h-[18px] w-[18px]" aria-hidden="true" />
                 </a>
-                <ProtectedEmail variant="icon" className="text-muted-foreground hover:text-primary" iconClassName="w-4 h-4" />
+                <ProtectedEmail
+                  variant="icon"
+                  className="text-muted-foreground hover:text-primary"
+                  iconClassName="h-[18px] w-[18px]"
+                />
               </div>
             </div>
 
@@ -124,7 +139,8 @@ export default function Index() {
       </section>
 
       {/* ═══════ WORK ═══════ */}
-      <section id="projects" aria-label="Selected work" className="border-t border-border py-20">
+      <section id="projects" aria-label="Selected work" className="relative border-t border-border py-14 sm:py-[68px]">
+        <SectionRule />
         <SectionReveal className="container mx-auto max-w-[1180px] px-5">
           <SectionHeader
             label="Selected work"
@@ -159,7 +175,8 @@ export default function Index() {
       </section>
 
       {/* ═══════ JOURNEY ═══════ */}
-      <section id="experience" aria-label="Experience and education" className="border-t border-border py-20">
+      <section id="experience" aria-label="Experience and education" className="relative border-t border-border py-14 sm:py-[68px]">
+        <SectionRule />
         <SectionReveal className="container mx-auto max-w-[1180px] px-5">
           <SectionHeader
             align="left"
@@ -178,7 +195,8 @@ export default function Index() {
           certifications already render as cards at the end of the timeline
           above, and a scrolling copy of a list the reader has just seen is
           repetition, not reinforcement. */}
-      <section id="skills" aria-label="Capabilities" className="border-t border-border py-20">
+      <section id="skills" aria-label="Capabilities" className="relative border-t border-border py-14 sm:py-[68px]">
+        <SectionRule />
         <SectionReveal className="container mx-auto max-w-[1180px] px-5">
           <SectionHeader
             label="Capabilities"
@@ -197,7 +215,8 @@ export default function Index() {
       </section>
 
       {/* ═══════ CONTACT ═══════ */}
-      <section id="contact" aria-label="Contact" className="border-t border-border py-20">
+      <section id="contact" aria-label="Contact" className="relative border-t border-border py-14 sm:py-[68px]">
+        <SectionRule />
         <SectionReveal className="container mx-auto max-w-[1180px] px-5">
           <div className="mx-auto max-w-[620px] text-center">
             <div className="section-heading">Contact</div>

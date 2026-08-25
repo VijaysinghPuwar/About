@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, forwardRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Github, X, ExternalLink, ArrowRight, Columns2, ChevronDown } from 'lucide-react';
+import { Github, X, ExternalLink, ArrowRight, Columns2, Search } from 'lucide-react';
 import { onOpenProject, scrollToSection } from '@/lib/portfolio-events';
 
 const IMPACT_DIFFS: Record<string, { before: string[]; after: string[] }> = {
@@ -174,9 +174,8 @@ const CATEGORY_ALIASES: Record<string, string> = {
 };
 const normalizeCategory = (category: string) => CATEGORY_ALIASES[category] ?? category;
 
-/** How many projects stay visible before the reader asks for the rest. */
+/** How many case-study cards render inline. The rest live in the index modal. */
 const FEATURED_LIMIT = 6;
-const SECONDARY_PREVIEW = 8;
 
 // Declaration order is the display order of the featured grid, so the headline
 // project leads regardless of where it came from (database rows or projects.json).
@@ -213,7 +212,8 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
   const [activeFilter, setActiveFilter] = useState('All');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [showDiff, setShowDiff] = useState(false);
-  const [showAll, setShowAll] = useState(false);
+  const [indexOpen, setIndexOpen] = useState(false);
+  const [indexQuery, setIndexQuery] = useState('');
 
   // Reset diff view when project changes
   useEffect(() => { setShowDiff(false); }, [selectedProject]);
@@ -245,17 +245,32 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
     .filter(p => featuredIds.has(p.id))
     .sort((a, b) => featuredRank(a.id) - featuredRank(b.id));
   const featured = featuredAll.slice(0, FEATURED_LIMIT);
-  const secondaryAll = [
-    ...featuredAll.slice(FEATURED_LIMIT),
+
+  // Everything in the current filter, case studies first, then the rest. This
+  // is what the index modal lists — the page itself no longer carries it.
+  const indexAll = [
+    ...featuredAll,
     ...filtered.filter(p => !featuredIds.has(p.id)),
   ];
 
-  // A filtered view is already small, so only the unfiltered wall collapses.
-  const collapsible = activeFilter === 'All' && !skillFilter && !showAll;
-  const secondary = collapsible ? secondaryAll.slice(0, SECONDARY_PREVIEW) : secondaryAll;
-  const hiddenCount = secondaryAll.length - secondary.length;
+  const needle = indexQuery.trim().toLowerCase();
+  const indexRows = needle
+    ? indexAll.filter(p =>
+        p.title.toLowerCase().includes(needle) ||
+        normalizeCategory(p.category).toLowerCase().includes(needle) ||
+        (p.tech || []).some(t => t.toLowerCase().includes(needle)),
+      )
+    : indexAll;
 
   const closeModal = useCallback(() => setSelectedProject(null), []);
+  const closeIndex = useCallback(() => { setIndexOpen(false); setIndexQuery(''); }, []);
+
+  /** From the index into one project's detail. */
+  const openFromIndex = useCallback((p: Project) => {
+    setIndexOpen(false);
+    setIndexQuery('');
+    setSelectedProject(p);
+  }, []);
 
   useEffect(() => onOpenProject(({ query }) => {
     const needle = query.toLowerCase();
@@ -264,16 +279,22 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
       projects.find(p => p.title.toLowerCase().includes(needle));
     if (!hit) return;
     setActiveFilter('All');
-    setShowAll(true);          // it may be one of the collapsed entries
+    setIndexOpen(false);
     setSelectedProject(hit);
     scrollToSection('projects');
   }), [projects]);
 
+  // Escape closes whichever layer is on top.
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') closeModal(); };
-    if (selectedProject) window.addEventListener('keydown', handler);
+    if (!selectedProject && !indexOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (selectedProject) closeModal();
+      else closeIndex();
+    };
+    window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [selectedProject, closeModal]);
+  }, [selectedProject, indexOpen, closeModal, closeIndex]);
 
   const getEnriched = (id: string) => enrichedData[id];
 
@@ -336,38 +357,21 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
         </div>
       )}
 
-      {/* Tier two: an index, not more cards. Twenty-five projects rendered as
-          twenty-five cards is a directory; as rows it is something a hiring
-          manager can actually scan. */}
-      {secondary.length > 0 && (
-        <div className="mt-9">
-          <div className="flex items-baseline justify-between border-b border-border-strong pb-2.5">
-            <span className="font-mono text-[11px] tracking-[0.14em] text-muted-dim">PROJECT INDEX</span>
-            <span className="font-mono text-[11px] text-muted-dim">
-              {secondary.length} of {secondaryAll.length} shown
-            </span>
-          </div>
-          {secondary.map(project => (
-            <IndexRow
-              key={project.id}
-              project={project}
-              onClick={() => setSelectedProject(project)}
-            />
-          ))}
-        </div>
-      )}
+      {/* Tier two lives behind a button.
 
-      {/* Every project stays reachable; the full set is opt-in so the default
-          view is not a wall of cards. */}
-      {(hiddenCount > 0 || showAll) && activeFilter === 'All' && (
+          Rendering all twenty-five as rows under the cards made the section
+          feel endless — you scrolled past a wall of hairlines to reach the next
+          heading. The full set now opens as a searchable index over the page,
+          so the section has a bottom again and nothing is buried. */}
+      {indexAll.length > featured.length && (
         <div className="mt-6 flex justify-center">
           <button
-            onClick={() => setShowAll(v => !v)}
-            aria-expanded={showAll}
-            className="btn-outline inline-flex min-h-[44px] items-center gap-2 rounded-md px-5 text-[13.5px] font-medium"
+            onClick={() => setIndexOpen(true)}
+            className="btn-outline inline-flex min-h-[44px] items-center gap-2.5 rounded-md px-5 text-[14px] font-medium"
           >
-            {showAll ? 'Show fewer projects' : `Show all ${projects.length} projects`}
-            <ChevronDown className={`h-4 w-4 transition-transform ${showAll ? 'rotate-180' : ''}`} aria-hidden="true" />
+            Browse all {indexAll.length} projects
+            <span className="font-mono text-[11px] text-muted-dim">INDEX</span>
+            <span className="font-mono" aria-hidden="true">&#8594;</span>
           </button>
         </div>
       )}
@@ -391,6 +395,77 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
           View all on GitHub <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </a>
       </div>
+
+      {/* Index modal — the full set, searchable, one row per project. */}
+      <AnimatePresence>
+        {indexOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 p-4"
+            onClick={closeIndex}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-label="All projects"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
+              className="panel relative flex h-full w-full flex-col rounded-none md:h-auto md:max-h-[80vh] md:w-full md:max-w-3xl md:rounded-lg"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-border p-5 sm:px-7">
+                <div>
+                  <div className="meta-label">Project index</div>
+                  <h3 className="mt-2 text-[21px] font-semibold tracking-[-0.02em] text-foreground">
+                    All {indexAll.length} projects
+                  </h3>
+                </div>
+                <button
+                  onClick={closeIndex}
+                  aria-label="Close index"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <X className="h-5 w-5" aria-hidden="true" />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2.5 border-b border-border px-5 py-3 sm:px-7">
+                <Search className="h-4 w-4 shrink-0 text-muted-dim" aria-hidden="true" />
+                <input
+                  autoFocus
+                  value={indexQuery}
+                  onChange={e => setIndexQuery(e.target.value)}
+                  placeholder="Filter by name, category or tech…"
+                  aria-label="Filter projects"
+                  className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[14px] text-foreground outline-none placeholder:text-muted-dim focus:ring-0"
+                />
+                <span className="shrink-0 font-mono text-[11px] text-muted-dim">
+                  {indexRows.length}/{indexAll.length}
+                </span>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 sm:px-7">
+                {indexRows.map(project => (
+                  <IndexRow
+                    key={project.id}
+                    project={project}
+                    onClick={() => openFromIndex(project)}
+                  />
+                ))}
+                {indexRows.length === 0 && (
+                  <p className="py-10 text-center text-sm text-muted-foreground">
+                    Nothing matches “{indexQuery}”.
+                  </p>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Modal */}
       <AnimatePresence>
