@@ -6,6 +6,8 @@ import projects from '@/data/projects.json';
 import { loginHref } from '@/lib/auth-redirect';
 import { useAuth } from '@/hooks/useAuth';
 import { contactEmail } from '@/lib/contact-email';
+import { isSoundMuted, setSoundMuted } from '@/lib/theme-transition';
+import { toast } from 'sonner';
 
 interface Command {
   category: 'Navigation' | 'Actions' | 'Skills' | 'Projects';
@@ -51,6 +53,20 @@ function buildCommands(isAuthed: boolean, goLogin: () => void): Command[] {
         a.href = '/resume.pdf';
         a.download = '';
         a.click();
+      },
+    },
+    // The theme switch is the only thing on the site that makes a sound, and a
+    // portfolio that cannot be silenced is a portfolio nobody opens twice. The
+    // preference lives in localStorage, so it survives the reload.
+    {
+      category: 'Actions',
+      label: 'Toggle transition sound',
+      hint: 'Audio on the theme switch',
+      keywords: 'sound audio mute volume theme',
+      action: () => {
+        const muted = !isSoundMuted();
+        setSoundMuted(muted);
+        toast(muted ? 'Transition sound muted' : 'Transition sound on');
       },
     },
     { category: 'Actions', label: 'Open GitHub', keywords: 'code repo', action: () => window.open('https://github.com/vijaysinghpuwar', '_blank') },

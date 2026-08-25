@@ -244,6 +244,50 @@ svg [stroke], svg [fill] {
   background-image: none;
 }
 
+/*
+  Theme switch shutter — see `src/lib/theme-transition.ts` for the geometry and
+  the timings that hang off it.
+
+  Each plate crosses in over the first 12% of its run, holds the viewport closed
+  until 88%, then crosses out the far side. Because plate n starts n * 40ms
+  late, the window where *every* plate is down is shorter than any one plate's
+  hold — that sealed window is what the class swap hides inside, and it is sized
+  around the label, not the other way round: the mode name resolves, sits still
+  long enough to be read, and only then do the plates continue.
+
+  `data-theme-sweep` kills the 250ms colour cross-fades for the duration, so the
+  new palette is fully settled — not mid-fade — when the plates lift.
+*/
+@keyframes theme-plate-down {
+  0% { transform: translate3d(0, -101%, 0); animation-timing-function: cubic-bezier(.5, 0, .2, 1); }
+  12%, 88% { transform: translate3d(0, 0, 0); animation-timing-function: cubic-bezier(.8, 0, .3, 1); }
+  100% { transform: translate3d(0, 101%, 0); }
+}
+
+@keyframes theme-plate-up {
+  0% { transform: translate3d(0, 101%, 0); animation-timing-function: cubic-bezier(.5, 0, .2, 1); }
+  12%, 88% { transform: translate3d(0, 0, 0); animation-timing-function: cubic-bezier(.8, 0, .3, 1); }
+  100% { transform: translate3d(0, -101%, 0); }
+}
+
+/* Up by the time the last plate seats, down before the first one clears. */
+@keyframes theme-plate-label {
+  0%, 18% { opacity: 0; }
+  26%, 85% { opacity: 1; }
+  88%, 100% { opacity: 0; }
+}
+
+@keyframes theme-plate-seam {
+  0%, 20% { transform: scaleX(0); }
+  30%, 85% { transform: scaleX(1); }
+  88%, 100% { transform: scaleX(0); }
+}
+
+html[data-theme-sweep] * {
+  transition-duration: 0ms !important;
+  transition-delay: 0ms !important;
+}
+
 /* Terminal caret */
 @keyframes terminal-blink {
   0%, 49% { opacity: 1; }

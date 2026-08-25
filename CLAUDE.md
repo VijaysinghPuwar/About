@@ -36,3 +36,11 @@ a second accent hue or reintroduce `bg-gradient-*`, coloured `box-shadow` or
 Ambient motion is capped at two effects: the static rule grid behind the hero
 (`CyberGrid`) and the section fade-up (`SectionReveal`). Anything beyond that
 needs to earn its place by aiding comprehension.
+
+The theme switch is the one deliberate exception, and it is not ambient — it
+only ever runs on a click. `src/lib/theme-transition.ts` closes a shutter of
+plates over the viewport, swaps the class behind it, holds long enough for the
+mode name to be read, and reopens, with a synthesized WebAudio cue on the same
+timeline. It is the only sound on the site; the command palette can mute it.
+Both the plates and the audio are skipped entirely under
+`prefers-reduced-motion`.

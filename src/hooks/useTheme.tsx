@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { runThemeSweep } from '@/lib/theme-transition';
 
 /**
  * Two operating modes, one accent.
@@ -8,11 +9,12 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
  * moves — so the switch reads as a change of stance rather than a different
  * site.
  *
- * The previous implementation wrapped this in a 1.1s cinematic: a full-screen
- * scan line, RGB-shift glitch layers, an expanding energy pulse and a
- * synthesized WebAudio click, with the actual class swap delayed 400ms behind
- * it. All of that has been removed. The class swaps immediately and CSS
- * transitions cross-fade the colours in 250ms.
+ * `setTheme` swaps the class immediately — that is the honest primitive, and
+ * what any programmatic caller wants. `toggleTheme` is the one the visible
+ * control uses, and it routes the same swap through the shutter in
+ * `@/lib/theme-transition`: the plates close, the class changes while nothing
+ * is visible, the plates open. Under `prefers-reduced-motion` the shutter is a
+ * no-op wrapper and the two paths are identical.
  */
 type Theme = 'default' | 'pentest';
 
@@ -51,7 +53,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [applyThemeClass]);
 
   const toggleTheme = useCallback(() => {
-    setTheme(theme === 'default' ? 'pentest' : 'default');
+    const next: Theme = theme === 'default' ? 'pentest' : 'default';
+    runThemeSweep(next, () => setTheme(next));
   }, [theme, setTheme]);
 
   return (
