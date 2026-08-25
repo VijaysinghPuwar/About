@@ -22,9 +22,6 @@ const CursorTrail = lazy(() =>
 const ThemeTransition = lazy(() =>
   import("@/components/ThemeTransition").then(m => ({ default: m.ThemeTransition }))
 );
-const ThreatLevelIndicator = lazy(() =>
-  import("@/components/ThreatLevelIndicator").then(m => ({ default: m.ThreatLevelIndicator }))
-);
 const KonamiCode = lazy(() =>
   import("@/components/KonamiCode").then(m => ({ default: m.KonamiCode }))
 );
@@ -54,7 +51,6 @@ const App = () => (
             <ThemeTransition />
           </Suspense>
           <Preloader />
-          {/* ThreatLevelIndicator needs router context, mounted inside BrowserRouter below */}
           <Suspense fallback={null}>
             <CursorSpotlight />
           </Suspense>
@@ -67,9 +63,6 @@ const App = () => (
           <Sonner />
           <div className="min-h-[100dvh] bg-background">
             <BrowserRouter>
-              <Suspense fallback={null}>
-                <ThreatLevelIndicator />
-              </Suspense>
               <Suspense fallback={null}>
                 <CommandPalette />
               </Suspense>
