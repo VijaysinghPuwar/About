@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, forwardRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Github, X, ExternalLink, Shield, ArrowRight, Columns2, ChevronDown } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Github, X, ExternalLink, ArrowRight, Columns2, ChevronDown } from 'lucide-react';
 import { onOpenProject, scrollToSection } from '@/lib/portfolio-events';
 
 const IMPACT_DIFFS: Record<string, { before: string[]; after: string[] }> = {
@@ -101,16 +100,6 @@ interface ProjectShowcaseProps {
   onClearSkillFilter?: () => void;
 }
 
-const categoryColors: Record<string, string> = {
-  'Security Automation': 'from-red-500 to-orange-500',
-  'Cloud Security': 'from-blue-500 to-cyan-500',
-  'Network Security': 'from-green-500 to-emerald-500',
-  'Application Security': 'from-purple-500 to-pink-500',
-  'Application Development': 'from-amber-500 to-yellow-500',
-  'Research': 'from-indigo-500 to-violet-500',
-  'Automation': 'from-orange-500 to-red-500',
-  'Python Tools': 'from-yellow-500 to-amber-500',
-};
 
 const enrichedData: Record<string, { description: string; features: string[] }> = {
   'vaultsnake-platform': {
@@ -203,6 +192,23 @@ const featuredRank = (id: string) => {
   return i === -1 ? Number.MAX_SAFE_INTEGER : i;
 };
 
+/** Featured cards lead with an outcome; index rows carry only a state. */
+const STATUS_LABEL: Record<string, string> = {
+  completed: 'SHIPPED',
+  'in-progress': 'IN PROGRESS',
+};
+const statusLabel = (s: string) => STATUS_LABEL[s] ?? s.replace(/-/g, ' ').toUpperCase();
+
+/** One metadata row inside a card. Label left, value right, hairline under. */
+function MetaRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 border-b border-border py-2">
+      <dt className="meta-label shrink-0">{label}</dt>
+      <dd className="text-right text-[13px] text-muted-foreground">{value}</dd>
+    </div>
+  );
+}
+
 export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: ProjectShowcaseProps) {
   const [activeFilter, setActiveFilter] = useState('All');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -269,8 +275,6 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
     return () => window.removeEventListener('keydown', handler);
   }, [selectedProject, closeModal]);
 
-  const getGradient = (category: string) =>
-    categoryColors[normalizeCategory(category)] || categoryColors[category] || 'from-primary to-primary';
   const getEnriched = (id: string) => enrichedData[id];
 
   const hasDiff = selectedProject ? selectedProject.id in IMPACT_DIFFS : false;
@@ -278,107 +282,115 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
 
   return (
     <div>
+      {/* Skill cross-link state, stated plainly. This is the site's best
+          interaction, so the filtered state is spelled out rather than implied
+          by a pill that could be mistaken for decoration. */}
       {skillFilter && (
-        <div className="flex justify-center mb-6">
-          <div className="inline-flex items-center gap-3 rounded-full glass-card px-4 py-2 text-sm">
-            <span className="text-muted-foreground">
-              Showing <span className="text-foreground font-medium">{filtered.length}</span>{' '}
-              project{filtered.length === 1 ? '' : 's'} using{' '}
-              <span className="text-foreground font-medium">{skillFilter.label}</span>
-            </span>
-            <button
-              onClick={onClearSkillFilter}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-              aria-label={`Clear the ${skillFilter.label} filter`}
-            >
-              <X className="w-4 h-4" aria-hidden="true" />
-            </button>
-          </div>
+        <div className="mb-6 flex flex-wrap items-center justify-center gap-3.5 font-mono text-[11.5px]">
+          <span className="text-muted-dim">FILTERED BY</span>
+          <span className="text-primary">{skillFilter.label}</span>
+          <span className="text-muted-dim">
+            {filtered.length} of {projects.length} indexed projects
+          </span>
+          <button
+            onClick={onClearSkillFilter}
+            className="rounded-[5px] border border-border-strong px-2.5 py-1 font-mono text-[10.5px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+            aria-label={`Clear the ${skillFilter.label} filter`}
+          >
+            CLEAR
+          </button>
         </div>
       )}
 
-      {/* Filter Bar */}
-      <div className="flex flex-wrap gap-2 mb-10 justify-center">
+      {/* Category filter */}
+      <div className="mb-9 flex flex-wrap justify-center gap-2">
         {filterCategories.map(cat => (
           <button
             key={cat}
             onClick={() => setActiveFilter(cat)}
-            className={`px-4 py-1.5 min-h-[44px] rounded-full text-sm font-medium transition-all ${
-              activeFilter === cat
-                ? 'gradient-btn'
-                : 'glass-card text-muted-foreground hover:text-foreground'
-            }`}
+            aria-pressed={activeFilter === cat}
+            className={
+              'rounded-md border px-3.5 py-2 text-[12.5px] transition-colors ' +
+              (activeFilter === cat
+                ? 'border-primary bg-primary-bg text-primary'
+                : 'border-border bg-card text-muted-foreground hover:border-border-strong hover:text-foreground')
+            }
           >
             {cat}
           </button>
         ))}
       </div>
 
-      {/* Featured Projects */}
+      {/* Tier one: deeply presented, two per row. */}
       {featured.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <AnimatePresence initial={false}>
             {featured.map(project => (
-              <ProjectCard key={project.id} project={project} gradient={getGradient(project.category)}
-                onClick={() => setSelectedProject(project)} />
+              <FeaturedCard
+                key={project.id}
+                project={project}
+                onClick={() => setSelectedProject(project)}
+              />
             ))}
           </AnimatePresence>
         </div>
       )}
 
-      {/* Secondary Projects */}
+      {/* Tier two: an index, not more cards. Twenty-five projects rendered as
+          twenty-five cards is a directory; as rows it is something a hiring
+          manager can actually scan. */}
       {secondary.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <AnimatePresence initial={false}>
-            {secondary.map(project => (
-              <ProjectCardCompact key={project.id} project={project} gradient={getGradient(project.category)}
-                onClick={() => setSelectedProject(project)} />
-            ))}
-          </AnimatePresence>
+        <div className="mt-9">
+          <div className="flex items-baseline justify-between border-b border-border-strong pb-2.5">
+            <span className="font-mono text-[11px] tracking-[0.14em] text-muted-dim">PROJECT INDEX</span>
+            <span className="font-mono text-[11px] text-muted-dim">
+              {secondary.length} of {secondaryAll.length} shown
+            </span>
+          </div>
+          {secondary.map(project => (
+            <IndexRow
+              key={project.id}
+              project={project}
+              onClick={() => setSelectedProject(project)}
+            />
+          ))}
         </div>
       )}
 
       {/* Every project stays reachable; the full set is opt-in so the default
           view is not a wall of cards. */}
       {(hiddenCount > 0 || showAll) && activeFilter === 'All' && (
-        <div className="flex justify-center mb-10">
+        <div className="mt-6 flex justify-center">
           <button
             onClick={() => setShowAll(v => !v)}
             aria-expanded={showAll}
-            className="inline-flex items-center gap-2 px-5 py-2.5 min-h-[44px] rounded-full text-sm font-medium glass-card text-muted-foreground hover:text-foreground transition-colors"
+            className="btn-outline inline-flex min-h-[44px] items-center gap-2 rounded-md px-5 text-[13.5px] font-medium"
           >
-            {showAll
-              ? 'Show fewer projects'
-              : `Show all ${projects.length} projects`}
-            <ChevronDown className={`w-4 h-4 transition-transform ${showAll ? 'rotate-180' : ''}`} aria-hidden="true" />
+            {showAll ? 'Show fewer projects' : `Show all ${projects.length} projects`}
+            <ChevronDown className={`h-4 w-4 transition-transform ${showAll ? 'rotate-180' : ''}`} aria-hidden="true" />
           </button>
         </div>
       )}
 
       {filtered.length === 0 && (
-        <div className="text-center py-16 text-muted-foreground">No projects found in this category.</div>
+        <div className="py-16 text-center text-muted-foreground">No projects found in this category.</div>
       )}
 
       {/* Bottom strip */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.5 }}
-        className="flex flex-col sm:flex-row items-center justify-center gap-4 py-5 mt-4 rounded-lg glass-card"
-      >
-        <div className="flex items-center gap-2">
-          <Github className="w-5 h-5 text-primary" />
-          <span className="font-mono text-sm text-muted-foreground">18+ public repositories</span>
+      <div className="panel mt-9 flex flex-col items-center justify-between gap-4 rounded-lg px-6 py-4 sm:flex-row">
+        <div className="flex items-center gap-2.5">
+          <Github className="h-4 w-4 text-primary" aria-hidden="true" />
+          <span className="font-mono text-[13px] text-muted-foreground">18+ public repositories</span>
         </div>
         <a
           href="https://github.com/vijaysinghpuwar"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 px-5 py-2 rounded-md text-sm font-medium gradient-btn"
+          className="btn-outline inline-flex h-10 items-center gap-2 rounded-md px-4 text-[13.5px] font-medium"
         >
-          View All on GitHub <ArrowRight className="w-4 h-4" />
+          View all on GitHub <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </a>
-      </motion.div>
+      </div>
 
       {/* Modal */}
       <AnimatePresence>
@@ -387,123 +399,110 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 p-4"
             onClick={closeModal}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.97 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.97 }}
-              transition={{ duration: 0.18, ease: 'easeOut' }}
-              className="relative w-screen h-screen md:w-full md:max-w-2xl md:max-h-[85vh] md:rounded-xl rounded-none overflow-y-auto glass-card border border-border/60 p-6 sm:p-8"
+              role="dialog"
+              aria-modal="true"
+              aria-label={selectedProject.title}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
+              className="panel relative h-screen w-screen overflow-y-auto rounded-none p-6 sm:p-8 md:h-auto md:max-h-[85vh] md:w-full md:max-w-2xl md:rounded-lg"
               onClick={e => e.stopPropagation()}
             >
-              {/* Top buttons */}
-              <div className="absolute top-4 right-4 flex items-center gap-2">
+              <div className="absolute right-4 top-4 flex items-center gap-2">
                 {hasDiff && (
                   <button
                     onClick={() => setShowDiff(!showDiff)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-[12px] transition-all ${
-                      showDiff
-                        ? 'border border-primary/40 bg-primary/10 text-primary'
-                        : 'glass-card border border-border/40 text-muted-foreground hover:text-foreground hover:border-primary/30'
-                    }`}
+                    className={
+                      'inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-[11.5px] transition-colors ' +
+                      (showDiff
+                        ? 'border-primary bg-primary-bg text-primary'
+                        : 'border-border text-muted-foreground hover:border-border-strong hover:text-foreground')
+                    }
                   >
-                    <Columns2 className="w-3.5 h-3.5" />
-                    {showDiff ? 'Show Details' : 'Show Impact'}
+                    <Columns2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    {showDiff ? 'Show details' : 'Show impact'}
                   </button>
                 )}
-                <button onClick={closeModal}
-                  className="text-muted-foreground hover:text-foreground transition-colors">
-                  <X className="w-5 h-5" />
+                <button
+                  onClick={closeModal}
+                  aria-label="Close"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <X className="h-5 w-5" aria-hidden="true" />
                 </button>
               </div>
 
-              {/* Gradient accent */}
-              <div className={`h-1 w-20 rounded-full bg-gradient-to-r ${getGradient(selectedProject.category)} mb-6`} />
-
-              <h3 className="text-2xl font-bold text-foreground mb-3">{selectedProject.title}</h3>
-
-              <div className="flex items-center gap-2 mb-4">
-                <Badge variant="outline" className="text-xs text-primary border-primary/20">
-                  {selectedProject.category}
-                </Badge>
-                <span className="text-xs text-muted-foreground">{selectedProject.year}</span>
+              <div className="meta-label">{normalizeCategory(selectedProject.category)}</div>
+              <h3 className="mt-3 pr-24 text-[24px] font-semibold tracking-[-0.02em] text-foreground">
+                {selectedProject.title}
+              </h3>
+              <div className="mt-2 font-mono text-[11.5px] text-muted-dim">
+                {selectedProject.year} · {statusLabel(selectedProject.status)}
               </div>
 
-              {/* Content swap */}
-              <AnimatePresence mode="wait">
+              <div className="mt-6">
                 {!showDiff ? (
-                  <motion.div
-                    key="details"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <p className="text-sm text-muted-foreground leading-relaxed mb-6">
+                  <div>
+                    <p className="text-[14.5px] leading-[1.65] text-muted-foreground">
                       {getEnriched(selectedProject.id)?.description || selectedProject.description}
                     </p>
 
-                    <div className="flex flex-wrap gap-2 mb-6">
-                      {selectedProject.tech.map(t => (
-                        <span key={t} className="text-xs px-3 py-1 rounded-full glass-card text-foreground border border-border/40">
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-
-                    {getEnriched(selectedProject.id)?.features && (
-                      <div className="mb-6">
-                        <h4 className="text-sm font-semibold text-foreground mb-2">Key Features</h4>
-                        <ul className="space-y-1.5">
-                          {getEnriched(selectedProject.id)!.features.map(f => (
-                            <li key={f} className="flex items-start gap-2 text-sm text-muted-foreground">
-                              <Shield className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
-                              {f}
+                    {selectedProject.keyResults?.length > 0 && (
+                      <div className="mt-6">
+                        <h4 className="meta-label">What it does</h4>
+                        <ul className="mt-3 flex flex-col gap-2.5">
+                          {selectedProject.keyResults.map(r => (
+                            <li key={r} className="flex gap-3 text-[14px] leading-[1.55] text-muted-foreground">
+                              <span className="shrink-0 text-primary" aria-hidden="true">—</span>
+                              {r}
                             </li>
                           ))}
                         </ul>
                       </div>
                     )}
 
-                    {selectedProject.links.demo && (
-                      <a
-                        href={selectedProject.links.demo}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-5 py-2.5 mr-3 rounded-md text-sm font-medium border border-border/60 text-foreground hover:border-primary/40 hover:text-primary transition-colors"
-                      >
-                        Visit site <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    )}
-                    {/* Repository links are public. links.github is only ever set for
-                        repositories that are public on GitHub — private ones carry null
-                        and render nothing, so there is no repo to gate and no private
-                        URL in the shipped data. Those projects lead with their live site. */}
-                    {selectedProject.links.github && (
-                      <a
-                        href={selectedProject.links.github}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-medium gradient-btn"
-                      >
-                        <Github className="w-4 h-4" /> View Source <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    )}
-                  </motion.div>
+                    <dl className="mt-6 border-t border-border">
+                      <MetaRow label="Stack" value={selectedProject.tech.join(' · ')} />
+                      <MetaRow label="Year" value={selectedProject.year} />
+                      <MetaRow label="Status" value={statusLabel(selectedProject.status)} />
+                    </dl>
+
+                    <div className="mt-6 flex flex-wrap gap-2.5">
+                      {selectedProject.links.demo && (
+                        <a
+                          href={selectedProject.links.demo}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn-outline inline-flex h-10 items-center gap-2 rounded-md px-4 text-[13.5px] font-medium"
+                        >
+                          Visit site <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                        </a>
+                      )}
+                      {/* Repository links are public. links.github is only ever set for
+                          repositories that are public on GitHub — private ones carry null
+                          and render nothing, so there is no repo to gate and no private
+                          URL in the shipped data. Those projects lead with their live site. */}
+                      {selectedProject.links.github && (
+                        <a
+                          href={selectedProject.links.github}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="gradient-btn inline-flex h-10 items-center gap-2 rounded-md px-4 text-[13.5px]"
+                        >
+                          <Github className="h-4 w-4" aria-hidden="true" /> View source
+                        </a>
+                      )}
+                    </div>
+                  </div>
                 ) : diffData ? (
-                  <motion.div
-                    key={`diff-${selectedProject.id}`}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <DiffView before={diffData.before} after={diffData.after} />
-                  </motion.div>
+                  <DiffView before={diffData.before} after={diffData.after} />
                 ) : null}
-              </AnimatePresence>
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -514,173 +513,122 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
 
 /* ── Diff View ── */
 
+/**
+ * Before/after, in the theme's own colours. It previously hardcoded #f43f5e and
+ * #22c55e, so the "after" column stayed green even in pentest mode where green
+ * means nothing, and both columns ignored the token layer entirely.
+ */
 function DiffView({ before, after }: { before: string[]; after: string[] }) {
-  const beforeDelay = before.length * 0.08;
+  const column = (title: string, rows: string[], sign: string, good: boolean) => (
+    <div className="overflow-x-auto rounded-md border border-border bg-card-elevated p-4">
+      <span className={`meta-label ${good ? 'text-primary' : 'text-destructive'}`}>{title}</span>
+      <div className="mt-3 flex flex-col gap-1.5">
+        {rows.map(line => (
+          <div key={line} className="flex items-start gap-2 font-mono text-[11.5px] leading-[1.5]">
+            <span className={`shrink-0 ${good ? 'text-primary' : 'text-destructive'}`}>{sign}</span>
+            <span className="text-muted-foreground">{line}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
-    <div className="grid md:grid-cols-2 gap-4">
-      {/* BEFORE */}
-      <div
-        className="rounded-lg p-4 overflow-x-auto"
-        style={{
-          borderLeft: '3px solid rgba(244, 63, 94, 0.3)',
-          background: 'rgba(244, 63, 94, 0.03)',
-        }}
-      >
-        <span
-          className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider mb-3"
-          style={{ background: 'rgba(244, 63, 94, 0.15)', color: '#f43f5e' }}
-        >
-          Before
-        </span>
-        <div className="space-y-1.5">
-          {before.map((line, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.08, duration: 0.2 }}
-              className="flex items-start gap-2 font-mono text-[12px] md:text-[12px] text-[11px]"
-            >
-              <span className="shrink-0" style={{ color: '#f43f5e' }}>−</span>
-              <span className="text-muted-foreground">{line}</span>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-
-      {/* AFTER */}
-      <div
-        className="rounded-lg p-4 overflow-x-auto"
-        style={{
-          borderLeft: '3px solid rgba(34, 197, 94, 0.3)',
-          background: 'rgba(34, 197, 94, 0.03)',
-        }}
-      >
-        <span
-          className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider mb-3"
-          style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e' }}
-        >
-          After
-        </span>
-        <div className="space-y-1.5">
-          {after.map((line, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, x: 10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: beforeDelay + i * 0.08, duration: 0.2 }}
-              className="flex items-start gap-2 font-mono text-[12px] md:text-[12px] text-[11px]"
-            >
-              <span className="shrink-0" style={{ color: '#22c55e' }}>+</span>
-              <span className="text-muted-foreground">{line}</span>
-            </motion.div>
-          ))}
-        </div>
-      </div>
+    <div className="grid gap-3 md:grid-cols-2">
+      {column('Before', before, '−', false)}
+      {column('After', after, '+', true)}
     </div>
   );
 }
 
-/* ── Card Components ── */
+/* ── Cards ── */
 
-const ProjectCard = forwardRef<HTMLDivElement, { project: Project; gradient: string; onClick: () => void }>(
-  function ProjectCard({ project, gradient, onClick }, ref) {
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-      onClick={onClick}
-      className="group cursor-pointer rounded-lg glass-card border border-border/30 hover:border-primary/40 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_8px_30px_hsl(var(--primary)/0.12)] flex flex-col overflow-hidden"
-    >
-      {/* Top accent */}
-      <div className={`h-0.5 bg-gradient-to-r ${gradient}`} />
+/**
+ * Tier one.
+ *
+ * The old card gave title, description, tech tags, year and status roughly the
+ * same weight, so nothing led. This one has a single focal point: the first key
+ * result, set brighter and marked with an accent rule. That is the outcome, and
+ * it is the reason to keep reading. Everything else is support.
+ */
+const FeaturedCard = forwardRef<HTMLDivElement, { project: Project; onClick: () => void }>(
+  function FeaturedCard({ project, onClick }, ref) {
+    const outcome = project.keyResults?.[0];
 
-      <div className="p-5 flex flex-col flex-1 relative">
-        {/* GitHub link */}
-        {project.links.github && (
-          <a
-            href={project.links.github}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={e => e.stopPropagation()}
-            aria-label={`${project.title} source on GitHub`}
-            className="absolute top-4 right-4 text-muted-foreground/50 hover:text-primary transition-colors"
-          >
-            <Github className="w-4 h-4" />
-          </a>
-        )}
-
-        <div className="flex items-center gap-2 mb-3">
-          <Badge variant="outline" className="text-[10px] text-primary border-primary/20">
-            {normalizeCategory(project.category)}
-          </Badge>
-          <span className="text-[10px] text-muted-foreground">{project.year}</span>
+    return (
+      <motion.article
+        ref={ref}
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        onClick={onClick}
+        className="panel panel-hover flex cursor-pointer flex-col rounded-lg p-6"
+      >
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="meta-label">{normalizeCategory(project.category)}</span>
+          <span className="font-mono text-[10.5px] text-muted-dim">{project.year}</span>
         </div>
 
-        <h3 className="font-semibold text-foreground text-sm mb-2 group-hover:text-primary transition-colors pr-8">
+        <h3 className="mt-3 text-[21px] font-semibold tracking-[-0.02em] text-foreground">
           {project.title}
         </h3>
 
-        <p className="text-xs text-muted-foreground line-clamp-2 mb-3 min-h-[2rem]">
+        <p className="mt-2.5 line-clamp-2 text-[14.5px] leading-[1.58] text-muted-foreground">
           {project.description}
         </p>
 
-        <div className="flex flex-wrap gap-1 mb-3 mt-auto">
-          {project.tech.slice(0, 4).map(t => (
-            <span key={t} className="text-[10px] px-2 py-0.5 rounded-full glass-card text-muted-foreground">
-              {t}
-            </span>
-          ))}
-          {project.tech.length > 4 && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full glass-card text-muted-foreground">
-              +{project.tech.length - 4}
-            </span>
+        {outcome && (
+          <p className="mt-4 border-l-2 border-primary pl-3.5 text-[13.5px] leading-[1.5] text-foreground">
+            {outcome}
+          </p>
+        )}
+
+        <dl className="mt-4 border-t border-border">
+          <MetaRow label="Stack" value={project.tech.slice(0, 4).join(' · ')} />
+          <MetaRow label="Status" value={statusLabel(project.status)} />
+        </dl>
+
+        <div className="mt-4 flex items-center gap-5 text-[14px] font-medium">
+          <span className="flex items-center gap-2 text-primary">
+            View details <span className="font-mono" aria-hidden="true">&#8594;</span>
+          </span>
+          {project.links.github && (
+            <a
+              href={project.links.github}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              aria-label={`${project.title} source on GitHub`}
+              className="ml-auto text-muted-dim transition-colors hover:text-primary"
+            >
+              <Github className="h-4 w-4" aria-hidden="true" />
+            </a>
           )}
         </div>
+      </motion.article>
+    );
+  });
 
-        <span className="text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-          View Details <ArrowRight className="w-3 h-3" />
+/**
+ * Tier two: name, stack, state. Three columns, one hairline, no card chrome.
+ */
+const IndexRow = forwardRef<HTMLButtonElement, { project: Project; onClick: () => void }>(
+  function IndexRow({ project, onClick }, ref) {
+    return (
+      <button
+        ref={ref}
+        type="button"
+        onClick={onClick}
+        className="grid w-full grid-cols-1 items-center gap-1 border-b border-border py-3.5 text-left transition-colors hover:bg-card sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1.2fr)_130px] sm:gap-5"
+      >
+        <span className="text-[15px] font-medium text-foreground">{project.title}</span>
+        <span className="truncate font-mono text-[11.5px] text-muted-dim">
+          {project.tech.slice(0, 3).join(' · ')}
         </span>
-      </div>
-    </motion.div>
-  );
-});
-
-const ProjectCardCompact = forwardRef<HTMLDivElement, { project: Project; gradient: string; onClick: () => void }>(
-  function ProjectCardCompact({ project, gradient, onClick }, ref) {
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 15 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-      onClick={onClick}
-      className="group cursor-pointer rounded-lg glass-card border border-border/30 hover:border-primary/40 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_4px_20px_hsl(var(--primary)/0.08)] overflow-hidden"
-    >
-      <div className={`h-0.5 bg-gradient-to-r ${gradient}`} />
-      <div className="p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Badge variant="outline" className="text-[10px] text-primary border-primary/20">
-            {normalizeCategory(project.category)}
-          </Badge>
-          <span className="text-[10px] text-muted-foreground">{project.year}</span>
-        </div>
-        <h3 className="font-semibold text-foreground text-xs mb-2 group-hover:text-primary transition-colors">
-          {project.title}
-        </h3>
-        <div className="flex flex-wrap gap-1">
-          {project.tech.slice(0, 3).map(t => (
-            <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-full glass-card text-muted-foreground">
-              {t}
-            </span>
-          ))}
-        </div>
-      </div>
-    </motion.div>
-  );
-});
+        <span className="font-mono text-[11px] text-muted-foreground sm:text-right">
+          {statusLabel(project.status)}
+        </span>
+      </button>
+    );
+  });

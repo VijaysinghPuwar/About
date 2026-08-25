@@ -127,13 +127,13 @@ export default function Login() {
       <Helmet>
         <title>Sign In | Vijaysingh Puwar</title>
       </Helmet>
-      <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent" />
+      <div className="absolute inset-0 hidden" />
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative w-full max-w-md">
-        <div className="glass-card rounded-2xl p-8 space-y-6">
+        <div className="glass-card rounded-lg p-8 space-y-6">
           {/* Logo */}
           <div className="text-center space-y-3">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl gradient-border">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-lg gradient-border">
               <span className="text-2xl font-bold gradient-text">VJ</span>
             </div>
             <div>

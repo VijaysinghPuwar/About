@@ -1,36 +1,58 @@
-import { Crosshair, Shield } from 'lucide-react';
-import { MouseEvent } from 'react';
-import { Button } from '@/components/ui/button';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 
-export function ThemeToggle({ showLabel = false }: { showLabel?: boolean }) {
-  const { isPentest, toggleTheme, isTransitioning } = useTheme();
+/**
+ * A two-state segmented control, not a mystery icon. Both modes are named and
+ * the active one is filled, so the reader knows what they are switching between
+ * before they click — the previous version was a single shield/crosshair glyph
+ * that gave no clue what the other state was.
+ */
+export function ThemeToggle({ compact = false }: { compact?: boolean }) {
+  const { isPentest, toggleTheme } = useTheme();
 
-  const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    toggleTheme({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
-  };
+  const segment = (label: string, active: boolean) => (
+    <span
+      className={cn(
+        'flex h-7 items-center rounded-[4px] border px-2.5 font-mono text-[10.5px] tracking-[0.08em] transition-colors',
+        active
+          ? 'border-primary bg-primary-bg text-primary'
+          : 'border-transparent text-muted-dim',
+      )}
+    >
+      {label}
+    </span>
+  );
+
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={toggleTheme}
+        aria-label={isPentest ? 'Switch to security mode' : 'Switch to pentest mode'}
+        className="flex h-11 w-11 items-center justify-center rounded-md border border-border bg-card"
+      >
+        <svg width="16" height="18" viewBox="0 0 16 18" aria-hidden="true">
+          <path
+            d="M8 1 L14.9 5 L14.9 13 L8 17 L1.1 13 L1.1 5 Z"
+            fill="none"
+            stroke="hsl(var(--primary))"
+            strokeWidth="1.6"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+    );
+  }
 
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={handleClick}
-      disabled={isTransitioning}
-      className={cn(
-        "transition-colors gap-2",
-        showLabel ? "px-3" : "w-9 px-0",
-        isPentest
-          ? "text-destructive hover:bg-destructive/10"
-          : "text-muted-foreground hover:text-foreground"
-      )}
-      title={isPentest ? 'Switch to Default Mode' : 'Activate Pentest Mode'}
+    <button
+      type="button"
+      onClick={toggleTheme}
+      aria-label="Switch operational theme"
+      className="flex h-9 items-center gap-0.5 rounded-md border border-border bg-card p-0.5"
     >
-      {isPentest ? <Crosshair className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
-      {showLabel && (
-        <span className="text-sm">{isPentest ? 'Pentest' : 'Default'}</span>
-      )}
-    </Button>
+      {segment('SECURITY', !isPentest)}
+      {segment('PENTEST', isPentest)}
+    </button>
   );
 }

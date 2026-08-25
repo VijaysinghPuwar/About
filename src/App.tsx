@@ -11,20 +11,22 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { CyberGrid } from "@/components/CyberGrid";
-import { Preloader } from "@/components/Preloader";
 
-const CursorSpotlight = lazy(() =>
-  import("@/components/CursorSpotlight").then(m => ({ default: m.CursorSpotlight }))
-);
-const CursorTrail = lazy(() =>
-  import("@/components/CursorTrail").then(m => ({ default: m.CursorTrail }))
-);
-const ThemeTransition = lazy(() =>
-  import("@/components/ThemeTransition").then(m => ({ default: m.ThemeTransition }))
-);
-const KonamiCode = lazy(() =>
-  import("@/components/KonamiCode").then(m => ({ default: m.KonamiCode }))
-);
+/*
+  Ambient effects, deliberately down to two.
+
+  The site previously ran a cursor spotlight, a cursor trail, a mouse-reactive
+  canvas grid, a preloader, a theme-transition scan line with synthesized audio,
+  and a Konami-code rainbow mode — all at once. Individually clever, collectively
+  noise, and none of them helped anyone read the work. What survives:
+
+    1. A static rule grid behind the hero (CyberGrid) — it frames the terminal
+       and fades out before the content.
+    2. Section fade-up on scroll (SectionReveal) — it marks where a section
+       begins without decorating it.
+
+  Everything else was removed rather than tuned down.
+*/
 const CommandPalette = lazy(() =>
   import("@/components/CommandPalette").then(m => ({ default: m.CommandPalette }))
 );
@@ -47,19 +49,6 @@ const App = () => (
       <ThemeProvider>
         <AuthProvider>
           <CyberGrid />
-          <Suspense fallback={null}>
-            <ThemeTransition />
-          </Suspense>
-          <Preloader />
-          <Suspense fallback={null}>
-            <CursorSpotlight />
-          </Suspense>
-          <Suspense fallback={null}>
-            <CursorTrail />
-          </Suspense>
-          <Suspense fallback={null}>
-            <KonamiCode />
-          </Suspense>
           <Sonner />
           <div className="min-h-[100dvh] bg-background">
             <BrowserRouter>
@@ -67,7 +56,7 @@ const App = () => (
                 <CommandPalette />
               </Suspense>
               <Navigation />
-              <main className="relative">
+              <main className="relative z-[1]">
                 <Routes>
                   <Route path="/" element={<Index />} />
                   <Route path="/login" element={<Login />} />

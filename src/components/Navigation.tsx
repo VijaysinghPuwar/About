@@ -19,10 +19,9 @@ import { LogoIcon } from '@/components/LogoIcon';
 
 // Order mirrors the page: work first, then the record, then supporting detail.
 const sections = [
-  { name: 'Home', id: 'home' },
-  { name: 'Projects', id: 'projects' },
-  { name: 'Experience', id: 'experience' },
-  { name: 'Skills', id: 'skills' },
+  { name: 'Work', id: 'projects' },
+  { name: 'Journey', id: 'experience' },
+  { name: 'Capabilities', id: 'skills' },
   { name: 'Contact', id: 'contact' },
 ];
 
@@ -62,7 +61,7 @@ export function Navigation() {
   const scrollTo = useCallback((id: string) => {
     const el = document.getElementById(id);
     if (el) {
-      const top = el.getBoundingClientRect().top + window.scrollY - 64;
+      const top = el.getBoundingClientRect().top + window.scrollY - 72;
       window.scrollTo({ top, behavior: 'smooth' });
     }
     setIsOpen(false);
@@ -78,15 +77,15 @@ export function Navigation() {
     : user?.email?.[0]?.toUpperCase() || '?';
 
   return (
+    // Solid on scroll rather than translucent-with-blur: the rule grid behind
+    // the hero was showing through the bar and vibrating against the nav text.
     <nav className={cn(
-      "fixed top-0 z-50 w-full transition-all duration-300",
-      scrolled
-        ? "bg-background/80 backdrop-blur-xl border-b border-border/40 shadow-sm"
-        : "bg-transparent border-b border-transparent"
+      "fixed top-0 z-50 w-full border-b transition-colors duration-200",
+      scrolled ? "border-border bg-background" : "border-transparent bg-transparent"
     )}>
-      <div className="container flex h-14 items-center justify-between">
-        <button onClick={() => scrollTo('home')} aria-label="Vijaysingh Puwar — back to top" className="flex items-center gap-1 hover:opacity-80 transition-opacity">
-          <LogoIcon size={36} />
+      <div className="container mx-auto flex h-16 max-w-[1180px] items-center justify-between px-5">
+        <button onClick={() => scrollTo('home')} aria-label="Vijaysingh Puwar — back to top" className="flex h-11 items-center">
+          <LogoIcon size={26} withName />
         </button>
 
         {/* Desktop */}
@@ -97,7 +96,7 @@ export function Navigation() {
                 key={item.id}
                 onClick={() => scrollTo(item.id)}
                 className={cn(
-                  "relative px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+                  "relative flex h-11 items-center px-3.5 text-[14px] transition-colors",
                   activeSection === item.id
                     ? "text-foreground"
                     : "text-muted-foreground hover:text-foreground"
@@ -105,30 +104,37 @@ export function Navigation() {
               >
                 {item.name}
                 {activeSection === item.id && (
-                  <span className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full bg-gradient-to-r from-primary to-secondary" />
+                  <span className="absolute bottom-2.5 left-3.5 right-3.5 h-px bg-primary" />
                 )}
               </button>
             ))
           ) : (
-            <Link to="/" className="px-3 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <Link to="/" className="flex h-11 items-center px-3.5 text-[14px] text-muted-foreground transition-colors hover:text-foreground">
               ← Back Home
             </Link>
           )}
         </div>
 
-        <div className="hidden md:flex items-center gap-2">
+        <div className="hidden md:flex items-center gap-2.5">
+          <a
+            href="/resume.pdf"
+            download
+            className="btn-outline hidden h-9 items-center gap-2 rounded-md px-3.5 text-[13.5px] font-medium lg:inline-flex"
+          >
+            Résumé <span className="font-mono text-[11px] text-muted-dim">PDF</span>
+          </a>
           <ThemeToggle />
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-8 w-8 rounded-full p-0">
-                  <Avatar className="h-8 w-8 border border-border/50">
+                  <Avatar className="h-8 w-8 border border-border">
                     <AvatarImage src={profile?.avatar_url || undefined} />
                     <AvatarFallback className="bg-muted text-xs">{userInitials}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48 glass-card">
+              <DropdownMenuContent align="end" className="w-48 border-border bg-card">
                 <div className="px-3 py-2">
                   <p className="text-sm font-medium truncate">{profile?.full_name || 'User'}</p>
                   <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
@@ -155,7 +161,7 @@ export function Navigation() {
 
         {/* Mobile */}
         <div className="md:hidden flex items-center gap-2">
-          <ThemeToggle />
+          <ThemeToggle compact />
           <Sheet open={isOpen} onOpenChange={(open) => {
               setIsOpen(open);
               document.body.style.overflow = open ? 'hidden' : '';
@@ -165,9 +171,9 @@ export function Navigation() {
                 <Menu className="w-5 h-5" aria-hidden="true" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-[280px] glass-card border-border/40">
+            <SheetContent side="right" className="w-[280px] border-border bg-background">
               <div className="flex flex-col gap-4 mt-6">
-                <div className="pb-3 border-b border-border/40">
+                <div className="border-b border-border pb-3">
                   <LogoIcon size={28} />
                   <div className="text-sm text-muted-foreground">Cybersecurity Engineer</div>
                 </div>
@@ -178,7 +184,7 @@ export function Navigation() {
                       onClick={() => scrollTo(item.id)}
                       className={cn(
                         "px-3 py-2 min-h-[44px] rounded-md text-sm font-medium transition-colors text-left flex items-center",
-                        activeSection === item.id ? "text-foreground bg-primary/5" : "text-muted-foreground hover:text-foreground"
+                        activeSection === item.id ? "text-primary" : "text-muted-foreground hover:text-foreground"
                       )}
                     >
                       {item.name}
@@ -189,7 +195,7 @@ export function Navigation() {
                     ← Back Home
                   </Link>
                 )}
-                <div className="pt-3 border-t border-border/40">
+                <div className="border-t border-border pt-3">
                   {user ? (
                     <div className="space-y-2">
                       {isAdmin && (
@@ -202,7 +208,7 @@ export function Navigation() {
                       </Button>
                     </div>
                   ) : (
-                    <Button size="sm" className="w-full gradient-btn" asChild onClick={() => setIsOpen(false)}>
+                    <Button size="sm" className="w-full gradient-btn rounded-md" asChild onClick={() => setIsOpen(false)}>
                       <Link to={loginHref()}><LogIn className="w-4 h-4 mr-2" /> Sign In</Link>
                     </Button>
                   )}

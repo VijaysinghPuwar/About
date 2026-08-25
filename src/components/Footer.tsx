@@ -1,65 +1,47 @@
-import { Github, Linkedin } from 'lucide-react';
 import { useCallback } from 'react';
 import { LogoIcon } from '@/components/LogoIcon';
-import { ProtectedEmail } from '@/components/ProtectedEmail';
 
 const navLinks = [
-  { label: 'Skills', id: 'skills' },
-  { label: 'Projects', id: 'projects' },
-  { label: 'Experience', id: 'experience' },
+  { label: 'Work', id: 'projects' },
+  { label: 'Journey', id: 'experience' },
+  { label: 'Capabilities', id: 'skills' },
   { label: 'Contact', id: 'contact' },
 ];
 
+/**
+ * A rule, a mark, a year, four links. The previous footer carried a fading
+ * gradient hairline, a duplicate set of social icons already present in the
+ * contact section directly above it, and a ⌘K hint styled with hardcoded cyan
+ * hex values that ignored the theme.
+ */
 export function Footer() {
   const scrollTo = useCallback((id: string) => {
     const el = document.getElementById(id);
     if (el) {
-      const top = el.getBoundingClientRect().top + window.scrollY - 64;
+      const top = el.getBoundingClientRect().top + window.scrollY - 72;
       window.scrollTo({ top, behavior: 'smooth' });
     }
   }, []);
 
   return (
-    <footer className="relative bg-transparent pt-0 pb-6">
-      <div className="h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent mb-6" />
+    <footer className="relative z-[1] border-t border-border">
+      <div className="container mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-6 gap-y-4 px-5 py-6">
+        <LogoIcon size={22} />
+        <span className="font-mono text-[11.5px] text-muted-dim">
+          © {new Date().getFullYear()} Vijaysingh Puwar
+        </span>
 
-      <div className="container max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <LogoIcon size={24} />
-          <p className="text-sm text-muted-foreground font-mono">
-            © {new Date().getFullYear()} · Built with intent
-          </p>
-        </div>
-
-        <nav className="flex items-center gap-4">
-          {navLinks.map((link) => (
+        <nav className="ml-auto flex flex-wrap gap-x-[18px] text-[13.5px]">
+          {navLinks.map(link => (
             <button
               key={link.id}
               onClick={() => scrollTo(link.id)}
-              className="text-xs font-mono text-muted-foreground hover:text-primary transition-colors"
+              className="text-muted-foreground transition-colors hover:text-primary"
             >
               {link.label}
             </button>
           ))}
         </nav>
-
-        <div className="flex items-center gap-5">
-          <ProtectedEmail variant="icon" />
-
-          <a href="https://github.com/vijaysinghpuwar" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors" aria-label="GitHub">
-            <Github className="w-4 h-4" aria-hidden="true" />
-          </a>
-          <a href="https://linkedin.com/in/vijaysinghpuwar" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors" aria-label="LinkedIn">
-            <Linkedin className="w-4 h-4" aria-hidden="true" />
-          </a>
-          <span className="hidden sm:inline-flex items-center gap-1 font-mono text-[11px]" style={{ color: '#475569' }}>
-            Press{' '}
-            <kbd className="inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[10px]" style={{ background: 'rgba(100,220,255,0.1)', border: '1px solid rgba(100,220,255,0.15)' }}>
-              {typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl+'}K
-            </kbd>
-            {' '}to navigate
-          </span>
-        </div>
       </div>
     </footer>
   );

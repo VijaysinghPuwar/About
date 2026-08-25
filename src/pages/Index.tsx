@@ -1,13 +1,13 @@
 import { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
-import { Github, Linkedin, ArrowRight, Shield, Lock } from 'lucide-react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { Lock } from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
 import projectsData from '@/data/projects.json';
 import { useAuth } from '@/hooks/useAuth';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
-import { SectionReveal, RevealLabel } from '@/components/SectionReveal';
+import { SecurityDiagram } from '@/components/SecurityDiagram';
+import { SectionReveal } from '@/components/SectionReveal';
 import { ProtectedEmail } from '@/components/ProtectedEmail';
 import { loginHref } from '@/lib/auth-redirect';
 import { onFilterSkill } from '@/lib/portfolio-events';
@@ -16,22 +16,37 @@ const SkillMatrix = lazy(() => import('@/components/SkillMatrix').then(m => ({ d
 const ExperienceTimeline = lazy(() => import('@/components/ExperienceTimeline').then(m => ({ default: m.ExperienceTimeline })));
 const ProjectShowcase = lazy(() => import('@/components/ProjectShowcase').then(m => ({ default: m.ProjectShowcase })));
 
-/* ── animation helpers ── */
-const spring = (i: number) => ({
-  type: 'spring' as const, stiffness: 100, damping: 15, delay: i * 0.1,
-});
+/**
+ * Section header.
+ *
+ * Every section used to be eyebrow + centred title + grid, which went monotone
+ * by the third scroll. This takes an `align` so the rhythm can break: Work and
+ * Capabilities lead centred because they introduce a wide grid, Journey runs
+ * left so the page does not read as four identical slabs.
+ */
+function SectionHeader({
+  label,
+  title,
+  blurb,
+  align = 'center',
+}: {
+  label: string;
+  title: string;
+  blurb?: string;
+  align?: 'center' | 'left';
+}) {
+  const centred = align === 'center';
+  return (
+    <div className={centred ? 'mx-auto mb-10 max-w-[640px] text-center' : 'mb-10 max-w-[640px]'}>
+      <div className="section-heading">{label}</div>
+      <h2 className="section-title mt-3">{title}</h2>
+      {blurb && <p className="mt-3 text-[15px] text-muted-foreground">{blurb}</p>}
+    </div>
+  );
+}
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 24 },
-  visible: (i: number) => ({ opacity: 1, y: 0, transition: spring(i) }),
-};
-
-const VP = { once: true, amount: 0.3 }; // viewport config
-
-/* ── main component ── */
 export default function Index() {
   const { user } = useAuth();
-  const reducedMotion = useReducedMotion();
 
   /* projects */
   const { projects: dbProjects } = useProjects();
@@ -69,82 +84,53 @@ export default function Index() {
       </Helmet>
       {/* sr-only h1 establishes the page heading for SEO and screen readers; the visual hero is the terminal card */}
       <h1 className="sr-only">Vijaysingh Puwar — Cybersecurity Engineer</h1>
+
       {/* ═══════ HERO ═══════ */}
-      <section id="home" aria-labelledby="home-heading" className="relative flex flex-col overflow-hidden hero-grid-bg lg:min-h-[100dvh] lg:justify-center">
+      <section id="home" aria-labelledby="home-heading" className="relative">
         <span id="home-heading" className="sr-only">Hero</span>
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] via-transparent to-background" />
 
-        <div className="container relative max-w-6xl mx-auto pt-20 pb-10 sm:pt-36 sm:pb-24">
-          <div className="max-w-3xl">
-            {/* Left: Terminal */}
+        <div className="container mx-auto max-w-[1180px] px-5 pb-16 pt-24 sm:pb-24 sm:pt-32">
+          {/* Terminal left, schematic right. The right column is the proof the
+              first screen previously had none of: what the work is, where it
+              happens now, and whether he is available — all checkable. */}
+          <div className="grid items-center gap-11 lg:grid-cols-[minmax(0,1.06fr)_minmax(0,1fr)] lg:gap-[68px]">
             <div>
-              {/* Status indicators — in flow above the terminal so they track it
-                  at every width instead of colliding with it on narrow desktops. */}
-              <div className="flex flex-col gap-1.5 sm:gap-2 mb-4 sm:mb-5">
-                <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
-                  className="flex items-center gap-2 sm:gap-2.5">
-                  <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-success animate-pulse shrink-0" />
-                  <span className="font-mono text-[10px] sm:text-xs lg:text-sm text-muted-foreground tracking-wider uppercase">Systems Online</span>
-                </motion.div>
-                <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }}
-                  className="flex items-center gap-2 sm:gap-2.5">
-                  <span className="text-muted-foreground/60 text-xs sm:text-sm lg:text-base leading-none">📍</span>
-                  <span className="font-mono text-[10px] sm:text-xs lg:text-sm text-muted-foreground">New York, NY</span>
-                </motion.div>
-                <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.6 }}
-                  className="flex items-center gap-2 sm:gap-2.5">
-                  <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-success animate-cyber-pulse shrink-0" />
-                  <span className="font-mono text-[10px] sm:text-xs lg:text-sm text-muted-foreground">Open to opportunities</span>
-                </motion.div>
-              </div>
-              <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
-                transition={{ type: 'spring', stiffness: 100, damping: 15, delay: 0.3 }}>
-                <TerminalHero projects={allProjects} />
-              </motion.div>
+              <TerminalHero projects={allProjects} />
 
-              {/* Social icons */}
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.5 }}
-                className="flex gap-5 mt-4 sm:mt-6 items-center">
-                {[
-                  { href: 'https://github.com/vijaysinghpuwar', icon: Github, label: 'GitHub' },
-                  { href: 'https://linkedin.com/in/vijaysinghpuwar', icon: Linkedin, label: 'LinkedIn' },
-                ].map(({ href, icon: Icon, label }) => (
-                  <a key={href} href={href} target="_blank" rel="noopener noreferrer"
-                    aria-label={label}
-                    className="text-muted-foreground hover:text-primary transition-colors">
-                    <Icon className="w-5 h-5" aria-hidden="true" />
-                  </a>
-                ))}
-                <ProtectedEmail variant="icon" className="text-muted-foreground hover:text-primary" iconClassName="w-5 h-5" />
-              </motion.div>
+              <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-[12px]">
+                <a
+                  href="https://github.com/vijaysinghpuwar"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground transition-colors hover:text-primary"
+                >
+                  github.com/vijaysinghpuwar
+                </a>
+                <a
+                  href="https://linkedin.com/in/vijaysinghpuwar"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground transition-colors hover:text-primary"
+                >
+                  linkedin.com/in/vijaysinghpuwar
+                </a>
+                <ProtectedEmail variant="icon" className="text-muted-foreground hover:text-primary" iconClassName="w-4 h-4" />
+              </div>
             </div>
+
+            <SecurityDiagram />
           </div>
         </div>
-
-        {/* Scroll indicator */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 3 }}
-          className="absolute bottom-8 left-1/2 -translate-x-1/2 hidden lg:flex flex-col items-center gap-2 z-10"
-        >
-          <span className="font-mono text-[10px] text-muted-foreground/50 tracking-wider uppercase">Scroll to explore</span>
-          <motion.div
-            animate={reducedMotion ? undefined : { y: [0, 6, 0] }}
-            transition={reducedMotion ? undefined : { duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            <ArrowRight className="w-4 h-4 text-muted-foreground/40 rotate-90" />
-          </motion.div>
-        </motion.div>
       </section>
 
-      {/* ═══════ PROJECTS ═══════ */}
-      <section id="projects" aria-label="Featured Projects" className="py-20 border-t border-border/40">
-        <SectionReveal className="container max-w-6xl mx-auto px-4">
-          <div className="text-center mb-14">
-            <RevealLabel text="Work" />
-            <h2 className="section-title">Featured Projects</h2>
-          </div>
+      {/* ═══════ WORK ═══════ */}
+      <section id="projects" aria-label="Selected work" className="border-t border-border py-20">
+        <SectionReveal className="container mx-auto max-w-[1180px] px-5">
+          <SectionHeader
+            label="Selected work"
+            title="Systems in production"
+            blurb="Built, deployed and maintained. The full index sits below and filters by capability."
+          />
 
           <Suspense fallback={<div className="h-64" />}>
             <ProjectShowcase
@@ -156,125 +142,102 @@ export default function Index() {
 
           {/* Project detail is public; repositories and the resume stay gated. */}
           {!user && (
-            <motion.div initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}>
-              <div className="glass-card rounded-lg max-w-2xl mx-auto mt-10 px-6 py-5 flex flex-col sm:flex-row items-center justify-center gap-4 text-center sm:text-left">
-                <Lock className="w-5 h-5 text-primary shrink-0" aria-hidden="true" />
-                <p className="text-sm text-muted-foreground flex-1">
-                  Sign in to open the source repositories and download my resume.
-                </p>
-                <Link
-                  to={loginHref()}
-                  className="inline-flex items-center justify-center h-10 px-5 rounded-md text-sm font-medium gradient-btn shrink-0"
-                >
-                  Sign in with Google
-                </Link>
-              </div>
-            </motion.div>
+            <div className="panel mx-auto mt-10 flex max-w-2xl flex-col items-center justify-center gap-4 rounded-lg px-6 py-5 text-center sm:flex-row sm:text-left">
+              <Lock className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+              <p className="flex-1 text-sm text-muted-foreground">
+                Sign in to open the source repositories and download my resume.
+              </p>
+              <Link
+                to={loginHref()}
+                className="gradient-btn inline-flex h-10 shrink-0 items-center justify-center rounded-md px-5 text-sm"
+              >
+                Sign in with Google
+              </Link>
+            </div>
           )}
         </SectionReveal>
       </section>
 
-      {/* ═══════ EXPERIENCE & EDUCATION ═══════ */}
-      <section id="experience" aria-label="Experience and Education" className="py-20 border-t border-border/40 relative overflow-hidden">
-        
-        <SectionReveal className="container max-w-5xl mx-auto relative z-10 px-4">
-          <div className="text-center mb-4">
-            <RevealLabel text="Journey" />
-            <h2 className="section-title">Experience & Education</h2>
-          </div>
+      {/* ═══════ JOURNEY ═══════ */}
+      <section id="experience" aria-label="Experience and education" className="border-t border-border py-20">
+        <SectionReveal className="container mx-auto max-w-[1180px] px-5">
+          <SectionHeader
+            align="left"
+            label="Journey"
+            title="Experience & education"
+            blurb="Work and study in one sequence. Expand an entry for what the role actually involved."
+          />
           <Suspense fallback={<div className="h-64" />}>
             <ExperienceTimeline />
           </Suspense>
         </SectionReveal>
       </section>
 
-      {/* ═══════ SKILLS & TECHNOLOGIES ═══════ */}
-      <section id="skills" aria-label="Skills and Technologies" className="py-20 border-t border-border/40">
-        <SectionReveal className="container max-w-6xl mx-auto px-4">
-          <div className="text-center mb-14">
-            <RevealLabel text="Arsenal" />
-            <h2 className="section-title">Skills & Technologies</h2>
-          </div>
+      {/* ═══════ CAPABILITIES ═══════ */}
+      {/* The certification marquee that used to sit here was cut: the same five
+          certifications already render as cards at the end of the timeline
+          above, and a scrolling copy of a list the reader has just seen is
+          repetition, not reinforcement. */}
+      <section id="skills" aria-label="Capabilities" className="border-t border-border py-20">
+        <SectionReveal className="container mx-auto max-w-[1180px] px-5">
+          <SectionHeader
+            label="Capabilities"
+            title="Skills, and the work that proves them"
+            blurb="The number on a skill is how many indexed projects actually use it. Select one to filter the work above — no ratings, no percentages."
+          />
 
           <Suspense fallback={<div className="h-64" />}>
-            <div className="mb-14">
-              <SkillMatrix
-                projects={allProjects}
-                activeSkill={skillFilter?.label ?? null}
-                onSelectSkill={handleSelectSkill}
-              />
-            </div>
+            <SkillMatrix
+              projects={allProjects}
+              activeSkill={skillFilter?.label ?? null}
+              onSelectSkill={handleSelectSkill}
+            />
           </Suspense>
-
-          <div className="rounded-lg glass-card py-4 overflow-hidden">
-            <div className="marquee-track">
-              {[false, true].map(isClone => (
-                <div key={String(isClone)} className="flex" aria-hidden={isClone || undefined}>
-                  {['CompTIA Security+', 'CompTIA CySA+', 'Cisco CCNA', 'Google AI Essentials', 'Cisco CCNP Enterprise (in progress)'].map(cert => (
-                    <span key={cert} className="flex items-center gap-2 font-mono text-sm text-muted-foreground px-6 whitespace-nowrap">
-                      <Shield className="w-3.5 h-3.5 text-primary shrink-0" />
-                      {cert}
-                    </span>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
         </SectionReveal>
       </section>
 
       {/* ═══════ CONTACT ═══════ */}
-      <section id="contact" aria-label="Contact" className="py-16 sm:py-20 border-t border-border/40">
-        <SectionReveal className="container max-w-5xl mx-auto px-4 sm:px-6">
-          <div className="text-center">
-            <RevealLabel text="Connect" />
-            <h2 className="section-title">Let's Work Together</h2>
-            <p className="text-sm sm:text-base text-muted-foreground max-w-xl mx-auto mt-3">
-              Open to cybersecurity roles, security operations, cloud security, and consulting opportunities.
+      <section id="contact" aria-label="Contact" className="border-t border-border py-20">
+        <SectionReveal className="container mx-auto max-w-[1180px] px-5">
+          <div className="mx-auto max-w-[620px] text-center">
+            <div className="section-heading">Contact</div>
+            <h2 className="section-title mt-3">Open to security engineering roles</h2>
+            <p className="mt-3 text-[15px] text-muted-foreground">
+              New York, NY and remote. Résumé and project detail stay public — no sign-in required.
             </p>
           </div>
 
-          <motion.div
-            initial="hidden" whileInView="visible" viewport={VP} variants={fadeUp} custom={0}
-            className="mt-10 sm:mt-12 grid gap-5 sm:gap-6 md:grid-cols-2 md:items-stretch"
-          >
-            {/* Digital Business Card */}
-            <div className="glass-card rounded-xl p-5 sm:p-6 space-y-5 hover:border-primary/30 transition-colors">
-              <div className="flex items-center gap-4">
-                <span className="gradient-text text-3xl font-bold shrink-0">VJ</span>
-                <div className="min-w-0">
-                  <h3 className="text-base sm:text-lg font-bold text-foreground truncate">Vijaysingh Puwar</h3>
-                  <p className="text-sm text-muted-foreground">Cybersecurity Engineer</p>
-                </div>
-              </div>
-              <div className="space-y-1">
-                <ProtectedEmail variant="row" compactHint />
-                {[
-                  { href: 'https://github.com/vijaysinghpuwar', icon: Github, label: 'github.com/vijaysinghpuwar' },
-                  { href: 'https://linkedin.com/in/vijaysinghpuwar', icon: Linkedin, label: 'linkedin.com/in/vijaysinghpuwar' },
-                ].map(({ href, icon: Icon, label }) => (
-                  <a key={href} href={href} target="_blank" rel="noopener noreferrer"
-                    className="group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:shadow-[inset_0_0_20px_hsl(var(--primary)/0.05)] transition-all">
-                    <Icon className="w-4 h-4 text-primary shrink-0" />
-                    <span className="truncate">{label}</span>
-                  </a>
-                ))}
-              </div>
-            </div>
-
-            {/* Availability */}
-            <div className="glass-card rounded-xl p-5 sm:p-6 space-y-4 hover:border-primary/30 transition-colors">
-              <h4 className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Availability</h4>
-              <div className="space-y-3">
-                {['Cybersecurity Engineering roles', 'Security Operations positions', 'Cloud Security opportunities', 'Collaborations & Consulting'].map(item => (
-                  <div key={item} className="flex items-start gap-2.5 text-sm text-foreground/80">
-                    <span className="w-2 h-2 mt-1.5 rounded-full bg-success animate-cyber-pulse shrink-0" />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </motion.div>
+          {/* Four routes, one row. The digital-business-card mock and the list of
+              "availabilities" padded out with pulsing dots are both gone. */}
+          <div className="mx-auto mt-8 grid max-w-[900px] gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <a
+              href="https://github.com/vijaysinghpuwar"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="panel panel-hover flex flex-col gap-1.5 rounded-lg px-[18px] py-4"
+            >
+              <span className="meta-label">GitHub</span>
+              <span className="text-[15px] text-foreground">/vijaysinghpuwar</span>
+            </a>
+            <a
+              href="https://linkedin.com/in/vijaysinghpuwar"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="panel panel-hover flex flex-col gap-1.5 rounded-lg px-[18px] py-4"
+            >
+              <span className="meta-label">LinkedIn</span>
+              <span className="text-[15px] text-foreground">/in/vijaysinghpuwar</span>
+            </a>
+            <ProtectedEmail variant="card" />
+            <a
+              href="/resume.pdf"
+              download
+              className="panel panel-hover flex flex-col gap-1.5 rounded-lg px-[18px] py-4"
+            >
+              <span className="meta-label">Résumé</span>
+              <span className="text-[15px] text-foreground">Download PDF</span>
+            </a>
+          </div>
         </SectionReveal>
       </section>
     </div>

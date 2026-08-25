@@ -22,7 +22,7 @@ export default function Blocked() {
       <Helmet>
         <title>Access Denied | Vijaysingh Puwar</title>
       </Helmet>
-      <div className="absolute inset-0 bg-gradient-to-b from-destructive/5 via-transparent to-transparent" />
+      <div className="absolute inset-0 hidden" />
       <div className="absolute inset-0 cyber-grid opacity-20" />
 
       <motion.div
@@ -30,8 +30,8 @@ export default function Blocked() {
         animate={{ opacity: 1, y: 0 }}
         className="relative w-full max-w-md text-center"
       >
-        <div className="rounded-2xl border border-destructive/20 bg-card/80 backdrop-blur-sm p-8 space-y-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-destructive/10 border border-destructive/20">
+        <div className="rounded-lg border border-destructive/20 bg-card p-8 space-y-6">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-lg bg-destructive/10 border border-destructive/20">
             <ShieldX className="w-8 h-8 text-destructive" />
           </div>
 
@@ -45,7 +45,7 @@ export default function Blocked() {
           <Button
             variant="outline"
             onClick={() => signOut()}
-            className="border-border/50 hover:border-destructive/50 hover:text-destructive"
+            className="border-border hover:border-destructive/50 hover:text-destructive"
           >
             <LogOut className="w-4 h-4 mr-2" />
             Sign Out

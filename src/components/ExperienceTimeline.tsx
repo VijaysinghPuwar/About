@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence, useInView } from 'framer-motion';
-import { GraduationCap, Briefcase, ChevronDown, Shield } from 'lucide-react';
+import { GraduationCap, Briefcase, ChevronDown } from 'lucide-react';
 import { useRef } from 'react';
 
 /* ── timeline data ── */
@@ -53,7 +53,7 @@ const entries: TimelineEntry[] = [
             'Business Data Communications',
             'Introduction to Coding',
           ].map(c => (
-            <span key={c} className="text-xs px-2.5 py-1 rounded-full glass-card text-muted-foreground">
+            <span key={c} className="rounded-md border border-border bg-card-elevated px-2.5 py-1 text-[12px] text-muted-foreground">
               {c}
             </span>
           ))}
@@ -115,7 +115,7 @@ const entries: TimelineEntry[] = [
             </p>
             <div className="flex flex-wrap gap-1.5">
               {group.items.map(item => (
-                <span key={item} className="text-xs px-2.5 py-1 rounded-full glass-card text-muted-foreground">
+                <span key={item} className="rounded-md border border-border bg-card-elevated px-2.5 py-1 text-[12px] text-muted-foreground">
                   {item}
                 </span>
               ))}
@@ -173,7 +173,7 @@ const entries: TimelineEntry[] = [
             'Computer Aided Design & Manufacturing',
             'Engineering Mathematics',
           ].map(c => (
-            <span key={c} className="text-xs px-2.5 py-1 rounded-full glass-card text-muted-foreground">
+            <span key={c} className="rounded-md border border-border bg-card-elevated px-2.5 py-1 text-[12px] text-muted-foreground">
               {c}
             </span>
           ))}
@@ -184,11 +184,11 @@ const entries: TimelineEntry[] = [
 ];
 
 const certifications = [
-  { name: 'CompTIA Security+', org: 'CompTIA' },
-  { name: 'CompTIA CySA+', org: 'CompTIA' },
-  { name: 'Cisco CCNA', org: 'Cisco' },
-  { name: 'Cisco CCNP Enterprise', org: 'Cisco · in progress' },
-  { name: 'Google AI Essentials', org: 'Google' },
+  { name: 'CompTIA Security+', org: 'CompTIA', earned: true },
+  { name: 'CompTIA CySA+', org: 'CompTIA', earned: true },
+  { name: 'Cisco CCNA', org: 'Cisco', earned: true },
+  { name: 'Google AI Essentials', org: 'Google', earned: true },
+  { name: 'Cisco CCNP Enterprise', org: 'Cisco', earned: false },
 ];
 
 /* ── Pointer Arrow ── */
@@ -197,12 +197,12 @@ function PointerArrow({ side }: { side: 'left' | 'right' }) {
   if (side === 'right') {
     // Card is on right, arrow points left
     return (
-      <div className="absolute top-5 -left-2 w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-r-[8px] border-r-[rgba(15,23,42,0.5)]" />
+      <div className="absolute top-5 -left-2 w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-r-[8px] border-r-card" />
     );
   }
   // Card is on left, arrow points right
   return (
-    <div className="absolute top-5 -right-2 w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-l-[8px] border-l-[rgba(15,23,42,0.5)]" />
+    <div className="absolute top-5 -right-2 w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-l-[8px] border-l-card" />
   );
 }
 
@@ -244,20 +244,13 @@ function TimelineNode({ entry, index, expandedId, onToggle }: {
           initial={{ scale: 0 }}
           animate={isInView ? { scale: 1 } : {}}
           transition={{ type: 'spring', stiffness: 200, damping: 15, delay: index * 0.15 }}
-          className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
+          className={`relative z-10 flex h-9 w-9 items-center justify-center rounded-md border transition-colors ${
             isExpanded
-              ? 'bg-primary shadow-[0_0_20px_hsl(var(--primary)/0.7)] scale-110'
-              : 'bg-card border-2 border-primary/40 hover:border-primary/80'
+              ? 'border-primary bg-primary text-primary-foreground'
+              : 'border-border bg-card text-primary hover:border-primary'
           }`}
         >
-          <Icon className={`w-4 h-4 ${isExpanded ? 'text-primary-foreground' : 'text-primary'}`} />
-          {isExpanded && (
-            <motion.div
-              className="absolute inset-0 rounded-full bg-primary/30"
-              animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            />
-          )}
+          <Icon className="h-4 w-4" aria-hidden="true" />
         </motion.button>
       </div>
 
@@ -284,13 +277,13 @@ function TimelineNode({ entry, index, expandedId, onToggle }: {
             initial={{ scale: 0 }}
             animate={isInView ? { scale: 1 } : {}}
             transition={{ type: 'spring', stiffness: 200, damping: 15, delay: index * 0.15 }}
-            className={`relative z-10 w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300 ${
+            className={`relative z-10 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border transition-colors ${
               isExpanded
-                ? 'bg-primary shadow-[0_0_16px_hsl(var(--primary)/0.7)]'
-                : 'bg-card border-2 border-primary/40'
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border bg-card text-primary'
             }`}
           >
-            <Icon className={`w-3.5 h-3.5 ${isExpanded ? 'text-primary-foreground' : 'text-primary'}`} />
+            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
           </motion.button>
           {index < entries.length - 1 && (
             <div className="w-[2px] flex-1 min-h-[20px] timeline-line-gradient" />
@@ -328,10 +321,8 @@ function NodeCard({ entry, isExpanded, onToggle, pointerSide }: {
       role="button"
       tabIndex={0}
       aria-expanded={isExpanded}
-      className={`relative bg-[rgba(15,23,42,0.5)] backdrop-blur-xl rounded-lg p-5 cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${
-        isExpanded
-          ? 'border border-primary/40 shadow-[0_0_24px_hsl(var(--primary)/0.12)]'
-          : 'border border-[rgba(100,220,255,0.08)] hover:border-primary/20 hover:shadow-[0_4px_20px_hsl(var(--primary)/0.08)]'
+      className={`relative cursor-pointer rounded-lg border bg-card p-5 transition-colors ${
+        isExpanded ? 'border-primary' : 'border-border hover:border-border-strong'
       }`}
     >
       {/* Pointer arrow (desktop only) */}
@@ -339,9 +330,9 @@ function NodeCard({ entry, isExpanded, onToggle, pointerSide }: {
 
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="font-bold text-foreground text-lg leading-tight">{entry.title}</h3>
-          <p className="text-sm text-muted-foreground mt-0.5">{entry.subtitle}</p>
-          <p className="text-xs text-muted-foreground font-mono mt-1">{entry.period}</p>
+          <h3 className="text-[17px] font-semibold leading-tight tracking-[-0.014em] text-foreground">{entry.title}</h3>
+          <p className="mt-1 text-[14px] text-muted-foreground">{entry.subtitle}</p>
+          <p className="mt-2 font-mono text-[11.5px] text-muted-dim">{entry.period}</p>
         </div>
         <motion.div
           animate={{ rotate: isExpanded ? 180 : 0 }}
@@ -361,7 +352,7 @@ function NodeCard({ entry, isExpanded, onToggle, pointerSide }: {
             transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
             className="overflow-hidden"
           >
-            <div className="pt-4 border-t border-border/40 mt-4">
+            <div className="mt-4 border-t border-border pt-4">
               {entry.expandedContent}
             </div>
           </motion.div>
@@ -371,19 +362,32 @@ function NodeCard({ entry, isExpanded, onToggle, pointerSide }: {
   );
 }
 
-/* ── Certification Flip Card ── */
-function CertCard({ name, org }: { name: string; org: string }) {
+/*
+  Certification card.
+
+  It used to flip on hover to reveal the issuing body — an animation to hide a
+  single word, on a card that had room for it. Now issuer and state are both on
+  the face, and the outline colour separates earned from in-progress, so the
+  status is readable without hovering five cards one at a time.
+
+  These are also the site's only certification block. A scrolling marquee of the
+  same five names used to run in the skills section below; it has been removed.
+*/
+function CertCard({ name, org, earned }: { name: string; org: string; earned: boolean }) {
   return (
-    <div className="flip-card group">
-      <div className="flip-card-inner">
-        <div className="flip-card-front glass-card rounded-lg flex flex-col items-center justify-center gap-2.5 p-4 border border-transparent group-hover:border-primary/30 transition-colors">
-          <Shield className="w-6 h-6 text-primary" />
-          <span className="text-sm text-foreground font-medium text-center leading-tight">{name}</span>
-        </div>
-        <div className="flip-card-back glass-card rounded-lg flex flex-col items-center justify-center gap-2 p-4 border border-primary/30">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider font-mono">Issued by</span>
-          <span className="text-base font-bold gradient-text">{org}</span>
-        </div>
+    <div className="panel flex flex-col items-center gap-3 rounded-lg px-[18px] py-[22px] text-center">
+      <svg width="26" height="29" viewBox="0 0 26 29" aria-hidden="true">
+        <path
+          d="M13 1.6 L23.8 7.8 L23.8 20.2 L13 26.4 L2.2 20.2 L2.2 7.8 Z"
+          fill="none"
+          stroke={earned ? 'hsl(var(--primary))' : 'hsl(var(--border-strong))'}
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <div className="text-[14.5px] font-medium leading-[1.35] text-foreground">{name}</div>
+      <div className="font-mono text-[10px] tracking-[0.1em] text-muted-dim">
+        {org.toUpperCase()} · {earned ? 'CERTIFIED' : 'IN PROGRESS'}
       </div>
     </div>
   );
@@ -419,12 +423,10 @@ export function ExperienceTimeline() {
 
       {/* Certifications */}
       <div className="mt-16">
-        <p className="text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground font-mono mb-6">
-          Certifications
-        </p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+        <p className="section-heading mb-6 text-center">Certifications</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
           {certifications.map(cert => (
-            <CertCard key={cert.name} name={cert.name} org={cert.org} />
+            <CertCard key={cert.name} {...cert} />
           ))}
         </div>
       </div>

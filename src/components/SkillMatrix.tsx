@@ -1,6 +1,4 @@
 import { useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { Shield, KeyRound, Cloud, Network, Terminal, ArrowRight } from 'lucide-react';
 
 /**
  * Skills as evidence, not self-assessment.
@@ -30,11 +28,10 @@ interface Skill {
   match?: string[];
 }
 
-const GROUPS: { key: string; label: string; icon: typeof Shield; blurb: string; skills: Skill[] }[] = [
+const GROUPS: { key: string; label: string; blurb: string; skills: Skill[] }[] = [
   {
     key: 'secops',
     label: 'Security Operations',
-    icon: Shield,
     blurb: 'Detection, triage, and response on enterprise systems.',
     skills: [
       { label: 'SIEM / Splunk', match: ['splunk', 'siem'] },
@@ -49,7 +46,6 @@ const GROUPS: { key: string; label: string; icon: typeof Shield; blurb: string; 
   {
     key: 'identity',
     label: 'Identity & Access',
-    icon: KeyRound,
     blurb: 'Who gets in, to what, and with how little privilege.',
     skills: [
       { label: 'Active Directory', match: ['active directory', 'ldap'] },
@@ -64,7 +60,6 @@ const GROUPS: { key: string; label: string; icon: typeof Shield; blurb: string; 
   {
     key: 'cloud',
     label: 'Cloud & Infrastructure',
-    icon: Cloud,
     blurb: 'Running and securing workloads in cloud and on Windows/Linux.',
     skills: [
       { label: 'AWS', match: ['aws', 'ec2', 'vpc'] },
@@ -79,7 +74,6 @@ const GROUPS: { key: string; label: string; icon: typeof Shield; blurb: string; 
   {
     key: 'network',
     label: 'Networking',
-    icon: Network,
     blurb: 'Enterprise routing, segmentation, and traffic analysis.',
     skills: [
       { label: 'TCP/IP', match: ['tcp'] },
@@ -93,7 +87,6 @@ const GROUPS: { key: string; label: string; icon: typeof Shield; blurb: string; 
   {
     key: 'build',
     label: 'Automation & Engineering',
-    icon: Terminal,
     blurb: 'The code behind the tooling and the platforms I ship.',
     skills: [
       { label: 'Python', match: ['python'] },
@@ -127,25 +120,28 @@ export function SkillMatrix({ projects, onSelectSkill, activeSkill }: SkillMatri
   }, [projects]);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
-      {GROUPS.map((group, gi) => {
-        const Icon = group.icon;
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {GROUPS.map(group => {
         return (
-          <motion.div
-            key={group.key}
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.2 }}
-            transition={{ duration: 0.35, delay: Math.min(gi * 0.06, 0.24) }}
-            className="glass-card rounded-xl p-5 flex flex-col"
-          >
-            <div className="flex items-center gap-2.5 mb-1.5">
-              <Icon className="w-4 h-4 text-primary shrink-0" aria-hidden="true" />
-              <h3 className="font-semibold text-foreground text-sm">{group.label}</h3>
+          <div key={group.key} className="panel flex flex-col rounded-lg p-[22px]">
+            <div className="flex items-center gap-2.5">
+              {/* One mark for all five groups. Five different lucide glyphs
+                  implied five different kinds of thing; they are all just
+                  groupings of skills. */}
+              <svg width="14" height="16" viewBox="0 0 14 16" aria-hidden="true" className="shrink-0">
+                <path
+                  d="M7 .9 L13 4.4 L13 11.6 L7 15.1 L1 11.6 L1 4.4 Z"
+                  fill="none"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth="1.3"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <h3 className="text-[15.5px] font-semibold tracking-[-0.01em] text-foreground">{group.label}</h3>
             </div>
-            <p className="text-xs text-muted-foreground mb-4">{group.blurb}</p>
+            <p className="mt-2 text-[13.5px] text-muted-dim">{group.blurb}</p>
 
-            <ul className="flex flex-wrap gap-1.5">
+            <ul className="mt-4 flex flex-wrap gap-[7px]">
               {group.skills.map(skill => {
                 const n = counts.get(skill.label) ?? 0;
                 const isActive = activeSkill === skill.label;
@@ -163,18 +159,18 @@ export function SkillMatrix({ projects, onSelectSkill, activeSkill }: SkillMatri
                           : undefined
                       }
                       className={[
-                        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-colors',
+                        'inline-flex items-center gap-[7px] rounded-md border px-2.5 py-1.5 text-[12.5px] leading-[1.3] transition-colors',
                         isActive
-                          ? 'border-primary/60 bg-primary/10 text-foreground'
+                          ? 'border-primary bg-primary-bg text-primary'
                           : clickable
-                            ? 'border-border/40 text-muted-foreground hover:border-primary/40 hover:text-foreground cursor-pointer'
-                            : 'border-border/30 text-muted-foreground/70 cursor-default',
+                            ? 'cursor-pointer border-border bg-card-elevated text-muted-foreground hover:border-border-strong hover:text-foreground'
+                            : 'cursor-default border-border text-muted-dim',
                       ].join(' ')}
                     >
                       {skill.label}
                       {n > 0 && (
                         <span
-                          className="font-mono text-[10px] text-primary tabular-nums"
+                          className="font-mono text-[11px] tabular-nums text-primary"
                           aria-label={`${n} project${n === 1 ? '' : 's'}`}
                         >
                           {n}
@@ -185,18 +181,9 @@ export function SkillMatrix({ projects, onSelectSkill, activeSkill }: SkillMatri
                 );
               })}
             </ul>
-          </motion.div>
+          </div>
         );
       })}
-
-      {/* Reading key: the number is the only claim being made, so say what it means. */}
-      <div className="md:col-span-2 xl:col-span-1 flex items-center justify-center">
-        <p className="text-xs text-muted-foreground text-center max-w-xs leading-relaxed">
-          The number on a skill is how many projects below actually use it.
-          Select one to filter the work.
-          <ArrowRight className="inline w-3 h-3 ml-1 -mt-0.5" aria-hidden="true" />
-        </p>
-      </div>
     </div>
   );
 }

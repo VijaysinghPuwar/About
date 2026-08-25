@@ -20,6 +20,7 @@ export default {
     extend: {
       colors: {
         border: "hsl(var(--border))",
+        "border-strong": "hsl(var(--border-strong))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
@@ -28,6 +29,8 @@ export default {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
           glow: "hsl(var(--primary-glow))",
+          dim: "hsl(var(--primary-dim))",
+          bg: "hsl(var(--primary-bg))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
@@ -41,6 +44,7 @@ export default {
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",
+          dim: "hsl(var(--muted-foreground-dim))",
         },
         accent: {
           DEFAULT: "hsl(var(--accent))",
@@ -63,16 +67,11 @@ export default {
           DEFAULT: "hsl(var(--warning))",
           foreground: "hsl(var(--warning-foreground))",
         },
-        // Custom cybersecurity colors
-        'terminal-green': "hsl(var(--terminal-green))",
-        'danger-red': "hsl(var(--danger-red))",
-        'warning-amber': "hsl(var(--warning-amber))",
         'grid-color': "hsl(var(--grid-color))",
-        'scanline-color': "hsl(var(--scanline-color))",
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'monospace'],
+        sans: ['IBM Plex Sans', 'system-ui', 'sans-serif'],
+        mono: ['IBM Plex Mono', 'SF Mono', 'Consolas', 'monospace'],
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -97,24 +96,6 @@ export default {
           },
         },
         // Cybersecurity-themed animations
-        "cyber-pulse": {
-          "0%, 100%": {
-            opacity: "1",
-            transform: "scale(1)",
-          },
-          "50%": {
-            opacity: "0.7",
-            transform: "scale(1.05)",
-          },
-        },
-        "glow-pulse": {
-          "0%, 100%": {
-            boxShadow: "0 0 5px hsl(var(--primary) / 0.5)",
-          },
-          "50%": {
-            boxShadow: "0 0 20px hsl(var(--primary) / 0.8), 0 0 30px hsl(var(--primary) / 0.4)",
-          },
-        },
         "fade-in": {
           "0%": {
             opacity: "0",
@@ -153,36 +134,21 @@ export default {
           "0%": { transform: "translateX(0%)" },
           "100%": { transform: "translateX(-100%)" },
         },
-        "scanline": {
-          "0%": { transform: "translateY(-100%)" },
-          "100%": { transform: "translateY(100vh)" },
-        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "cyber-pulse": "cyber-pulse 2s ease-in-out infinite",
-        "glow-pulse": "glow-pulse 2s ease-in-out infinite",
         "fade-in": "fade-in 0.5s ease-out",
         "slide-in-right": "slide-in-right 0.5s ease-out",
         "slide-in-left": "slide-in-left 0.5s ease-out",
         "terminal-blink": "terminal-blink 1s infinite",
         "marquee": "marquee 20s linear infinite",
-        "scanline": "scanline 2s linear infinite",
       },
       backgroundImage: {
-        'cyber-grid': `
-          linear-gradient(hsl(var(--grid-color) / 0.1) 1px, transparent 1px),
-          linear-gradient(90deg, hsl(var(--grid-color) / 0.1) 1px, transparent 1px)
+        'rule-grid': `
+          linear-gradient(to right, hsl(var(--grid-color)) 1px, transparent 1px),
+          linear-gradient(to bottom, hsl(var(--grid-color)) 1px, transparent 1px)
         `,
-        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
-      },
-      boxShadow: {
-        'glow-cyan': 'var(--glow-cyan)',
-        'glow-violet': 'var(--glow-violet)',
-        'glow-success': 'var(--glow-success)',
-        'cyber': '0 0 20px hsl(var(--primary) / 0.3), 0 10px 40px hsl(var(--primary) / 0.1)',
       },
     },
   },

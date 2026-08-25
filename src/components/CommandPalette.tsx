@@ -215,7 +215,7 @@ export function CommandPalette() {
         >
           {/* Overlay */}
           <div
-            className="absolute inset-0 backdrop-blur-sm"
+            className="absolute inset-0 "
             style={{ background: 'rgba(5,8,22,0.7)' }}
             onClick={() => setIsOpen(false)}
           />
@@ -225,7 +225,7 @@ export function CommandPalette() {
             role="dialog"
             aria-modal="true"
             aria-label="Command palette"
-            className="relative w-[95vw] md:w-[90vw] max-w-[560px] h-fit rounded-2xl overflow-hidden"
+            className="relative w-[95vw] md:w-[90vw] max-w-[560px] h-fit rounded-lg overflow-hidden"
             style={{
               background: 'rgba(15,23,42,0.95)',
               backdropFilter: 'blur(24px)',

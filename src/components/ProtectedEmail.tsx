@@ -11,7 +11,7 @@ const EMAIL = contactEmail();
 const MASKED = maskedContactEmail();
 
 interface ProtectedEmailProps {
-  variant?: 'row' | 'icon';
+  variant?: 'row' | 'icon' | 'card';
   className?: string;
   /** For icon variant: size/style the mail glyph without touching the lock badge. */
   iconClassName?: string;
@@ -30,6 +30,17 @@ export function ProtectedEmail({
 
   // ── Authenticated: render real mailto: ──────────────────────────────
   if (user) {
+    if (variant === 'card') {
+      return (
+        <a
+          href={`mailto:${EMAIL}`}
+          className={cn('panel panel-hover flex flex-col gap-1.5 rounded-lg px-[18px] py-4', className)}
+        >
+          <span className="meta-label">Email</span>
+          <span className="truncate text-[15px] text-foreground">{EMAIL}</span>
+        </a>
+      );
+    }
     if (variant === 'icon') {
       return (
         <a
@@ -49,7 +60,7 @@ export function ProtectedEmail({
         href={`mailto:${EMAIL}`}
         aria-label="Email Vijaysingh"
         className={cn(
-          'group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:shadow-[inset_0_0_20px_hsl(var(--primary)/0.05)] transition-all duration-500',
+          'group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:text-foreground transition-colors',
           className,
         )}
       >
@@ -62,6 +73,25 @@ export function ProtectedEmail({
   }
 
   // ── Unauthenticated: no real address in DOM, route to /login ────────
+  if (variant === 'card') {
+    return (
+      <button
+        type="button"
+        onClick={() => navigate(loginHref())}
+        aria-label="Sign in to reveal email"
+        className={cn('panel panel-hover flex flex-col gap-1.5 rounded-lg px-[18px] py-4 text-left', className)}
+      >
+        <span className="meta-label flex items-center gap-1.5">
+          <Lock className="h-[9px] w-[9px]" aria-hidden="true" />
+          Email — protected
+        </span>
+        <span className="truncate font-mono text-[14px] text-muted-foreground" aria-hidden="true">
+          {MASKED}
+        </span>
+      </button>
+    );
+  }
+
   if (variant === 'icon') {
     return (
       <button

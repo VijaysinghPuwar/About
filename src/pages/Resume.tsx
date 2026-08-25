@@ -147,7 +147,7 @@ const SKILLS: { label: string; items: string }[] = [
 /** Section heading plus the hairline rule the print layout also uses. */
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-primary font-mono pb-2 mb-5 border-b border-border/50">
+    <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-primary font-mono pb-2 mb-5 border-b border-border">
       {children}
     </h2>
   );

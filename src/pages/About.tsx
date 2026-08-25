@@ -149,8 +149,8 @@ export default function About() {
           className="flex flex-col md:flex-row gap-10 items-center md:items-start mb-16"
         >
           <div className="flex-shrink-0">
-            <div className="w-44 h-44 rounded-2xl gradient-border overflow-hidden flex items-center justify-center">
-              <div className="w-full h-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
+            <div className="w-44 h-44 rounded-lg gradient-border overflow-hidden flex items-center justify-center">
+              <div className="w-full h-full bg-card-elevated flex items-center justify-center">
                 <span className="text-5xl font-bold gradient-text">VJ</span>
               </div>
             </div>
@@ -211,7 +211,7 @@ export default function About() {
           {capabilities.map((item, i) => (
             <motion.div key={item.title} initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={i + 2}>
               <div className="h-full glass-card rounded-lg p-6 hover:border-primary/20 transition-colors">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center mb-4">
+                <div className="w-10 h-10 rounded-lg bg-card-elevated flex items-center justify-center mb-4">
                   <item.icon className="w-5 h-5 text-primary" />
                 </div>
                 <h3 className="font-semibold text-foreground mb-2">{item.title}</h3>
@@ -248,8 +248,8 @@ export default function About() {
           <div className="max-w-5xl mx-auto space-y-8">
             {experience.map((job, i) => (
               <motion.div key={job.company} variants={fadeUp} custom={i} className="pl-8 relative">
-                <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-primary to-secondary" />
-                <div className="absolute -left-[5px] top-2 w-3 h-3 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary)/0.6)]" />
+                <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-primary" />
+                <div className="absolute -left-[5px] top-2 w-3 h-3 rounded-full bg-primary" />
                 <div className="glass-card rounded-lg p-5">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
                     <h3 className="font-semibold text-foreground">{job.company}</h3>
@@ -354,7 +354,7 @@ export default function About() {
           <p className="text-muted-foreground mb-4">Interested in working together?</p>
           <div className="flex gap-3 justify-center">
             <Link to="/contact" className="inline-flex items-center justify-center h-10 px-6 rounded-md text-sm font-medium gradient-btn">Get in Touch</Link>
-            <Button variant="outline" asChild className="border-border/60 hover:border-primary/40">
+            <Button variant="outline" asChild className="border-border-strong hover:border-primary/40">
               <Link to="/projects">View Projects</Link>
             </Button>
           </div>

@@ -92,7 +92,7 @@ export default function Contact() {
                   'Open to collaborations & consulting',
                 ].map(item => (
                   <li key={item} className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0 shadow-[0_0_6px_hsl(var(--primary)/0.5)]" />
+                    <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
                     {item}
                   </li>
                 ))}
@@ -107,12 +107,12 @@ export default function Contact() {
                 <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-4" />
                 <h3 className="text-xl font-semibold text-foreground mb-2">Message Sent</h3>
                 <p className="text-muted-foreground mb-4">Thanks for reaching out. I'll respond within 24–48 hours.</p>
-                <Button variant="outline" onClick={() => setSubmitted(false)} className="border-border/60">Send Another</Button>
+                <Button variant="outline" onClick={() => setSubmitted(false)} className="border-border-strong">Send Another</Button>
               </div>
             ) : (
               <div className="glass-card rounded-lg p-6">
                 {user && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4 pb-4 border-b border-border/40">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4 pb-4 border-b border-border">
                     <User className="w-4 h-4 text-primary" />
                     <span>Signed in as <span className="text-foreground font-medium">{user.email}</span></span>
                   </div>
@@ -122,25 +122,25 @@ export default function Contact() {
                     <div>
                       <Label htmlFor="name" className="text-sm">Name</Label>
                       <Input id="name" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
-                        className="bg-background/50 border-border/40 mt-1 focus:border-primary/60" />
+                        className="bg-background/50 border-border mt-1 focus:border-primary/60" />
                     </div>
                     {!user && (
                       <div>
                         <Label htmlFor="email" className="text-sm">Email</Label>
                         <Input id="email" type="email" required value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })}
-                          className="bg-background/50 border-border/40 mt-1 focus:border-primary/60" />
+                          className="bg-background/50 border-border mt-1 focus:border-primary/60" />
                       </div>
                     )}
                   </div>
                   <div>
                     <Label htmlFor="subject" className="text-sm">Subject</Label>
                     <Input id="subject" required value={formData.subject} onChange={e => setFormData({ ...formData, subject: e.target.value })}
-                      className="bg-background/50 border-border/40 mt-1 focus:border-primary/60" />
+                      className="bg-background/50 border-border mt-1 focus:border-primary/60" />
                   </div>
                   <div>
                     <Label htmlFor="message" className="text-sm">Message</Label>
                     <Textarea id="message" required rows={6} value={formData.message} onChange={e => setFormData({ ...formData, message: e.target.value })}
-                      className="bg-background/50 border-border/40 mt-1 focus:border-primary/60" />
+                      className="bg-background/50 border-border mt-1 focus:border-primary/60" />
                   </div>
                   <button type="submit" disabled={isSubmitting}
                     className="w-full h-11 rounded-md text-sm font-medium gradient-btn inline-flex items-center justify-center disabled:opacity-50">

@@ -1,34 +1,22 @@
-import { useId } from 'react';
 import { cn } from '@/lib/utils';
-import { useTheme } from '@/hooks/useTheme';
 
 interface LogoIconProps {
   size?: number;
   className?: string;
+  /** Renders the full name beside the mark. Used in the nav. */
+  withName?: boolean;
 }
 
-const HEX_PATH = 'M20 2 L36.66 11 L36.66 29 L20 38 L3.34 29 L3.34 11 Z';
+const HEX_PATH = 'M20 3.6 L34.2 11.8 L34.2 28.2 L20 36.4 L5.8 28.2 L5.8 11.8 Z';
 
-export function LogoIcon({ size = 36, className }: LogoIconProps) {
-  const uid = useId();
-  const { isPentest, isTransitioning } = useTheme();
-
-  const stop1 = isPentest ? '#f43f5e' : '#3b82f6';
-  const stop2 = isPentest ? '#fb923c' : '#a855f7';
-  const gradientId = `hex-grad-${uid}`;
-  const fontPx = Math.round(size * 0.45);
-
+/**
+ * Hex outline in the accent colour, initials in the foreground. Single stroke,
+ * no gradient fill, no drop-shadow, no hue-rotate on theme change — it inherits
+ * the active theme through the token, which is the point of having one accent.
+ */
+export function LogoIcon({ size = 26, className, withName = false }: LogoIconProps) {
   return (
-    <div
-      className={cn('group relative inline-flex items-center justify-center theme-glow', className)}
-      style={{
-        width: size,
-        height: size,
-        transition: 'filter 0.4s ease-out, transform 0.3s ease-out',
-        filter: isTransitioning ? `drop-shadow(0 0 12px ${stop1}) drop-shadow(0 0 4px ${stop2})` : 'none',
-        transform: isTransitioning ? 'scale(1.06)' : 'scale(1)',
-      }}
-    >
+    <span className={cn('inline-flex items-center gap-2.5', className)}>
       <svg
         viewBox="0 0 40 40"
         width={size}
@@ -38,43 +26,37 @@ export function LogoIcon({ size = 36, className }: LogoIconProps) {
         shapeRendering="geometricPrecision"
         role="img"
         aria-label="Vijaysingh Puwar"
-        className="absolute inset-0"
+        className="shrink-0"
       >
         <title>Vijaysingh Puwar</title>
-        <defs>
-          <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor={stop1} style={{ transition: 'stop-color 0.4s ease-out' }} />
-            <stop offset="100%" stopColor={stop2} style={{ transition: 'stop-color 0.4s ease-out' }} />
-          </linearGradient>
-        </defs>
         <path
           d={HEX_PATH}
-          stroke={`url(#${gradientId})`}
-          strokeWidth="1.5"
+          stroke="hsl(var(--primary))"
+          strokeWidth="2"
+          strokeLinejoin="round"
           fill="none"
           vectorEffect="non-scaling-stroke"
-          className="transition-all duration-300 group-hover:[stroke-opacity:1]"
         />
+        <text
+          x="20"
+          y="25.4"
+          textAnchor="middle"
+          style={{
+            fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
+            fontSize: '13.5px',
+            fontWeight: 600,
+            letterSpacing: '-0.03em',
+            fill: 'hsl(var(--foreground))',
+          }}
+        >
+          VJ
+        </text>
       </svg>
-
-      <span
-        aria-hidden="true"
-        className="relative z-10 select-none leading-none font-bold tracking-tight"
-        style={{
-          fontFamily: "'Space Grotesk', -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
-          fontSize: `${fontPx}px`,
-          letterSpacing: '-0.05em',
-        }}
-      >
-        <span
-          className="transition-colors duration-300 group-hover:!text-white"
-          style={{ color: stop1, transition: 'color 0.4s ease-out' }}
-        >V</span>
-        <span
-          className="transition-colors duration-300 group-hover:!text-white"
-          style={{ color: stop2, transition: 'color 0.4s ease-out' }}
-        >J</span>
-      </span>
-    </div>
+      {withName && (
+        <span className="text-[14.5px] font-medium tracking-[-0.008em] text-foreground">
+          Vijaysingh Puwar
+        </span>
+      )}
+    </span>
   );
 }

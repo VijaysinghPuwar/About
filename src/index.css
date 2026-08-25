@@ -4,260 +4,117 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  One accent, one surface ramp, no gradients.
+
+  The palette is deliberately flat: a neutral near-black ramp for every surface
+  and border, and a single solid accent that carries state. The theme switch
+  swaps only that accent — green for defensive work, red for offensive — so the
+  change reads as a deliberate mode, not a reskin. Nothing here glows, blurs, or
+  fades into a second hue; depth comes from the border ramp instead.
+*/
 @layer base {
-  :root, .theme-blue {
-    --background: 230 50% 4%;
-    --foreground: 215 25% 90%;
+  :root, .theme-default, .theme-blue {
+    /* surfaces */
+    --background: 240 11% 4%;
+    --foreground: 240 8% 95%;
 
-    --card: 217 50% 11%;
-    --card-foreground: 215 20% 90%;
-    --card-elevated: 217 50% 14%;
+    --card: 240 7% 6%;
+    --card-foreground: 240 8% 95%;
+    --card-elevated: 240 7% 8%;
 
-    --popover: 217 50% 9%;
-    --popover-foreground: 215 20% 90%;
+    --popover: 240 7% 6%;
+    --popover-foreground: 240 8% 95%;
 
-    --primary: 217 91% 60%;
-    --primary-foreground: 230 50% 4%;
-    --primary-glow: 217 91% 72%;
+    /* accent — defensive (green) */
+    --primary: 146 46% 45%;
+    --primary-foreground: 240 11% 4%;
+    --primary-glow: 148 50% 29%;
+    --primary-dim: 148 50% 29%;
+    --primary-bg: 155 38% 6%;
 
-    --secondary: 262 83% 66%;
-    --secondary-foreground: 0 0% 100%;
-    --secondary-glow: 262 83% 78%;
+    /* The design has exactly one accent. `secondary` stays bound to it so any
+       component still asking for a second hue renders the same solid colour
+       instead of reintroducing a gradient. */
+    --secondary: 146 46% 45%;
+    --secondary-foreground: 240 11% 4%;
+    --secondary-glow: 148 50% 29%;
 
-    --muted: 217 25% 14%;
-    --muted-foreground: 215 16% 47%;
+    /* text ramp */
+    --muted: 240 7% 8%;
+    --muted-foreground: 240 5% 65%;
+    --muted-foreground-dim: 240 4% 53%;
 
-    --accent: 217 25% 14%;
-    --accent-foreground: 215 20% 90%;
+    --accent: 240 7% 8%;
+    --accent-foreground: 240 8% 95%;
 
-    --destructive: 350 80% 55%;
-    --destructive-foreground: 0 0% 98%;
-    --success: 185 80% 48%;
-    --success-foreground: 0 0% 98%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 230 50% 4%;
+    --destructive: 358 75% 59%;
+    --destructive-foreground: 240 8% 95%;
+    --success: 146 46% 45%;
+    --success-foreground: 240 11% 4%;
+    --warning: 38 80% 52%;
+    --warning-foreground: 240 11% 4%;
 
-    --border: 217 20% 14%;
-    --input: 217 20% 14%;
-    --ring: 217 91% 60%;
+    --border: 240 6% 12%;
+    --border-strong: 240 8% 18%;
+    --input: 240 6% 12%;
+    --ring: 146 46% 45%;
 
-    --radius: 0.5rem;
+    --radius: 0.625rem;
 
-    --grid-color: 217 20% 12%;
-    --scanline-color: 217 91% 60%;
-    --terminal-green: 185 80% 48%;
-    --danger-red: 350 80% 55%;
-    --warning-amber: 38 92% 50%;
+    --grid-color: 240 6% 8%;
   }
 
+  /* Offensive mode. Only the accent moves — the surface ramp is identical, so
+     the switch is legible as a change of stance rather than a change of site. */
   .theme-pentest {
-    --background: 0 15% 4%;
-    --foreground: 0 0% 95%;
+    --primary: 358 75% 59%;
+    --primary-foreground: 240 11% 4%;
+    --primary-glow: 358 59% 35%;
+    --primary-dim: 358 59% 35%;
+    --primary-bg: 355 39% 7%;
 
-    --card: 0 15% 8%;
-    --card-foreground: 0 0% 93%;
-    --card-elevated: 0 15% 11%;
+    --secondary: 358 75% 59%;
+    --secondary-foreground: 240 11% 4%;
+    --secondary-glow: 358 59% 35%;
 
-    --popover: 0 15% 7%;
-    --popover-foreground: 0 0% 93%;
+    --success: 358 75% 59%;
+    --success-foreground: 240 11% 4%;
+    --warning: 15 75% 55%;
 
-    --primary: 350 80% 55%;
-    --primary-foreground: 0 0% 100%;
-    --primary-glow: 350 80% 68%;
-
-    --secondary: 15 60% 45%;
-    --secondary-foreground: 0 0% 100%;
-    --secondary-glow: 15 60% 60%;
-
-    --muted: 0 10% 14%;
-    --muted-foreground: 0 8% 50%;
-
-    --accent: 0 15% 14%;
-    --accent-foreground: 0 0% 93%;
-
-    --destructive: 350 80% 55%;
-    --destructive-foreground: 0 0% 98%;
-    --success: 0 60% 45%;
-    --success-foreground: 0 0% 98%;
-    --warning: 15 80% 50%;
-    --warning-foreground: 0 0% 100%;
-
-    --border: 0 12% 14%;
-    --input: 0 12% 14%;
-    --ring: 350 80% 55%;
-
-    --grid-color: 0 12% 12%;
-    --scanline-color: 350 80% 55%;
-    --terminal-green: 350 80% 55%;
-    --danger-red: 350 80% 55%;
-    --warning-amber: 15 80% 50%;
+    --ring: 358 75% 59%;
   }
 }
 
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: 3.5rem;
+  scroll-padding-top: 4.5rem;
   overflow-x: hidden;
 }
 
 body {
   overflow-x: hidden;
-  transition: background-color 0.4s ease-out;
 }
 
-/* Theme transition settling */
-.glass-card {
-  transition: border-color 0.4s ease-out, background-color 0.4s ease-out;
+/* Theme swap: colours cross-fade, nothing else moves. */
+a, button, input, .panel, .glass-card, .gradient-btn, .section-heading {
+  transition: color 0.25s ease, background-color 0.25s ease, border-color 0.25s ease;
 }
 
-a, button, .gradient-text, .section-heading, .gradient-btn, .gradient-border::before {
-  transition: color 0.4s ease-out, background 0.4s ease-out, border-color 0.4s ease-out, box-shadow 0.4s ease-out;
+svg [stroke], svg [fill] {
+  transition: stroke 0.25s ease, fill 0.25s ease;
 }
 
-/* Theme transition keyframes */
-@keyframes theme-scan-line {
-  0% { top: -2px; opacity: 0; }
-  5% { opacity: 1; }
-  95% { opacity: 1; }
-  100% { top: 100vh; opacity: 0; }
-}
-
-@keyframes theme-pulse {
-  0% { opacity: 0; }
-  40% { opacity: 1; }
-  100% { opacity: 0; }
-}
-
-@keyframes theme-grid-flash {
-  0% { opacity: 0; }
-  20% { opacity: 1; }
-  100% { opacity: 0; }
-}
-
-@keyframes theme-text-flash {
-  0% { opacity: 0; transform: scale(0.95); }
-  30% { opacity: 1; transform: scale(1); }
-  80% { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(1.02); }
-}
-
-@keyframes theme-overlay-exit {
-  0% { opacity: 1; }
-  100% { opacity: 0; }
-}
-
-@keyframes theme-chip-enter {
-  0% { opacity: 0; transform: translateX(20px); }
-  100% { opacity: 1; transform: translateX(0); }
-}
-
-/* Energy pulse from toggle origin */
-@keyframes theme-energy-pulse {
-  0%   { transform: scale(0); opacity: 1; }
-  60%  { opacity: 0.7; }
-  100% { transform: scale(var(--pulse-scale, 250vmax)); opacity: 0; }
-}
-
-/* Glitch / RGB-shift layers (desktop only) */
-@keyframes theme-glitch-r {
-  0%   { transform: translateX(0); opacity: 0; }
-  20%  { transform: translateX(3px); opacity: 1; }
-  40%  { transform: translateX(-2px); opacity: 0.8; }
-  60%  { transform: translateX(2px); opacity: 0.6; }
-  80%  { transform: translateX(-1px); opacity: 0.3; }
-  100% { transform: translateX(0); opacity: 0; }
-}
-
-@keyframes theme-glitch-c {
-  0%   { transform: translateX(0); opacity: 0; }
-  20%  { transform: translateX(-3px); opacity: 1; }
-  40%  { transform: translateX(2px); opacity: 0.8; }
-  60%  { transform: translateX(-2px); opacity: 0.6; }
-  80%  { transform: translateX(1px); opacity: 0.3; }
-  100% { transform: translateX(0); opacity: 0; }
-}
-
-@keyframes theme-scanlines {
-  0%   { opacity: 0; }
-  30%  { opacity: 1; }
-  100% { opacity: 0; }
-}
-
-/* Logo hue morph during transition */
-@keyframes logo-hue-morph {
-  0%   { filter: hue-rotate(0deg) drop-shadow(0 0 8px currentColor); }
-  50%  { filter: hue-rotate(180deg) drop-shadow(0 0 14px currentColor); }
-  100% { filter: hue-rotate(0deg) drop-shadow(0 0 8px currentColor); }
-}
-
-/* Global UI reactions during theme shift */
-html.theme-shifting .glass-card,
-html.theme-shifting [data-card],
-html.theme-shifting .gradient-border {
-  transform: scale(0.985);
-  transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1), border-color 400ms;
-}
-
-html.theme-shifting .theme-glow {
-  filter: drop-shadow(0 0 4px currentColor);
-  transition: filter 300ms ease-out;
-}
-
-/* Pentest mode subtle animated noise overlay (desktop only) */
-@media (min-width: 769px) {
-  html.theme-pentest body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 1;
-    opacity: 0.04;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 0.2 0 0 0 0 0.3 0 0 0 0.6 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-    background-size: 160px 160px;
-    animation: pentest-noise-drift 8s steps(8) infinite;
-    mix-blend-mode: overlay;
-  }
-}
-
-@keyframes pentest-noise-drift {
-  0%   { background-position: 0 0; }
-  25%  { background-position: -40px 20px; }
-  50%  { background-position: 30px -20px; }
-  75%  { background-position: -20px -30px; }
-  100% { background-position: 0 0; }
-}
-
-/* Mobile text sizing overrides */
-@media (max-width: 767px) {
-  .section-title {
-    font-size: 1.75rem !important; /* 28px */
-    line-height: 1.2 !important;
-  }
-  .section-heading {
-    font-size: 11px !important;
-  }
-}
-
-/* Keyboard focus */
+/* Keyboard focus — visible on every interactive element. */
 *:focus-visible {
   outline: 2px solid hsl(var(--primary));
-  outline-offset: 2px;
-  border-radius: 4px;
+  outline-offset: 3px;
+  border-radius: 3px;
 }
 
-/* Rainbow easter egg */
-@keyframes rainbow-shift {
-  0% { --primary: 0 100% 50%; --secondary: 60 100% 50%; }
-  16% { --primary: 60 100% 50%; --secondary: 120 100% 50%; }
-  33% { --primary: 120 100% 50%; --secondary: 180 100% 50%; }
-  50% { --primary: 180 100% 50%; --secondary: 240 100% 50%; }
-  66% { --primary: 240 100% 50%; --secondary: 300 100% 50%; }
-  83% { --primary: 300 100% 50%; --secondary: 0 100% 50%; }
-  100% { --primary: 0 100% 50%; --secondary: 60 100% 50%; }
-}
-
-.rainbow-mode {
-  animation: rainbow-shift 2s linear infinite;
+::selection {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
 }
 
 @layer base {
@@ -267,350 +124,148 @@ html.theme-shifting .theme-glow {
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.022em;
   }
 
   code, pre, .font-mono {
-    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+    font-family: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
   }
 
   ::-webkit-scrollbar {
-    width: 6px;
+    width: 8px;
   }
-  
+
   ::-webkit-scrollbar-track {
     background: transparent;
   }
-  
+
   ::-webkit-scrollbar-thumb {
-    @apply bg-border rounded-full;
+    background: hsl(var(--border-strong));
+    border-radius: 4px;
   }
-  
+
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-muted-foreground/30;
+    background: hsl(var(--muted-foreground-dim));
   }
 }
 
 @layer components {
+  /* Section eyebrow: mono, dim, spaced. No gradient fill. */
   .section-heading {
-    @apply text-sm font-semibold uppercase tracking-widest mb-3;
-    font-family: 'JetBrains Mono', monospace;
-    letter-spacing: 0.25em;
-    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    @apply text-[11px] uppercase;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.22em;
+    color: hsl(var(--muted-foreground-dim));
   }
 
   .section-title {
-    @apply text-3xl md:text-4xl lg:text-5xl font-bold text-foreground;
-    font-family: 'Space Grotesk', system-ui, sans-serif;
-    letter-spacing: -0.02em;
+    @apply text-[27px] font-semibold text-foreground sm:text-[32px] lg:text-[38px];
+    line-height: 1.12;
+    letter-spacing: -0.026em;
   }
 
+  /* Metadata label used inside cards and definition rows. */
+  .meta-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground-dim));
+  }
+
+  /* Formerly a translucent blur panel. Now a solid surface with a hairline
+     border — the same object everywhere, so cards stack without haze. */
+  .glass-card,
+  .panel {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+  }
+
+  .panel-hover {
+    transition: border-color 0.16s ease;
+  }
+
+  .panel-hover:hover {
+    border-color: hsl(var(--border-strong));
+  }
+
+  /* Kept as names so existing call sites resolve, but all three now render one
+     solid colour. */
   .gradient-text {
-    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .glass-card {
-    background: rgba(15, 23, 42, 0.5);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(100, 220, 255, 0.08);
+    color: hsl(var(--primary));
+    -webkit-text-fill-color: currentColor;
   }
 
   .gradient-border {
-    position: relative;
     background: hsl(var(--card));
-    border: 1px solid transparent;
-    background-clip: padding-box;
-  }
-
-  .gradient-border::before {
-    content: '';
-    position: absolute;
-    inset: -1px;
-    border-radius: inherit;
-    padding: 1px;
-    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)));
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    pointer-events: none;
+    border: 1px solid hsl(var(--border));
   }
 
   .gradient-btn {
-    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)));
+    background: hsl(var(--primary));
     color: hsl(var(--primary-foreground));
-    transition: all 0.3s;
+    font-weight: 600;
   }
 
   .gradient-btn:hover {
-    box-shadow: 0 0 25px hsl(var(--primary) / 0.4), 0 0 50px hsl(var(--secondary) / 0.2);
+    background: hsl(var(--primary));
+    opacity: 0.88;
+  }
+
+  .btn-outline {
+    border: 1px solid hsl(var(--border-strong));
+    color: hsl(var(--foreground));
+    transition: border-color 0.16s ease, color 0.16s ease;
+  }
+
+  .btn-outline:hover {
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary));
   }
 }
 
-/* Dot matrix background */
+/* The hero's dot matrix is gone; the page-wide rule grid in CyberGrid replaced
+   it. The class is retained because Login still composes with it. */
 .hero-grid-bg {
-  background-image:
-    radial-gradient(circle, hsl(var(--grid-color) / 0.3) 1px, transparent 1px);
-  background-size: 32px 32px;
+  background-image: none;
 }
 
-/* Marquee */
-@keyframes marquee-scroll {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
-}
-
-.marquee-track {
-  display: flex;
-  width: max-content;
-  animation: marquee-scroll 30s linear infinite;
-}
-
-.marquee-track:hover {
-  animation-play-state: paused;
-}
-
-/* Shield rotation */
-@keyframes shield-rotate {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.animate-shield-rotate {
-  animation: shield-rotate 30s linear infinite;
-}
-
-/* Logo rotation (8s) */
-@keyframes logo-rotate {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.animate-logo-rotate {
-  animation: logo-rotate 8s linear infinite;
-}
-
-.animate-shield-pulse {
-  animation: shield-pulse 4s ease-in-out infinite;
-}
-
-@keyframes shield-pulse {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
-}
-
-/* Orbit */
-@keyframes orbit {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.hero-shield {
-  contain: layout paint;
-  isolation: isolate;
-}
-
-.hero-shield__scene {
-  --hero-tilt-x: 0deg;
-  --hero-tilt-y: 0deg;
-  --hero-orbit-radius: 168px;
-  transform: rotateX(var(--hero-tilt-x)) rotateY(var(--hero-tilt-y));
-  transform-style: preserve-3d;
-  will-change: transform;
-}
-
-.hero-shield__glow {
-  position: absolute;
-  pointer-events: none;
-  border-radius: 9999px;
-  opacity: 0.85;
-}
-
-.hero-shield__glow--primary {
-  top: 50%;
-  left: 50%;
-  width: 320px;
-  height: 320px;
-  transform: translate(-50%, -50%);
-  background: radial-gradient(circle, hsl(var(--primary) / 0.18) 0%, transparent 72%);
-  filter: blur(72px);
-}
-
-.hero-shield__glow--secondary {
-  top: 34%;
-  left: 66%;
-  width: 184px;
-  height: 184px;
-  transform: translate(-50%, -50%);
-  background: radial-gradient(circle, hsl(var(--secondary) / 0.14) 0%, transparent 74%);
-  filter: blur(56px);
-}
-
-.hero-shield__layer {
-  transform-style: preserve-3d;
-}
-
-.hero-shield__layer--spin {
-  animation-name: hero-hex-spin;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-}
-
-.hero-shield__layer--pulse {
-  animation-name: hero-hex-pulse;
-  animation-timing-function: ease-in-out;
-  animation-iteration-count: infinite;
-}
-
-.hero-shield__orbit {
-  animation-name: orbit;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-}
-
-.hero-shield__orbit-chip {
-  display: flex;
-  width: 2.25rem;
-  height: 2.25rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.75rem;
-  transform: translateX(var(--hero-orbit-radius));
-  background: rgba(8, 17, 32, 0.82);
-  border: 1px solid rgba(100, 220, 255, 0.14);
-  box-shadow: 0 0 14px rgba(0, 229, 255, 0.08);
-}
-
-/* Hero hexagon idle spin */
-@keyframes hero-hex-spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Hero hexagon center pulse */
-@keyframes hero-hex-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.03); }
-}
-
-/* Hero scan pulse ring */
-@keyframes hero-scan-pulse {
-  0% { transform: translate(-50%, -50%) scale(0.35); opacity: 0.55; }
-  100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
-}
-
-.hero-shield__pulse {
-  width: 420px;
-  height: 420px;
-  animation: hero-scan-pulse 0.75s ease-out forwards;
-}
-
-/* Cyber pulse */
-@keyframes cyber-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 4px hsl(var(--success)); }
-  50% { opacity: 0.4; box-shadow: 0 0 8px hsl(var(--success)); }
-}
-
-.animate-cyber-pulse {
-  animation: cyber-pulse 2s ease-in-out infinite;
-}
-
-/* Terminal blink */
+/* Terminal caret */
 @keyframes terminal-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
 }
 
 .animate-terminal-blink {
-  animation: terminal-blink 1s step-end infinite;
+  animation: terminal-blink 1.1s step-end infinite;
 }
 
-/* Timeline animated gradient line */
-@keyframes timeline-flow {
-  0% { background-position: 0% 0%; }
-  100% { background-position: 0% 200%; }
+/* The pulsing "systems online" dot is gone. The class is retained only so any
+   stray call site renders a plain, honest dot. */
+.animate-cyber-pulse {
+  animation: none;
 }
 
 .timeline-line-gradient {
-  background: linear-gradient(
-    180deg,
-    hsl(var(--primary)),
-    hsl(var(--secondary)),
-    hsl(var(--primary))
-  );
-  background-size: 100% 200%;
-  animation: timeline-flow 3s linear infinite;
+  background: hsl(var(--border));
 }
 
-/* Flip card 3D */
-.flip-card {
-  perspective: 600px;
-  height: 100px;
-}
-
-.flip-card-inner {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  transform-style: preserve-3d;
-}
-
-.flip-card:hover .flip-card-inner {
-  transform: rotateY(180deg);
-}
-
-.flip-card-front,
-.flip-card-back {
-  position: absolute;
-  inset: 0;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-}
-
-.flip-card-back {
-  transform: rotateY(180deg);
-}
-
-/* Section reveal line wipe */
-@keyframes section-line-wipe {
-  0% { transform: scaleX(0); }
-  100% { transform: scaleX(1); }
-}
-
-/* Reduced motion */
+/* Reduced motion: every decorative animation stops, the layout does not change. */
 @media (prefers-reduced-motion: reduce) {
-  .hero-shield__scene,
-  .hero-shield__layer,
-  .hero-shield__orbit,
-  .hero-shield__pulse {
-    animation: none !important;
-    transform: none !important;
-  }
-
-  .section-reveal * {
-    animation: none !important;
-    transition: none !important;
-  }
-
-  .marquee-track,
-  .timeline-line-gradient,
-  .animate-logo-rotate,
-  .animate-shield-rotate,
-  .animate-cyber-pulse {
-    animation: none !important;
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 
   html {

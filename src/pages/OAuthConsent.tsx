@@ -83,7 +83,7 @@ export default function OAuthConsent() {
         <title>Authorize access | Vijay Singh Puwar</title>
         <meta name="robots" content="noindex" />
       </Helmet>
-      <div className="w-full max-w-md rounded-xl border border-border bg-card/60 backdrop-blur p-8">
+      <div className="w-full max-w-md rounded-lg border border-border bg-card p-8">
         <div className="flex items-center gap-3 mb-6">
           <ShieldCheck className="h-6 w-6 text-primary" aria-hidden="true" />
           <span className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">

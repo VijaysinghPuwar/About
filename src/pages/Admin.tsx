@@ -316,7 +316,7 @@ export default function Admin() {
     return (
       <div className="p-4 hover:bg-muted/30 transition-colors">
         <div className="flex items-center gap-3">
-          <Avatar className="h-10 w-10 border border-border/50">
+          <Avatar className="h-10 w-10 border border-border">
             <AvatarImage src={u.avatar_url || undefined} />
             <AvatarFallback className="bg-primary/10 text-primary text-xs">{initials}</AvatarFallback>
           </Avatar>
@@ -360,13 +360,13 @@ export default function Admin() {
         <title>Admin Dashboard | Vijaysingh Puwar</title>
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>
-      <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent" />
+      <div className="absolute inset-0 hidden" />
       <div className="absolute inset-0 cyber-grid opacity-20" />
 
       <div className="container relative max-w-6xl">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
               <Settings className="w-5 h-5 text-primary" />
             </div>
             <h1 className="text-3xl font-bold text-foreground">Admin Dashboard</h1>
@@ -375,7 +375,7 @@ export default function Admin() {
         </motion.div>
 
         <Tabs defaultValue="users" className="space-y-6">
-          <TabsList className="bg-card border border-border/50">
+          <TabsList className="bg-card border border-border">
             <TabsTrigger value="users" className="flex items-center gap-2">
               <Users className="w-4 h-4" /> Users
               {pendingUsers.length > 0 && (
@@ -417,7 +417,7 @@ export default function Admin() {
           <TabsContent value="users">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
               {pendingUsers.length > 0 && (
-                <div className="rounded-2xl border border-warning/30 bg-card/50 backdrop-blur-sm overflow-hidden">
+                <div className="rounded-lg border border-warning/30 bg-card overflow-hidden">
                   <div className="p-4 border-b border-warning/20 bg-warning/5">
                     <div className="flex items-center gap-2">
                       <Clock className="w-5 h-5 text-warning" />
@@ -430,8 +430,8 @@ export default function Admin() {
                 </div>
               )}
 
-              <div className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
-                <div className="p-4 border-b border-border/50">
+              <div className="rounded-lg border border-border bg-card overflow-hidden">
+                <div className="p-4 border-b border-border">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-5 h-5 text-success" />
                     <h3 className="font-semibold text-foreground">Approved ({approvedUsers.length})</h3>
@@ -445,7 +445,7 @@ export default function Admin() {
               </div>
 
               {blockedUsers.length > 0 && (
-                <div className="rounded-2xl border border-destructive/30 bg-card/50 backdrop-blur-sm overflow-hidden">
+                <div className="rounded-lg border border-destructive/30 bg-card overflow-hidden">
                   <div className="p-4 border-b border-destructive/20">
                     <div className="flex items-center gap-2">
                       <Ban className="w-5 h-5 text-destructive" />
@@ -464,8 +464,8 @@ export default function Admin() {
           <TabsContent value="projects">
             <div className="grid lg:grid-cols-3 gap-8">
               <div className="lg:col-span-2 space-y-6">
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
-                  <div className="p-6 border-b border-border/50 flex items-center justify-between">
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="rounded-lg border border-border bg-card overflow-hidden">
+                  <div className="p-6 border-b border-border flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <FolderLock className="w-5 h-5 text-primary" />
                       <h2 className="text-xl font-semibold">Projects ({projects.length})</h2>
@@ -582,8 +582,8 @@ export default function Admin() {
               </div>
 
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-                className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
-                <div className="p-6 border-b border-border/50">
+                className="rounded-lg border border-border bg-card overflow-hidden">
+                <div className="p-6 border-b border-border">
                   <div className="flex items-center gap-3">
                     <Users className="w-5 h-5 text-secondary" />
                     <h2 className="text-xl font-semibold">Users ({users.length})</h2>
@@ -613,8 +613,8 @@ export default function Admin() {
           {/* Contact Messages Tab */}
           <TabsContent value="messages">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-              className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
-              <div className="p-4 border-b border-border/50 flex items-center justify-between">
+              className="rounded-lg border border-border bg-card overflow-hidden">
+              <div className="p-4 border-b border-border flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-primary" />
                   <h3 className="font-semibold text-foreground">Contact Messages ({contactMessages.length})</h3>
@@ -652,8 +652,8 @@ export default function Admin() {
           {/* Security / Auth Events Tab */}
           <TabsContent value="notifications">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-              className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
-              <div className="p-4 border-b border-border/50 flex items-center justify-between gap-4">
+              className="rounded-lg border border-border bg-card overflow-hidden">
+              <div className="p-4 border-b border-border flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
                   <Bell className="w-5 h-5 text-primary" />
                   <h3 className="font-semibold text-foreground">Notifications ({notifications.length})</h3>
@@ -694,8 +694,8 @@ export default function Admin() {
 
           <TabsContent value="security">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-              className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
-              <div className="p-4 border-b border-border/50 flex items-center justify-between">
+              className="rounded-lg border border-border bg-card overflow-hidden">
+              <div className="p-4 border-b border-border flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="w-5 h-5 text-primary" />
                   <h3 className="font-semibold text-foreground">Auth Events</h3>
