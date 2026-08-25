@@ -32,6 +32,9 @@ export function Navigation() {
   const location = useLocation();
   const { user, profile, isAdmin, signOut } = useAuth();
   const isHomePage = location.pathname === '/';
+  // The Sign In control links to /login, so on /login it points at the page
+  // you are already on. Hide it there rather than shipping a dead button.
+  const isLoginPage = location.pathname === '/login';
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -152,7 +155,7 @@ export function Navigation() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          ) : (
+          ) : isLoginPage ? null : (
             <Button size="sm" variant="ghost" asChild>
               <Link to={loginHref()}><LogIn className="w-4 h-4 mr-1" /> Sign In</Link>
             </Button>
@@ -207,7 +210,7 @@ export function Navigation() {
                         <LogOut className="w-4 h-4 mr-2" /> Sign Out
                       </Button>
                     </div>
-                  ) : (
+                  ) : isLoginPage ? null : (
                     <Button size="sm" className="w-full gradient-btn rounded-md" asChild onClick={() => setIsOpen(false)}>
                       <Link to={loginHref()}><LogIn className="w-4 h-4 mr-2" /> Sign In</Link>
                     </Button>

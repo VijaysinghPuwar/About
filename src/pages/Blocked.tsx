@@ -18,12 +18,10 @@ export default function Blocked() {
   }, [user, profile, loading, navigate]);
 
   return (
-    <div className="min-h-[100dvh] flex items-center justify-center px-4">
+    <div className="min-h-[100dvh] flex items-center justify-center px-4 hero-grid-bg">
       <Helmet>
         <title>Access Denied | Vijaysingh Puwar</title>
       </Helmet>
-      <div className="absolute inset-0 hidden" />
-      <div className="absolute inset-0 cyber-grid opacity-20" />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}

@@ -105,11 +105,15 @@ svg [stroke], svg [fill] {
   transition: stroke 0.25s ease, fill 0.25s ease;
 }
 
-/* Keyboard focus — visible on every interactive element. */
+/* Keyboard focus — visible on every interactive element.
+
+   No border-radius here. It used to set 3px, which the browser applied to the
+   element itself rather than to the ring: every control changed shape the
+   moment it took focus — 8px buttons squared off, the round avatar became a
+   near-square. The outline already traces the element's own radius. */
 *:focus-visible {
   outline: 2px solid hsl(var(--primary));
   outline-offset: 3px;
-  border-radius: 3px;
 }
 
 ::selection {

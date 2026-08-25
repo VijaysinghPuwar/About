@@ -144,10 +144,15 @@ const SKILLS: { label: string; items: string }[] = [
   },
 ];
 
-/** Section heading plus the hairline rule the print layout also uses. */
+/** Section heading plus the hairline rule the print layout also uses.
+
+    Uses the site's `.section-heading` token rather than a local recipe. It used
+    to hand-roll `text-xs / tracking-[0.14em] / text-primary`, which made the
+    resume the one page whose eyebrows were a third size, a third tracking and
+    the accent colour instead of the dim tone every other section uses. */
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-primary font-mono pb-2 mb-5 border-b border-border">
+    <h2 className="section-heading pb-2 mb-5 border-b border-border">
       {children}
     </h2>
   );

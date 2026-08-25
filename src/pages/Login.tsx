@@ -108,7 +108,6 @@ export default function Login() {
       <Helmet>
         <title>Sign In | Vijaysingh Puwar</title>
       </Helmet>
-      <div className="absolute inset-0 hidden" />
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative w-full max-w-md">
         <div className="glass-card rounded-lg p-8 space-y-6">
@@ -122,7 +121,7 @@ export default function Login() {
                 Secure Access
               </h1>
               <p className="text-muted-foreground text-sm mt-2">
-                Authentication is handled securely through Google.
+                Continue with Google, or have a one-time sign-in link emailed to you.
               </p>
             </div>
           </div>
@@ -212,7 +211,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={emailLoading || googleLoading}
-                className="w-full h-11 rounded-md font-medium text-sm bg-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-border transition-colors inline-flex items-center justify-center disabled:opacity-50"
+                className="w-full h-12 rounded-md font-medium text-sm bg-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-border transition-colors inline-flex items-center justify-center disabled:opacity-50"
               >
                 {emailLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin mr-2" />
