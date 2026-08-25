@@ -10,6 +10,14 @@ interface LogoIconProps {
 const HEX_PATH = 'M20 3.6 L34.2 11.8 L34.2 28.2 L20 36.4 L5.8 28.2 L5.8 11.8 Z';
 
 /**
+ * Vijaysingh Puwar. The mark read VJ — two letters of the first name — while
+ * the account avatar beside it derived VP from the same name, so the header
+ * showed a person two different sets of initials. Exported so the favicon and
+ * anything else that spells them out has one place to read them from.
+ */
+export const INITIALS = 'VP';
+
+/**
  * Hex outline in the accent colour, initials in the foreground. Single stroke,
  * no gradient fill, no drop-shadow, no hue-rotate on theme change — it inherits
  * the active theme through the token, which is the point of having one accent.
@@ -49,7 +57,7 @@ export function LogoIcon({ size = 26, className, withName = false }: LogoIconPro
             fill: 'hsl(var(--foreground))',
           }}
         >
-          VJ
+          {INITIALS}
         </text>
       </svg>
       {withName && (

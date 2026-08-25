@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { INITIALS } from '@/components/LogoIcon';
 import { Helmet } from 'react-helmet-async';
 import { Loader2, CheckCircle2, Mail } from 'lucide-react';
 import { z } from 'zod';
@@ -114,7 +115,7 @@ export default function Login() {
           {/* Logo */}
           <div className="text-center space-y-3">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-lg gradient-border">
-              <span className="text-2xl font-bold gradient-text">VJ</span>
+              <span className="text-2xl font-bold gradient-text">{INITIALS}</span>
             </div>
             <div>
               <h1 className="text-2xl font-bold font-mono tracking-[0.18em] uppercase gradient-text">

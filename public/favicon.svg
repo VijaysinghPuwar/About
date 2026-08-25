@@ -1,12 +1,34 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#00e5ff"/>
-      <stop offset="100%" stop-color="#a855f7"/>
-    </linearGradient>
-  </defs>
-  <polygon points="32,4 58,19 58,49 32,64 6,49 6,19" fill="none" stroke="url(#g)" stroke-width="1.5"/>
-  <text x="32" y="34" font-family="system-ui,sans-serif" font-weight="700" font-size="26" text-anchor="middle" dominant-baseline="central" letter-spacing="-1">
-    <tspan fill="#00e5ff">V</tspan><tspan fill="#a855f7">J</tspan>
-  </text>
+<!--
+  The tab mark, matching LogoIcon: one accent, no gradient.
+
+  The previous file was pre-redesign — it read VJ, and drew the hexagon and the
+  letters in a cyan-to-purple gradient, the exact two-hue treatment the palette
+  was rebuilt to remove. A standalone SVG cannot read the theme tokens, so the
+  colours are the resolved defensive values: --primary 146 46% 45% -> #3ea86c,
+  --foreground 240 8% 95% -> #f1f1f3, --background 240 11% 4% -> #09090b.
+
+  The background plate is deliberate. The mark is near-white on a dark site, so
+  a transparent favicon disappeared into a light tab strip.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Vijaysingh Puwar">
+  <title>Vijaysingh Puwar</title>
+  <rect width="64" height="64" rx="13" fill="#09090b"/>
+  <path
+    d="M32 8.5 L52.4 20.25 L52.4 43.75 L32 55.5 L11.6 43.75 L11.6 20.25 Z"
+    fill="none"
+    stroke="#3ea86c"
+    stroke-width="3.2"
+    stroke-linejoin="round"
+  />
+  <text
+    x="32"
+    y="32.8"
+    text-anchor="middle"
+    dominant-baseline="central"
+    font-family="'IBM Plex Sans', system-ui, -apple-system, sans-serif"
+    font-size="21"
+    font-weight="600"
+    letter-spacing="-0.6"
+    fill="#f1f1f3"
+  >VP</text>
 </svg>

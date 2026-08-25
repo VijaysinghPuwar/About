@@ -7,6 +7,7 @@ import { Helmet } from 'react-helmet-async';
 import { useRef, useEffect, useState } from 'react';
 import { meCourseGroups, type CourseGroup } from '@/data/me-coursework';
 import { ProtectedEmail } from '@/components/ProtectedEmail';
+import { INITIALS } from '@/components/LogoIcon';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -151,7 +152,7 @@ export default function About() {
           <div className="flex-shrink-0">
             <div className="w-44 h-44 rounded-lg gradient-border overflow-hidden flex items-center justify-center">
               <div className="w-full h-full bg-card-elevated flex items-center justify-center">
-                <span className="text-5xl font-bold gradient-text">VJ</span>
+                <span className="text-5xl font-bold gradient-text">{INITIALS}</span>
               </div>
             </div>
           </div>

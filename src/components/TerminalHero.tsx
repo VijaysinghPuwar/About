@@ -92,6 +92,15 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  /* Where the block caret is drawn: the cursor's column, and how far the field
+     has scrolled once the line outgrows it. */
+  const [caret, setCaret] = useState({ col: 0, scrollLeft: 0 });
+  const syncCaret = useCallback(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    setCaret({ col: el.selectionStart ?? el.value.length, scrollLeft: el.scrollLeft });
+  }, []);
+
   const submitted = entries.map(e => e.input);
 
   const submit = useCallback(() => {
@@ -148,6 +157,11 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [entries]);
+
+  // `onSelect` covers typing, clicking and the arrow keys, but not the times
+  // the draft is rewritten from under the field — tab-completion, history
+  // recall, ctrl-c. Re-read the cursor after any of those land.
+  useEffect(() => { syncCaret(); }, [draft, syncCaret]);
 
   /* ── typewriter intro ── */
   // How many lines have finished printing. Storing a count rather than copies
@@ -316,22 +330,42 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
                 ))}
               </div>
 
+              {/* The caret sits on the cursor's own column.
+
+                  It used to be a sibling *after* an input carrying `flex-1`:
+                  the input claimed the whole row, so the block was pushed to
+                  the far right edge of the card while the real text cursor
+                  stayed back at the prompt — two carets, several hundred
+                  pixels apart, and only one of them where you were typing.
+                  The block is now placed off `selectionStart`. The face is
+                  monospace, so a column is exactly `1ch` and nothing has to be
+                  measured; `scrollLeft` keeps it honest once the line is long
+                  enough to scroll, and the input's own caret is hidden so
+                  there is only ever one. */}
               <div className="mt-2.5 flex items-center gap-2.5 font-mono text-[13px]">
                 <span className="shrink-0 text-primary" aria-hidden="true">$</span>
-                <input
-                  ref={inputRef}
-                  value={draft}
-                  onChange={e => setDraft(e.target.value)}
-                  onKeyDown={onKeyDown}
-                  spellCheck={false}
-                  autoComplete="off"
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                  aria-label="Terminal input — type help for available commands"
-                  placeholder={entries.length ? '' : "type 'help'"}
-                  className="min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-[13px] text-foreground outline-none placeholder:text-muted-dim focus:ring-0"
-                />
-                <span className="h-[15px] w-[7px] shrink-0 animate-terminal-blink bg-primary" aria-hidden="true" />
+                <span className="relative flex min-w-0 flex-1 items-center overflow-hidden">
+                  <input
+                    ref={inputRef}
+                    value={draft}
+                    onChange={e => setDraft(e.target.value)}
+                    onKeyDown={onKeyDown}
+                    onSelect={syncCaret}
+                    onScroll={syncCaret}
+                    spellCheck={false}
+                    autoComplete="off"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    aria-label="Terminal input — type help for available commands"
+                    placeholder={entries.length ? '' : "type 'help'"}
+                    className="w-full min-w-0 border-0 bg-transparent p-0 font-mono text-[13px] text-foreground caret-transparent outline-none placeholder:text-muted-dim focus:ring-0"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute top-1/2 h-[15px] w-[7px] -translate-y-1/2 animate-terminal-blink bg-primary"
+                    style={{ left: `calc(${caret.col}ch - ${caret.scrollLeft}px)` }}
+                  />
+                </span>
               </div>
             </>
           )}
