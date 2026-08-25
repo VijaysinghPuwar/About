@@ -272,3 +272,49 @@ svg [stroke], svg [fill] {
     scroll-behavior: auto;
   }
 }
+
+/*
+  Touch targets.
+
+  Every control here is sized for a mouse: a 30px skill chip, a 32px close
+  button, an 18px social glyph. On a finger that is a miss waiting to happen —
+  WCAG 2.2 asks for 24px, Apple and Google both ask for 44px. Rather than
+  inflate the controls and lose the compact chip that the design is built on,
+  `.tap-44` grows only the *hit area*, with a centred pseudo-element that takes
+  no space in layout. Nothing moves; everything is tappable.
+
+  Scoped to a coarse pointer so the desktop geometry is untouched.
+
+  In a dense wrapped row — the skill chips run a 30px chip on a 37px pitch —
+  neighbouring hit areas do overlap, and a tap in the gutter resolves to
+  whichever chip paints last. That is still strictly better than the gutter
+  swallowing the tap outright, which is what it does today.
+*/
+@media (pointer: coarse) {
+  .tap-44 {
+    position: relative;
+  }
+
+  .tap-44::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 100%;
+    height: 100%;
+    min-width: 44px;
+    min-height: 44px;
+    transform: translate(-50%, -50%);
+  }
+
+  /* iOS Safari zooms the whole page in when a focused field is under 16px and
+     never zooms back out, which leaves the layout stranded mid-scale. The two
+     fields on the site — the terminal prompt and the project index filter —
+     both set 13-14px for the monospace look. Hold the rendered size at 16px on
+     touch; the zoom is a worse artefact than the slightly larger caret. */
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+}

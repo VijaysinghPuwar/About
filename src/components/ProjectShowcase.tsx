@@ -175,6 +175,12 @@ const CATEGORY_ALIASES: Record<string, string> = {
 };
 const normalizeCategory = (category: string) => CATEGORY_ALIASES[category] ?? category;
 
+/** True on a device driven by a mouse or trackpad rather than a finger. */
+const hasFinePointer = () =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(pointer: fine)').matches;
+
 /** How many case-study cards render inline. The rest live in the index modal. */
 const FEATURED_LIMIT = 6;
 
@@ -322,7 +328,7 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
           </span>
           <button
             onClick={onClearSkillFilter}
-            className="rounded-[5px] border border-border-strong px-2.5 py-1 font-mono text-[10.5px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+            className="tap-44 rounded-[5px] border border-border-strong px-2.5 py-1 font-mono text-[10.5px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
             aria-label={`Clear the ${skillFilter.label} filter`}
           >
             CLEAR
@@ -338,7 +344,7 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
             onClick={() => setActiveFilter(cat)}
             aria-pressed={activeFilter === cat}
             className={
-              'rounded-md border px-3.5 py-2 text-[12.5px] transition-colors ' +
+              'tap-44 rounded-md border px-3.5 py-2 text-[12.5px] transition-colors ' +
               (activeFilter === cat
                 ? 'border-primary bg-primary-bg text-primary'
                 : 'border-border bg-card text-muted-foreground hover:border-border-strong hover:text-foreground')
@@ -442,7 +448,7 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
                 <button
                   onClick={closeIndex}
                   aria-label="Close index"
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+                  className="tap-44 -mr-1.5 -mt-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
                 >
                   <X className="h-5 w-5" aria-hidden="true" />
                 </button>
@@ -451,7 +457,11 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
               <div className="flex items-center gap-2.5 border-b border-border px-5 py-3 sm:px-7">
                 <Search className="h-4 w-4 shrink-0 text-muted-dim" aria-hidden="true" />
                 <input
-                  autoFocus
+                  /* Focus the filter on a mouse, never on a finger. On a phone
+                     autoFocus threw the software keyboard up the instant the
+                     index opened, which covered the list the reader had just
+                     asked to see — before they had typed anything. */
+                  autoFocus={hasFinePointer()}
                   value={indexQuery}
                   onChange={e => setIndexQuery(e.target.value)}
                   placeholder="Filter by name, category or tech…"
@@ -503,15 +513,53 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 8 }}
               transition={{ duration: 0.16, ease: 'easeOut' }}
-              className="panel relative h-screen w-screen overflow-y-auto rounded-none p-6 sm:p-8 md:h-auto md:max-h-[85vh] md:w-full md:max-w-2xl md:rounded-lg"
+              /* `h-full w-full`, not `h-screen w-screen`. The overlay is a
+                 padded flex box, so a 100vh child did not fit its 100vh−32px
+                 content box: measured on a 390px phone the dialog ran to 708px
+                 against a 700px viewport, hanging 8px off the bottom and
+                 leaving no backdrop above or below to tap the dialog shut. The
+                 index dialog above always sized itself this way; this matches. */
+              className="panel relative flex h-full w-full flex-col overflow-hidden rounded-none md:h-auto md:max-h-[85vh] md:w-full md:max-w-2xl md:rounded-lg"
               onClick={e => e.stopPropagation()}
             >
-              <div className="absolute right-4 top-4 flex items-center gap-2">
+              {/* Header in flow, with the body scrolling under it, so the close
+                  button stays put. It used to be `absolute` inside the element
+                  that scrolls — which means it scrolled with the content: at
+                  the bottom of a long project the X measured 68px above the top
+                  of the screen. On a phone, with no Escape key and (see above)
+                  no backdrop left to tap, getting out meant scrolling back up
+                  first. The title also gets its full width back: it used to
+                  hold 96px open (`pr-24`) for a cluster that never sat on the
+                  same line as it, so the reservation only cost it wrapping. */}
+              <div className="flex items-start justify-between gap-3 border-b border-border p-6 sm:p-8 sm:pb-6">
+                <div className="min-w-0">
+                  <div className="meta-label">{normalizeCategory(selectedProject.category)}</div>
+                  <h3 className="mt-3 text-[21px] font-semibold leading-[1.2] tracking-[-0.02em] text-foreground sm:text-[24px]">
+                    {selectedProject.title}
+                  </h3>
+                  <div className="mt-2 font-mono text-[11.5px] text-muted-dim">
+                    {selectedProject.year} · {statusLabel(selectedProject.status)}
+                  </div>
+                </div>
+                <button
+                  onClick={closeModal}
+                  aria-label="Close"
+                  className="tap-44 -mr-1.5 -mt-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <X className="h-5 w-5" aria-hidden="true" />
+                </button>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto p-6 pt-6 sm:p-8">
+                {/* The impact toggle switches what the body says, so it reads
+                    with the body rather than from the corner of the header. It
+                    also scrolled away with the close button it sat beside. */}
                 {hasDiff && (
                   <button
                     onClick={() => setShowDiff(!showDiff)}
+                    aria-pressed={showDiff}
                     className={
-                      'inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-[11.5px] transition-colors ' +
+                      'tap-44 mb-6 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-[11.5px] transition-colors ' +
                       (showDiff
                         ? 'border-primary bg-primary-bg text-primary'
                         : 'border-border text-muted-foreground hover:border-border-strong hover:text-foreground')
@@ -521,24 +569,6 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
                     {showDiff ? 'Show details' : 'Show impact'}
                   </button>
                 )}
-                <button
-                  onClick={closeModal}
-                  aria-label="Close"
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <X className="h-5 w-5" aria-hidden="true" />
-                </button>
-              </div>
-
-              <div className="meta-label">{normalizeCategory(selectedProject.category)}</div>
-              <h3 className="mt-3 pr-24 text-[24px] font-semibold tracking-[-0.02em] text-foreground">
-                {selectedProject.title}
-              </h3>
-              <div className="mt-2 font-mono text-[11.5px] text-muted-dim">
-                {selectedProject.year} · {statusLabel(selectedProject.status)}
-              </div>
-
-              <div className="mt-6">
                 {!showDiff ? (
                   <div>
                     <p className="text-[14.5px] leading-[1.65] text-muted-foreground">
@@ -704,7 +734,7 @@ const FeaturedCard = forwardRef<HTMLDivElement, { project: Project; onClick: () 
               rel="noopener noreferrer"
               onClick={e => e.stopPropagation()}
               aria-label={`${project.title} source on GitHub`}
-              className="text-muted-dim transition-colors hover:text-primary"
+              className="tap-44 text-muted-dim transition-colors hover:text-primary"
             >
               <Github className="h-4 w-4" aria-hidden="true" />
             </a>

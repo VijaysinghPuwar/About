@@ -168,7 +168,7 @@ export function SkillMatrix({ projects, onSelectSkill, activeSkill }: SkillMatri
                           : undefined
                       }
                       className={[
-                        'inline-flex items-center gap-[7px] rounded-md border px-2.5 py-1.5 text-[12.5px] leading-[1.3] transition-colors',
+                        'tap-44 inline-flex items-center gap-[7px] rounded-md border px-2.5 py-1.5 text-[12.5px] leading-[1.3] transition-colors',
                         isActive
                           ? 'border-primary bg-primary-bg text-primary'
                           : clickable

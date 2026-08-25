@@ -109,7 +109,7 @@ export default function Index() {
                   rel="noopener noreferrer"
                   aria-label="GitHub — vijaysinghpuwar"
                   title="github.com/vijaysinghpuwar"
-                  className="text-muted-foreground transition-colors hover:text-primary"
+                  className="tap-44 text-muted-foreground transition-colors hover:text-primary"
                 >
                   <Github className="h-[18px] w-[18px]" aria-hidden="true" />
                 </a>
@@ -119,13 +119,13 @@ export default function Index() {
                   rel="noopener noreferrer"
                   aria-label="LinkedIn — vijaysinghpuwar"
                   title="linkedin.com/in/vijaysinghpuwar"
-                  className="text-muted-foreground transition-colors hover:text-primary"
+                  className="tap-44 text-muted-foreground transition-colors hover:text-primary"
                 >
                   <Linkedin className="h-[18px] w-[18px]" aria-hidden="true" />
                 </a>
                 <ProtectedEmail
                   variant="icon"
-                  className="text-muted-foreground hover:text-primary"
+                  className="tap-44 text-muted-foreground hover:text-primary"
                   iconClassName="h-[18px] w-[18px]"
                 />
               </div>

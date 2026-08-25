@@ -178,7 +178,10 @@ function Bullets({ items }: { items: string[] }) {
 
 export default function Resume() {
   return (
-    <div className="py-14 sm:py-20">
+    /* pt-24, not py-14: the navigation is fixed and 64px tall, so 56px of
+       top padding put the name behind it — and the bar is transparent at the
+       top of the page, so the two simply overlapped. */
+    <div className="pb-14 pt-24 sm:pb-20 sm:pt-28">
       <Helmet>
         <title>Resume | Vijaysingh Puwar</title>
         <meta

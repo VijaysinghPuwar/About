@@ -277,7 +277,7 @@ function TimelineNode({ entry, index, expandedId, onToggle }: {
             initial={{ scale: 0 }}
             animate={isInView ? { scale: 1 } : {}}
             transition={{ type: 'spring', stiffness: 200, damping: 15, delay: index * 0.15 }}
-            className={`relative z-10 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border transition-colors ${
+            className={`tap-44 relative z-10 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border transition-colors ${
               isExpanded
                 ? 'border-primary bg-primary text-primary-foreground'
                 : 'border-border bg-card text-primary'

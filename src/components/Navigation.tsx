@@ -167,7 +167,7 @@ export function Navigation() {
               document.body.style.overflow = open ? 'hidden' : '';
             }}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="sm" className="w-9 px-0" aria-label="Open navigation menu">
+              <Button variant="ghost" size="sm" className="h-11 w-11 px-0" aria-label="Open navigation menu">
                 <Menu className="w-5 h-5" aria-hidden="true" />
               </Button>
             </SheetTrigger>

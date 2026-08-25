@@ -36,7 +36,7 @@ export function Footer() {
             <button
               key={link.id}
               onClick={() => scrollTo(link.id)}
-              className="text-muted-foreground transition-colors hover:text-primary"
+              className="tap-44 text-muted-foreground transition-colors hover:text-primary"
             >
               {link.label}
             </button>

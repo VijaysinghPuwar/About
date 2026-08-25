@@ -355,7 +355,7 @@ export default function Admin() {
   };
 
   return (
-    <div className="min-h-[100dvh] py-12">
+    <div className="min-h-[100dvh] pb-12 pt-24">
       <Helmet>
         <title>Admin Dashboard | Vijaysingh Puwar</title>
         <meta name="robots" content="noindex, nofollow" />

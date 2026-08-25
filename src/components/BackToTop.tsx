@@ -19,7 +19,11 @@ export function BackToTop() {
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.8 }}
           onClick={() => document.getElementById('home')?.scrollIntoView({ behavior: 'smooth' })}
-          className="panel panel-hover fixed bottom-6 right-6 z-50 flex h-10 w-10 items-center justify-center rounded-md text-primary"
+          // 44px, and lifted clear of the iOS home indicator: at `bottom-6`
+          // on a notched phone the button sat in the gesture strip, where the
+          // swipe-up wins and the tap does not register.
+          style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
+          className="panel panel-hover fixed right-5 z-50 flex h-11 w-11 items-center justify-center rounded-md text-primary sm:right-6"
           aria-label="Back to top"
         >
           <ArrowUp className="w-4 h-4" />
