@@ -82,6 +82,23 @@ function introLines(isPentest: boolean): TerminalLine[] {
   ];
 }
 
+/**
+ * True below Tailwind's `sm`, which is where the terminal switches to its phone
+ * layout. Written against `matchMedia` rather than a width read so it costs one
+ * listener and cannot disagree with the CSS.
+ */
+function useNarrow() {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const mql = window.matchMedia('(max-width: 639px)');
+    const sync = () => setNarrow(mql.matches);
+    sync();
+    mql.addEventListener('change', sync);
+    return () => mql.removeEventListener('change', sync);
+  }, []);
+  return narrow;
+}
+
 /*
   The tap row under the prompt on phones. `help` first because it explains the
   rest, `clear` last because it undoes them; the four in between are the ones
@@ -185,50 +202,119 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
   }, [draft, projects, recall, submit, submitted]);
 
   /*
-    A phone keyboard does not resize the page — it covers the bottom of it. The
-    prompt the reader tapped to open that keyboard can end up underneath it, and
-    so can the shortcut row right below the prompt, which is the whole of this
-    shell's navigation on a phone.
+    ── the prompt and the on-screen keyboard ──
 
-    `visualViewport` is the part of the page the keyboard leaves visible. This
-    measures the prompt against that and scrolls the page by exactly the
-    overlap, so the line being typed and the commands next to it stay above the
-    keyboard — on open, on rotate, and after each command prints and pushes the
-    prompt further down.
+    A phone keyboard does not resize the page. It draws itself over the bottom
+    of the layout viewport, and the line you tapped to open it ends up
+    underneath. Scrolling the page to compensate is the obvious answer and it is
+    the wrong one on iOS: Safari is scrolling too — it moves the visual viewport
+    inside the layout viewport rather than moving the document — so a scroll of
+    our own either fights it or is undone by it, and the prompt lands off screen
+    anyway.
+
+    So the prompt does not chase the keyboard. When the keyboard is up and the
+    field has focus, the prompt row is taken out of the card and pinned to the
+    bottom of the layout viewport, offset by exactly the height the keyboard
+    covers. `position: fixed` is measured against the layout viewport, which the
+    keyboard does not change, so the row sits on top of the keyboard no matter
+    what either scroller is doing. A spacer holds its place in the card so
+    nothing below it jumps, and it drops back in on blur.
+
+    `visualViewport` is what the keyboard leaves visible; the difference between
+    that and `innerHeight` is the keyboard. The 90px floor keeps a retracting
+    URL bar — which moves the same numbers by a much smaller amount — from
+    reading as a keyboard.
   */
   const promptRef = useRef<HTMLDivElement>(null);
-  const keepPromptVisible = useCallback(() => {
-    const vv = window.visualViewport;
-    const el = promptRef.current;
-    if (!vv || !el) return;
-    const overlap = el.getBoundingClientRect().bottom + 12 - (vv.offsetTop + vv.height);
-    if (overlap > 1) window.scrollBy({ top: overlap, behavior: 'instant' as ScrollBehavior });
-  }, []);
+  /* The gap the docked prompt left behind in the card — the point in the
+     transcript the reader is actually typing at. */
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const flowHeight = useRef(0);
+  const [keyboard, setKeyboard] = useState(0);
+  const [visible, setVisible] = useState(0);
+  const [focused, setFocused] = useState(false);
 
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
-    // The keyboard animates in, so the viewport settles over several events.
-    const onViewport = () => {
-      if (document.activeElement === inputRef.current) keepPromptVisible();
+    const measure = () => {
+      const covered = window.innerHeight - (vv.height + vv.offsetTop);
+      setKeyboard(covered > 90 ? Math.round(covered) : 0);
+      setVisible(Math.round(vv.height));
     };
-    vv.addEventListener('resize', onViewport);
-    vv.addEventListener('scroll', onViewport);
+    measure();
+    vv.addEventListener('resize', measure);
+    vv.addEventListener('scroll', measure);
     return () => {
-      vv.removeEventListener('resize', onViewport);
-      vv.removeEventListener('scroll', onViewport);
+      vv.removeEventListener('resize', measure);
+      vv.removeEventListener('scroll', measure);
     };
-  }, [keepPromptVisible]);
+  }, []);
+
+  /* The bar is a phone affordance; from `sm` up there is no keyboard covering
+     anything and the prompt stays where it was written. */
+  const narrow = useNarrow();
+  const docked = narrow && focused && keyboard > 0;
+  /* A phone in landscape can be left with barely two hundred points above the
+     keyboard. The bar earns its place there only if what it covers is worth
+     less than what it shows, so the shortcut row drops out and the prompt
+     alone is docked. */
+  const roomForShortcuts = !docked || visible >= 320;
+
+  // The height to hold open in the card, remeasured whenever it is in the flow.
+  useEffect(() => {
+    if (!docked && promptRef.current) flowHeight.current = promptRef.current.offsetHeight;
+  });
+
+  /*
+    Docking pins the prompt, not the transcript. The card can be left showing
+    its opening lines while the reader types at the bottom of the screen, so the
+    page is scrolled once, to put the end of the transcript directly above the
+    bar. Safari has nothing to fight over here — the focused field is fixed, so
+    it is already in view as far as the browser is concerned.
+
+    Undocked, it is the other way round: the prompt is in the flow and can be
+    pushed under the fold by its own output, so it is walked back up.
+  */
+  const alignToKeyboard = useCallback(() => {
+    const vv = window.visualViewport;
+    const bar = promptRef.current;
+    if (!bar) return;
+    const visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+
+    if (docked) {
+      const anchor = anchorRef.current;
+      if (!anchor) return;
+      // `visibleBottom` is already the keyboard's top edge; the bar sits on it,
+      // and the transcript should end where the prompt used to be — directly
+      // above it, whether that means scrolling down to it or back up to it.
+      const room = visibleBottom - bar.offsetHeight;
+      // The gap's *top* is where the transcript now ends, and that is the edge
+      // worth putting against the bar; the rest of the gap can sit behind it.
+      const shift = anchor.getBoundingClientRect().top - room;
+      if (Math.abs(shift) > 2) window.scrollBy({ top: shift, behavior: 'instant' as ScrollBehavior });
+      return;
+    }
+
+    const overlap = bar.getBoundingClientRect().bottom + 12 - visibleBottom;
+    if (overlap > 1) window.scrollBy({ top: overlap, behavior: 'instant' as ScrollBehavior });
+  }, [docked]);
+
+  // The bar lands after the keyboard has finished animating, so this runs on the
+  // state that says it landed rather than on the focus that started it.
+  useEffect(() => {
+    if (docked) requestAnimationFrame(alignToKeyboard);
+  }, [docked, alignToKeyboard]);
 
   // Keep the newest output in view without moving the page itself — and, if the
-  // keyboard is up, keep the prompt the output just pushed down in view too.
+  // keyboard is up, keep it above the bar the command just printed behind.
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-    if (document.activeElement === inputRef.current) {
-      requestAnimationFrame(keepPromptVisible);
+    if (docked || document.activeElement === inputRef.current) {
+      requestAnimationFrame(alignToKeyboard);
     }
-  }, [entries, keepPromptVisible]);
+  }, [entries, docked, alignToKeyboard]);
 
   // `onSelect` covers typing, clicking and the arrow keys, but not the times
   // the draft is rewritten from under the field — tab-completion, history
@@ -473,7 +559,19 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
                   so the input and the block caret stay in step — the caret is
                   positioned in `ch` and sized in `em`, both of which follow
                   whatever the row is set to. */}
-              <div ref={promptRef}>
+              {/* Docked, this is the bar sitting on top of the keyboard: full
+                  width, the card's own surface, a hairline to separate it from
+                  whatever it is covering. In the flow it is just the next line
+                  of the terminal. */}
+              <div
+                ref={promptRef}
+                className={
+                  docked
+                    ? 'fixed inset-x-0 z-40 border-t border-border bg-card px-5 pb-3 pt-1'
+                    : undefined
+                }
+                style={docked ? { bottom: keyboard } : undefined}
+              >
                 <div className="mt-2.5 flex items-center gap-2.5 font-mono text-[16px] sm:text-[13px]">
                   <span className="shrink-0 text-primary" aria-hidden="true">$</span>
                   <span className="relative flex min-w-0 flex-1 items-center overflow-hidden">
@@ -484,12 +582,8 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
                       onKeyDown={onKeyDown}
                       onSelect={syncCaret}
                       onScroll={syncCaret}
-                      onFocus={() => {
-                        // No event fires when the keyboard finishes animating in;
-                        // the viewport listener catches the resize, this catches
-                        // the browsers that scroll the field into view instead.
-                        window.setTimeout(keepPromptVisible, 320);
-                      }}
+                      onFocus={() => setFocused(true)}
+                      onBlur={() => setFocused(false)}
                       spellCheck={false}
                       autoComplete="off"
                       autoCapitalize="off"
@@ -514,19 +608,41 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
                     typing, one tap each. `stopPropagation` keeps the tap off the
                     body's focus handler, so running one does not also throw the
                     keyboard up over the output it just printed. */}
-                <div className="mt-3.5 flex flex-wrap gap-1.5 sm:hidden">
+                <div
+                  className={
+                    !roomForShortcuts
+                      ? 'hidden'
+                      : docked
+                        ? // Above the keyboard there is no room to wrap: one row
+                          // that scrolls, the way a keyboard accessory bar does.
+                          'term-scroll mt-2 flex flex-nowrap gap-1.5 overflow-x-auto pb-1'
+                        : 'mt-3.5 flex flex-wrap gap-1.5 sm:hidden'
+                  }
+                >
                   {SHORTCUTS.map(cmd => (
                     <button
                       key={cmd}
                       type="button"
-                      onClick={e => { e.stopPropagation(); run(cmd); }}
-                      className="min-h-[38px] rounded-[4px] border border-border px-3 font-mono text-[12px] tracking-[0.04em] text-muted-dim active:border-primary active:text-primary"
+                      // Preventing the default on mousedown is what stops the tap
+                    // taking focus off the field, which on a phone is what
+                    // stops the keyboard closing under the reader every time
+                    // they run a command from this row.
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={e => { e.stopPropagation(); run(cmd); }}
+                      className="min-h-[38px] shrink-0 rounded-[4px] border border-border px-3 font-mono text-[12px] tracking-[0.04em] text-muted-dim active:border-primary active:text-primary"
                     >
                       {cmd}
                     </button>
                   ))}
                 </div>
               </div>
+
+              {/* Holds the prompt's place in the card while it is docked, so the
+                  shortcut row and the CTAs below it do not jump up by a line the
+                  moment the keyboard opens. */}
+              {docked && (
+                <div ref={anchorRef} style={{ height: flowHeight.current }} aria-hidden="true" />
+              )}
             </>
           )}
 

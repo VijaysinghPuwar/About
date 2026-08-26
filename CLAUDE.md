@@ -49,9 +49,18 @@ the plates cover the viewport; do not hardcode that delay a second time.
 
 On phones the terminal is the whole hero, so it carries its own affordances: a
 16px input (anything smaller makes iOS zoom the page on focus), a tap row of
-commands standing in for Tab and the arrow keys, command output that scrolls
-sideways instead of wrapping its columns, and a `visualViewport` listener that
-keeps the prompt above the on-screen keyboard.
+commands standing in for Tab and the arrow keys, and command output that
+scrolls sideways instead of wrapping its columns.
+
+When the on-screen keyboard is up, the prompt is pinned to the bottom of the
+layout viewport with `position: fixed`, offset by the height `visualViewport`
+says the keyboard covers — it does not scroll the page to keep the prompt in
+view. iOS is scrolling the visual viewport at the same time, so a scroll of our
+own is either fought or undone and the prompt ends up off screen anyway. A
+spacer holds the prompt's place in the card, and the page is scrolled once so
+the end of the transcript meets the bar. In landscape, where there may be only
+a couple of hundred points above the keyboard, the shortcut row drops out of
+the bar.
 
 The theme switch is the one deliberate exception, and it is not ambient — it
 only ever runs on a click. `src/lib/theme-transition.ts` closes a shutter of
