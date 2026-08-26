@@ -403,8 +403,14 @@ export function ExperienceTimeline() {
 
   return (
     <div className="mt-12">
-      {/* Timeline */}
-      <div className="relative">
+      {/* Timeline
+
+          `overflow-x-clip`: the cards slide in from 50px outside their own
+          column, and the right-hand column ends at the container edge — so
+          until they land, they hold the document open wider than the viewport
+          and the whole page can be dragged sideways. Clipping contains the
+          entry animation without making this a scroll container. */}
+      <div className="relative overflow-x-clip">
         {/* Center line (desktop) */}
         <div className="hidden md:block absolute left-1/2 -translate-x-1/2 top-0 bottom-0 w-[2px] timeline-line-gradient" />
 

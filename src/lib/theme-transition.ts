@@ -71,6 +71,26 @@ function marks(plates: number) {
   };
 }
 
+/*
+  How long anything that replays itself on a mode switch should wait first.
+
+  The class swaps at `m.commit` — about 0.77s into a sweep whose last plate does
+  not clear the viewport until `m.teardown` — so a replay started on the swap
+  would spend its opening beats behind the plates. This is that remainder: the
+  replay begins as the shutter lifts, which is the only moment there is anything
+  to see it.
+*/
+const REPLAY_HOLD = 2750;
+
+/**
+ * Milliseconds a mode-switch replay should hold for the shutter, or 0 when no
+ * sweep is running (reduced motion, or a theme set some other way).
+ */
+export function sweepHold(): number {
+  if (typeof document === 'undefined') return 0;
+  return document.documentElement.hasAttribute('data-theme-sweep') ? REPLAY_HOLD : 0;
+}
+
 const SOUND_KEY = 'theme-transition-sound';
 
 let running = false;
@@ -110,6 +130,18 @@ function audio(): AudioContext | null {
     window.AudioContext ??
     (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Ctor) return null;
+  /*
+    iOS routes WebAudio through the "ambient" session by default, and an ambient
+    session is silenced by the hardware mute switch — the cue plays, the phone
+    just never sounds it. Declaring a playback session (Safari 16.4+) is the one
+    lever a page has over that, and it has to be set before the context exists.
+  */
+  const nav = navigator as Navigator & { audioSession?: { type: string } };
+  try {
+    if (nav.audioSession) nav.audioSession.type = 'playback';
+  } catch {
+    /* older Safari, or a UA that exposes the property read-only */
+  }
   try {
     ctx = new Ctor();
   } catch {
@@ -233,8 +265,28 @@ function playCue(toPentest: boolean, plates: number, m: ReturnType<typeof marks>
   if (isSoundMuted()) return;
   const ac = audio();
   if (!ac) return;
-  if (ac.state === 'suspended') void ac.resume();
 
+  /*
+    A context can be handed back suspended even when it was created inside the
+    gesture — iOS does this routinely, and resuming it is asynchronous. Anything
+    scheduled against `currentTime` before the resume lands is simply dropped,
+    which is most of the cue. So the whole thing is scheduled after the resume
+    resolves; the cost is the few milliseconds of drift against the plates, and
+    the alternative is silence.
+  */
+  if (ac.state === 'suspended') {
+    ac.resume().then(() => schedule(ac, toPentest, plates, m)).catch(() => {});
+    return;
+  }
+  schedule(ac, toPentest, plates, m);
+}
+
+function schedule(
+  ac: AudioContext,
+  toPentest: boolean,
+  plates: number,
+  m: ReturnType<typeof marks>,
+) {
   const out = ac.createGain();
   out.gain.value = 0.9;
   out.connect(ac.destination);

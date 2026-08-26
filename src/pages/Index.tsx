@@ -93,7 +93,12 @@ export default function Index() {
               first screen previously had none of: what the work is, where it
               happens now, and whether he is available — all checkable. */}
           <div className="grid items-center gap-11 lg:grid-cols-[minmax(0,1.06fr)_minmax(0,1fr)] lg:gap-[68px]">
-            <div>
+            {/* `min-w-0`: a grid item's automatic minimum size is its content's
+                min-content width, and the terminal now prints command output
+                unwrapped so its own scroller can keep the columns aligned. Left
+                to itself the item would take that width and push the page
+                sideways instead of letting the scroller do its job. */}
+            <div className="min-w-0">
               <TerminalHero projects={allProjects} />
 
               {/* Signature row: the mark, then one icon per channel. These were

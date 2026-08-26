@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { useTheme } from '@/hooks/useTheme';
+import { sweepHold } from '@/lib/theme-transition';
 
 /*
   The hero's second column.
@@ -55,18 +56,6 @@ const LABEL_IN = 0.5;
 
 /** On load the diagram is already on screen; a short settle is all it needs. */
 const IDLE_DELAY = 0.35;
-/*
-  A mode switch re-renders this from inside the theme shutter's sealed beat (see
-  `lib/theme-transition.ts`): the class swap lands ~0.77s in and the plates are
-  not fully clear until ~3.5s. Starting the redraw on that render would spend
-  the first legs behind the plates, so it waits them out.
-*/
-const SWEEP_DELAY = 2.8;
-
-/** True while the theme shutter has the viewport covered. */
-function sweeping() {
-  return typeof document !== 'undefined' && document.documentElement.hasAttribute('data-theme-sweep');
-}
 
 type Leg = { d: string };
 type Step = { text: string; x: number; y: number; leg: number; anchor?: 'end' };
@@ -145,9 +134,11 @@ export function SecurityDiagram() {
   const chain = isPentest ? ATTACK : DETECTION;
 
   /* Resolved once per chain — reading the shutter, not a mount counter, so a
-     re-render for any other reason cannot restart the draw mid-way through it. */
+     re-render for any other reason cannot restart the draw mid-way through it.
+     A mode switch renders from inside the shutter's sealed beat and has to wait
+     it out; a first load has no shutter to wait for. */
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const delay = useMemo(() => (sweeping() ? SWEEP_DELAY : IDLE_DELAY), [isPentest]);
+  const delay = useMemo(() => sweepHold() / 1000 || IDLE_DELAY, [isPentest]);
 
   /* The dot is held out of the DOM until the route it travels exists, rather
      than started with an SMIL offset — a `begin` resolves against the document

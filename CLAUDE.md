@@ -37,6 +37,22 @@ Ambient motion is capped at two effects: the static rule grid behind the hero
 (`CyberGrid`) and the section fade-up (`SectionReveal`). Anything beyond that
 needs to earn its place by aiding comprehension.
 
+Two more effects are scoped to a single moment rather than running on a loop,
+which is why they are not counted as ambient. The hero schematic
+(`SecurityDiagram`) draws its numbered chain one leg at a time on load and
+again on a mode switch, and only starts its travelling dot once the route
+exists. The terminal (`TerminalHero`) retypes its intro on a mode switch —
+unless the reader has already run a command, in which case the transcript is
+swapped in place. Both wait out the theme shutter by calling `sweepHold()` from
+`src/lib/theme-transition.ts`, which is the single source of truth for how long
+the plates cover the viewport; do not hardcode that delay a second time.
+
+On phones the terminal is the whole hero, so it carries its own affordances: a
+16px input (anything smaller makes iOS zoom the page on focus), a tap row of
+commands standing in for Tab and the arrow keys, command output that scrolls
+sideways instead of wrapping its columns, and a `visualViewport` listener that
+keeps the prompt above the on-screen keyboard.
+
 The theme switch is the one deliberate exception, and it is not ambient — it
 only ever runs on a click. `src/lib/theme-transition.ts` closes a shutter of
 plates over the viewport, swaps the class behind it, holds long enough for the

@@ -306,6 +306,30 @@ html[data-theme-sweep] * {
   100% { opacity: 1; transform: scale(1); }
 }
 
+/*
+  The terminal's sideways scroller. Command output is laid out in padded
+  columns, so on a phone it scrolls rather than wraps — and the default bar is
+  a bright slab across the bottom of the output. Touch browsers overlay their
+  own and ignore this; it is for the narrow pointer case.
+*/
+.term-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border-strong)) transparent;
+}
+
+.term-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.term-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.term-scroll::-webkit-scrollbar-thumb {
+  background: hsl(var(--border-strong));
+  border-radius: 3px;
+}
+
 /* Terminal caret */
 @keyframes terminal-blink {
   0%, 49% { opacity: 1; }

@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useReducedMotion } from 'framer-motion';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { useNavigate } from 'react-router-dom';
 import { loginHref } from '@/lib/auth-redirect';
+import { sweepHold } from '@/lib/theme-transition';
 import {
   complete,
   runCommand,
@@ -21,9 +23,17 @@ import {
   solid colour instead of a blue-to-violet gradient fill.
 
   The intro copy is derived from the active mode, so switching to pentest
-  rewrites the mission and the listed toolset. Lines are held by index rather
-  than copied into state, which means a mode switch re-renders the finished
-  transcript in place — it does not replay the animation at the reader.
+  rewrites the mission and the listed toolset — and the terminal types the new
+  transcript out again rather than swapping it in place. The switch is the site
+  changing its stance; the terminal restating that stance in its own voice is
+  most of the reason the mode has a terminal at all. Lines are still held by
+  index rather than copied into state, so the replay is a counter going back to
+  zero, not a second copy of the transcript.
+
+  It replays only when the intro is all there is. Once the reader has run a
+  command of their own, the intro is history sitting above their session and
+  retyping it would talk over them, so that case reconciles the counter and
+  leaves the transcript alone.
 */
 
 interface TerminalLine {
@@ -72,6 +82,13 @@ function introLines(isPentest: boolean): TerminalLine[] {
   ];
 }
 
+/*
+  The tap row under the prompt on phones. `help` first because it explains the
+  rest, `clear` last because it undoes them; the four in between are the ones
+  that go somewhere.
+*/
+const SHORTCUTS = ['help', 'projects', 'skills', 'experience', 'contact', 'clear'] as const;
+
 interface TerminalHeroProps {
   /** Backs `projects`, `open` and `skills`. */
   projects: TerminalProject[];
@@ -86,6 +103,7 @@ interface HistoryEntry {
 export function TerminalHero({ projects }: TerminalHeroProps) {
   const { user } = useAuth();
   const { isPentest } = useTheme();
+  const reduced = useReducedMotion();
   const navigate = useNavigate();
 
   // Recomputed on a mode switch. The typing state indexes into it, so lines
@@ -110,9 +128,10 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
 
   const submitted = entries.map(e => e.input);
 
-  const submit = useCallback(() => {
-    const input = draft.trim();
-    setDraft('');
+  /* Running a command is separate from submitting the field, because the phone
+     shortcut row runs commands that were never typed into it. */
+  const run = useCallback((raw: string) => {
+    const input = raw.trim();
     setRecall(null);
     if (!input) return;
     const output = runCommand(input, {
@@ -122,9 +141,15 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
       clear: () => setEntries([]),
     });
     // `clear` empties the log itself, so don't re-append the command that ran it.
-    if (input.trim().toLowerCase() === 'clear') return;
+    if (input.toLowerCase() === 'clear') return;
     setEntries(prev => [...prev, { input, output }]);
-  }, [draft, projects, user, navigate]);
+  }, [projects, user, navigate]);
+
+  const submit = useCallback(() => {
+    const input = draft;
+    setDraft('');
+    run(input);
+  }, [draft, run]);
 
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') { e.preventDefault(); submit(); return; }
@@ -159,11 +184,51 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
     if (e.key === 'l' && e.ctrlKey) { e.preventDefault(); setEntries([]); }
   }, [draft, projects, recall, submit, submitted]);
 
-  // Keep the newest output in view without moving the page itself.
+  /*
+    A phone keyboard does not resize the page — it covers the bottom of it. The
+    prompt the reader tapped to open that keyboard can end up underneath it, and
+    so can the shortcut row right below the prompt, which is the whole of this
+    shell's navigation on a phone.
+
+    `visualViewport` is the part of the page the keyboard leaves visible. This
+    measures the prompt against that and scrolls the page by exactly the
+    overlap, so the line being typed and the commands next to it stay above the
+    keyboard — on open, on rotate, and after each command prints and pushes the
+    prompt further down.
+  */
+  const promptRef = useRef<HTMLDivElement>(null);
+  const keepPromptVisible = useCallback(() => {
+    const vv = window.visualViewport;
+    const el = promptRef.current;
+    if (!vv || !el) return;
+    const overlap = el.getBoundingClientRect().bottom + 12 - (vv.offsetTop + vv.height);
+    if (overlap > 1) window.scrollBy({ top: overlap, behavior: 'instant' as ScrollBehavior });
+  }, []);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    // The keyboard animates in, so the viewport settles over several events.
+    const onViewport = () => {
+      if (document.activeElement === inputRef.current) keepPromptVisible();
+    };
+    vv.addEventListener('resize', onViewport);
+    vv.addEventListener('scroll', onViewport);
+    return () => {
+      vv.removeEventListener('resize', onViewport);
+      vv.removeEventListener('scroll', onViewport);
+    };
+  }, [keepPromptVisible]);
+
+  // Keep the newest output in view without moving the page itself — and, if the
+  // keyboard is up, keep the prompt the output just pushed down in view too.
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [entries]);
+    if (document.activeElement === inputRef.current) {
+      requestAnimationFrame(keepPromptVisible);
+    }
+  }, [entries, keepPromptVisible]);
 
   // `onSelect` covers typing, clicking and the arrow keys, but not the times
   // the draft is rewritten from under the field — tab-completion, history
@@ -176,27 +241,48 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
   const [printed, setPrinted] = useState(0);
   const [currentTyping, setCurrentTyping] = useState('');
   const [charIndex, setCharIndex] = useState(0);
-  const [phase, setPhase] = useState<'typing' | 'pause' | 'done'>('typing');
+  // `sealed` is the replay waiting out the theme shutter: transcript emptied,
+  // nothing drawn, no caret — the panel is behind the plates for that beat.
+  const [phase, setPhase] = useState<'sealed' | 'typing' | 'pause' | 'done'>('typing');
   const [showButtons, setShowButtons] = useState(false);
 
   const lineIndex = printed;
   const currentLine = lineIndex < lines.length ? lines[lineIndex] : null;
 
-  /* The two modes no longer print the same number of lines — pentest has no
-     mission paragraph — so a mode switch has to reconcile the counter with the
-     transcript it is now indexing into. A finished intro stays finished; one
-     switched mid-type keeps whatever it had printed and closes out. */
+  /*
+    A new transcript arrived, which only ever means the mode changed. Type it
+    out again from the top — after the shutter, so the retype is watched rather
+    than spent behind the plates.
+
+    Two cases skip it: a shell the reader has already used (see the note at the
+    top of this file), and reduced motion, where there is no shutter and no
+    replay. Both still have to reconcile the counter, because the two modes no
+    longer print the same number of lines — pentest has no mission paragraph.
+  */
+  const holdMs = useRef(0);
+  const firstTranscript = useRef(true);
   useEffect(() => {
-    if (phase === 'done') {
-      setPrinted(lines.length);
+    if (firstTranscript.current) {
+      firstTranscript.current = false;
       return;
     }
-    if (printed >= lines.length) {
-      setPrinted(lines.length);
-      setPhase('done');
-      setShowButtons(true);
+
+    if (entries.length > 0 || reduced) {
+      if (phase === 'done' || printed >= lines.length) {
+        setPrinted(lines.length);
+        setPhase('done');
+        setShowButtons(true);
+      }
+      return;
     }
-    // Reconciliation is keyed to the transcript changing, not to typing state.
+
+    holdMs.current = sweepHold();
+    setPrinted(0);
+    setCurrentTyping('');
+    setCharIndex(0);
+    setShowButtons(false);
+    setPhase('sealed');
+    // Keyed to the transcript changing, not to the typing state it resets.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines]);
 
@@ -216,6 +302,11 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
 
   useEffect(() => {
     if (!currentLine) return;
+
+    if (phase === 'sealed') {
+      const timer = setTimeout(() => setPhase('typing'), holdMs.current);
+      return () => clearTimeout(timer);
+    }
 
     if (phase === 'pause') {
       const prev = lines[lineIndex - 1];
@@ -330,7 +421,16 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
           {/* Interactive shell, once the intro has finished typing. */}
           {phase === 'done' && (
             <>
-              <div role="log" aria-live="polite" aria-label="Terminal output">
+              {/* Command output is laid out in padded columns. Wrapping those
+                  at phone width breaks every row mid-column and the alignment
+                  stops meaning anything, so below `sm` the log scrolls
+                  sideways instead — which is what a terminal does. */}
+              <div
+                role="log"
+                aria-live="polite"
+                aria-label="Terminal output"
+                className="term-scroll -mx-1 overflow-x-auto px-1 sm:mx-0 sm:overflow-x-visible sm:px-0"
+              >
                 {entries.map((entry, i) => (
                   <div key={i} className="mt-2 first:mt-1">
                     <div className="break-all font-mono text-[13px] text-foreground">
@@ -340,7 +440,7 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
                       <div
                         key={j}
                         className={
-                          'whitespace-pre-wrap break-words font-mono text-[13px] leading-[1.7] ' +
+                          'whitespace-pre font-mono text-[13px] leading-[1.7] sm:whitespace-pre-wrap sm:break-words ' +
                           (line.tone === 'muted' ? 'text-muted-dim'
                             : line.tone === 'accent' ? 'text-primary'
                             : line.tone === 'success' ? 'text-primary'
@@ -367,30 +467,65 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
                   measured; `scrollLeft` keeps it honest once the line is long
                   enough to scroll, and the input's own caret is hidden so
                   there is only ever one. */}
-              <div className="mt-2.5 flex items-center gap-2.5 font-mono text-[13px]">
-                <span className="shrink-0 text-primary" aria-hidden="true">$</span>
-                <span className="relative flex min-w-0 flex-1 items-center overflow-hidden">
-                  <input
-                    ref={inputRef}
-                    value={draft}
-                    onChange={e => setDraft(e.target.value)}
-                    onKeyDown={onKeyDown}
-                    onSelect={syncCaret}
-                    onScroll={syncCaret}
-                    spellCheck={false}
-                    autoComplete="off"
-                    autoCapitalize="off"
-                    autoCorrect="off"
-                    aria-label="Terminal input — type help for available commands"
-                    placeholder={entries.length ? '' : "type 'help'"}
-                    className="w-full min-w-0 border-0 bg-transparent p-0 font-mono text-[13px] text-foreground caret-transparent outline-none placeholder:text-muted-dim focus:ring-0"
-                  />
-                  <span
-                    aria-hidden="true"
-                    className="pointer-events-none absolute top-1/2 h-[15px] w-[7px] -translate-y-1/2 animate-terminal-blink bg-primary"
-                    style={{ left: `calc(${caret.col}ch - ${caret.scrollLeft}px)` }}
-                  />
-                </span>
+              {/* 16px on a phone, 13px from `sm` up. Anything under 16px makes
+                  iOS Safari zoom the whole page the moment the field takes
+                  focus, and it never zooms back out. The row carries the size
+                  so the input and the block caret stay in step — the caret is
+                  positioned in `ch` and sized in `em`, both of which follow
+                  whatever the row is set to. */}
+              <div ref={promptRef}>
+                <div className="mt-2.5 flex items-center gap-2.5 font-mono text-[16px] sm:text-[13px]">
+                  <span className="shrink-0 text-primary" aria-hidden="true">$</span>
+                  <span className="relative flex min-w-0 flex-1 items-center overflow-hidden">
+                    <input
+                      ref={inputRef}
+                      value={draft}
+                      onChange={e => setDraft(e.target.value)}
+                      onKeyDown={onKeyDown}
+                      onSelect={syncCaret}
+                      onScroll={syncCaret}
+                      onFocus={() => {
+                        // No event fires when the keyboard finishes animating in;
+                        // the viewport listener catches the resize, this catches
+                        // the browsers that scroll the field into view instead.
+                        window.setTimeout(keepPromptVisible, 320);
+                      }}
+                      spellCheck={false}
+                      autoComplete="off"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      inputMode="text"
+                      enterKeyHint="go"
+                      aria-label="Terminal input — type help for available commands"
+                      placeholder={entries.length ? '' : "type 'help'"}
+                      className="w-full min-w-0 border-0 bg-transparent p-0 font-mono text-[1em] text-foreground caret-transparent outline-none placeholder:text-muted-dim focus:ring-0"
+                    />
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute top-1/2 h-[1.15em] w-[0.6em] -translate-y-1/2 animate-terminal-blink bg-primary"
+                      style={{ left: `calc(${caret.col}ch - ${caret.scrollLeft}px)` }}
+                    />
+                  </span>
+                </div>
+
+                {/* A phone keyboard has no Tab, no arrow keys and no Ctrl, which
+                    is every affordance this shell has for finding its way around.
+                    These are the replacement: the commands worth reaching without
+                    typing, one tap each. `stopPropagation` keeps the tap off the
+                    body's focus handler, so running one does not also throw the
+                    keyboard up over the output it just printed. */}
+                <div className="mt-3.5 flex flex-wrap gap-1.5 sm:hidden">
+                  {SHORTCUTS.map(cmd => (
+                    <button
+                      key={cmd}
+                      type="button"
+                      onClick={e => { e.stopPropagation(); run(cmd); }}
+                      className="min-h-[38px] rounded-[4px] border border-border px-3 font-mono text-[12px] tracking-[0.04em] text-muted-dim active:border-primary active:text-primary"
+                    >
+                      {cmd}
+                    </button>
+                  ))}
+                </div>
               </div>
             </>
           )}
