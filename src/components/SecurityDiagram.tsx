@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { useTheme } from '@/hooks/useTheme';
 
@@ -15,9 +16,14 @@ import { useTheme } from '@/hooks/useTheme';
   untrusted network. Same network, two directions of travel — which is the
   argument the mode toggle is making.
 
-  The travelling dot is the one piece of motion here, and it encodes direction
-  of flow rather than decorating the panel. It stops under prefers-reduced-motion;
-  the path itself stays drawn, so nothing is lost.
+  The path is numbered, so it draws in that order rather than arriving whole:
+  each leg strokes on at a constant speed and its step label resolves as the
+  leg lands. Reading order and drawing order are the same thing, which is the
+  only reason the numbers are there. Once the chain is complete the travelling
+  dot starts — flow, after the route that carries it, never on top of it.
+
+  Both the draw and the dot stop under prefers-reduced-motion; the path is
+  rendered fully drawn instead, so nothing is lost.
 */
 
 const NODE_LABEL = {
@@ -33,10 +39,143 @@ const STEP_LABEL = {
   fill: 'hsl(var(--primary))',
 } as const;
 
+/*
+  Every leg strokes at the same speed, so a long hop across the boundary takes
+  visibly longer than a short one inside it. Timing the legs equally instead
+  would flatten exactly the distance the diagram is about.
+
+  The speed is deliberately unhurried — a chain that completes in a second is
+  a flourish, not a diagram. At this rate the whole detection loop takes about
+  seven seconds, which is roughly how long the terminal beside it spends typing
+  its intro, and slow enough to read each step as it lands.
+*/
+const SPEED = 155; // user units per second
+const GAP = 0.1; // beat between legs, so the joins read as joins
+const LABEL_IN = 0.5;
+
+/** On load the diagram is already on screen; a short settle is all it needs. */
+const IDLE_DELAY = 0.35;
+/*
+  A mode switch re-renders this from inside the theme shutter's sealed beat (see
+  `lib/theme-transition.ts`): the class swap lands ~0.77s in and the plates are
+  not fully clear until ~3.5s. Starting the redraw on that render would spend
+  the first legs behind the plates, so it waits them out.
+*/
+const SWEEP_DELAY = 2.8;
+
+/** True while the theme shutter has the viewport covered. */
+function sweeping() {
+  return typeof document !== 'undefined' && document.documentElement.hasAttribute('data-theme-sweep');
+}
+
+type Leg = { d: string };
+type Step = { text: string; x: number; y: number; leg: number; anchor?: 'end' };
+
+/** Straight-line paths only, which every leg here is. */
+function legLength(d: string) {
+  const n = d.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+  let total = 0;
+  for (let i = 2; i < n.length; i += 2) {
+    total += Math.hypot(n[i] - n[i - 2], n[i + 1] - n[i - 1]);
+  }
+  return total;
+}
+
+/** Lays the legs end to end on a timeline, all offsets relative to the start. */
+function schedule(legs: Leg[]) {
+  let t = 0;
+  const timed = legs.map((leg) => {
+    const dur = legLength(leg.d) / SPEED;
+    const at = t;
+    t = at + dur + GAP;
+    return { ...leg, at, dur, end: at + dur };
+  });
+  return { legs: timed, total: t - GAP };
+}
+
+/*
+  Detection: four feeds converge on the collector, the collector raises what it
+  found to the identity core, and the core reaches back out to the edge to shut
+  the thing down. The four feeds are drawn one after another rather than at once
+  — collection is the slow part of this loop, and drawing it as the slow part is
+  the honest reading.
+*/
+const DETECTION = {
+  ...schedule([
+    { d: 'M206 164 L300 368' },
+    { d: 'M206 272 L300 368' },
+    { d: 'M388 292 L300 368' },
+    { d: 'M393 120 L300 368' },
+    { d: 'M300 368 L300 240' },
+    { d: 'M319 207 L393 120' },
+  ]),
+  steps: [
+    { text: '01 COLLECT', x: 222, y: 148, leg: 0 },
+    { text: '02 DETECT', x: 286, y: 396, leg: 3, anchor: 'end' },
+    { text: '03 TRIAGE', x: 334, y: 252, leg: 4 },
+    { text: '04 CONTAIN', x: 408, y: 108, leg: 5 },
+  ] as Step[],
+  width: 1.2,
+};
+
+/* Intrusion: one continuous walk inward, each leg landing on the node its
+   label names. */
+const ATTACK = {
+  ...schedule([
+    { d: 'M544 48 L393 120' },
+    { d: 'M393 120 L388 292' },
+    { d: 'M388 292 L319 229' },
+    { d: 'M281 229 L206 272' },
+  ]),
+  steps: [
+    { text: '01 RECON', x: 474, y: 64, leg: 0, anchor: 'end' },
+    { text: '02 ACCESS', x: 408, y: 108, leg: 0 },
+    { text: '03 ESCALATE', x: 402, y: 276, leg: 1 },
+    { text: '04 PIVOT', x: 334, y: 252, leg: 2 },
+    { text: '05 LATERAL', x: 220, y: 298, leg: 3 },
+  ] as Step[],
+  width: 1.3,
+};
+
 export function SecurityDiagram() {
   const { isPentest } = useTheme();
   const reduced = useReducedMotion();
   const animate = !reduced;
+
+  const chain = isPentest ? ATTACK : DETECTION;
+
+  /* Resolved once per chain — reading the shutter, not a mount counter, so a
+     re-render for any other reason cannot restart the draw mid-way through it. */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const delay = useMemo(() => (sweeping() ? SWEEP_DELAY : IDLE_DELAY), [isPentest]);
+
+  /* The dot is held out of the DOM until the route it travels exists, rather
+     than started with an SMIL offset — a `begin` resolves against the document
+     timeline, which is not where a mid-session mode switch starts. */
+  const [routeDrawn, setRouteDrawn] = useState(!animate);
+  useEffect(() => {
+    if (!animate) {
+      setRouteDrawn(true);
+      return;
+    }
+    setRouteDrawn(false);
+    const id = window.setTimeout(
+      () => setRouteDrawn(true),
+      (delay + chain.total) * 1000,
+    );
+    return () => window.clearTimeout(id);
+    // `delay` is derived from a ref and is stable for a given chain.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPentest, animate]);
+
+  const drawStyle = (at: number, dur: number) =>
+    animate
+      ? ({
+          strokeDasharray: 1,
+          strokeDashoffset: 1,
+          animation: `diagram-trace ${dur.toFixed(2)}s linear ${(delay + at).toFixed(2)}s forwards`,
+        } as const)
+      : undefined;
 
   return (
     <div>
@@ -79,22 +218,43 @@ export function SecurityDiagram() {
             <path d="M206 164 L206 272" />
           </g>
 
-          {isPentest ? (
-            <g>
-              <g fill="none" stroke="hsl(var(--primary))" strokeWidth="1.3">
-                <path d="M544 48 L393 120" />
-                <path d="M393 120 L388 292" />
-                <path d="M388 292 L319 229" />
-                <path d="M281 229 L206 272" />
-              </g>
-              <g style={STEP_LABEL}>
-                <text x="474" y="64" textAnchor="end">01 RECON</text>
-                <text x="408" y="108">02 ACCESS</text>
-                <text x="402" y="276">03 ESCALATE</text>
-                <text x="334" y="252">04 PIVOT</text>
-                <text x="220" y="298">05 LATERAL</text>
-              </g>
-              {animate && (
+          {/* The traced chain. Keyed by mode so a switch remounts it and the
+              draw runs again from step one. */}
+          <g key={isPentest ? 'attack' : 'detection'}>
+            <g fill="none" stroke="hsl(var(--primary))" strokeWidth={chain.width}>
+              {chain.legs.map((leg) => (
+                <path key={leg.d} d={leg.d} pathLength={1} style={drawStyle(leg.at, leg.dur)} />
+              ))}
+            </g>
+            <g style={STEP_LABEL}>
+              {chain.steps.map((step) => (
+                <text
+                  key={step.text}
+                  x={step.x}
+                  y={step.y}
+                  textAnchor={step.anchor}
+                  style={
+                    animate
+                      ? {
+                          opacity: 0,
+                          /* Scale about the label's own box, not the SVG origin,
+                             so the overshoot happens where the label sits. */
+                          transformBox: 'fill-box',
+                          transformOrigin: 'center',
+                          animation: `diagram-step-in ${LABEL_IN}s cubic-bezier(.2,.9,.3,1.2) ${(
+                            delay + chain.legs[step.leg].end
+                          ).toFixed(2)}s forwards`,
+                        }
+                      : undefined
+                  }
+                >
+                  {step.text}
+                </text>
+              ))}
+            </g>
+
+            {animate && routeDrawn && (
+              isPentest ? (
                 <circle r="2.8" fill="hsl(var(--primary))">
                   <animateMotion
                     dur="8s"
@@ -102,25 +262,7 @@ export function SecurityDiagram() {
                     path="M544 48 L393 120 L388 292 L319 229"
                   />
                 </circle>
-              )}
-            </g>
-          ) : (
-            <g>
-              <g fill="none" stroke="hsl(var(--primary))" strokeWidth="1.2">
-                <path d="M206 164 L300 368" />
-                <path d="M206 272 L300 368" />
-                <path d="M388 292 L300 368" />
-                <path d="M393 120 L300 368" />
-                <path d="M300 368 L300 240" />
-                <path d="M319 207 L393 120" />
-              </g>
-              <g style={STEP_LABEL}>
-                <text x="222" y="148">01 COLLECT</text>
-                <text x="286" y="396" textAnchor="end">02 DETECT</text>
-                <text x="334" y="252">03 TRIAGE</text>
-                <text x="408" y="108">04 CONTAIN</text>
-              </g>
-              {animate && (
+              ) : (
                 <>
                   <circle r="2.8" fill="hsl(var(--primary))">
                     <animateMotion dur="6s" repeatCount="indefinite" path="M393 120 L300 368" />
@@ -129,9 +271,9 @@ export function SecurityDiagram() {
                     <animateMotion dur="6s" begin="1.4s" repeatCount="indefinite" path="M206 272 L300 368" />
                   </circle>
                 </>
-              )}
-            </g>
-          )}
+              )
+            )}
+          </g>
 
           {/* nodes */}
           <g style={NODE_LABEL}>

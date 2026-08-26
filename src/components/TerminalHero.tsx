@@ -39,8 +39,11 @@ function introLines(isPentest: boolean): TerminalLine[] {
   // three hardcoded strings, which wrapped a second time on a phone and left a
   // ragged two-word orphan under each. Only commands are typed out, so the
   // paragraph costs nothing in animation and wraps to the column it is given.
+  //
+  // Pentest mode prints no mission at all: `ls offense/` is the claim, and a
+  // paragraph in front of it was restating the tools in prose.
   const mission = isPentest
-    ? 'I test the systems I defend — mapping attack surface, proving which paths are reachable, and closing them before someone else finds them.'
+    ? null
     : 'I secure enterprise infrastructure, automate security operations, and build detection pipelines that catch threats before they escalate.';
 
   const listing = isPentest ? '$ ls offense/' : '$ ls defense/';
@@ -55,9 +58,13 @@ function introLines(isPentest: boolean): TerminalLine[] {
     { type: 'command', text: '$ cat role.txt', speed: 40, pauseAfter: 300 },
     { type: 'output', text: 'Cybersecurity Engineer', style: 'role', pauseAfter: 400 },
     { type: 'output', text: '', pauseAfter: 100 },
-    { type: 'command', text: '$ cat mission.txt', speed: 40, pauseAfter: 300 },
-    { type: 'output', text: mission, style: 'mission', pauseAfter: 400 },
-    { type: 'output', text: '', pauseAfter: 100 },
+    ...(mission
+      ? ([
+          { type: 'command', text: '$ cat mission.txt', speed: 40, pauseAfter: 300 },
+          { type: 'output', text: mission, style: 'mission', pauseAfter: 400 },
+          { type: 'output', text: '', pauseAfter: 100 },
+        ] as TerminalLine[])
+      : []),
     { type: 'command', text: listing, speed: 40, pauseAfter: 300 },
     { type: 'output', text: tools, style: 'skills', pauseAfter: 400 },
     { type: 'output', text: '', pauseAfter: 100 },
@@ -174,6 +181,24 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
 
   const lineIndex = printed;
   const currentLine = lineIndex < lines.length ? lines[lineIndex] : null;
+
+  /* The two modes no longer print the same number of lines — pentest has no
+     mission paragraph — so a mode switch has to reconcile the counter with the
+     transcript it is now indexing into. A finished intro stays finished; one
+     switched mid-type keeps whatever it had printed and closes out. */
+  useEffect(() => {
+    if (phase === 'done') {
+      setPrinted(lines.length);
+      return;
+    }
+    if (printed >= lines.length) {
+      setPrinted(lines.length);
+      setPhase('done');
+      setShowButtons(true);
+    }
+    // Reconciliation is keyed to the transcript changing, not to typing state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines]);
 
   const advanceLine = useCallback(() => {
     if (!currentLine) return;
