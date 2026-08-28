@@ -37,6 +37,11 @@ Ambient motion is capped at two effects: the static rule grid behind the hero
 (`CyberGrid`) and the section fade-up (`SectionReveal`). Anything beyond that
 needs to earn its place by aiding comprehension.
 
+The typewriter intro is paced to be watched once, not admired: about three
+seconds end to end, and a click or any keystroke finishes it immediately.
+Reduced motion never sees it type at all — including on the first load, which
+the mode-switch guard alone used to miss.
+
 Two more effects are scoped to a single moment rather than running on a loop,
 which is why they are not counted as ambient. The hero schematic
 (`SecurityDiagram`) draws its numbered chain one leg at a time on load and
@@ -47,10 +52,32 @@ swapped in place. Both wait out the theme shutter by calling `sweepHold()` from
 `src/lib/theme-transition.ts`, which is the single source of truth for how long
 the plates cover the viewport; do not hardcode that delay a second time.
 
-On phones the terminal is the whole hero, so it carries its own affordances: a
-16px input (anything smaller makes iOS zoom the page on focus), a tap row of
-commands standing in for Tab and the arrow keys, and command output that
-scrolls sideways instead of wrapping its columns.
+The prompt does not move when a command prints. Output goes into a bounded,
+self-scrolling session log between the intro and the prompt (`max-height:
+min(46vh, 340px)`), so the card does not grow without limit and the page is
+never scrolled to chase a prompt that has been pushed under the fold. The one
+scroll the terminal does perform undocked is a correction, not a jump: the
+prompt's distance from the top of the viewport is captured before an output
+change and restored after it, which keeps the shortcut button a reader has just
+tapped under their thumb.
+
+Rows are laid out in fixed columns and are never re-wrapped — wrapping broke
+every row mid-column — so the log scrolls sideways when it has to. `COLUMNS` in
+`src/lib/terminal-commands.ts` is the width budget every command's output is
+written against; anything wider is a horizontal scroll on a phone.
+
+The commands the intro demonstrates all work: `whoami`, `ls`, `cat`, and the
+rest resolve, aliases are accepted, Tab completes to the longest shared prefix
+and prints the candidates, `clear` wipes the screen but not the history, and an
+unknown word gets a "did you mean". A shell that answers `command not found` to
+a command printed in its own banner is the main thing that made this feel
+broken.
+
+Touch affordances key off `(pointer: coarse)` as well as the `sm` width — a
+tablet has the same on-screen keyboard covering the same prompt and used to get
+neither the tap row nor the docking. They are: a 16px input (anything smaller
+makes iOS zoom the page on focus), a tap row of commands standing in for Tab
+and the arrow keys, and the docking below.
 
 When the on-screen keyboard is up, the prompt is pinned to the bottom of the
 layout viewport with `position: fixed`, offset by the height `visualViewport`

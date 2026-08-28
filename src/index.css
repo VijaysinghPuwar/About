@@ -319,6 +319,7 @@ html[data-theme-sweep] * {
 
 .term-scroll::-webkit-scrollbar {
   height: 6px;
+  width: 6px;
 }
 
 .term-scroll::-webkit-scrollbar-track {

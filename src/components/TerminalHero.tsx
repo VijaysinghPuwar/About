@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
@@ -34,6 +34,18 @@ import {
   command of their own, the intro is history sitting above their session and
   retyping it would talk over them, so that case reconciles the counter and
   leaves the transcript alone.
+
+  ── two rules the layout is built on ──
+
+  1. The prompt does not move when a command prints. The session log is a
+     bounded, self-scrolling region between the intro and the prompt, so output
+     accumulates *inside* the card instead of growing it without limit. The
+     terminal used to answer every command by scrolling the whole page down to
+     chase a prompt that had just been pushed under the fold, which is what
+     reading a result felt like standing on.
+  2. Nothing waits for the intro. It types out about three times faster than it
+     did, a click or a keystroke finishes it immediately, and reduced motion
+     never sees it type at all.
 */
 
 interface TerminalLine {
@@ -43,6 +55,16 @@ interface TerminalLine {
   speed?: number;
   pauseAfter?: number;
 }
+
+/*
+  Typing speed. The banner is the thing standing between a visitor and a shell
+  they can use, so it is paced to be watched once, not admired: ~18ms a
+  character and a beat between lines, which lands the whole intro in about
+  three seconds instead of fourteen.
+*/
+const CHAR_MS = 18;
+const BEAT = 150;
+const HOLD = 220;
 
 function introLines(isPentest: boolean): TerminalLine[] {
   // One paragraph, not pre-broken lines. The intro used to ship the mission as
@@ -62,47 +84,48 @@ function introLines(isPentest: boolean): TerminalLine[] {
     : 'SIEM-detection  Incident-Response  Endpoint-Hardening  Secure-Coding  Active-Directory  IAM  MFA-GPO  Encryption-at-Rest  Firewalls  PowerShell';
 
   return [
-    { type: 'command', text: '$ whoami', speed: 40, pauseAfter: 300 },
-    { type: 'output', text: 'Vijaysingh Puwar', style: 'name', pauseAfter: 400 },
-    { type: 'output', text: '', pauseAfter: 100 },
-    { type: 'command', text: '$ cat role.txt', speed: 40, pauseAfter: 300 },
-    { type: 'output', text: 'Cybersecurity Engineer', style: 'role', pauseAfter: 400 },
-    { type: 'output', text: '', pauseAfter: 100 },
+    { type: 'command', text: '$ whoami', speed: CHAR_MS, pauseAfter: HOLD },
+    { type: 'output', text: 'Vijaysingh Puwar', style: 'name', pauseAfter: HOLD },
+    { type: 'output', text: '', pauseAfter: 60 },
+    { type: 'command', text: '$ cat role.txt', speed: CHAR_MS, pauseAfter: HOLD },
+    { type: 'output', text: 'Cybersecurity Engineer', style: 'role', pauseAfter: HOLD },
+    { type: 'output', text: '', pauseAfter: 60 },
     ...(mission
       ? ([
-          { type: 'command', text: '$ cat mission.txt', speed: 40, pauseAfter: 300 },
-          { type: 'output', text: mission, style: 'mission', pauseAfter: 400 },
-          { type: 'output', text: '', pauseAfter: 100 },
+          { type: 'command', text: '$ cat mission.txt', speed: CHAR_MS, pauseAfter: BEAT },
+          { type: 'output', text: mission, style: 'mission', pauseAfter: HOLD },
+          { type: 'output', text: '', pauseAfter: 60 },
         ] as TerminalLine[])
       : []),
-    { type: 'command', text: listing, speed: 40, pauseAfter: 300 },
-    { type: 'output', text: tools, style: 'skills', pauseAfter: 400 },
-    { type: 'output', text: '', pauseAfter: 100 },
-    { type: 'command', text: '$ ./connect.sh', speed: 40, pauseAfter: 200 },
+    { type: 'command', text: listing, speed: CHAR_MS, pauseAfter: BEAT },
+    { type: 'output', text: tools, style: 'skills', pauseAfter: HOLD },
+    { type: 'output', text: '', pauseAfter: 60 },
+    { type: 'command', text: '$ ./connect.sh', speed: CHAR_MS, pauseAfter: BEAT },
   ];
 }
 
-/**
- * True below Tailwind's `sm`, which is where the terminal switches to its phone
- * layout. Written against `matchMedia` rather than a width read so it costs one
- * listener and cannot disagree with the CSS.
- */
-function useNarrow() {
-  const [narrow, setNarrow] = useState(false);
+/** One `matchMedia` query as a boolean, kept in step with the CSS. */
+function useMedia(query: string) {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== 'undefined' && 'matchMedia' in window
+      ? window.matchMedia(query).matches
+      : false,
+  );
   useEffect(() => {
-    const mql = window.matchMedia('(max-width: 639px)');
-    const sync = () => setNarrow(mql.matches);
+    if (!('matchMedia' in window)) return;
+    const mql = window.matchMedia(query);
+    const sync = () => setMatches(mql.matches);
     sync();
     mql.addEventListener('change', sync);
     return () => mql.removeEventListener('change', sync);
-  }, []);
-  return narrow;
+  }, [query]);
+  return matches;
 }
 
 /*
-  The tap row under the prompt on phones. `help` first because it explains the
-  rest, `clear` last because it undoes them; the four in between are the ones
-  that go somewhere.
+  The tap row under the prompt on touch devices. `help` first because it
+  explains the rest, `clear` last because it undoes them; the ones in between
+  are the ones that go somewhere.
 */
 const SHORTCUTS = ['help', 'projects', 'skills', 'experience', 'contact', 'clear'] as const;
 
@@ -115,11 +138,13 @@ interface TerminalHeroProps {
 interface HistoryEntry {
   input: string;
   output: OutputLine[];
+  /** Ctrl+C: the line was abandoned rather than run. */
+  aborted?: boolean;
 }
 
 export function TerminalHero({ projects }: TerminalHeroProps) {
   const { user } = useAuth();
-  const { isPentest } = useTheme();
+  const { isPentest, toggleTheme } = useTheme();
   const reduced = useReducedMotion();
   const navigate = useNavigate();
 
@@ -129,10 +154,13 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
 
   /* ── interactive shell (starts once the intro has typed out) ── */
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
+  /* Kept apart from `entries` so `clear` wipes the screen and not the history,
+     which is what every shell does and what the arrow keys are for. */
+  const [history, setHistory] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
   const [recall, setRecall] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const logRef = useRef<HTMLDivElement>(null);
 
   /* Where the block caret is drawn: the cursor's column, and how far the field
      has scrolled once the line outgrows it. */
@@ -143,24 +171,43 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
     setCaret({ col: el.selectionStart ?? el.value.length, scrollLeft: el.scrollLeft });
   }, []);
 
-  const submitted = entries.map(e => e.input);
+  /*
+    The prompt's distance from the top of the viewport, captured before an
+    output change and restored after it. Printing a result moves the log, and
+    the log sits above the prompt — without this, every command shoves the
+    prompt (and, on a phone, the shortcut button still under the reader's
+    thumb) down the screen by however tall the answer was.
+  */
+  const promptRef = useRef<HTMLDivElement>(null);
+  const pin = useRef<number | null>(null);
+  const capturePin = useCallback(() => {
+    pin.current = promptRef.current?.getBoundingClientRect().top ?? null;
+  }, []);
 
-  /* Running a command is separate from submitting the field, because the phone
+  /* Running a command is separate from submitting the field, because the touch
      shortcut row runs commands that were never typed into it. */
   const run = useCallback((raw: string) => {
     const input = raw.trim();
     setRecall(null);
     if (!input) return;
-    const output = runCommand(input, {
+
+    capturePin();
+    // Consecutive repeats are noise in the arrow-key walk, so collapse them.
+    setHistory(prev => (prev[prev.length - 1] === input ? prev : [...prev, input]));
+
+    const { output, silent } = runCommand(input, {
       projects,
       isAuthed: Boolean(user),
       goToLogin: () => navigate(loginHref()),
       clear: () => setEntries([]),
+      history,
+      isPentest,
+      setPentest: (on: boolean) => { if (on !== isPentest) toggleTheme(); },
     });
-    // `clear` empties the log itself, so don't re-append the command that ran it.
-    if (input.toLowerCase() === 'clear') return;
+
+    if (silent) return;
     setEntries(prev => [...prev, { input, output }]);
-  }, [projects, user, navigate]);
+  }, [projects, user, navigate, history, isPentest, toggleTheme, capturePin]);
 
   const submit = useCallback(() => {
     const input = draft;
@@ -173,17 +220,27 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
 
     if (e.key === 'Tab') {
       e.preventDefault();
-      const filled = complete(draft, projects);
-      if (filled) setDraft(filled);
+      const hit = complete(draft, projects);
+      if (!hit) return;
+      setDraft(hit.value);
+      // Several things still match: print them the way bash does, so a second
+      // Tab is an answer rather than a key that appears not to work.
+      if (hit.candidates.length > 1) {
+        capturePin();
+        setEntries(prev => [
+          ...prev,
+          { input: draft, output: [{ text: hit.candidates.join('  '), tone: 'muted' }] },
+        ]);
+      }
       return;
     }
 
     if (e.key === 'ArrowUp') {
       e.preventDefault();
-      if (!submitted.length) return;
-      const next = recall === null ? submitted.length - 1 : Math.max(0, recall - 1);
+      if (!history.length) return;
+      const next = recall === null ? history.length - 1 : Math.max(0, recall - 1);
       setRecall(next);
-      setDraft(submitted[next]);
+      setDraft(history[next]);
       return;
     }
 
@@ -191,15 +248,27 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
       e.preventDefault();
       if (recall === null) return;
       const next = recall + 1;
-      if (next >= submitted.length) { setRecall(null); setDraft(''); return; }
+      if (next >= history.length) { setRecall(null); setDraft(''); return; }
       setRecall(next);
-      setDraft(submitted[next]);
+      setDraft(history[next]);
       return;
     }
 
-    if (e.key === 'c' && e.ctrlKey) { e.preventDefault(); setDraft(''); setRecall(null); return; }
-    if (e.key === 'l' && e.ctrlKey) { e.preventDefault(); setEntries([]); }
-  }, [draft, projects, recall, submit, submitted]);
+    if (e.key === 'c' && e.ctrlKey) {
+      e.preventDefault();
+      // Echo the abandoned line rather than swallowing it, so Ctrl+C reads as
+      // something that happened instead of the field silently emptying.
+      if (draft.trim()) {
+        capturePin();
+        setEntries(prev => [...prev, { input: draft, output: [], aborted: true }]);
+      }
+      setDraft('');
+      setRecall(null);
+      return;
+    }
+
+    if (e.key === 'l' && e.ctrlKey) { e.preventDefault(); capturePin(); setEntries([]); }
+  }, [draft, projects, recall, submit, history, capturePin]);
 
   /*
     ── the prompt and the on-screen keyboard ──
@@ -225,7 +294,6 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
     URL bar — which moves the same numbers by a much smaller amount — from
     reading as a keyboard.
   */
-  const promptRef = useRef<HTMLDivElement>(null);
   /* The gap the docked prompt left behind in the card — the point in the
      transcript the reader is actually typing at. */
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -251,10 +319,18 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
     };
   }, []);
 
-  /* The bar is a phone affordance; from `sm` up there is no keyboard covering
-     anything and the prompt stays where it was written. */
-  const narrow = useNarrow();
-  const docked = narrow && focused && keyboard > 0;
+  /*
+    The tap row and the docking are answers to a touch keyboard, not to a narrow
+    window. Keying them off `sm` meant a tablet — which has exactly the same
+    keyboard covering exactly the same prompt — got neither, and a desktop
+    window dragged narrow got a tap row it had no use for. `pointer: coarse` is
+    the question actually being asked; the width stays in the test so a phone
+    whose browser lies about its pointer is still covered.
+  */
+  const narrow = useMedia('(max-width: 639px)');
+  const coarse = useMedia('(pointer: coarse)');
+  const touch = coarse || narrow;
+  const docked = touch && focused && keyboard > 0;
   /* A phone in landscape can be left with barely two hundred points above the
      keyboard. The bar earns its place there only if what it covers is worth
      less than what it shows, so the shortcut row drops out and the prompt
@@ -273,31 +349,26 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
     bar. Safari has nothing to fight over here — the focused field is fixed, so
     it is already in view as far as the browser is concerned.
 
-    Undocked, it is the other way round: the prompt is in the flow and can be
-    pushed under the fold by its own output, so it is walked back up.
+    This is the only place the terminal moves the page. Undocked it does not:
+    output goes into a bounded log that scrolls itself, so there is never a
+    prompt under the fold to walk back up to.
   */
   const alignToKeyboard = useCallback(() => {
+    if (!docked) return;
     const vv = window.visualViewport;
     const bar = promptRef.current;
-    if (!bar) return;
+    const anchor = anchorRef.current;
+    if (!bar || !anchor) return;
+
     const visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
-
-    if (docked) {
-      const anchor = anchorRef.current;
-      if (!anchor) return;
-      // `visibleBottom` is already the keyboard's top edge; the bar sits on it,
-      // and the transcript should end where the prompt used to be — directly
-      // above it, whether that means scrolling down to it or back up to it.
-      const room = visibleBottom - bar.offsetHeight;
-      // The gap's *top* is where the transcript now ends, and that is the edge
-      // worth putting against the bar; the rest of the gap can sit behind it.
-      const shift = anchor.getBoundingClientRect().top - room;
-      if (Math.abs(shift) > 2) window.scrollBy({ top: shift, behavior: 'instant' as ScrollBehavior });
-      return;
-    }
-
-    const overlap = bar.getBoundingClientRect().bottom + 12 - visibleBottom;
-    if (overlap > 1) window.scrollBy({ top: overlap, behavior: 'instant' as ScrollBehavior });
+    // `visibleBottom` is already the keyboard's top edge; the bar sits on it,
+    // and the transcript should end where the prompt used to be — directly
+    // above it, whether that means scrolling down to it or back up to it.
+    const room = visibleBottom - bar.offsetHeight;
+    // The gap's *top* is where the transcript now ends, and that is the edge
+    // worth putting against the bar; the rest of the gap can sit behind it.
+    const shift = anchor.getBoundingClientRect().top - room;
+    if (Math.abs(shift) > 2) window.scrollBy({ top: shift, behavior: 'instant' as ScrollBehavior });
   }, [docked]);
 
   // The bar lands after the keyboard has finished animating, so this runs on the
@@ -306,14 +377,24 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
     if (docked) requestAnimationFrame(alignToKeyboard);
   }, [docked, alignToKeyboard]);
 
-  // Keep the newest output in view without moving the page itself — and, if the
-  // keyboard is up, keep it above the bar the command just printed behind.
-  useEffect(() => {
-    const el = scrollRef.current;
+  /* Keep the newest output in view inside the log, and give the prompt back the
+     screen position it had before the log changed size. Layout effect, so both
+     land in the same frame the output does and nothing is seen to jump. */
+  useLayoutEffect(() => {
+    const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-    if (docked || document.activeElement === inputRef.current) {
-      requestAnimationFrame(alignToKeyboard);
-    }
+
+    const want = pin.current;
+    pin.current = null;
+    if (want == null || docked) return;
+    const bar = promptRef.current;
+    if (!bar) return;
+    const delta = bar.getBoundingClientRect().top - want;
+    if (Math.abs(delta) > 1) window.scrollBy({ top: delta, behavior: 'instant' as ScrollBehavior });
+  }, [entries, docked]);
+
+  useEffect(() => {
+    if (docked) requestAnimationFrame(alignToKeyboard);
   }, [entries, docked, alignToKeyboard]);
 
   // `onSelect` covers typing, clicking and the arrow keys, but not the times
@@ -335,6 +416,41 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
   const lineIndex = printed;
   const currentLine = lineIndex < lines.length ? lines[lineIndex] : null;
 
+  /* The banner is not the point of the terminal, so anything that says the
+     reader is ready to use it — a click on the card, a keystroke, reduced
+     motion — puts the whole transcript up at once. */
+  const finishIntro = useCallback(() => {
+    setPrinted(lines.length);
+    setCurrentTyping('');
+    setCharIndex(0);
+    setPhase('done');
+    setShowButtons(true);
+  }, [lines.length]);
+
+  // `sealed` is the beat the theme shutter is closed over the panel; skipping
+  // there would show the replay to a viewport that is covered anyway.
+  const skipIntro = useCallback(() => {
+    if (phase === 'typing' || phase === 'pause') finishIntro();
+  }, [phase, finishIntro]);
+
+  // Reduced motion never watches it type — not on the first load either, which
+  // is the case the mode-switch guard alone used to miss.
+  useEffect(() => {
+    if (reduced) finishIntro();
+  }, [reduced, finishIntro]);
+
+  // Any key ends it. The field does not exist yet at that point, so the
+  // listener is on the window; modifier-only presses are not an intent to skip.
+  useEffect(() => {
+    if (phase === 'done') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.key === 'Shift' || e.key === 'Tab') return;
+      skipIntro();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [phase, skipIntro]);
+
   /*
     A new transcript arrived, which only ever means the mode changed. Type it
     out again from the top — after the shutter, so the retype is watched rather
@@ -354,11 +470,7 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
     }
 
     if (entries.length > 0 || reduced) {
-      if (phase === 'done' || printed >= lines.length) {
-        setPrinted(lines.length);
-        setPhase('done');
-        setShowButtons(true);
-      }
+      finishIntro();
       return;
     }
 
@@ -380,7 +492,7 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
 
     if (lineIndex + 1 >= lines.length) {
       setPhase('done');
-      setTimeout(() => setShowButtons(true), 300);
+      setTimeout(() => setShowButtons(true), 200);
     } else {
       setPhase('pause');
     }
@@ -396,7 +508,7 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
 
     if (phase === 'pause') {
       const prev = lines[lineIndex - 1];
-      const timer = setTimeout(() => setPhase('typing'), prev?.pauseAfter || 200);
+      const timer = setTimeout(() => setPhase('typing'), prev?.pauseAfter || BEAT);
       return () => clearTimeout(timer);
     }
 
@@ -412,11 +524,26 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
       const timer = setTimeout(() => {
         setCurrentTyping(currentLine.text.slice(0, charIndex + 1));
         setCharIndex(c => c + 1);
-      }, currentLine.speed || 40);
+      }, currentLine.speed || CHAR_MS);
       return () => clearTimeout(timer);
     }
     advanceLine();
   }, [phase, charIndex, currentLine, lineIndex, lines, advanceLine]);
+
+  /*
+    Clicking the card puts the cursor in the field — but only when the click was
+    not aimed at something else. A click on a CTA, a link or a shortcut button
+    used to focus the input on its way past, which on a phone threw the keyboard
+    up over the thing that had just been tapped; a click that ends a text
+    selection used to do the same to anyone copying a line out.
+  */
+  const focusInput = useCallback((e: React.MouseEvent) => {
+    if (phase !== 'done') { skipIntro(); return; }
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('a, button, input, [role="button"]')) return;
+    if (!window.getSelection()?.isCollapsed) return;
+    inputRef.current?.focus();
+  }, [phase, skipIntro]);
 
   const renderLine = (line: TerminalLine, i: number) => {
     if (!line.text) return <div key={i} className="h-4" />;
@@ -469,6 +596,12 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
     }
   };
 
+  const toneClass = (tone: OutputLine['tone']) =>
+    tone === 'muted' ? 'text-muted-dim'
+      : tone === 'accent' || tone === 'success' ? 'text-primary'
+      : tone === 'error' ? 'text-destructive'
+      : 'text-muted-foreground';
+
   return (
     <div className="w-full">
       <div className="overflow-hidden rounded-lg border border-border bg-card">
@@ -487,11 +620,11 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
 
         {/* Terminal body */}
         <div
-          ref={scrollRef}
-          onClick={() => inputRef.current?.focus()}
-          // No max-height. The intro is a fixed length and clipping it behind
-          // an inner scrollbar hid the CTAs on short viewports; the card grows
-          // with the shell instead, which is how a terminal behaves anyway.
+          onClick={focusInput}
+          // No max-height on the card itself. The intro is a fixed length and
+          // clipping it behind an inner scrollbar hid the CTAs on short
+          // viewports; what is bounded is the session log below, which is the
+          // only part that grows.
           className="flex min-h-[300px] flex-col justify-start px-5 py-5 sm:min-h-[420px] sm:px-7 sm:py-7"
         >
           {lines.slice(0, printed).map((line, i) => renderLine(line, i))}
@@ -507,39 +640,43 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
           {/* Interactive shell, once the intro has finished typing. */}
           {phase === 'done' && (
             <>
-              {/* Command output is laid out in padded columns. Wrapping those
-                  at phone width breaks every row mid-column and the alignment
-                  stops meaning anything, so below `sm` the log scrolls
-                  sideways instead — which is what a terminal does. */}
-              <div
-                role="log"
-                aria-live="polite"
-                aria-label="Terminal output"
-                className="term-scroll -mx-1 overflow-x-auto px-1 sm:mx-0 sm:overflow-x-visible sm:px-0"
-              >
-                {entries.map((entry, i) => (
-                  <div key={i} className="mt-2 first:mt-1">
-                    <div className="break-all font-mono text-[13px] text-foreground">
-                      <span className="text-primary">$</span> {entry.input}
-                    </div>
-                    {entry.output.map((line, j) => (
-                      <div
-                        key={j}
-                        className={
-                          'whitespace-pre font-mono text-[13px] leading-[1.7] sm:whitespace-pre-wrap sm:break-words ' +
-                          (line.tone === 'muted' ? 'text-muted-dim'
-                            : line.tone === 'accent' ? 'text-primary'
-                            : line.tone === 'success' ? 'text-primary'
-                            : line.tone === 'error' ? 'text-destructive'
-                            : 'text-muted-foreground')
-                        }
-                      >
-                        {line.text || ' '}
+              {/* The session log.
+
+                  Bounded and self-scrolling: output collects here instead of
+                  growing the card, so the prompt below keeps its place on the
+                  page no matter how much has been run. Command output is laid
+                  out in padded columns and is never re-wrapped — wrapping
+                  broke every row mid-column and the alignment stopped meaning
+                  anything — so it scrolls sideways when it has to, which is
+                  what a terminal does. */}
+              {entries.length > 0 && (
+                <div
+                  ref={logRef}
+                  role="log"
+                  aria-live="polite"
+                  aria-atomic="false"
+                  aria-label="Terminal output"
+                  className="term-scroll -mx-1 mt-1 overflow-auto px-1"
+                  style={{ maxHeight: 'min(46vh, 340px)' }}
+                >
+                  {entries.map((entry, i) => (
+                    <div key={i} className="mt-2 first:mt-0">
+                      <div className="whitespace-pre font-mono text-[13px] text-foreground">
+                        <span className="text-primary">$</span> {entry.input}
+                        {entry.aborted && <span className="text-muted-dim">^C</span>}
                       </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
+                      {entry.output.map((line, j) => (
+                        <div
+                          key={j}
+                          className={`whitespace-pre font-mono text-[13px] leading-[1.7] ${toneClass(line.tone)}`}
+                        >
+                          {line.text || ' '}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* The caret sits on the cursor's own column.
 
@@ -594,47 +731,57 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
                       placeholder={entries.length ? '' : "type 'help'"}
                       className="w-full min-w-0 border-0 bg-transparent p-0 font-mono text-[1em] text-foreground caret-transparent outline-none placeholder:text-muted-dim focus:ring-0"
                     />
-                    <span
-                      aria-hidden="true"
-                      className="pointer-events-none absolute top-1/2 h-[1.15em] w-[0.6em] -translate-y-1/2 animate-terminal-blink bg-primary"
-                      style={{ left: `calc(${caret.col}ch - ${caret.scrollLeft}px)` }}
-                    />
+                    {/* Not drawn over the placeholder. Idle and empty, the
+                        block landed on column zero — on top of the first
+                        letter of `type 'help'` — and the hint read as a typo. */}
+                    {(focused || draft.length > 0) && (
+                      <span
+                        aria-hidden="true"
+                        className={
+                          'pointer-events-none absolute top-1/2 h-[1.15em] w-[0.6em] -translate-y-1/2 bg-primary ' +
+                          (focused ? 'animate-terminal-blink' : 'opacity-40')
+                        }
+                        style={{ left: `calc(${caret.col}ch - ${caret.scrollLeft}px)` }}
+                      />
+                    )}
                   </span>
                 </div>
 
-                {/* A phone keyboard has no Tab, no arrow keys and no Ctrl, which
+                {/* A touch keyboard has no Tab, no arrow keys and no Ctrl, which
                     is every affordance this shell has for finding its way around.
                     These are the replacement: the commands worth reaching without
                     typing, one tap each. `stopPropagation` keeps the tap off the
                     body's focus handler, so running one does not also throw the
                     keyboard up over the output it just printed. */}
-                <div
-                  className={
-                    !roomForShortcuts
-                      ? 'hidden'
-                      : docked
-                        ? // Above the keyboard there is no room to wrap: one row
-                          // that scrolls, the way a keyboard accessory bar does.
-                          'term-scroll mt-2 flex flex-nowrap gap-1.5 overflow-x-auto pb-1'
-                        : 'mt-3.5 flex flex-wrap gap-1.5 sm:hidden'
-                  }
-                >
-                  {SHORTCUTS.map(cmd => (
-                    <button
-                      key={cmd}
-                      type="button"
-                      // Preventing the default on mousedown is what stops the tap
-                    // taking focus off the field, which on a phone is what
-                    // stops the keyboard closing under the reader every time
-                    // they run a command from this row.
-                    onMouseDown={e => e.preventDefault()}
-                    onClick={e => { e.stopPropagation(); run(cmd); }}
-                      className="min-h-[38px] shrink-0 rounded-[4px] border border-border px-3 font-mono text-[12px] tracking-[0.04em] text-muted-dim active:border-primary active:text-primary"
-                    >
-                      {cmd}
-                    </button>
-                  ))}
-                </div>
+                {touch && (
+                  <div
+                    className={
+                      !roomForShortcuts
+                        ? 'hidden'
+                        : docked
+                          ? // Above the keyboard there is no room to wrap: one row
+                            // that scrolls, the way a keyboard accessory bar does.
+                            'term-scroll mt-2 flex flex-nowrap gap-1.5 overflow-x-auto pb-1'
+                          : 'mt-3.5 flex flex-wrap gap-1.5'
+                    }
+                  >
+                    {SHORTCUTS.map(cmd => (
+                      <button
+                        key={cmd}
+                        type="button"
+                        // Preventing the default on mousedown is what stops the tap
+                        // taking focus off the field, which on a phone is what
+                        // stops the keyboard closing under the reader every time
+                        // they run a command from this row.
+                        onMouseDown={e => e.preventDefault()}
+                        onClick={e => { e.stopPropagation(); run(cmd); }}
+                        className="min-h-[38px] shrink-0 rounded-[4px] border border-border px-3 font-mono text-[12px] tracking-[0.04em] text-muted-dim active:border-primary active:text-primary"
+                      >
+                        {cmd}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Holds the prompt's place in the card while it is docked, so the
