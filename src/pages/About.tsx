@@ -61,11 +61,9 @@ const experience = [
   {
     company: "R.S. Infotech", role: "System Engineer", period: "Feb 2023 – Aug 2024",
     bullets: [
-      "Secured 150+ enterprise endpoints with group policies, antivirus, and patch management",
-      "Managed Active Directory identity hygiene and enforced MFA via PowerShell",
-      "Automated log analysis and reporting with Python, reducing manual effort by 70%",
-      "Maintained firewalls, IDS/IPS, contributing to 20% reduction in security breaches",
-      "Provided Tier 1/2 incident response and escalation support",
+      "Automated recurring operational workflows across a 150+ Windows and Linux environment in Python, SQL, PowerShell and Bash — log processing, inventory, uptime monitoring, account lifecycle, configuration compliance, data reconciliation and reporting — replacing manual process with reusable, maintainable tooling rather than one-off scripts",
+      "Delivered solutions end to end with stakeholders: identified the problem, investigated it, designed and built the solution, tested, deployed and documented the expected behaviour so other engineers could support it, maintained through Git-based development",
+      "Root-caused defects across applications, system services, authentication, data and networking using Splunk, operating-system logs, event data and network evidence, then validated each fix; supported AWS and Microsoft Azure alongside on-premises infrastructure",
     ],
   },
   {

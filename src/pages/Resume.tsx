@@ -47,9 +47,9 @@ const EXPERIENCE: Role[] = [
     period: 'February 2023 – August 2024',
     location: 'Vadodara, India',
     bullets: [
-      'Configured production firewall rules and supported IDS/IPS, reviewing traffic and system logs to remediate misconfigurations and suspicious activity.',
-      'Hardened 150+ Windows and Linux production endpoints (baselines, patching, post-change validation) with Windows Server, Active Directory, and Group Policy administration.',
-      'Built automation in Python, PowerShell, and Bash for log analysis, configuration-compliance checking, and inventory; investigated failed-authentication patterns with Splunk SPL.',
+      'Automated recurring operational workflows across a 150+ Windows and Linux environment in Python, SQL, PowerShell and Bash — log processing, inventory, uptime monitoring, account lifecycle, configuration compliance, data reconciliation and reporting — replacing manual process with reusable, maintainable tooling rather than one-off scripts.',
+      'Delivered solutions end to end with stakeholders: identified the problem, investigated it, designed and built the solution, tested, deployed and documented the expected behaviour so other engineers could support it, maintained through Git-based development.',
+      'Root-caused defects across applications, system services, authentication, data and networking using Splunk, operating-system logs, event data and network evidence, then validated each fix; supported AWS and Microsoft Azure alongside on-premises infrastructure.',
     ],
   },
 ];
