@@ -33,8 +33,7 @@ function useEnteredView(ref: React.RefObject<HTMLElement>, skip: boolean) {
  * Render it as the first child of a `relative` section. The section carries no
  * `border-t`: it used to, and the hairline that stayed behind after the rule
  * faded read as a seam cutting the page into slabs. Spacing separates the
- * sections now, and the rule leaves nothing behind. One solid accent — the
- * original swept a primary-to-violet gradient, which put a second hue on screen
+ * sections now, and the rule leaves nothing behind. One solid accent. The original swept a primary-to-violet gradient, which put a second hue on screen
  * four times per scroll.
  */
 export function SectionRule() {

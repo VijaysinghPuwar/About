@@ -6,22 +6,22 @@ import { sweepHold } from '@/lib/theme-transition';
 /*
   The hero's second column.
 
-  It replaces three neon status rows — a pulsing "SYSTEMS ONLINE" dot, an emoji
-  map pin, and a second pulsing dot for "Open to opportunities" — none of which
+  It replaces three neon status rows (a pulsing "SYSTEMS ONLINE" dot, an emoji
+  map pin, and a second pulsing dot for "Open to opportunities"), none of which
   reported real state. In their place: a schematic of the thing this person
   actually works on, and a definition list of three facts that are checkable.
 
   The schematic is the same topology in both modes; only the traced path
   changes. In security mode it traces the detection loop that ends at
   containment. In pentest mode it traces an intrusion path inward from an
-  untrusted network. Same network, two directions of travel — which is the
+  untrusted network. Same network, two directions of travel, which is the
   argument the mode toggle is making.
 
   The path is numbered, so it draws in that order rather than arriving whole:
   each leg strokes on at a constant speed and its step label resolves as the
   leg lands. Reading order and drawing order are the same thing, which is the
   only reason the numbers are there. Once the chain is complete the travelling
-  dot starts — flow, after the route that carries it, never on top of it.
+  dot starts. Flow, after the route that carries it, never on top of it.
 
   Both the draw and the dot stop under prefers-reduced-motion; the path is
   rendered fully drawn instead, so nothing is lost.
@@ -45,7 +45,7 @@ const STEP_LABEL = {
   visibly longer than a short one inside it. Timing the legs equally instead
   would flatten exactly the distance the diagram is about.
 
-  The speed is deliberately unhurried — a chain that completes in a second is
+  The speed is deliberately unhurried, a chain that completes in a second is
   a flourish, not a diagram. At this rate the whole detection loop takes about
   seven seconds, which is roughly how long the terminal beside it spends typing
   its intro, and slow enough to read each step as it lands.
@@ -86,7 +86,7 @@ function schedule(legs: Leg[]) {
   Detection: four feeds converge on the collector, the collector raises what it
   found to the identity core, and the core reaches back out to the edge to shut
   the thing down. The four feeds are drawn one after another rather than at once
-  — collection is the slow part of this loop, and drawing it as the slow part is
+ , collection is the slow part of this loop, and drawing it as the slow part is
   the honest reading.
 */
 const DETECTION = {
@@ -133,7 +133,7 @@ export function SecurityDiagram() {
 
   const chain = isPentest ? ATTACK : DETECTION;
 
-  /* Resolved once per chain — reading the shutter, not a mount counter, so a
+  /* Resolved once per chain, reading the shutter, not a mount counter, so a
      re-render for any other reason cannot restart the draw mid-way through it.
      A mode switch renders from inside the shutter's sealed beat and has to wait
      it out; a first load has no shutter to wait for. */
@@ -141,7 +141,7 @@ export function SecurityDiagram() {
   const delay = useMemo(() => sweepHold() / 1000 || IDLE_DELAY, [isPentest]);
 
   /* The dot is held out of the DOM until the route it travels exists, rather
-     than started with an SMIL offset — a `begin` resolves against the document
+     than started with an SMIL offset, a `begin` resolves against the document
      timeline, which is not where a mid-session mode switch starts. */
   const [routeDrawn, setRouteDrawn] = useState(!animate);
   useEffect(() => {
@@ -170,10 +170,16 @@ export function SecurityDiagram() {
 
   return (
     <div>
-      {/* The schematic needs width to stay legible, so below `lg` it is dropped
+      {/* The schematic needs width to stay legible, so on a phone it is dropped
           rather than shrunk. The three facts underneath are the part a phone
-          reader actually needs, and they stay at every width. */}
-      <div className="hidden lg:block">
+          reader actually needs, and they stay at every width.
+
+          The cut used to happen at `lg`, which took the schematic away from
+          tablets too. It has room there: the hero is a single column below
+          980px, so at 834px the drawing gets the full ~774px measure and its
+          9px labels land near 12px. Only under 640px does it stop being
+          readable, which is where it now stops being drawn. */}
+      <div className="hidden sm:block">
         <svg
           viewBox="0 0 600 420"
           className="block h-auto w-full"
@@ -303,10 +309,10 @@ export function SecurityDiagram() {
 
       {/* Three facts, each one checkable. This is what the pulsing status dots
           were standing in for. */}
-      <dl className="border-t border-border lg:mt-7">
+      <dl className="border-t border-border sm:mt-7">
         {[
           ['FOCUS', 'Infrastructure · Network · Application security'],
-          ['CURRENT', 'MTA — Staten Island Railway'],
+          ['CURRENT', 'MTA, Staten Island Railway'],
           ['AVAILABILITY', 'Open to security engineering roles'],
         ].map(([label, value]) => (
           <div key={label} className="flex items-baseline justify-between gap-6 border-b border-border py-2.5">

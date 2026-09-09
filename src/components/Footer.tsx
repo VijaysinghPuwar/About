@@ -25,7 +25,7 @@ export function Footer() {
 
   return (
     <footer className="relative z-[1] border-t border-border">
-      <div className="container mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-6 gap-y-4 px-5 py-6">
+      <div className="page-gutter container mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-6 gap-y-4 py-6">
         <LogoIcon size={22} />
         <span className="font-mono text-[11.5px] text-muted-dim">
           © {new Date().getFullYear()} Vijaysingh Puwar

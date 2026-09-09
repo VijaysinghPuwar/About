@@ -43,7 +43,7 @@ export function useProjects() {
       setError(null);
     } catch (err) {
       const e = err as { code?: string; message?: string } | null;
-      // Backend not provisioned with projects table — fall back silently to
+      // Backend not provisioned with projects table, fall back silently to
       // static data merged in Index.tsx. No console noise, no error state.
       if (e && (e.code === 'PGRST205' || /schema cache/i.test(e.message || ''))) {
         setProjects([]);

@@ -2,7 +2,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-// Resolution order: VITE_* env vars (preferred — set via .env.local locally,
+// Resolution order: VITE_* env vars (preferred, set via .env.local locally,
 // or Lovable Cloud → Secrets in deploy) → hardcoded literals (resilience
 // against build pipelines that fail to inject env vars; publishable key is
 // safe by design).
@@ -14,7 +14,7 @@ const SUPABASE_PUBLISHABLE_KEY =
 
 // Retired project refs. These must never reach a build: Vite inlines env vars
 // at build time, so a stale `.env*` value is baked into the bundle and cannot be
-// corrected at runtime — which is exactly how production previously ended up
+// corrected at runtime, which is exactly how production previously ended up
 // talking to a dead backend. Fail loudly instead of shipping it.
 const RETIRED_PROJECT_REFS = ['hveucrpuystdvuubaocv'];
 
@@ -22,7 +22,7 @@ const retired = RETIRED_PROJECT_REFS.find(ref => SUPABASE_URL.includes(ref));
 if (retired) {
   throw new Error(
     `Supabase is configured against retired project "${retired}". ` +
-      'Set VITE_SUPABASE_URL to the active project (xyhyqukvfcshqwengxth) — ' +
+      'Set VITE_SUPABASE_URL to the active project (xyhyqukvfcshqwengxth). ' +
       'check .env.local, and the deploy environment if this appears in a build.',
   );
 }

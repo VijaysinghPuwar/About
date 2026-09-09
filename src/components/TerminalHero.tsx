@@ -23,7 +23,7 @@ import {
   solid colour instead of a blue-to-violet gradient fill.
 
   The intro copy is derived from the active mode, so switching to pentest
-  rewrites the mission and the listed toolset — and the terminal types the new
+  rewrites the mission and the listed toolset, and the terminal types the new
   transcript out again rather than swapping it in place. The switch is the site
   changing its stance; the terminal restating that stance in its own voice is
   most of the reason the mode has a terminal at all. Lines are still held by
@@ -174,7 +174,7 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
   /*
     The prompt's distance from the top of the viewport, captured before an
     output change and restored after it. Printing a result moves the log, and
-    the log sits above the prompt — without this, every command shoves the
+    the log sits above the prompt. Without this, every command shoves the
     prompt (and, on a phone, the shortcut button still under the reader's
     thumb) down the screen by however tall the answer was.
   */
@@ -276,8 +276,8 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
     A phone keyboard does not resize the page. It draws itself over the bottom
     of the layout viewport, and the line you tapped to open it ends up
     underneath. Scrolling the page to compensate is the obvious answer and it is
-    the wrong one on iOS: Safari is scrolling too — it moves the visual viewport
-    inside the layout viewport rather than moving the document — so a scroll of
+    the wrong one on iOS: Safari is scrolling too(it moves the visual viewport
+    inside the layout viewport rather than moving the document) so a scroll of
     our own either fights it or is undone by it, and the prompt lands off screen
     anyway.
 
@@ -291,10 +291,10 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
 
     `visualViewport` is what the keyboard leaves visible; the difference between
     that and `innerHeight` is the keyboard. The 90px floor keeps a retracting
-    URL bar — which moves the same numbers by a much smaller amount — from
+    URL bar (which moves the same numbers by a much smaller amount) from
     reading as a keyboard.
   */
-  /* The gap the docked prompt left behind in the card — the point in the
+  /* The gap the docked prompt left behind in the card, the point in the
      transcript the reader is actually typing at. */
   const anchorRef = useRef<HTMLDivElement>(null);
   const flowHeight = useRef(0);
@@ -321,8 +321,8 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
 
   /*
     The tap row and the docking are answers to a touch keyboard, not to a narrow
-    window. Keying them off `sm` meant a tablet — which has exactly the same
-    keyboard covering exactly the same prompt — got neither, and a desktop
+    window. Keying them off `sm` meant a tablet (which has exactly the same
+    keyboard covering exactly the same prompt), got neither, and a desktop
     window dragged narrow got a tap row it had no use for. `pointer: coarse` is
     the question actually being asked; the width stays in the test so a phone
     whose browser lies about its pointer is still covered.
@@ -346,7 +346,7 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
     Docking pins the prompt, not the transcript. The card can be left showing
     its opening lines while the reader types at the bottom of the screen, so the
     page is scrolled once, to put the end of the transcript directly above the
-    bar. Safari has nothing to fight over here — the focused field is fixed, so
+    bar. Safari has nothing to fight over here. The focused field is fixed, so
     it is already in view as far as the browser is concerned.
 
     This is the only place the terminal moves the page. Undocked it does not:
@@ -362,7 +362,7 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
 
     const visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
     // `visibleBottom` is already the keyboard's top edge; the bar sits on it,
-    // and the transcript should end where the prompt used to be — directly
+    // and the transcript should end where the prompt used to be, directly
     // above it, whether that means scrolling down to it or back up to it.
     const room = visibleBottom - bar.offsetHeight;
     // The gap's *top* is where the transcript now ends, and that is the edge
@@ -398,7 +398,7 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
   }, [entries, docked, alignToKeyboard]);
 
   // `onSelect` covers typing, clicking and the arrow keys, but not the times
-  // the draft is rewritten from under the field — tab-completion, history
+  // the draft is rewritten from under the field: tab-completion, history
   // recall, ctrl-c. Re-read the cursor after any of those land.
   useEffect(() => { syncCaret(); }, [draft, syncCaret]);
 
@@ -409,7 +409,7 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
   const [currentTyping, setCurrentTyping] = useState('');
   const [charIndex, setCharIndex] = useState(0);
   // `sealed` is the replay waiting out the theme shutter: transcript emptied,
-  // nothing drawn, no caret — the panel is behind the plates for that beat.
+  // nothing drawn, no caret. The panel is behind the plates for that beat.
   const [phase, setPhase] = useState<'sealed' | 'typing' | 'pause' | 'done'>('typing');
   const [showButtons, setShowButtons] = useState(false);
 
@@ -417,8 +417,8 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
   const currentLine = lineIndex < lines.length ? lines[lineIndex] : null;
 
   /* The banner is not the point of the terminal, so anything that says the
-     reader is ready to use it — a click on the card, a keystroke, reduced
-     motion — puts the whole transcript up at once. */
+     reader is ready to use it (a click on the card, a keystroke, reduced
+     motion), puts the whole transcript up at once. */
   const finishIntro = useCallback(() => {
     setPrinted(lines.length);
     setCurrentTyping('');
@@ -433,7 +433,7 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
     if (phase === 'typing' || phase === 'pause') finishIntro();
   }, [phase, finishIntro]);
 
-  // Reduced motion never watches it type — not on the first load either, which
+  // Reduced motion never watches it type, not on the first load either, which
   // is the case the mode-switch guard alone used to miss.
   useEffect(() => {
     if (reduced) finishIntro();
@@ -453,13 +453,13 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
 
   /*
     A new transcript arrived, which only ever means the mode changed. Type it
-    out again from the top — after the shutter, so the retype is watched rather
+    out again from the top, after the shutter, so the retype is watched rather
     than spent behind the plates.
 
     Two cases skip it: a shell the reader has already used (see the note at the
     top of this file), and reduced motion, where there is no shutter and no
     replay. Both still have to reconcile the counter, because the two modes no
-    longer print the same number of lines — pentest has no mission paragraph.
+    longer print the same number of lines. Pentest has no mission paragraph.
   */
   const holdMs = useRef(0);
   const firstTranscript = useRef(true);
@@ -531,7 +531,7 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
   }, [phase, charIndex, currentLine, lineIndex, lines, advanceLine]);
 
   /*
-    Clicking the card puts the cursor in the field — but only when the click was
+    Clicking the card puts the cursor in the field, but only when the click was
     not aimed at something else. A click on a CTA, a link or a shortcut button
     used to focus the input on its way past, which on a phone threw the keyboard
     up over the thing that had just been tapped; a click that ends a text
@@ -549,7 +549,7 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
     if (!line.text) return <div key={i} className="h-4" />;
 
     // Commands print the `$` in the accent and the command itself dim, which is
-    // how a real prompt reads — the previous version coloured the whole line.
+    // how a real prompt reads. The previous version coloured the whole line.
     if (line.type === 'command') {
       const body = line.text.replace(/^\$\s*/, '');
       return (
@@ -564,7 +564,7 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
         return (
           <div
             key={i}
-            className="mb-[18px] mt-1.5 text-[32px] font-semibold leading-[1.05] tracking-[-0.035em] text-foreground sm:text-[44px]"
+            className="mb-[18px] mt-1.5 text-[clamp(32px,4.2vw,48px)] font-semibold leading-[1.05] tracking-[-0.035em] text-foreground"
           >
             {line.text}
           </div>
@@ -572,12 +572,12 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
       case 'role':
         return (
           <div key={i} className="mb-[18px] mt-1 text-[19px] font-medium tracking-[-0.012em] text-foreground">
-            {line.text} <span className="font-normal text-muted-dim">— New York, NY</span>
+            {line.text} <span className="font-normal text-muted-dim">· New York, NY</span>
           </div>
         );
       case 'mission':
         return (
-          <div key={i} className="max-w-[52ch] text-[15px] leading-[1.6] text-muted-foreground">
+          <div key={i} className="max-w-[52ch] text-[16px] leading-[1.6] text-muted-foreground">
             {line.text}
           </div>
         );
@@ -645,9 +645,9 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
                   Bounded and self-scrolling: output collects here instead of
                   growing the card, so the prompt below keeps its place on the
                   page no matter how much has been run. Command output is laid
-                  out in padded columns and is never re-wrapped — wrapping
+                  out in padded columns and is never re-wrapped(wrapping
                   broke every row mid-column and the alignment stopped meaning
-                  anything — so it scrolls sideways when it has to, which is
+                  anything, so it scrolls sideways when it has to, which is
                   what a terminal does. */}
               {entries.length > 0 && (
                 <div
@@ -683,7 +683,7 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
                   It used to be a sibling *after* an input carrying `flex-1`:
                   the input claimed the whole row, so the block was pushed to
                   the far right edge of the card while the real text cursor
-                  stayed back at the prompt — two carets, several hundred
+                  stayed back at the prompt, two carets, several hundred
                   pixels apart, and only one of them where you were typing.
                   The block is now placed off `selectionStart`. The face is
                   monospace, so a column is exactly `1ch` and nothing has to be
@@ -693,7 +693,7 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
               {/* 16px on a phone, 13px from `sm` up. Anything under 16px makes
                   iOS Safari zoom the whole page the moment the field takes
                   focus, and it never zooms back out. The row carries the size
-                  so the input and the block caret stay in step — the caret is
+                  so the input and the block caret stay in step. The caret is
                   positioned in `ch` and sized in `em`, both of which follow
                   whatever the row is set to. */}
               {/* Docked, this is the bar sitting on top of the keyboard: full
@@ -727,13 +727,13 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
                       autoCorrect="off"
                       inputMode="text"
                       enterKeyHint="go"
-                      aria-label="Terminal input — type help for available commands"
+                      aria-label="Terminal input. Type help for available commands"
                       placeholder={entries.length ? '' : "type 'help'"}
                       className="w-full min-w-0 border-0 bg-transparent p-0 font-mono text-[1em] text-foreground caret-transparent outline-none placeholder:text-muted-dim focus:ring-0"
                     />
                     {/* Not drawn over the placeholder. Idle and empty, the
-                        block landed on column zero — on top of the first
-                        letter of `type 'help'` — and the hint read as a typo. */}
+                        block landed on column zero (on top of the first
+                        letter of `type 'help'`), and the hint read as a typo. */}
                     {(focused || draft.length > 0) && (
                       <span
                         aria-hidden="true"
@@ -809,7 +809,7 @@ export function TerminalHero({ projects }: TerminalHeroProps) {
                 View my work <span className="font-mono" aria-hidden="true">&#8594;</span>
               </button>
               {/* Public. A recruiter should never have to make an account to read
-                  a resume — the direct contact details stay gated instead. */}
+                  a resume. The direct contact details stay gated instead. */}
               <a
                 href="/resume.pdf"
                 download

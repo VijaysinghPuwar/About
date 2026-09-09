@@ -12,6 +12,6 @@ const DOMAIN = 'vijaysinghpuwar.com';
 /** Real address. Only call this behind an authentication check. */
 export const contactEmail = (): string => [LOCAL, DOMAIN].join('@');
 
-/** `cont••••@domain` — safe to render for logged-out visitors. */
+/** `cont••••@domain`, safe to render for logged-out visitors. */
 export const maskedContactEmail = (): string =>
   [LOCAL.slice(0, 4) + '••••', DOMAIN].join('@');

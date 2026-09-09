@@ -1,45 +1,127 @@
-import { useState } from 'react';
-import { motion, AnimatePresence, useInView } from 'framer-motion';
-import { GraduationCap, Briefcase, ChevronDown } from 'lucide-react';
-import { useRef } from 'react';
+import { useState, type ReactNode } from 'react';
+import { cn } from '@/lib/utils';
 
-/* ── timeline data ── */
-interface TimelineEntry {
-  id: string;
-  type: 'education' | 'work';
-  title: string;
-  subtitle: string;
-  period: string;
-  expandedContent: React.ReactNode;
-}
+/*
+  Experience and education as an alternating sequence.
+
+  Entries hang off a single centre rule, one to a side, each behind its own
+  disclosure. The mark on the rule is the site's own hexagon rather than a
+  lucide glyph per entry type: a mortar board next to "M.S. Cybersecurity" and
+  a briefcase next to "System Engineer" told a reader nothing the title had not
+  already said, and a stock icon set is the first thing anyone points at when
+  they call a page generated. One mark, used consistently, reads as a mark.
+
+  The centre column collapses below 980px, the same width the nav and hero
+  switch on. Cards move to a single left-aligned column with the rule and its
+  marks running down the left edge, because two columns of alternating cards on
+  a phone is one column of cards with half the width wasted.
+*/
 
 const highlightMetric = (text: string) => (
-  <span className="text-primary font-semibold">{text}</span>
+  <span className="font-semibold text-primary">{text}</span>
 );
 
-const entries: TimelineEntry[] = [
+/** Reference chips shared by the coursework and skill-group disclosures. */
+function Chips({ items }: { items: string[] }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map(item => (
+        <span
+          key={item}
+          className="rounded-md border border-border bg-card-elevated px-2.5 py-1 text-[12px] text-muted-foreground"
+        >
+          {item}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function DetailHeading({ children }: { children: ReactNode }) {
+  return (
+    <p className="meta-label mb-2 mt-4 first:mt-0">{children}</p>
+  );
+}
+
+interface Row {
+  id: string;
+  /** Left column. `place` and `kind` are omitted rather than guessed. */
+  dates: string;
+  place?: string;
+  kind?: string;
+  /** Marks the row that is still running. */
+  now?: boolean;
+  title: string;
+  org: string;
+  bullets: ReactNode[];
+  metaLabel?: string;
+  meta?: string[];
+  /** Reference depth, one disclosure per row. */
+  detail?: ReactNode;
+}
+
+const rows: Row[] = [
+  {
+    id: 'mta-sirtoa',
+    dates: 'JUN 2026 → NOW',
+    place: 'New York, NY',
+    kind: 'Internship',
+    now: true,
+    title: 'IT Infrastructure & Network Operations',
+    org: 'Metropolitan Transportation Authority · Staten Island Railway (SIRTOA) · title of record: IT Emerging Talent Intern',
+    bullets: [
+      <>Configure Cisco Catalyst switching (VLANs, access and trunk ports) and support OSPF and BGP routing on production network devices.</>,
+      <>Administer zero-trust and identity access: Zscaler ZPA application groups, DUO multi-factor enrollment, Active Directory groups, and provisioning and revocation as staff join, move, and leave.</>,
+      <>Own incidents end to end in ServiceNow from triage through closure, maintain a daily System Verification Log, and deploy endpoint hardware at remote facilities.</>,
+      <>Designed a Power Automate and SharePoint intake application and root-caused a trigger-versus-Compose defect in testing; deployed a Python NTP clock-correction service for a Rail Control Center workstation.</>,
+    ],
+    metaLabel: 'Working with',
+    meta: ['Active Directory', 'Microsoft 365', 'ServiceNow', 'Cisco / TCP-IP', 'Windows Server'],
+    detail: (
+      <div>
+        <p className="text-[13.5px] leading-[1.6] text-muted-foreground">
+          Supporting enterprise IT infrastructure, network operations, endpoint systems, and secure
+          technology services for MTA Staten Island Railway, focusing on system reliability,
+          troubleshooting, and operational efficiency.
+        </p>
+        {[
+          { label: 'Networking', items: ['TCP/IP', 'LAN Troubleshooting', 'Enterprise Networks'] },
+          { label: 'Systems', items: ['Windows Administration', 'Active Directory', 'Microsoft 365', 'Endpoint Management'] },
+          { label: 'Security', items: ['Access Management', 'Endpoint Security', 'System Verification'] },
+          { label: 'Tools', items: ['ServiceNow', 'ArcGIS', 'HxGN EAM'] },
+        ].map(group => (
+          <div key={group.label}>
+            <DetailHeading>{group.label}</DetailHeading>
+            <Chips items={group.items} />
+          </div>
+        ))}
+      </div>
+    ),
+  },
   {
     id: 'ms-cyber',
-    type: 'education',
+    dates: 'EXPECTED DEC 2026',
+    place: 'New York, NY',
+    kind: 'M.S.',
     title: 'M.S. Cybersecurity',
-    subtitle: 'Pace University, Seidenberg School of CSIS — New York, NY',
-    period: 'Expected Dec 2026',
-    expandedContent: (
+    org: 'Pace University · Seidenberg School of Computer Science and Information Systems',
+    bullets: [
+      <>
+        GPA {highlightMetric('3.92')}, with {highlightMetric('36')} credits completed and{' '}
+        {highlightMetric('3')} in progress.
+      </>,
+      <>Coursework in security automation, network defense, ethical hacking and secure software development.</>,
+    ],
+    metaLabel: 'Concentration',
+    meta: ['Security automation', 'Network defense', 'Detection engineering'],
+    detail: (
       <div>
-        <p className="text-sm text-muted-foreground mb-1">
-          {/* Degree audit 2026-07-19: 30 required, 39 applied — 36 completed plus
-              the 3-credit capstone in progress. Stated as completed/in-progress
-              because "39 credits applied" reads as 39 finished. */}
-          GPA: {highlightMetric('3.92')} · {highlightMetric('36')} credits completed, {highlightMetric('3')} in progress
-        </p>
-        <p className="text-xs text-muted-foreground mb-3 font-mono">
-          Seidenberg School of Computer Science & Information Systems
-        </p>
-        <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider font-mono">
-          Completed Coursework
-        </p>
-        <div className="flex flex-wrap gap-1.5 mb-4">
-          {[
+        {/* Degree audit 2026-07-19: 30 required, 39 applied (36 completed plus
+            the 3-credit capstone in progress). Stated as completed/in-progress
+            because "39 credits applied" reads as 39 finished. */}
+        <DetailHeading>Completed coursework</DetailHeading>
+        <Chips
+          items={[
             'Introduction to Cybersecurity',
             'Operating Systems Theory & Administration',
             'Information Security Management',
@@ -52,132 +134,58 @@ const entries: TimelineEntry[] = [
             'Algorithms & Computing Theory',
             'Business Data Communications',
             'Introduction to Coding',
-          ].map(c => (
-            <span key={c} className="rounded-md border border-border bg-card-elevated px-2.5 py-1 text-[12px] text-muted-foreground">
-              {c}
-            </span>
-          ))}
-        </div>
-        <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider font-mono">
-          In Progress
-        </p>
+          ]}
+        />
+        {/* Degree audit 2026-07-19: CYB 691 is the only course still IP.
+            IS 680 completed Summer 2026. */}
+        <DetailHeading>In progress</DetailHeading>
         <div className="flex flex-wrap gap-1.5">
-          {/* Degree audit 2026-07-19: CYB 691 is the only course still IP.
-              IS 680 completed Summer 2026. */}
-          {['Cybersecurity Capstone Project'].map(c => (
-            <span key={c} className="text-xs px-2.5 py-1 rounded-full border border-primary/40 text-primary">
-              {c}
-            </span>
-          ))}
+          <span className="rounded-md border border-primary/40 px-2.5 py-1 text-[12px] text-primary">
+            Cybersecurity Capstone Project
+          </span>
         </div>
-      </div>
-    ),
-  },
-  {
-    id: 'mta-sirtoa',
-    type: 'work',
-    title: 'IT Emerging Talent Intern',
-    subtitle: 'Metropolitan Transportation Authority (MTA) — Staten Island Railway (SIRTOA) · IT Infrastructure & Network Operations · New York City',
-    period: 'June 2026 – Present',
-    expandedContent: (
-      <div>
-        <p className="text-sm text-muted-foreground mb-4">
-          Supporting enterprise IT infrastructure, network operations, endpoint systems, and secure technology services for MTA Staten Island Railway, focusing on system reliability, troubleshooting, and operational efficiency.
-        </p>
-        <ul className="space-y-2 mb-5">
-          {[
-            <>Configure Cisco Catalyst switching — VLANs, access and trunk ports — and support OSPF and BGP routing on production network devices.</>,
-            <>Administer zero-trust and identity access: Zscaler ZPA application groups, DUO multi-factor enrollment, Active Directory groups, and provisioning and revocation as staff join, move, and leave.</>,
-            <>Own incidents end to end in ServiceNow from triage through closure, maintain a daily System Verification Log, and deploy endpoint hardware at remote facilities.</>,
-            <>Designed a Power Automate and SharePoint intake application and root-caused a trigger-versus-Compose defect in testing; deployed a Python NTP clock-correction service for a Rail Control Center workstation.</>,
-          ].map((bullet, i) => (
-            <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-              <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-              <span>{bullet}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider font-mono">
-          Security Alignment
-        </p>
-        <p className="text-sm text-muted-foreground mb-5">
-          Supported secure infrastructure operations through endpoint management, access control, system verification, and enterprise technology support.
-        </p>
-        {[
-          { label: 'Networking', items: ['TCP/IP', 'LAN Troubleshooting', 'Enterprise Networks'] },
-          { label: 'Systems', items: ['Windows Administration', 'Active Directory', 'Microsoft 365', 'Endpoint Management'] },
-          { label: 'Security', items: ['Access Management', 'Endpoint Security', 'System Verification'] },
-          { label: 'Tools', items: ['ServiceNow', 'ArcGIS', 'HxGN EAM'] },
-        ].map(group => (
-          <div key={group.label} className="mb-3 last:mb-0">
-            <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider font-mono">
-              {group.label}
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {group.items.map(item => (
-                <span key={item} className="rounded-md border border-border bg-card-elevated px-2.5 py-1 text-[12px] text-muted-foreground">
-                  {item}
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
       </div>
     ),
   },
   {
     id: 'rs-infotech',
-    type: 'work',
+    dates: 'FEB 2023 → AUG 2024',
+    kind: 'Full-time',
     title: 'System Engineer',
-    subtitle: 'R.S. Infotech',
-    period: 'Feb 2023 – Aug 2024',
-    expandedContent: (
-      <ul className="space-y-2">
-        {[
-          <>Configured production firewall rules and supported IDS/IPS, reviewing traffic and system logs to remediate misconfigurations and suspicious activity</>,
-          <>Hardened {highlightMetric('150+')} Windows and Linux production endpoints — baselines, patching, post-change validation — with Windows Server, Active Directory, and Group Policy administration</>,
-          <>Built automation in Python, PowerShell, and Bash for log analysis, configuration-compliance checking, and inventory</>,
-          <>Investigated failed-authentication patterns with Splunk SPL</>,
-        ].map((bullet, i) => (
-          <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-            <span>{bullet}</span>
-          </li>
-        ))}
-      </ul>
-    ),
+    org: 'R.S. Infotech',
+    bullets: [
+      <>Configured production firewall rules and supported IDS/IPS, reviewing traffic and system logs to remediate misconfigurations and suspicious activity.</>,
+      <>Hardened {highlightMetric('150+')} Windows and Linux production endpoints (baselines, patching, post-change validation) with Windows Server, Active Directory, and Group Policy administration.</>,
+      <>Built automation in Python, PowerShell, and Bash for log analysis, configuration-compliance checking, and inventory.</>,
+      <>Investigated failed-authentication patterns with Splunk SPL.</>,
+    ],
+    metaLabel: 'Working with',
+    meta: ['Windows Server', 'Linux', 'PowerShell / Bash', 'Firewall policy', 'Splunk'],
   },
   {
     id: 'be-mech',
-    type: 'education',
+    dates: 'COMPLETED JAN 2024',
+    place: 'Anand, India',
+    kind: 'B.E.',
     title: 'B.E. Mechanical Engineering',
-    subtitle: 'G H Patel College of Engineering and Technology — Anand, India',
-    period: 'Completed Jan 2024',
-    expandedContent: (
+    org: 'G H Patel College of Engineering and Technology',
+    bullets: [
+      <>CGPA {highlightMetric('7.11 / 10')}.</>,
+      <>Engineering foundation in systems thinking, design, and problem solving. Later pivoted to cybersecurity.</>,
+    ],
+    detail: (
       <div>
-        <p className="text-sm text-muted-foreground mb-4">
-          CGPA: {highlightMetric('7.11 / 10')}
-        </p>
-        <p className="text-sm text-muted-foreground mb-3">
-          Engineering foundation in systems thinking, design, and problem solving — later pivoted to cybersecurity.
-        </p>
-        <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider font-mono">
-          Selected Coursework
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {[
+        <DetailHeading>Selected coursework</DetailHeading>
+        <Chips
+          items={[
             'Programming for Problem Solving',
             'Operation Research',
             'Quality & Reliability Engineering',
             'Industry 4.0',
             'Computer Aided Design & Manufacturing',
             'Engineering Mathematics',
-          ].map(c => (
-            <span key={c} className="rounded-md border border-border bg-card-elevated px-2.5 py-1 text-[12px] text-muted-foreground">
-              {c}
-            </span>
-          ))}
-        </div>
+          ]}
+        />
       </div>
     ),
   },
@@ -191,173 +199,109 @@ const certifications = [
   { name: 'Cisco CCNP Enterprise', org: 'Cisco', earned: false },
 ];
 
-/* ── Pointer Arrow ── */
-function PointerArrow({ side }: { side: 'left' | 'right' }) {
-  // Points toward the center line
-  if (side === 'right') {
-    // Card is on right, arrow points left
-    return (
-      <div className="absolute top-5 -left-2 w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-r-[8px] border-r-card" />
-    );
-  }
-  // Card is on left, arrow points right
-  return (
-    <div className="absolute top-5 -right-2 w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-l-[8px] border-l-card" />
-  );
-}
+/* ── One entry ── */
+function TimelineEntry({ row, index }: { row: Row; index: number }) {
+  const [open, setOpen] = useState(false);
+  const panelId = `${row.id}-panel`;
+  /* Odd entries sit left of the rule, even entries right. Below the
+     breakpoint every card takes the single content column instead. */
+  const onLeft = index % 2 === 0;
 
-/* ── Timeline Node ── */
-function TimelineNode({ entry, index, expandedId, onToggle }: {
-  entry: TimelineEntry;
-  index: number;
-  expandedId: string | null;
-  onToggle: (id: string) => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const isInView = useInView(ref, { once: true, amount: 0.3 });
-  const isExpanded = expandedId === entry.id;
-  const isLeft = index % 2 === 1; // 0→right, 1→left, 2→right...
-  const Icon = entry.type === 'education' ? GraduationCap : Briefcase;
-  const isDimmed = expandedId !== null && !isExpanded;
+  /* One card element, placed by grid column.
 
-  return (
-    <div ref={ref} className="relative grid grid-cols-[1fr] md:grid-cols-[1fr_auto_1fr] gap-0 md:gap-8 items-start">
-      {/* Left content (desktop only) */}
-      <div className="hidden md:block">
-        {isLeft && (
-          <motion.div
-            initial={{ opacity: 0, x: -50 }}
-            animate={isInView ? { opacity: isDimmed ? 0.4 : 1, x: 0 } : {}}
-            transition={{ type: 'spring', stiffness: 80, damping: 18, delay: index * 0.15 }}
+     It was briefly rendered twice, once for the narrow layout and once for the
+     wide one, with CSS hiding the wrong copy. That put every role in the
+     document twice: a screen reader read the whole timeline through, then read
+     it again. Placement is a class, not a second copy. */
+  const card = (
+    <div
+      className={cn(
+        'col-start-2 row-start-1 pb-[26px]',
+        onLeft
+          ? 'wide:col-start-1 wide:text-right'
+          : 'wide:col-start-3',
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="w-full rounded-[10px] border border-border bg-card px-5 py-[18px] text-left transition-colors [text-align:inherit] hover:border-border-strong"
+      >
+        <div className={cn('flex gap-3.5', onLeft && 'wide:flex-row-reverse')}>
+          <span
+            aria-hidden="true"
+            className={cn(
+              'mt-0.5 shrink-0 text-[14px] text-muted-dim transition-transform',
+              open && 'rotate-180',
+            )}
           >
-            <NodeCard entry={entry} isExpanded={isExpanded} onToggle={onToggle} pointerSide="left" />
-          </motion.div>
-        )}
-      </div>
-
-      {/* Center dot */}
-      <div className="hidden md:flex flex-col items-center">
-        <motion.button
-          onClick={() => onToggle(entry.id)}
-          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${entry.title}`}
-          aria-expanded={isExpanded}
-          initial={{ scale: 0 }}
-          animate={isInView ? { scale: 1 } : {}}
-          transition={{ type: 'spring', stiffness: 200, damping: 15, delay: index * 0.15 }}
-          className={`relative z-10 flex h-9 w-9 items-center justify-center rounded-md border transition-colors ${
-            isExpanded
-              ? 'border-primary bg-primary text-primary-foreground'
-              : 'border-border bg-card text-primary hover:border-primary'
-          }`}
-        >
-          <Icon className="h-4 w-4" aria-hidden="true" />
-        </motion.button>
-      </div>
-
-      {/* Right content (desktop only) */}
-      <div className="hidden md:block">
-        {!isLeft && (
-          <motion.div
-            initial={{ opacity: 0, x: 50 }}
-            animate={isInView ? { opacity: isDimmed ? 0.4 : 1, x: 0 } : {}}
-            transition={{ type: 'spring', stiffness: 80, damping: 18, delay: index * 0.15 }}
-          >
-            <NodeCard entry={entry} isExpanded={isExpanded} onToggle={onToggle} pointerSide="right" />
-          </motion.div>
-        )}
-      </div>
-
-      {/* Mobile layout */}
-      <div className="md:hidden flex gap-4">
-        <div className="flex flex-col items-center">
-          <motion.button
-            onClick={() => onToggle(entry.id)}
-            aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${entry.title}`}
-            aria-expanded={isExpanded}
-            initial={{ scale: 0 }}
-            animate={isInView ? { scale: 1 } : {}}
-            transition={{ type: 'spring', stiffness: 200, damping: 15, delay: index * 0.15 }}
-            className={`tap-44 relative z-10 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border transition-colors ${
-              isExpanded
-                ? 'border-primary bg-primary text-primary-foreground'
-                : 'border-border bg-card text-primary'
-            }`}
-          >
-            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-          </motion.button>
-          {index < entries.length - 1 && (
-            <div className="w-[2px] flex-1 min-h-[20px] timeline-line-gradient" />
-          )}
+            ⌄
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className={cn('flex flex-wrap items-baseline gap-x-3 gap-y-1', onLeft && 'wide:justify-end')}>
+              <h3 className="text-[17px] font-semibold tracking-[-0.014em] text-foreground">
+                {row.title}
+              </h3>
+              {row.now && (
+                <span className="inline-flex items-center gap-[7px] font-mono text-[11px] tracking-[0.14em] text-primary">
+                  CURRENT
+                  <span className="h-3 w-1.5 animate-pulse bg-primary motion-reduce:animate-none" aria-hidden="true" />
+                </span>
+              )}
+            </div>
+            <div className="mt-1 text-[14px] leading-[1.5] text-muted-foreground">{row.org}</div>
+            <div className="mt-2 font-mono text-[11.5px] tracking-[0.04em] text-muted-dim">
+              {[row.dates, row.place, row.kind].filter(Boolean).join('  ·  ')}
+            </div>
+          </div>
         </div>
-        <motion.div
-          className="flex-1 pb-8"
-          initial={{ opacity: 0, x: 20 }}
-          animate={isInView ? { opacity: isDimmed ? 0.4 : 1, x: 0 } : {}}
-          transition={{ type: 'spring', stiffness: 80, damping: 18, delay: index * 0.15 }}
-        >
-          <NodeCard entry={entry} isExpanded={isExpanded} onToggle={onToggle} pointerSide="right" />
-        </motion.div>
-      </div>
+
+        {open && (
+          <div id={panelId} className="mt-3.5 border-t border-border pt-3.5 text-left">
+            <ul className="flex flex-col gap-2">
+              {row.bullets.map((bullet, i) => (
+                <li key={i} className="flex gap-2.5 text-[14px] leading-[1.55] text-muted-foreground">
+                  <span className="shrink-0 text-primary" aria-hidden="true">·</span>
+                  <span>{bullet}</span>
+                </li>
+              ))}
+            </ul>
+
+            {row.meta && row.meta.length > 0 && (
+              <div className="mt-4">
+                <div className="meta-label">{row.metaLabel}</div>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11.5px] text-muted-foreground">
+                  {row.meta.map(m => <span key={m}>{m}</span>)}
+                </div>
+              </div>
+            )}
+
+            {row.detail && <div className="mt-4">{row.detail}</div>}
+          </div>
+        )}
+      </button>
     </div>
   );
-}
 
-/* ── Node Card ── */
-function NodeCard({ entry, isExpanded, onToggle, pointerSide }: {
-  entry: TimelineEntry;
-  isExpanded: boolean;
-  onToggle: (id: string) => void;
-  pointerSide?: 'left' | 'right';
-}) {
   return (
-    <div
-      onClick={() => onToggle(entry.id)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onToggle(entry.id);
-        }
-      }}
-      role="button"
-      tabIndex={0}
-      aria-expanded={isExpanded}
-      className={`relative cursor-pointer rounded-lg border bg-card p-5 transition-colors ${
-        isExpanded ? 'border-primary' : 'border-border hover:border-border-strong'
-      }`}
-    >
-      {/* Pointer arrow (desktop only) */}
-      {pointerSide && <div className="hidden md:block"><PointerArrow side={pointerSide} /></div>}
-
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="text-[17px] font-semibold leading-tight tracking-[-0.014em] text-foreground">{entry.title}</h3>
-          <p className="mt-1 text-[14px] text-muted-foreground">{entry.subtitle}</p>
-          <p className="mt-2 font-mono text-[11.5px] text-muted-dim">{entry.period}</p>
-        </div>
-        <motion.div
-          animate={{ rotate: isExpanded ? 180 : 0 }}
-          transition={{ duration: 0.3 }}
-          className="flex-shrink-0 mt-1"
-        >
-          <ChevronDown className="w-5 h-5 text-muted-foreground" />
-        </motion.div>
+    <div className="grid grid-cols-[22px_minmax(0,1fr)] gap-x-4 wide:grid-cols-[minmax(0,1fr)_56px_minmax(0,1fr)] wide:gap-x-0">
+      {/* The rule and its mark. One column on a phone, the centre on desktop. */}
+      <div className="col-start-1 row-start-1 flex flex-col items-center wide:col-start-2">
+        <svg width="20" height="22" viewBox="0 0 20 22" aria-hidden="true" className="mt-5 shrink-0">
+          <path
+            d="M10 1.2 L18.2 6 L18.2 16 L10 20.8 L1.8 16 L1.8 6 Z"
+            fill="hsl(var(--background))"
+            stroke={row.now ? 'hsl(var(--primary))' : 'hsl(var(--border-strong))'}
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <span className="w-px flex-1 bg-border" aria-hidden="true" />
       </div>
 
-      <AnimatePresence initial={false}>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-            className="overflow-hidden"
-          >
-            <div className="mt-4 border-t border-border pt-4">
-              {entry.expandedContent}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {card}
     </div>
   );
 }
@@ -365,7 +309,7 @@ function NodeCard({ entry, isExpanded, onToggle, pointerSide }: {
 /*
   Certification card.
 
-  It used to flip on hover to reveal the issuing body — an animation to hide a
+  It used to flip on hover to reveal the issuing body, an animation to hide a
   single word, on a card that had room for it. Now issuer and state are both on
   the face, and the outline colour separates earned from in-progress, so the
   status is readable without hovering five cards one at a time.
@@ -395,42 +339,18 @@ function CertCard({ name, org, earned }: { name: string; org: string; earned: bo
 
 /* ── Main Component ── */
 export function ExperienceTimeline() {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-
-  const handleToggle = (id: string) => {
-    setExpandedId(prev => (prev === id ? null : id));
-  };
-
   return (
-    <div className="mt-12">
-      {/* Timeline
-
-          `overflow-x-clip`: the cards slide in from 50px outside their own
-          column, and the right-hand column ends at the container edge — so
-          until they land, they hold the document open wider than the viewport
-          and the whole page can be dragged sideways. Clipping contains the
-          entry animation without making this a scroll container. */}
-      <div className="relative overflow-x-clip">
-        {/* Center line (desktop) */}
-        <div className="hidden md:block absolute left-1/2 -translate-x-1/2 top-0 bottom-0 w-[2px] timeline-line-gradient" />
-
-        <div className="space-y-6 md:space-y-10">
-          {entries.map((entry, i) => (
-            <TimelineNode
-              key={entry.id}
-              entry={entry}
-              index={i}
-              expandedId={expandedId}
-              onToggle={handleToggle}
-            />
-          ))}
-        </div>
+    <div className="mt-10">
+      <div className="relative">
+        {rows.map((row, i) => (
+          <TimelineEntry key={row.id} row={row} index={i} />
+        ))}
       </div>
 
       {/* Certifications */}
-      <div className="mt-16">
+      <div className="mt-14">
         <p className="section-heading mb-6 text-center">Certifications</p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 wide:grid-cols-5">
           {certifications.map(cert => (
             <CertCard key={cert.name} {...cert} />
           ))}

@@ -16,7 +16,7 @@ export default function AuthCallback() {
 
   useEffect(() => {
     // First, check for OAuth errors in the URL (hash or search). If present,
-    // surface immediately and skip the session-wait — there's no session coming.
+    // surface immediately and skip the session-wait. There's no session coming.
     const oauthError = parseOAuthErrorFromUrl();
     if (oauthError) {
       const conflict = isIdentityConflictError(oauthError.errorCode, oauthError.errorDescription);

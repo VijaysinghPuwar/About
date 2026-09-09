@@ -4,7 +4,7 @@
   Vertical plates ratchet across the viewport in alternating directions, hold it
   closed for a little over two seconds, then clear the far side. The class swap
   happens inside that closed beat, so the reader never watches colours crawl
-  from green to red — they watch the site shut, reconfigure and reopen in the
+  from green to red. They watch the site shut, reconfigure and reopen in the
   other stance.
 
   The whole cue runs about three and a half seconds on purpose. A 200ms wipe is
@@ -12,17 +12,17 @@
   is sequenced around the text rather than the other way round: the plates seal,
   the mode name resolves out of noise, it sits still for a beat and a half so it
   can actually be read, and only then do the plates continue. Most of the
-  duration is that hold — the plates themselves move quickly at either end.
+  duration is that hold. The plates themselves move quickly at either end.
 
   Written against the flat palette: plates are painted in `--background` with a
   single hairline `--primary` leading edge. No glow, no coloured shadow, no
-  second hue — the same rules the rest of the design keeps.
+  second hue, which is the same rule the rest of the design keeps.
 
   The overlay is `position: fixed`, anchored to the viewport rather than to any
   scrolled ancestor, so the plates cover what the reader is actually looking at
   no matter how far down the page they are.
 
-  `prefers-reduced-motion` skips all of it — plates and audio both — and commits
+  `prefers-reduced-motion` skips all of it (plates and audio both) and commits
   the swap immediately.
 */
 
@@ -34,7 +34,7 @@ const NARROW = 640;
 
 /*
   Each plate crosses in over the first 12% of its run, holds until 88%, then
-  crosses out — see the `theme-plate-*` keyframes in `index.css`. Because plate
+  crosses out. See the `theme-plate-*` keyframes in `index.css`. Because plate
   n starts n * STAGGER late, the viewport is only fully covered between the last
   plate's arrival and the first plate's departure, and everything timed below
   has to land inside that window.
@@ -74,8 +74,8 @@ function marks(plates: number) {
 /*
   How long anything that replays itself on a mode switch should wait first.
 
-  The class swaps at `m.commit` — about 0.77s into a sweep whose last plate does
-  not clear the viewport until `m.teardown` — so a replay started on the swap
+  The class swaps at `m.commit`, about 0.77s into a sweep whose last plate does
+  not clear the viewport until `m.teardown`, so a replay started on the swap
   would spend its opening beats behind the plates. This is that remainder: the
   replay begins as the shutter lifts, which is the only moment there is anything
   to see it.
@@ -109,7 +109,7 @@ export function setSoundMuted(muted: boolean) {
   try {
     localStorage.setItem(SOUND_KEY, muted ? 'off' : 'on');
   } catch {
-    /* private mode — the preference just doesn't persist */
+    /* private mode, the preference just doesn't persist */
   }
 }
 
@@ -121,7 +121,7 @@ function prefersReducedMotion() {
   The cue is synthesized rather than shipped as a file: the whole thing is under
   a kilobyte of code and needs no network round trip on the one frame where the
   page is already busy animating. The context is created on the click that
-  starts the sweep — a user gesture — which is the only moment a browser will
+  starts the sweep (a user gesture), which is the only moment a browser will
   let it start unsuspended.
 */
 function audio(): AudioContext | null {
@@ -132,7 +132,7 @@ function audio(): AudioContext | null {
   if (!Ctor) return null;
   /*
     iOS routes WebAudio through the "ambient" session by default, and an ambient
-    session is silenced by the hardware mute switch — the cue plays, the phone
+    session is silenced by the hardware mute switch. The cue plays, the phone
     just never sounds it. Declaring a playback session (Safari 16.4+) is the one
     lever a page has over that, and it has to be set before the context exists.
   */
@@ -268,7 +268,7 @@ function playCue(toPentest: boolean, plates: number, m: ReturnType<typeof marks>
 
   /*
     A context can be handed back suspended even when it was created inside the
-    gesture — iOS does this routinely, and resuming it is asynchronous. Anything
+    gesture, iOS does this routinely, and resuming it is asynchronous. Anything
     scheduled against `currentTime` before the resume lands is simply dropped,
     which is most of the cue. So the whole thing is scheduled after the resume
     resolves; the cost is the few milliseconds of drift against the plates, and
@@ -302,7 +302,7 @@ function schedule(
   thump(ac, out, t + m.sealed / 1000);
 
   // Sealed: the mode's own note over a low bed, then a blip per glyph as the
-  // name resolves — the sound of a readout settling, not of nothing happening.
+  // name resolves, the sound of a readout settling, not of nothing happening.
   lock(ac, out, t + (m.commit + 60) / 1000, root);
   bed(ac, out, t + m.sealed / 1000, (m.opening - m.sealed) / 1000);
   const blips = 7;
@@ -361,9 +361,9 @@ function scramble(el: HTMLElement, word: string): number {
  * Run the shutter and commit the theme inside it.
  *
  * `commit` is what actually swaps the class; it is called once, mid-sweep.
- * Returns immediately — the caller does not await the animation.
+ * Returns immediately. The caller does not await the animation.
  */
-export function runThemeSweep(next: 'default' | 'pentest', commit: () => void) {
+export function runThemeSweep(next: 'security' | 'pentest', commit: () => void) {
   if (prefersReducedMotion()) {
     commit();
     return;

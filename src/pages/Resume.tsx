@@ -6,7 +6,7 @@ import { ProtectedEmail } from '@/components/ProtectedEmail';
  * Web resume.
  *
  * Content is transcribed from the canonical PDF at /resume.pdf (2026-08-22) and
- * must not drift from it — a recruiter who reads this page and then downloads
+ * must not drift from it, a recruiter who reads this page and then downloads
  * the PDF should find the same claims. Nothing here is inferred or generated.
  *
  * The previous version of this page was never routed, which is why it still
@@ -102,7 +102,7 @@ const PROJECTS: ResumeProject[] = [
 
 const EDUCATION = [
   {
-    school: 'Pace University — Seidenberg School of Computer Science and Information Systems',
+    school: 'Pace University, Seidenberg School of Computer Science and Information Systems',
     location: 'New York, NY',
     degree: 'M.S. Cybersecurity, GPA 3.92 / 4.0',
     detail: 'Network Security & Defense, Ethical Hacking, Algorithms, Data Science',
@@ -184,14 +184,14 @@ function Bullets({ items }: { items: string[] }) {
 export default function Resume() {
   return (
     /* pt-24, not py-14: the navigation is fixed and 64px tall, so 56px of
-       top padding put the name behind it — and the bar is transparent at the
+       top padding put the name behind it, and the bar is transparent at the
        top of the page, so the two simply overlapped. */
     <div className="pb-14 pt-24 sm:pb-20 sm:pt-28">
       <Helmet>
         <title>Resume | Vijaysingh Puwar</title>
         <meta
           name="description"
-          content="Resume of Vijaysingh Puwar — cybersecurity and infrastructure engineer in New York. Enterprise networking at the MTA, production AI and full-stack platforms, M.S. Cybersecurity at Pace University."
+          content="Resume of Vijaysingh Puwar, cybersecurity and infrastructure engineer in New York. Enterprise networking at the MTA, production AI and full-stack platforms, M.S. Cybersecurity at Pace University."
         />
         <link rel="canonical" href="https://vijaysinghpuwar.com/resume" />
       </Helmet>
@@ -203,7 +203,7 @@ export default function Resume() {
             Vijaysingh Puwar
           </h1>
           <p className="mt-1 text-base sm:text-lg text-primary font-medium">
-            Cybersecurity Engineer — networks, systems, and the software on top
+            Cybersecurity Engineer: networks, systems, and the software on top
           </p>
 
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">

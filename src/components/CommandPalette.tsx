@@ -42,7 +42,7 @@ function buildCommands(isAuthed: boolean, goLogin: () => void): Command[] {
 
   const actions: Command[] = [
     // The resume is deliberately public: a recruiter should never have to make
-    // an account to read it. The email below stays gated — that is anti-scraping,
+    // an account to read it. The email below stays gated. That is anti-scraping,
     // not evaluation friction.
     {
       category: 'Actions',

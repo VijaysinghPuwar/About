@@ -224,7 +224,7 @@ export default function Login() {
           )}
 
           {/* The old line here promised sign-in unlocked "the full project
-              portfolio and resume". Both are public — every project, every
+              portfolio and resume". Both are public: every project, every
               repository link and /resume need no account. */}
           <p className="text-center text-xs text-muted-foreground">
             The projects and the résumé are public. Signing in is only for

@@ -27,6 +27,29 @@
     <meta name="twitter:description" content="Cybersecurity engineer specializing in identity security, security automation, cloud defense, and detection engineering. M.S. Cybersecurity at Pace University, New York." />
     <meta name="twitter:image" content="https://vijaysinghpuwar.com/og.png" />
     <meta name="theme-color" content="#08080a" />
+
+    <!--
+      Operating mode, applied before first paint.
+
+      The class was previously added by React on mount, so a visitor who had
+      chosen offensive mode loaded the page green and watched it turn red once
+      the bundle executed. This reads the same key `src/hooks/useTheme.tsx`
+      writes, including the legacy `pentest-mode` key an earlier build used.
+    -->
+    <script>
+      (function () {
+        try {
+          var m = localStorage.getItem('vj-mode');
+          if (m !== 'security' && m !== 'pentest') {
+            m = localStorage.getItem('pentest-mode') === 'pentest' ? 'pentest' : 'security';
+          }
+          document.documentElement.classList.add('theme-' + m);
+          document.documentElement.dataset.mode = m;
+        } catch (e) {
+          document.documentElement.classList.add('theme-security');
+        }
+      })();
+    </script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
