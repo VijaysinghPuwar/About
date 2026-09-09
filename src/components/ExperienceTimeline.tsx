@@ -309,42 +309,80 @@ function TimelineEntry({ row, index }: { row: Row; index: number }) {
 }
 
 /*
-  Certifications as a list, set large.
+  Certifications as a ruled index.
 
-  These were five equal cards in a grid, which gave a name earned after months
-  of study the same visual weight as the card chrome around it, and forced the
-  eye across a row rather than down a column. Set as a stack at display size
-  they read as a claim: four names in full strength, the one still in progress
-  held back in weight and colour and marked with a hollow ring, so the state is
-  legible without a label repeating it.
+  Two earlier attempts failed for opposite reasons. Five equal cards in a grid
+  gave the chrome as much weight as the credential. Replacing them with names
+  at 42px was worse: it left two thirds of the measure empty on the right, said
+  nothing a reader did not already know from the name, and mistook size for
+  design.
 
-  The `~/` on the eyebrow is the same path prefix the terminal above uses, and
-  it is the only accent in the block.
+  This is the row the site already uses everywhere else, in the hero facts, in
+  the tooling column of the timeline, in the project index. Name on the left,
+  issuer and state on the right, a hairline between. It fills the measure
+  because it has something to put at both ends of it.
+
+  The hover is the one from the design's timeline artboard: a 2px accent rule
+  wipes down the left edge from `scaleY(0)`, the surface lifts to `card`, and
+  the name moves 2px right into the space the rule just made. It reads as the
+  row acknowledging the cursor rather than as decoration, and it is the same
+  gesture on all five.
 */
-function CertList({ items }: { items: { name: string; earned: boolean }[] }) {
+function CertRow({ name, org, earned }: { name: string; org: string; earned: boolean }) {
   return (
-    <ul className="flex flex-col">
-      {items.map(cert => (
-        <li key={cert.name} className="flex items-center gap-3.5">
-          {/* The ring sits in the gutter so every name keeps the same left
-              edge, earned or not. */}
-          <span className="flex w-3.5 shrink-0 justify-center" aria-hidden="true">
-            {!cert.earned && (
-              <span className="block h-3.5 w-3.5 rounded-full border border-muted-dim" />
+    <li className="group relative">
+      {/* Scaled rather than sized, so the wipe costs no layout. */}
+      <span
+        aria-hidden="true"
+        className="absolute left-0 top-0 h-full w-[2px] origin-top scale-y-0 bg-primary transition-transform duration-[220ms] ease-[cubic-bezier(.2,.8,.3,1)] group-hover:scale-y-100 motion-reduce:transition-none"
+      />
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 rounded-md px-0 py-[15px] transition-colors duration-200 group-hover:bg-card wide:px-[18px]">
+        <span className="flex min-w-0 items-baseline gap-3">
+          {/* The gutter is present on every row, so the names keep one left
+              edge whether or not there is a mark to put in front of them. */}
+          <span className="flex w-3.5 shrink-0 translate-y-[3px] justify-center" aria-hidden="true">
+            {!earned && (
+              <svg viewBox="0 0 14 14" className="h-3.5 w-3.5 animate-spin [animation-duration:1.6s] motion-reduce:animate-none">
+                <circle cx="7" cy="7" r="5.6" fill="none" stroke="hsl(var(--border-strong))" strokeWidth="1.4" />
+                <circle
+                  cx="7"
+                  cy="7"
+                  r="5.6"
+                  fill="none"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  strokeDasharray="9 26"
+                />
+              </svg>
             )}
           </span>
           <span
-            className={cn(
-              'text-[clamp(26px,3.6vw,42px)] font-semibold leading-[1.28] tracking-[-0.028em]',
-              cert.earned ? 'text-foreground' : 'text-muted-dim',
-            )}
+          className={cn(
+            /* Grown with a transform rather than a larger font size: the row
+               height stays put, so sweeping down the list does not shunt the
+               rows below the cursor around. `origin-left` keeps the left edge
+               of every name on the same line while it grows. */
+            'origin-left text-[clamp(18px,2vw,23px)] font-semibold leading-[1.3] tracking-[-0.018em]',
+            'transition-[color,transform] duration-200 ease-out',
+            'group-hover:translate-x-1 group-hover:scale-[1.035] group-hover:text-primary',
+            'motion-reduce:transition-none motion-reduce:group-hover:translate-x-0 motion-reduce:group-hover:scale-100',
+            earned ? 'text-foreground' : 'text-muted-foreground',
+          )}
           >
-            {cert.name}
+            {name}
           </span>
-          <span className="sr-only">{cert.earned ? 'Certified' : 'In progress'}</span>
-        </li>
-      ))}
-    </ul>
+        </span>
+        <span
+          className={cn(
+            'font-mono text-[10.5px] uppercase tracking-[0.1em] transition-colors duration-200',
+            earned ? 'text-muted-dim group-hover:text-muted-foreground' : 'text-primary',
+          )}
+        >
+          {org} · {earned ? 'Certified' : 'In progress'}
+        </span>
+      </div>
+    </li>
   );
 }
 
@@ -360,10 +398,14 @@ export function ExperienceTimeline() {
 
       {/* Certifications */}
       <div className="mt-16">
-        <p className="section-heading mb-6">
+        <p className="section-heading mb-5">
           <span className="text-primary">~/</span>CERTIFICATIONS
         </p>
-        <CertList items={certifications} />
+        <ul className="flex flex-col">
+          {certifications.map(cert => (
+            <CertRow key={cert.name} {...cert} />
+          ))}
+        </ul>
       </div>
     </div>
   );

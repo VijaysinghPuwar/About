@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { cn } from '@/lib/utils';
 
 /*
   A one-line proof that the work is ongoing.
@@ -32,7 +33,7 @@ import { useEffect, useState } from 'react';
 */
 
 const USER = 'VijaysinghPuwar';
-const CACHE_KEY = 'vj-gh-activity-v2';
+const CACHE_KEY = 'vj-gh-activity-v3';
 const TTL = 6 * 60 * 60 * 1000;
 const DAYS = 30;
 
@@ -45,10 +46,17 @@ interface Repo {
   url: string;
 }
 
+/** One day of the chart. `repos` is what was pushed to, deduped. */
+interface Day {
+  date: string;
+  count: number;
+  repos: string[];
+}
+
 interface Activity {
   repos: Repo[];
-  /** One entry per day, oldest first. */
-  days: number[];
+  /** Oldest first. */
+  days: Day[];
   total: number;
   /** What a bar represents, which depends on which source answered. */
   unit: 'contributions' | 'pushes';
@@ -87,7 +95,13 @@ async function loadAuthenticated(): Promise<Omit<Activity, 'repos'> | null> {
     const body = await res.json();
     if (!Array.isArray(body?.days) || body.days.length === 0) return null;
     return {
-      days: body.days.map((d: { count: number }) => d.count ?? 0),
+      days: body.days.map((d: { date: string; count: number }) => ({
+        date: d.date,
+        count: d.count ?? 0,
+        // The authenticated source counts contributions, not pushes, so it
+        // cannot attribute them to a repository. The readout says so.
+        repos: [],
+      })),
       total: body.total ?? 0,
       unit: 'contributions',
       privateCount: body.privateCount ?? 0,
@@ -117,7 +131,7 @@ async function load(): Promise<Activity | null> {
 
   const keys = dayKeys();
   const index = new Map(keys.map((k, i) => [k, i]));
-  const days = new Array<number>(DAYS).fill(0);
+  const days: Day[] = keys.map(date => ({ date, count: 0, repos: [] }));
   let total = 0;
 
   if (eventsRes.ok) {
@@ -127,8 +141,12 @@ async function load(): Promise<Activity | null> {
         if (e?.type !== 'PushEvent') continue;
         const i = index.get(String(e.created_at ?? '').slice(0, 10));
         if (i === undefined) continue;
-        days[i] += 1;
+        days[i].count += 1;
         total += 1;
+        // The repo behind each push, so a day can say what was worked on and
+        // not merely that something was.
+        const name = String(e.repo?.name ?? '').split('/').pop();
+        if (name && !days[i].repos.includes(name)) days[i].repos.push(name);
       }
     }
   }
@@ -143,6 +161,8 @@ async function load(): Promise<Activity | null> {
 
 export function GitHubActivity() {
   const [data, setData] = useState<Activity | null>(null);
+  /** Index of the day under the cursor or keyboard focus, if any. */
+  const [active, setActive] = useState<number | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -157,6 +177,7 @@ export function GitHubActivity() {
           Array.isArray(v.repos) &&
           Array.isArray(v.days) &&
           typeof v.total === 'number' &&
+          (v.days.length === 0 || typeof v.days[0] === 'object') &&
           (v.unit === 'pushes' || v.unit === 'contributions');
         if (usable && Date.now() - cached.t < TTL) {
           setData(v);
@@ -190,8 +211,12 @@ export function GitHubActivity() {
   // a placeholder here would be a claim about activity that was never checked.
   if (!data) return null;
 
-  const peak = Math.max(1, ...data.days);
-  const keys = dayKeys();
+  const peak = Math.max(1, ...data.days.map(d => d.count));
+  const shown = active === null ? null : data.days[active];
+
+  /** "25 Aug", in the reader's locale rather than an ISO string. */
+  const dayLabel = (iso: string) =>
+    new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
   return (
     <div className="page-gutter container mx-auto max-w-[1180px]">
@@ -231,26 +256,69 @@ export function GitHubActivity() {
                 below the two-column breakpoint it is what turns a one-line
                 strip into a five-line block. The count beside it carries the
                 same fact in a tenth of the width, so the bars are what goes. */}
+            {/* Thirty days, each one a link into that date on GitHub.
+
+                The bars used to carry a native `title` and nothing else, which
+                is a tooltip you have to wait for and cannot read on a phone.
+                Each bar is now a real destination: GitHub's own contribution
+                view accepts a from/to range, so a click lands on that exact
+                day. Hovering or tabbing to one lifts it, dims its neighbours,
+                and prints the day beside the chart rather than over it, so
+                nothing is covered while you read across.
+
+                The hit area is padded well beyond the 5px of ink, because a
+                5px target with a 3px gap is not a target. */}
             <div
-              className="hidden h-6 flex-none items-end gap-[3px] wide:flex"
-              role="img"
-              aria-label={
-                data.unit === 'contributions'
-                  ? `${data.total} contributions in the last ${DAYS} days, private repositories included`
-                  : `${data.total} pushes to public repositories in the last ${DAYS} days`
-              }
+              className="group/chart hidden h-6 flex-none items-end gap-[3px] wide:flex"
+              onMouseLeave={() => setActive(null)}
             >
-              {data.days.map((n, i) => (
-                <span
-                  key={keys[i]}
-                  title={`${n} ${n === 1 ? UNIT_ONE[data.unit] : data.unit} on ${keys[i]}`}
-                  className={n ? 'w-[5px] rounded-[1.5px] bg-primary' : 'w-[5px] rounded-[1.5px] bg-border-strong'}
-                  style={{ height: n ? `${Math.max(4, Math.round((n / peak) * 22))}px` : '2px' }}
-                />
+              {data.days.map((day, i) => (
+                <a
+                  key={day.date}
+                  href={`https://github.com/${USER}?tab=overview&from=${day.date}&to=${day.date}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onMouseEnter={() => setActive(i)}
+                  onFocus={() => setActive(i)}
+                  onBlur={() => setActive(null)}
+                  aria-label={`${day.count} ${day.count === 1 ? UNIT_ONE[data.unit] : data.unit} on ${day.date}`}
+                  className="flex h-6 items-end px-px py-1 -my-1 outline-offset-4"
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      'block w-[5px] rounded-[1.5px] transition-[transform,opacity,background-color] duration-150 ease-out motion-reduce:transition-none',
+                      day.count ? 'bg-primary' : 'bg-border-strong',
+                      /* The hovered bar grows from its base; the rest step
+                         back so the one being read is the one that reads. */
+                      active === i
+                        ? 'origin-bottom scale-x-[1.6] scale-y-125 opacity-100'
+                        : active !== null && 'opacity-40',
+                    )}
+                    style={{ height: day.count ? `${Math.max(4, Math.round((day.count / peak) * 22))}px` : '2px' }}
+                  />
+                </a>
               ))}
             </div>
-            <span className="flex-none whitespace-nowrap font-mono text-[12px] text-muted-dim">
-              {data.total} {data.unit} / {DAYS}d
+            {/* One line, two jobs: the thirty-day total at rest, and the day
+                under the cursor while there is one. Reserving the width stops
+                the row reflowing as you sweep across the chart. */}
+            <span
+              className="flex-none whitespace-nowrap font-mono text-[12px] text-muted-dim wide:min-w-[19rem]"
+              aria-live="polite"
+            >
+              {shown ? (
+                <>
+                  <span className="text-foreground">{dayLabel(shown.date)}</span>
+                  {' · '}
+                  <span className={shown.count ? 'text-primary' : undefined}>
+                    {shown.count} {shown.count === 1 ? UNIT_ONE[data.unit] : data.unit}
+                  </span>
+                  {shown.repos.length > 0 && ` · ${shown.repos.join(', ')}`}
+                </>
+              ) : (
+                `${data.total} ${data.unit} / ${DAYS}d`
+              )}
             </span>
           </>
         )}
