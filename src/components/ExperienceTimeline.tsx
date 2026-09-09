@@ -309,33 +309,42 @@ function TimelineEntry({ row, index }: { row: Row; index: number }) {
 }
 
 /*
-  Certification card.
+  Certifications as a list, set large.
 
-  It used to flip on hover to reveal the issuing body, an animation to hide a
-  single word, on a card that had room for it. Now issuer and state are both on
-  the face, and the outline colour separates earned from in-progress, so the
-  status is readable without hovering five cards one at a time.
+  These were five equal cards in a grid, which gave a name earned after months
+  of study the same visual weight as the card chrome around it, and forced the
+  eye across a row rather than down a column. Set as a stack at display size
+  they read as a claim: four names in full strength, the one still in progress
+  held back in weight and colour and marked with a hollow ring, so the state is
+  legible without a label repeating it.
 
-  These are also the site's only certification block. A scrolling marquee of the
-  same five names used to run in the skills section below; it has been removed.
+  The `~/` on the eyebrow is the same path prefix the terminal above uses, and
+  it is the only accent in the block.
 */
-function CertCard({ name, org, earned }: { name: string; org: string; earned: boolean }) {
+function CertList({ items }: { items: { name: string; earned: boolean }[] }) {
   return (
-    <div className="panel flex flex-col items-center gap-3 rounded-lg px-[18px] py-[22px] text-center">
-      <svg width="26" height="29" viewBox="0 0 26 29" aria-hidden="true">
-        <path
-          d="M13 1.6 L23.8 7.8 L23.8 20.2 L13 26.4 L2.2 20.2 L2.2 7.8 Z"
-          fill="none"
-          stroke={earned ? 'hsl(var(--primary))' : 'hsl(var(--border-strong))'}
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-        />
-      </svg>
-      <div className="text-[14.5px] font-medium leading-[1.35] text-foreground">{name}</div>
-      <div className="font-mono text-[10px] tracking-[0.1em] text-muted-dim">
-        {org.toUpperCase()} · {earned ? 'CERTIFIED' : 'IN PROGRESS'}
-      </div>
-    </div>
+    <ul className="flex flex-col">
+      {items.map(cert => (
+        <li key={cert.name} className="flex items-center gap-3.5">
+          {/* The ring sits in the gutter so every name keeps the same left
+              edge, earned or not. */}
+          <span className="flex w-3.5 shrink-0 justify-center" aria-hidden="true">
+            {!cert.earned && (
+              <span className="block h-3.5 w-3.5 rounded-full border border-muted-dim" />
+            )}
+          </span>
+          <span
+            className={cn(
+              'text-[clamp(26px,3.6vw,42px)] font-semibold leading-[1.28] tracking-[-0.028em]',
+              cert.earned ? 'text-foreground' : 'text-muted-dim',
+            )}
+          >
+            {cert.name}
+          </span>
+          <span className="sr-only">{cert.earned ? 'Certified' : 'In progress'}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -350,13 +359,11 @@ export function ExperienceTimeline() {
       </div>
 
       {/* Certifications */}
-      <div className="mt-14">
-        <p className="section-heading mb-6 text-center">Certifications</p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 wide:grid-cols-5">
-          {certifications.map(cert => (
-            <CertCard key={cert.name} {...cert} />
-          ))}
-        </div>
+      <div className="mt-16">
+        <p className="section-heading mb-6">
+          <span className="text-primary">~/</span>CERTIFICATIONS
+        </p>
+        <CertList items={certifications} />
       </div>
     </div>
   );
