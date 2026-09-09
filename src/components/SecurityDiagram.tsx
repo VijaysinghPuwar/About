@@ -57,6 +57,25 @@ const STEP_LABEL = {
   seven seconds, which is roughly how long the terminal beside it spends typing
   its intro, and slow enough to read each step as it lands.
 */
+/*
+  What each node is, in one sentence he would actually say.
+
+  A diagram that needs a separate page to explain it has failed; a diagram
+  with a tooltip has failed on every touch screen. The caption line below the
+  drawing was already there and already empty, so it doubles as the readout:
+  at rest it names the reading, and while a node is held it explains that
+  node. Nothing is covered, nothing new is navigated to, and the sentence a
+  reader gets is the sentence he can repeat in an interview.
+*/
+const NODE_NOTES: Record<string, string> = {
+  internet: 'Everything outside the perimeter. Untrusted by default.',
+  firewall: 'The edge. Where traffic is allowed in or stopped.',
+  ad: 'Active Directory. Accounts, groups and access, created and revoked as staff join, move and leave.',
+  endpoints: 'Staff laptops and operations workstations across the sites.',
+  m365: 'Microsoft 365. Mail, files and the identities attached to them.',
+  splunk: 'Where the logs land and the detections run. Click any node for the detail.',
+};
+
 const SPEED = 155; // user units per second
 const GAP = 0.1; // beat between legs, so the joins read as joins
 const LABEL_IN = 0.5;
@@ -135,6 +154,8 @@ const ATTACK = {
 
 export function SecurityDiagram() {
   const { isPentest } = useTheme();
+  /** The node under the cursor or keyboard focus, if any. */
+  const [node, setNode] = useState<string | null>(null);
   const reduced = useReducedMotion();
   const animate = !reduced;
 
@@ -281,36 +302,81 @@ export function SecurityDiagram() {
 
           {/* nodes */}
           <g style={NODE_LABEL}>
-            <circle cx="544" cy="48" r="4.5" fill="hsl(var(--background))" stroke="hsl(var(--muted-foreground-dim))" strokeWidth="1.3" />
+            {/* Hit targets, sized for a pointer rather than for the ink. Each
+                is focusable so the notes are reachable from the keyboard. */}
+            {[
+              { id: 'internet', cx: 544, cy: 48 },
+              { id: 'firewall', cx: 393, cy: 120 },
+              { id: 'ad', cx: 300, cy: 218 },
+              { id: 'endpoints', cx: 206, cy: 218 },
+              { id: 'm365', cx: 388, cy: 292 },
+              { id: 'splunk', cx: 300, cy: 368 },
+            ].map(hit => (
+              <a
+                key={hit.id}
+                href={`/environment#${hit.id}`}
+                aria-label={`${hit.id}: ${NODE_NOTES[hit.id]}`}
+                onMouseEnter={() => setNode(hit.id)}
+                onMouseLeave={() => setNode(null)}
+                onFocus={() => setNode(hit.id)}
+                onBlur={() => setNode(null)}
+              >
+                <circle
+                  cx={hit.cx}
+                  cy={hit.cy}
+                  r="26"
+                  fill="transparent"
+                  style={{ cursor: 'pointer', outlineOffset: '2px' }}
+                />
+              </a>
+            ))}
+            <circle style={{ transformOrigin: '544px 48px', transform: node === 'internet' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="544" cy="48" r="4.5" fill="hsl(var(--background))" stroke={node === 'internet' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground-dim))'} strokeWidth="1.3" />
             <text x="544" y="30" textAnchor="middle" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>INTERNET</text>
 
-            <circle cx="393" cy="120" r="6" fill="hsl(var(--background))" stroke="hsl(var(--primary))" strokeWidth="1.5" />
+            <circle style={{ transformOrigin: '393px 120px', transform: node === 'firewall' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="393" cy="120" r="6" fill="hsl(var(--background))" stroke="hsl(var(--primary))" strokeWidth="1.5" />
             <text x="408" y="140" style={{ fill: 'hsl(var(--muted-foreground))' }}>FIREWALL</text>
 
             <path
               d="M300 196 L319 207 L319 229 L300 240 L281 229 L281 207 Z"
               fill="hsl(var(--card-elevated))"
-              stroke="hsl(var(--foreground))"
+              stroke={node === 'ad' ? 'hsl(var(--primary))' : 'hsl(var(--foreground))'}
               strokeWidth="1.4"
+              style={{
+                transformOrigin: '300px 218px',
+                transform: node === 'ad' ? 'scale(1.5)' : undefined,
+                transition: 'transform .3s ease',
+              }}
             />
             <text x="300" y="180" textAnchor="middle" style={{ fill: 'hsl(var(--foreground))' }}>ACTIVE DIRECTORY</text>
 
-            <circle cx="206" cy="164" r="3.5" fill="hsl(var(--muted-foreground))" />
-            <circle cx="206" cy="272" r="3.5" fill="hsl(var(--muted-foreground))" />
+            <circle
+              cx="206"
+              cy="164"
+              r="3.5"
+              fill={node === 'endpoints' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'}
+              style={{ transformOrigin: '206px 164px', transform: node === 'endpoints' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }}
+            />
+            <circle
+              cx="206"
+              cy="272"
+              r="3.5"
+              fill={node === 'endpoints' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'}
+              style={{ transformOrigin: '206px 272px', transform: node === 'endpoints' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }}
+            />
             <text x="176" y="222" textAnchor="end" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>ENDPOINTS</text>
 
-            <circle cx="388" cy="292" r="4.5" fill="hsl(var(--background))" stroke="hsl(var(--muted-foreground))" strokeWidth="1.3" />
+            <circle style={{ transformOrigin: '388px 292px', transform: node === 'm365' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="388" cy="292" r="4.5" fill="hsl(var(--background))" stroke={node === 'm365' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'} strokeWidth="1.3" />
             <text x="398" y="308" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>MICROSOFT 365</text>
 
-            <circle cx="300" cy="368" r="4.5" fill="hsl(var(--background))" stroke="hsl(var(--muted-foreground))" strokeWidth="1.3" />
+            <circle style={{ transformOrigin: '300px 368px', transform: node === 'splunk' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="300" cy="368" r="4.5" fill="hsl(var(--background))" stroke={node === 'splunk' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'} strokeWidth="1.3" />
             <text x="314" y="372" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>SPLUNK</text>
 
-            <text x="118" y="104" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>MTA NETWORK</text>
+            <text x="96" y="104" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>ENTERPRISE NETWORK</text>
           </g>
         </svg>
 
         <div className="mt-0.5 font-mono text-[10px] tracking-[0.16em] text-muted-dim">
-          {isPentest ? 'How an intrusion moves' : 'How an alert is handled'}
+          {node ? NODE_NOTES[node] : isPentest ? 'How an intrusion moves' : 'How an alert is handled'}
         </div>
       </div>
 
