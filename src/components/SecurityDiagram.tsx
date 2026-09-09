@@ -11,6 +11,13 @@ import { sweepHold } from '@/lib/theme-transition';
   reported real state. In their place: a schematic of the thing this person
   actually works on, and a definition list of three facts that are checkable.
 
+  The nodes are named after the systems he actually administers, not after
+  abstractions. They used to read UNTRUSTED, TRUST BOUNDARY, EDGE, IDENTITY,
+  SERVICES and TELEMETRY, which look precise and mean nothing in particular:
+  asked what TELEMETRY was, the only honest answer was "a word for logs". Named
+  as Splunk, Active Directory, Microsoft 365 and the firewall, the drawing is a
+  map of one real estate and every node is something he has logged into.
+
   The schematic is the same topology in both modes; only the traced path
   changes. In security mode it traces the detection loop that ends at
   containment. In pentest mode it traces an intrusion path inward from an
@@ -101,7 +108,7 @@ const DETECTION = {
   steps: [
     { text: '01 COLLECT', x: 222, y: 148, leg: 0 },
     { text: '02 DETECT', x: 286, y: 396, leg: 3, anchor: 'end' },
-    { text: '03 TRIAGE', x: 334, y: 252, leg: 4 },
+    { text: '03 TICKET', x: 334, y: 252, leg: 4 },
     { text: '04 CONTAIN', x: 408, y: 108, leg: 5 },
   ] as Step[],
   width: 1.2,
@@ -118,7 +125,7 @@ const ATTACK = {
   ]),
   steps: [
     { text: '01 RECON', x: 474, y: 64, leg: 0, anchor: 'end' },
-    { text: '02 ACCESS', x: 408, y: 108, leg: 0 },
+    { text: '02 FOOTHOLD', x: 408, y: 108, leg: 0 },
     { text: '03 ESCALATE', x: 402, y: 276, leg: 1 },
     { text: '04 PIVOT', x: 334, y: 252, leg: 2 },
     { text: '05 LATERAL', x: 220, y: 298, leg: 3 },
@@ -275,10 +282,10 @@ export function SecurityDiagram() {
           {/* nodes */}
           <g style={NODE_LABEL}>
             <circle cx="544" cy="48" r="4.5" fill="hsl(var(--background))" stroke="hsl(var(--muted-foreground-dim))" strokeWidth="1.3" />
-            <text x="544" y="30" textAnchor="middle" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>UNTRUSTED</text>
+            <text x="544" y="30" textAnchor="middle" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>INTERNET</text>
 
             <circle cx="393" cy="120" r="6" fill="hsl(var(--background))" stroke="hsl(var(--primary))" strokeWidth="1.5" />
-            <text x="408" y="140" style={{ fill: 'hsl(var(--muted-foreground))' }}>EDGE</text>
+            <text x="408" y="140" style={{ fill: 'hsl(var(--muted-foreground))' }}>FIREWALL</text>
 
             <path
               d="M300 196 L319 207 L319 229 L300 240 L281 229 L281 207 Z"
@@ -286,24 +293,24 @@ export function SecurityDiagram() {
               stroke="hsl(var(--foreground))"
               strokeWidth="1.4"
             />
-            <text x="300" y="184" textAnchor="middle" style={{ fill: 'hsl(var(--foreground))' }}>IDENTITY</text>
+            <text x="300" y="180" textAnchor="middle" style={{ fill: 'hsl(var(--foreground))' }}>ACTIVE DIRECTORY</text>
 
             <circle cx="206" cy="164" r="3.5" fill="hsl(var(--muted-foreground))" />
             <circle cx="206" cy="272" r="3.5" fill="hsl(var(--muted-foreground))" />
             <text x="176" y="222" textAnchor="end" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>ENDPOINTS</text>
 
             <circle cx="388" cy="292" r="4.5" fill="hsl(var(--background))" stroke="hsl(var(--muted-foreground))" strokeWidth="1.3" />
-            <text x="402" y="308" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>SERVICES</text>
+            <text x="398" y="308" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>MICROSOFT 365</text>
 
             <circle cx="300" cy="368" r="4.5" fill="hsl(var(--background))" stroke="hsl(var(--muted-foreground))" strokeWidth="1.3" />
-            <text x="314" y="372" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>TELEMETRY</text>
+            <text x="314" y="372" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>SPLUNK</text>
 
-            <text x="118" y="104" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>TRUST BOUNDARY</text>
+            <text x="118" y="104" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>MTA NETWORK</text>
           </g>
         </svg>
 
         <div className="mt-0.5 font-mono text-[10px] tracking-[0.16em] text-muted-dim">
-          {isPentest ? 'ATTACK CHAIN' : 'DETECTION LOOP'}
+          {isPentest ? 'How an intrusion moves' : 'How an alert is handled'}
         </div>
       </div>
 
