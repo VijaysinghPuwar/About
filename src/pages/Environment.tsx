@@ -1,5 +1,6 @@
+import { useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';
 
 /*
@@ -109,6 +110,26 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export default function Environment() {
   const { isPentest } = useTheme();
+  const { hash } = useLocation();
+
+  /*
+    Land on the node the reader clicked.
+
+    The browser does this itself for a document it has just loaded, which is
+    why it looked correct for as long as the schematic navigated here with a
+    plain `href` and reloaded the page. Arriving from the same session, the
+    hash is only ever a string in the URL: react-router does not scroll for
+    it, so every node on the diagram opened the same paragraph at the top.
+
+    `instant`, not `auto`: `auto` defers to CSS, and `scroll-behavior: smooth`
+    is set globally, so the arrival became a two-thousand-pixel glide that
+    reads as the page running away, and did not happen at all in a tab that
+    was not in front. `scroll-mt` on the headings clears the fixed bar.
+  */
+  useEffect(() => {
+    if (!hash) return;
+    document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'instant' });
+  }, [hash]);
 
   return (
     <div className="min-h-[100dvh]">
