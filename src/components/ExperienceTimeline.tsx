@@ -153,14 +153,16 @@ const rows: Row[] = [
     kind: 'Full-time',
     title: 'System Engineer',
     org: 'R.S. Infotech',
+    /* Bullets rewritten on main (db181cb) while this redesign was in flight.
+       Kept verbatim in substance, with the parenthetical set off by brackets
+       rather than by the em dashes the rest of the site no longer uses. */
     bullets: [
-      <>Configured production firewall rules and supported IDS/IPS, reviewing traffic and system logs to remediate misconfigurations and suspicious activity.</>,
-      <>Hardened {highlightMetric('150+')} Windows and Linux production endpoints (baselines, patching, post-change validation) with Windows Server, Active Directory, and Group Policy administration.</>,
-      <>Built automation in Python, PowerShell, and Bash for log analysis, configuration-compliance checking, and inventory.</>,
-      <>Investigated failed-authentication patterns with Splunk SPL.</>,
+      <>Automated recurring operational workflows across a {highlightMetric('150+')} Windows and Linux environment in Python, SQL, PowerShell and Bash (log processing, inventory, uptime monitoring, account lifecycle, configuration compliance, data reconciliation and reporting), replacing manual process with reusable, maintainable tooling rather than one-off scripts.</>,
+      <>Delivered solutions end to end with stakeholders: identified the problem, investigated it, designed and built the solution, tested, deployed and documented the expected behaviour so other engineers could support it, maintained through Git-based development.</>,
+      <>Root-caused defects across applications, system services, authentication, data and networking using Splunk, operating-system logs, event data and network evidence, then validated each fix; supported AWS and Microsoft Azure alongside on-premises infrastructure.</>,
     ],
     metaLabel: 'Working with',
-    meta: ['Windows Server', 'Linux', 'PowerShell / Bash', 'Firewall policy', 'Splunk'],
+    meta: ['Windows Server', 'Linux', 'Python / SQL', 'PowerShell / Bash', 'Splunk', 'AWS / Azure', 'Git'],
   },
   {
     id: 'be-mech',
