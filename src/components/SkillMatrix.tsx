@@ -137,12 +137,26 @@ export function SkillMatrix({ projects, onSelectSkill, activeSkill }: SkillMatri
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
       {GROUPS.map((group, i) => {
         return (
-          <div key={group.key} className={`panel flex flex-col rounded-lg p-[22px] ${spanFor(i)}`}>
+          <div
+            key={group.key}
+            /* The card answers the cursor: its border takes the accent, the
+               surface lifts a step, and the whole thing rises 2px. The mark
+               beside the heading brightens with it, so the card reads as one
+               object responding rather than four parts each doing something.
+               Transform only, so the grid never reflows. */
+            className={`panel group/card flex flex-col rounded-lg p-[22px] hover:-translate-y-0.5 hover:border-primary hover:bg-card-elevated motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${spanFor(i)}`}
+          >
             <div className="flex items-center gap-2.5">
               {/* One mark for all five groups. Five different lucide glyphs
                   implied five different kinds of thing; they are all just
                   groupings of skills. */}
-              <svg width="14" height="16" viewBox="0 0 14 16" aria-hidden="true" className="shrink-0">
+              <svg
+                width="14"
+                height="16"
+                viewBox="0 0 14 16"
+                aria-hidden="true"
+                className="shrink-0 transition-transform duration-300 ease-out group-hover/card:scale-110 motion-reduce:transition-none"
+              >
                 <path
                   d="M7 .9 L13 4.4 L13 11.6 L7 15.1 L1 11.6 L1 4.4 Z"
                   fill="none"

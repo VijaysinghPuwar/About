@@ -11,6 +11,13 @@ import { sweepHold } from '@/lib/theme-transition';
   reported real state. In their place: a schematic of the thing this person
   actually works on, and a definition list of three facts that are checkable.
 
+  The nodes are named after the systems he actually administers, not after
+  abstractions. They used to read UNTRUSTED, TRUST BOUNDARY, EDGE, IDENTITY,
+  SERVICES and TELEMETRY, which look precise and mean nothing in particular:
+  asked what TELEMETRY was, the only honest answer was "a word for logs". Named
+  as Splunk, Active Directory, Microsoft 365 and the firewall, the drawing is a
+  map of one real estate and every node is something he has logged into.
+
   The schematic is the same topology in both modes; only the traced path
   changes. In security mode it traces the detection loop that ends at
   containment. In pentest mode it traces an intrusion path inward from an
@@ -50,6 +57,25 @@ const STEP_LABEL = {
   seven seconds, which is roughly how long the terminal beside it spends typing
   its intro, and slow enough to read each step as it lands.
 */
+/*
+  What each node is, in one sentence he would actually say.
+
+  A diagram that needs a separate page to explain it has failed; a diagram
+  with a tooltip has failed on every touch screen. The caption line below the
+  drawing was already there and already empty, so it doubles as the readout:
+  at rest it names the reading, and while a node is held it explains that
+  node. Nothing is covered, nothing new is navigated to, and the sentence a
+  reader gets is the sentence he can repeat in an interview.
+*/
+const NODE_NOTES: Record<string, string> = {
+  internet: 'Everything outside the perimeter. Untrusted by default.',
+  firewall: 'The edge. Where traffic is allowed in or stopped.',
+  ad: 'Active Directory. Accounts, groups and access, created and revoked as staff join, move and leave.',
+  endpoints: 'Staff laptops and operations workstations across the sites.',
+  m365: 'Microsoft 365. Mail, files and the identities attached to them.',
+  splunk: 'Where the logs land and the detections run. Click any node for the detail.',
+};
+
 const SPEED = 155; // user units per second
 const GAP = 0.1; // beat between legs, so the joins read as joins
 const LABEL_IN = 0.5;
@@ -101,7 +127,7 @@ const DETECTION = {
   steps: [
     { text: '01 COLLECT', x: 222, y: 148, leg: 0 },
     { text: '02 DETECT', x: 286, y: 396, leg: 3, anchor: 'end' },
-    { text: '03 TRIAGE', x: 334, y: 252, leg: 4 },
+    { text: '03 TICKET', x: 334, y: 252, leg: 4 },
     { text: '04 CONTAIN', x: 408, y: 108, leg: 5 },
   ] as Step[],
   width: 1.2,
@@ -118,7 +144,7 @@ const ATTACK = {
   ]),
   steps: [
     { text: '01 RECON', x: 474, y: 64, leg: 0, anchor: 'end' },
-    { text: '02 ACCESS', x: 408, y: 108, leg: 0 },
+    { text: '02 FOOTHOLD', x: 408, y: 108, leg: 0 },
     { text: '03 ESCALATE', x: 402, y: 276, leg: 1 },
     { text: '04 PIVOT', x: 334, y: 252, leg: 2 },
     { text: '05 LATERAL', x: 220, y: 298, leg: 3 },
@@ -128,6 +154,8 @@ const ATTACK = {
 
 export function SecurityDiagram() {
   const { isPentest } = useTheme();
+  /** The node under the cursor or keyboard focus, if any. */
+  const [node, setNode] = useState<string | null>(null);
   const reduced = useReducedMotion();
   const animate = !reduced;
 
@@ -274,50 +302,116 @@ export function SecurityDiagram() {
 
           {/* nodes */}
           <g style={NODE_LABEL}>
-            <circle cx="544" cy="48" r="4.5" fill="hsl(var(--background))" stroke="hsl(var(--muted-foreground-dim))" strokeWidth="1.3" />
-            <text x="544" y="30" textAnchor="middle" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>UNTRUSTED</text>
+            {/* Hit targets, sized for a pointer rather than for the ink. Each
+                is focusable so the notes are reachable from the keyboard. */}
+            {[
+              { id: 'internet', cx: 544, cy: 48 },
+              { id: 'firewall', cx: 393, cy: 120 },
+              { id: 'ad', cx: 300, cy: 218 },
+              { id: 'endpoints', cx: 206, cy: 218 },
+              { id: 'm365', cx: 388, cy: 292 },
+              { id: 'splunk', cx: 300, cy: 368 },
+            ].map(hit => (
+              <a
+                key={hit.id}
+                href={`/environment#${hit.id}`}
+                aria-label={`${hit.id}: ${NODE_NOTES[hit.id]}`}
+                onMouseEnter={() => setNode(hit.id)}
+                onMouseLeave={() => setNode(null)}
+                onFocus={() => setNode(hit.id)}
+                onBlur={() => setNode(null)}
+              >
+                <circle
+                  cx={hit.cx}
+                  cy={hit.cy}
+                  r="26"
+                  fill="transparent"
+                  style={{ cursor: 'pointer', outlineOffset: '2px' }}
+                />
+              </a>
+            ))}
+            <circle style={{ transformOrigin: '544px 48px', transform: node === 'internet' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="544" cy="48" r="4.5" fill="hsl(var(--background))" stroke={node === 'internet' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground-dim))'} strokeWidth="1.3" />
+            <text x="544" y="30" textAnchor="middle" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>INTERNET</text>
 
-            <circle cx="393" cy="120" r="6" fill="hsl(var(--background))" stroke="hsl(var(--primary))" strokeWidth="1.5" />
-            <text x="408" y="140" style={{ fill: 'hsl(var(--muted-foreground))' }}>EDGE</text>
+            <circle style={{ transformOrigin: '393px 120px', transform: node === 'firewall' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="393" cy="120" r="6" fill="hsl(var(--background))" stroke="hsl(var(--primary))" strokeWidth="1.5" />
+            <text x="408" y="140" style={{ fill: 'hsl(var(--muted-foreground))' }}>FIREWALL</text>
 
             <path
               d="M300 196 L319 207 L319 229 L300 240 L281 229 L281 207 Z"
               fill="hsl(var(--card-elevated))"
-              stroke="hsl(var(--foreground))"
+              stroke={node === 'ad' ? 'hsl(var(--primary))' : 'hsl(var(--foreground))'}
               strokeWidth="1.4"
+              style={{
+                transformOrigin: '300px 218px',
+                transform: node === 'ad' ? 'scale(1.5)' : undefined,
+                transition: 'transform .3s ease',
+              }}
             />
-            <text x="300" y="184" textAnchor="middle" style={{ fill: 'hsl(var(--foreground))' }}>IDENTITY</text>
+            <text x="300" y="180" textAnchor="middle" style={{ fill: 'hsl(var(--foreground))' }}>ACTIVE DIRECTORY</text>
 
-            <circle cx="206" cy="164" r="3.5" fill="hsl(var(--muted-foreground))" />
-            <circle cx="206" cy="272" r="3.5" fill="hsl(var(--muted-foreground))" />
+            <circle
+              cx="206"
+              cy="164"
+              r="3.5"
+              fill={node === 'endpoints' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'}
+              style={{ transformOrigin: '206px 164px', transform: node === 'endpoints' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }}
+            />
+            <circle
+              cx="206"
+              cy="272"
+              r="3.5"
+              fill={node === 'endpoints' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'}
+              style={{ transformOrigin: '206px 272px', transform: node === 'endpoints' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }}
+            />
             <text x="176" y="222" textAnchor="end" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>ENDPOINTS</text>
 
-            <circle cx="388" cy="292" r="4.5" fill="hsl(var(--background))" stroke="hsl(var(--muted-foreground))" strokeWidth="1.3" />
-            <text x="402" y="308" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>SERVICES</text>
+            <circle style={{ transformOrigin: '388px 292px', transform: node === 'm365' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="388" cy="292" r="4.5" fill="hsl(var(--background))" stroke={node === 'm365' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'} strokeWidth="1.3" />
+            <text x="398" y="308" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>MICROSOFT 365</text>
 
-            <circle cx="300" cy="368" r="4.5" fill="hsl(var(--background))" stroke="hsl(var(--muted-foreground))" strokeWidth="1.3" />
-            <text x="314" y="372" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>TELEMETRY</text>
+            <circle style={{ transformOrigin: '300px 368px', transform: node === 'splunk' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="300" cy="368" r="4.5" fill="hsl(var(--background))" stroke={node === 'splunk' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'} strokeWidth="1.3" />
+            <text x="314" y="372" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>SPLUNK</text>
 
-            <text x="118" y="104" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>TRUST BOUNDARY</text>
+            <text x="96" y="104" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>ENTERPRISE NETWORK</text>
           </g>
         </svg>
 
         <div className="mt-0.5 font-mono text-[10px] tracking-[0.16em] text-muted-dim">
-          {isPentest ? 'ATTACK CHAIN' : 'DETECTION LOOP'}
+          {node ? NODE_NOTES[node] : isPentest ? 'How an intrusion moves' : 'How an alert is handled'}
         </div>
       </div>
 
-      {/* Three facts, each one checkable. This is what the pulsing status dots
-          were standing in for. */}
-      <dl className="border-t border-border sm:mt-7">
+      {/* Three facts, each one checkable, set as a status readout.
+
+          These were a label in small caps against a sentence in the body face,
+          which is the shape of a specification table and belongs to no part of
+          this page. Written as `key  value` in the mono face they read as the
+          output of the terminal directly above, which is what they are: the
+          same three answers the shell would give.
+
+          Availability is the only line that breathes, because it is the only
+          one of the three that can change while someone is reading it. */}
+      <dl className="mt-6 border-t border-border font-mono sm:mt-7">
+        <div className="flex items-center gap-2.5 border-b border-border py-2.5 text-[11px] tracking-[0.16em] text-muted-dim">
+          <span className="text-primary" aria-hidden="true">$</span>
+          <span>cat status</span>
+        </div>
         {[
-          ['FOCUS', 'Infrastructure · Network · Application security'],
-          ['CURRENT', 'MTA, Staten Island Railway'],
-          ['AVAILABILITY', 'Open to security engineering roles'],
-        ].map(([label, value]) => (
-          <div key={label} className="flex items-baseline justify-between gap-6 border-b border-border py-2.5">
-            <dt className="meta-label shrink-0">{label}</dt>
-            <dd className="text-right text-[13.5px] text-foreground">{value}</dd>
+          { key: 'focus', value: 'Infrastructure · Network · Application security' },
+          { key: 'current', value: 'MTA, Staten Island Railway' },
+          { key: 'availability', value: 'Open to security engineering roles', live: true },
+        ].map(({ key, value, live }) => (
+          <div
+            key={key}
+            className="group flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-border py-[9px]"
+          >
+            <dt className="w-[92px] shrink-0 text-[11px] tracking-[0.1em] text-muted-dim transition-colors duration-300 group-hover:text-primary">
+              {key}
+            </dt>
+            {/* Grown from the left so the value stays anchored to its key, and
+                by a transform so no row moves under the cursor. */}
+            <dd className="flex min-w-0 flex-1 origin-left items-baseline gap-2 text-[12.5px] leading-[1.5] text-foreground transition-transform duration-300 ease-out group-hover:scale-[1.06] motion-reduce:transition-none motion-reduce:group-hover:scale-100">
+              <span className={live ? 'live-glow' : undefined}>{value}</span>
+            </dd>
           </div>
         ))}
       </dl>

@@ -38,6 +38,7 @@ import Blocked from "./pages/Blocked";
 import OAuthConsent from "./pages/OAuthConsent";
 import Admin from "./pages/Admin";
 import Resume from "./pages/Resume";
+import Environment from "./pages/Environment";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -68,6 +69,9 @@ const App = () => (
                       the download agree. It previously went unrouted because the
                       page contradicted the verified record; that content is gone. */}
                   <Route path="/resume" element={<Resume />} />
+                  {/* The long read behind the hero schematic; each node on the
+                      home page links to its section here. */}
+                  <Route path="/environment" element={<Environment />} />
                   <Route path="/admin" element={<ProtectedRoute requireAdmin><Admin /></ProtectedRoute>} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>

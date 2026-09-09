@@ -108,7 +108,12 @@ body {
 
 /* Theme swap: colours cross-fade, nothing else moves. */
 a, button, input, .panel, .glass-card, .gradient-btn, .section-heading {
-  transition: color 0.25s ease, background-color 0.25s ease, border-color 0.25s ease;
+  /* `transform` is in the list because this rule is unlayered, and unlayered
+     declarations beat anything in `@layer components`. A card that wanted to
+     lift on hover could not add its own transition from a utility or a
+     component class: this shorthand replaced it every time. */
+  transition: color 0.25s ease, background-color 0.25s ease, border-color 0.25s ease,
+    transform 0.3s ease;
 }
 
 svg [stroke], svg [fill] {
@@ -241,6 +246,129 @@ svg [stroke], svg [fill] {
     opacity: 0.88;
   }
 
+  /* Certification name: an accent wipe rather than a colour swap.
+
+     The fill is a two-stop gradient laid over twice the width of the text and
+     clipped to the glyphs. At rest the second half is in view, so the name is
+     dim; on hover the background slides back to its origin and the accent half
+     sweeps in from the left. Nothing is redrawn, so the wipe costs one
+     compositor property and cannot reflow the row.
+
+     `color` is set first and only then made transparent: a browser without
+     `background-clip: text` ignores the transparency rule and keeps a readable
+     name rather than an invisible one. */
+  .cert-wipe {
+    color: hsl(var(--muted-foreground));
+    background-image: linear-gradient(
+      90deg,
+      hsl(var(--primary)) 0 50%,
+      hsl(var(--muted-foreground)) 50% 100%
+    );
+    background-size: 200% 100%;
+    background-position: 100% 0;
+    background-repeat: no-repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    transition:
+      background-position 0.9s cubic-bezier(0.22, 0.8, 0.28, 1),
+      transform 0.9s cubic-bezier(0.22, 0.8, 0.28, 1);
+  }
+
+  .group:hover .cert-wipe,
+  .group:focus-visible .cert-wipe {
+    background-position: 0 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cert-wipe {
+      transition: none;
+    }
+  }
+
+  /* The rule grid drifts.
+
+     One 60px cell diagonally over two minutes, which is about half a pixel a
+     second: too slow to catch the eye, fast enough that the page is never
+     quite still. Because the travel is exactly one cell the loop closes on
+     itself with no jump, and because it moves `background-position` rather
+     than the element there is no layer to composite and no layout to redo.
+
+     The grid's opacity is untouched. It should stay at the edge of visible. */
+  @keyframes rule-grid-drift {
+    from {
+      background-position: 0 0;
+    }
+    to {
+      background-position: 60px 60px;
+    }
+  }
+
+  .rule-grid-drift {
+    animation: rule-grid-drift 120s linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rule-grid-drift {
+      animation: none;
+    }
+  }
+
+  /* Disclosure content, fading up as it mounts. */
+  @keyframes disclose {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .animate-disclose {
+    animation: disclose 0.45s cubic-bezier(0.22, 0.8, 0.28, 1) both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-disclose {
+      animation: none;
+    }
+  }
+
+  /* The live line breathes.
+
+     A dot beside the text was a second object saying what the text already
+     says. The value itself now drifts toward the accent and back on a slow
+     cycle, which reads as a state that is still true rather than a decoration
+     sitting next to one.
+
+     This is the only glow on the site and it is deliberate: the halo is at 30%
+     of the accent and never leaves the glyphs, so it registers as the line
+     brightening rather than as a light source. */
+  @keyframes live-glow {
+    0%,
+    100% {
+      color: hsl(var(--foreground));
+      text-shadow: none;
+    }
+    50% {
+      color: hsl(var(--primary));
+      text-shadow: 0 0 9px hsl(var(--primary) / 0.3);
+    }
+  }
+
+  .live-glow {
+    animation: live-glow 3.2s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .live-glow {
+      animation: none;
+      color: hsl(var(--primary));
+    }
+  }
+
   /* Page gutter.
 
      Every full-width band (nav, sections, footer) is centred on the same
@@ -312,24 +440,6 @@ svg [stroke], svg [fill] {
 html[data-theme-sweep] * {
   transition-duration: 0ms !important;
   transition-delay: 0ms !important;
-}
-
-/*
-  Hero schematic (see `components/SecurityDiagram.tsx`).
-
-  The traced chain draws leg by leg in the order its steps are numbered, then
-  each step label resolves as its leg lands, a small overshoot on the way in so
-  the label reads as arriving at the node rather than fading up over it. Both
-  are one-shot, `forwards`, and only ever run on load or on a mode switch.
-*/
-@keyframes diagram-trace {
-  to { stroke-dashoffset: 0; }
-}
-
-@keyframes diagram-step-in {
-  0% { opacity: 0; transform: scale(0.82); }
-  62% { opacity: 1; transform: scale(1.07); }
-  100% { opacity: 1; transform: scale(1); }
 }
 
 /*
