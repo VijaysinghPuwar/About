@@ -18,6 +18,13 @@ export default {
       },
     },
     extend: {
+      screens: {
+        /* The design switches nav, hero and timeline together at 980px.
+           Tailwind's md (768) and lg (1024) sit either side of it, so using
+           them split the layout: between 768 and 1023 the bar was already in
+           its desktop form while the hero was still stacked. */
+        wide: '980px',
+      },
       colors: {
         border: "hsl(var(--border))",
         "border-strong": "hsl(var(--border-strong))",

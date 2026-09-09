@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useMemo, forwardRef } from 'react';
+import { useState, useEffect, useCallback, forwardRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Github, X, ExternalLink, ArrowRight, Columns2, Search } from 'lucide-react';
 import { onOpenProject, scrollToSection } from '@/lib/portfolio-events';
+import { cn } from '@/lib/utils';
 
 const IMPACT_DIFFS: Record<string, { before: string[]; after: string[] }> = {
   'secure-ubuntu-fleet': {
@@ -108,11 +109,11 @@ const enrichedData: Record<string, { description: string; features: string[] }> 
     features: ['Google OAuth + server-side JWT', 'Fernet-encrypted vault at rest', 'RBAC user/admin dashboards', 'Automated threat detection & 24h risk score'],
   },
   'cutmox': {
-    description: 'A browser-based audio tool built on WebAssembly for fast, fully client-side processing. Built on the TanStack Start template with Vite and deployed via Cloudflare Workers (wrangler). Currently in active build — Phase 1 proved WASM viability, Phase 2 adds settings and upload. No user audio is ever uploaded to a server.',
+    description: 'A browser-based audio tool built on WebAssembly for fast, fully client-side processing. Built on the TanStack Start template with Vite and deployed via Cloudflare Workers (wrangler). Currently in active build: Phase 1 proved WASM viability, Phase 2 adds settings and upload. No user audio is ever uploaded to a server.',
     features: ['Fully client-side WASM processing', 'No server upload of audio', 'TanStack Start + Vite', 'Cloudflare Workers deploy'],
   },
   'iptables-hardening': {
-    description: 'CYB623 Network Security term project (Pace University, Spring 2026). A two-VM VirtualBox host-only lab — Kali attacker vs Ubuntu defender — building and quantitatively measuring three defensive layers: SSH brute-force defense with the recent module, ICMP/SYN flood mitigation with the limit module, and DNAT port forwarding for service hiding. All steps scripted, idempotent, and shellcheck-linted in CI.',
+    description: 'CYB623 Network Security term project (Pace University, Spring 2026). A two-VM VirtualBox host-only lab (Kali attacker vs Ubuntu defender) building and quantitatively measuring three defensive layers: SSH brute-force defense with the recent module, ICMP/SYN flood mitigation with the limit module, and DNAT port forwarding for service hiding. All steps scripted, idempotent, and shellcheck-linted in CI.',
     features: ['SSH brute-force defense (recent module)', 'ICMP/SYN flood mitigation (limit module)', 'DNAT :80 → internal :8080', 'Idempotent scripts, shellcheck CI'],
   },
   'win-dev-sec-bootstrap': {
@@ -181,8 +182,14 @@ const hasFinePointer = () =>
   typeof window.matchMedia === 'function' &&
   window.matchMedia('(pointer: fine)').matches;
 
-/** How many case-study cards render inline. The rest live in the index modal. */
-const FEATURED_LIMIT = 6;
+/**
+ * How many case-study cards render inline. The rest live in the index modal.
+ *
+ * Six cards was a wall: by the third one a reader is skimming, and the two
+ * strongest projects are no longer the ones being looked at. Three is what a
+ * reader actually reads, and everything else stays one button away.
+ */
+const FEATURED_LIMIT = 3;
 
 // Declaration order is the display order of the featured grid, so the headline
 // project leads regardless of where it came from (database rows or projects.json).
@@ -216,7 +223,6 @@ function MetaRow({ label, value }: { label: string; value: string }) {
 }
 
 export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: ProjectShowcaseProps) {
-  const [activeFilter, setActiveFilter] = useState('All');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [showDiff, setShowDiff] = useState(false);
   const [indexOpen, setIndexOpen] = useState(false);
@@ -224,17 +230,6 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
 
   // Reset diff view when project changes
   useEffect(() => { setShowDiff(false); }, [selectedProject]);
-
-  // Filters follow the data, so a new category in the database shows up on its
-  // own and one that disappears stops being offered. Busiest category first.
-  const filterCategories = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const p of projects) {
-      const c = normalizeCategory(p.category);
-      if (c) counts.set(c, (counts.get(c) ?? 0) + 1);
-    }
-    return ['All', ...[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c)];
-  }, [projects]);
 
   const bySkill = skillFilter
     ? projects.filter(p =>
@@ -244,9 +239,12 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
       )
     : projects;
 
-  const filtered = activeFilter === 'All'
-    ? bySkill
-    : bySkill.filter(p => normalizeCategory(p.category) === activeFilter);
+  /* The category chips that used to narrow this are gone. Seven of them sat
+     above three cards, and every one of them led to a shorter version of a
+     list the reader had not finished reading. The skill cross-link below is
+     the one filter that earns its place, because it answers a question the
+     reader asked. */
+  const filtered = bySkill;
 
   const featuredAll = filtered
     .filter(p => featuredIds.has(p.id))
@@ -254,7 +252,7 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
   const featured = featuredAll.slice(0, FEATURED_LIMIT);
 
   // Everything in the current filter, case studies first, then the rest. This
-  // is what the index modal lists — the page itself no longer carries it.
+  // is what the index modal lists. The page itself no longer carries it.
   const indexAll = [
     ...featuredAll,
     ...filtered.filter(p => !featuredIds.has(p.id)),
@@ -285,14 +283,13 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
       projects.find(p => p.id.toLowerCase() === needle) ??
       projects.find(p => p.title.toLowerCase().includes(needle));
     if (!hit) return;
-    setActiveFilter('All');
     setIndexOpen(false);
     setSelectedProject(hit);
     scrollToSection('projects');
   }), [projects]);
 
   // Escape closes whichever layer is on top, and the page behind an open layer
-  // stops scrolling — the wheel used to scroll the section under the overlay.
+  // stops scrolling. The wheel used to scroll the section under the overlay.
   useEffect(() => {
     if (!selectedProject && !indexOpen) return;
     const handler = (e: KeyboardEvent) => {
@@ -336,54 +333,36 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
         </div>
       )}
 
-      {/* Category filter */}
-      <div className="mb-7 flex flex-wrap justify-center gap-2">
-        {filterCategories.map(cat => (
-          <button
-            key={cat}
-            onClick={() => setActiveFilter(cat)}
-            aria-pressed={activeFilter === cat}
-            className={
-              'tap-44 rounded-md border px-3.5 py-2 text-[12.5px] transition-colors ' +
-              (activeFilter === cat
-                ? 'border-primary bg-primary-bg text-primary'
-                : 'border-border bg-card text-muted-foreground hover:border-border-strong hover:text-foreground')
-            }
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-
       {/* Tier one: deeply presented, two per row. */}
       {featured.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <AnimatePresence initial={false}>
-            {featured.map(project => (
-              <FeaturedCard
-                key={project.id}
-                project={project}
-                onClick={() => setSelectedProject(project)}
-              />
-            ))}
-          </AnimatePresence>
+        <div className="grid grid-cols-1 gap-4 wide:grid-cols-2">
+          {featured.map((project, i) => (
+            <FeaturedCard
+              key={project.id}
+              project={project}
+              /* Two across, then the third takes the full measure rather
+                 than sitting beside a gap. */
+              className={i === 2 ? 'wide:col-span-2' : undefined}
+              onClick={() => setSelectedProject(project)}
+            />
+          ))}
         </div>
       )}
 
       {/* Tier two lives behind a button.
 
           Rendering all twenty-five as rows under the cards made the section
-          feel endless — you scrolled past a wall of hairlines to reach the next
+          feel endless. You scrolled past a wall of hairlines to reach the next
           heading. The full set now opens as a searchable index over the page,
           so the section has a bottom again and nothing is buried. */}
       {filtered.length === 0 && (
-        <div className="py-16 text-center text-muted-foreground">No projects found in this category.</div>
+        <div className="py-16 text-center text-muted-foreground">No projects use that skill yet.</div>
       )}
 
       {/* One footer row, two exits.
 
           This used to be a centred button, then a full-width bordered panel
-          reading "18+ public repositories" with a second button inside it —
+          reading "18+ public repositories" with a second button inside it,
           three stacked blocks closing a section that was already long. Both
           exits sit on one line now and the repository count rides on the link
           that goes there. */}
@@ -410,7 +389,7 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
         </a>
       </div>
 
-      {/* Index modal — the full set, searchable, one row per project.
+      {/* Index modal, the full set, searchable, one row per project.
 
           Portalled to <body>. The router's <main> carries `relative z-[1]`,
           which opens a stacking context: a `z-50` overlay rendered inside it
@@ -460,7 +439,7 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
                   /* Focus the filter on a mouse, never on a finger. On a phone
                      autoFocus threw the software keyboard up the instant the
                      index opened, which covered the list the reader had just
-                     asked to see — before they had typed anything. */
+                     asked to see, before they had typed anything. */
                   autoFocus={hasFinePointer()}
                   value={indexQuery}
                   onChange={e => setIndexQuery(e.target.value)}
@@ -494,7 +473,7 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
         document.body,
       )}
 
-      {/* Detail modal — portalled for the same reason as the index above. */}
+      {/* Detail modal, portalled for the same reason as the index above. */}
       {createPortal(
         <AnimatePresence>
           {selectedProject && (
@@ -524,7 +503,7 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
             >
               {/* Header in flow, with the body scrolling under it, so the close
                   button stays put. It used to be `absolute` inside the element
-                  that scrolls — which means it scrolled with the content: at
+                  that scrolls, which means it scrolled with the content: at
                   the bottom of a long project the X measured 68px above the top
                   of the screen. On a phone, with no Escape key and (see above)
                   no backdrop left to tap, getting out meant scrolling back up
@@ -581,7 +560,7 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
                         <ul className="mt-3 flex flex-col gap-2.5">
                           {selectedProject.keyResults.map(r => (
                             <li key={r} className="flex gap-3 text-[14px] leading-[1.55] text-muted-foreground">
-                              <span className="shrink-0 text-primary" aria-hidden="true">—</span>
+                              <span className="shrink-0 text-primary" aria-hidden="true">·</span>
                               {r}
                             </li>
                           ))}
@@ -607,7 +586,7 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
                         </a>
                       )}
                       {/* Repository links are public. links.github is only ever set for
-                          repositories that are public on GitHub — private ones carry null
+                          repositories that are public on GitHub. Private ones carry null
                           and render nothing, so there is no repo to gate and no private
                           URL in the shipped data. Those projects lead with their live site. */}
                       {selectedProject.links.github && (
@@ -681,22 +660,28 @@ function DiffView({ before, after }: { before: string[]; after: string[] }) {
  * structural weight as the outcome. They are one mono line and one word now.
  * The card is also `h-full` with the action row pushed down by `mt-auto`, so a
  * two-line title next to a one-line title no longer leaves a hole in the shorter
- * card — every footer in a row lands on the same baseline.
+ * card, every footer in a row lands on the same baseline.
  */
-const FeaturedCard = forwardRef<HTMLDivElement, { project: Project; onClick: () => void }>(
-  function FeaturedCard({ project, onClick }, ref) {
+const FeaturedCard = forwardRef<HTMLElement, { project: Project; onClick: () => void; className?: string }>(
+  function FeaturedCard({ project, onClick, className }, ref) {
     const outcome = project.keyResults?.[0];
     const inProgress = project.status === 'in-progress';
 
+    /* A plain article, deliberately.
+
+       These cards used to fade and rise on mount. That was a third ambient
+       effect on a page whose design allows two (the rule grid and the section
+       fade-up), and the section fade-up already carries this whole block in.
+       It was also load-bearing by accident: a card mounted after the first
+       render, which is what happens when a skill filter is cleared, kept its
+       `initial` styles and never ran the animation, so the third card sat at
+       `opacity: 0` and simply did not appear. Content should not be invisible
+       because an animation failed to start. */
     return (
-      <motion.article
+      <article
         ref={ref}
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.2, ease: 'easeOut' }}
         onClick={onClick}
-        className="panel panel-hover flex h-full cursor-pointer flex-col rounded-lg p-5"
+        className={cn('panel panel-hover flex h-full cursor-pointer flex-col rounded-lg p-5', className)}
       >
         <div className="flex items-baseline justify-between gap-3">
           <span className="meta-label truncate">{normalizeCategory(project.category)}</span>
@@ -740,7 +725,7 @@ const FeaturedCard = forwardRef<HTMLDivElement, { project: Project; onClick: () 
             </a>
           )}
         </div>
-      </motion.article>
+      </article>
     );
   });
 

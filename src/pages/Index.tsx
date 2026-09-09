@@ -1,5 +1,4 @@
 import { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
-import { Github, Linkedin } from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
 import projectsData from '@/data/projects.json';
 import { useProjects } from '@/hooks/useProjects';
@@ -7,12 +6,12 @@ import { TerminalHero } from '@/components/TerminalHero';
 import { SecurityDiagram } from '@/components/SecurityDiagram';
 import { SectionReveal, SectionRule } from '@/components/SectionReveal';
 import { ProtectedEmail } from '@/components/ProtectedEmail';
-import { LogoIcon } from '@/components/LogoIcon';
 import { onFilterSkill } from '@/lib/portfolio-events';
 
 const SkillMatrix = lazy(() => import('@/components/SkillMatrix').then(m => ({ default: m.SkillMatrix })));
 const ExperienceTimeline = lazy(() => import('@/components/ExperienceTimeline').then(m => ({ default: m.ExperienceTimeline })));
 const ProjectShowcase = lazy(() => import('@/components/ProjectShowcase').then(m => ({ default: m.ProjectShowcase })));
+const GitHubActivity = lazy(() => import('@/components/GitHubActivity').then(m => ({ default: m.GitHubActivity })));
 
 /**
  * Section header.
@@ -82,17 +81,17 @@ export default function Index() {
         <link rel="canonical" href="https://vijaysinghpuwar.com/" />
       </Helmet>
       {/* sr-only h1 establishes the page heading for SEO and screen readers; the visual hero is the terminal card */}
-      <h1 className="sr-only">Vijaysingh Puwar — Cybersecurity Engineer</h1>
+      <h1 className="sr-only">Vijaysingh Puwar, Cybersecurity Engineer</h1>
 
       {/* ═══════ HERO ═══════ */}
       <section id="home" aria-labelledby="home-heading" className="relative">
         <span id="home-heading" className="sr-only">Hero</span>
 
-        <div className="container mx-auto max-w-[1180px] px-5 pb-10 pt-24 sm:pb-14 sm:pt-28">
+        <div className="page-gutter container mx-auto max-w-[1180px] pb-[clamp(60px,8vw,100px)] pt-[clamp(100px,13vh,140px)]">
           {/* Terminal left, schematic right. The right column is the proof the
               first screen previously had none of: what the work is, where it
-              happens now, and whether he is available — all checkable. */}
-          <div className="grid items-center gap-11 lg:grid-cols-[minmax(0,1.06fr)_minmax(0,1fr)] lg:gap-[68px]">
+              happens now, and whether he is available, all checkable. */}
+          <div className="grid items-center gap-11 wide:grid-cols-[minmax(0,1.06fr)_minmax(0,1fr)] wide:gap-[clamp(40px,5vw,68px)]">
             {/* `min-w-0`: a grid item's automatic minimum size is its content's
                 min-content width, and the terminal now prints command output
                 unwrapped so its own scroller can keep the columns aligned. Left
@@ -101,38 +100,30 @@ export default function Index() {
             <div className="min-w-0">
               <TerminalHero projects={allProjects} />
 
-              {/* Signature row: the mark, then one icon per channel. These were
-                  spelled-out URLs in monospace, which put two long strings of
-                  low-value text directly under the terminal and competed with
-                  it. The icons carry accessible names and titles instead. */}
-              <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2.5">
-                <LogoIcon size={22} />
-                <span className="h-4 w-px bg-border-strong" aria-hidden="true" />
+              {/* Signature row.
+
+                  Spelled out rather than shown as glyphs. The handle is the
+                  useful part of either link, a reader can copy it without
+                  following it, and it survives being printed. The email is not
+                  repeated here: it has its own card in the contact section and
+                  its own `contact` command in the terminal above. */}
+              <div className="mt-4 flex flex-wrap gap-x-[22px] gap-y-2 text-[12px]">
                 <a
                   href="https://github.com/vijaysinghpuwar"
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="GitHub — vijaysinghpuwar"
-                  title="github.com/vijaysinghpuwar"
-                  className="tap-44 text-muted-foreground transition-colors hover:text-primary"
+                  className="tap-44 font-mono text-muted-foreground transition-colors hover:text-primary"
                 >
-                  <Github className="h-[18px] w-[18px]" aria-hidden="true" />
+                  github.com/vijaysinghpuwar
                 </a>
                 <a
                   href="https://linkedin.com/in/vijaysinghpuwar"
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="LinkedIn — vijaysinghpuwar"
-                  title="linkedin.com/in/vijaysinghpuwar"
-                  className="tap-44 text-muted-foreground transition-colors hover:text-primary"
+                  className="tap-44 font-mono text-muted-foreground transition-colors hover:text-primary"
                 >
-                  <Linkedin className="h-[18px] w-[18px]" aria-hidden="true" />
+                  linkedin.com/in/vijaysinghpuwar
                 </a>
-                <ProtectedEmail
-                  variant="icon"
-                  className="tap-44 text-muted-foreground hover:text-primary"
-                  iconClassName="h-[18px] w-[18px]"
-                />
               </div>
             </div>
 
@@ -141,14 +132,22 @@ export default function Index() {
         </div>
       </section>
 
+      {/* ═══════ ACTIVITY ═══════ */}
+      {/* One line, between the introduction and the evidence. It renders
+          nothing at all until GitHub answers, so a rate-limited or offline
+          visitor sees the page close up rather than an empty frame. */}
+      <Suspense fallback={null}>
+        <GitHubActivity />
+      </Suspense>
+
       {/* ═══════ WORK ═══════ */}
-      <section id="projects" aria-label="Selected work" className="relative py-14 sm:py-[68px]">
+      <section id="projects" aria-label="Selected work" className="relative py-[clamp(52px,7vw,88px)]">
         <SectionRule />
-        <SectionReveal className="container mx-auto max-w-[1180px] px-5">
+        <SectionReveal className="page-gutter container mx-auto max-w-[1180px]">
           <SectionHeader
             label="Selected work"
-            title="Systems in Production"
-            blurb="Built, deployed and maintained. Six case studies below, and a searchable index of the rest."
+            title="Systems in production"
+            blurb="Built, deployed and maintained. Three case studies below, and a searchable index of the rest."
           />
 
           <Suspense fallback={<div className="h-64" />}>
@@ -168,13 +167,13 @@ export default function Index() {
       </section>
 
       {/* ═══════ JOURNEY ═══════ */}
-      <section id="experience" aria-label="Experience and education" className="relative py-14 sm:py-[68px]">
+      <section id="experience" aria-label="Experience and education" className="relative py-[clamp(52px,7vw,88px)]">
         <SectionRule />
-        <SectionReveal className="container mx-auto max-w-[1180px] px-5">
+        <SectionReveal className="page-gutter container mx-auto max-w-[1180px]">
           <SectionHeader
             align="left"
             title="Journey"
-            blurb="Work and study in one sequence. Expand an entry for what the role actually involved."
+            blurb="Work and study in one sequence, most recent first. Coursework and tooling detail sit behind each entry."
           />
           <Suspense fallback={<div className="h-64" />}>
             <ExperienceTimeline />
@@ -187,13 +186,13 @@ export default function Index() {
           certifications already render as cards at the end of the timeline
           above, and a scrolling copy of a list the reader has just seen is
           repetition, not reinforcement. */}
-      <section id="skills" aria-label="Capabilities" className="relative py-14 sm:py-[68px]">
+      <section id="skills" aria-label="Capabilities" className="relative py-[clamp(52px,7vw,88px)]">
         <SectionRule />
-        <SectionReveal className="container mx-auto max-w-[1180px] px-5">
+        <SectionReveal className="page-gutter container mx-auto max-w-[1180px]">
           <SectionHeader
             label="Capabilities"
-            title="Skills Backed by Shipped Work"
-            blurb="The number on a skill is how many indexed projects actually use it. Select one to filter the work above — no ratings, no percentages."
+            title="What I work with"
+            blurb="The number on a skill is how many indexed projects actually use it. Select one to filter the work above. No ratings, no percentages."
           />
 
           <Suspense fallback={<div className="h-64" />}>
@@ -207,20 +206,20 @@ export default function Index() {
       </section>
 
       {/* ═══════ CONTACT ═══════ */}
-      <section id="contact" aria-label="Contact" className="relative py-14 sm:py-[68px]">
+      <section id="contact" aria-label="Contact" className="relative py-[clamp(52px,7vw,88px)]">
         <SectionRule />
-        <SectionReveal className="container mx-auto max-w-[1180px] px-5">
+        <SectionReveal className="page-gutter container mx-auto max-w-[1180px]">
           <div className="mx-auto max-w-[620px] text-center">
             <div className="section-heading">Contact</div>
-            <h2 className="section-title mt-3">Open to Security Engineering Roles</h2>
+            <h2 className="section-title mt-3">Open to security engineering roles</h2>
             <p className="mt-3 text-[15px] text-muted-foreground">
-              New York, NY and remote. Résumé and project detail stay public — no sign-in required.
+              New York, NY and remote. Résumé, projects and links stay public, no sign-in required.
             </p>
           </div>
 
           {/* Four routes, one row. The digital-business-card mock and the list of
               "availabilities" padded out with pulsing dots are both gone. */}
-          <div className="mx-auto mt-8 grid max-w-[900px] gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mx-auto mt-8 grid max-w-[1080px] gap-3 sm:grid-cols-2 wide:grid-cols-4">
             <a
               href="https://github.com/vijaysinghpuwar"
               target="_blank"

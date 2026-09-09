@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 /**
  * A two-state segmented control, not a mystery icon. Both modes are named and
  * the active one is filled, so the reader knows what they are switching between
- * before they click — the previous version was a single shield/crosshair glyph
+ * before they click. The previous version was a single shield/crosshair glyph
  * that gave no clue what the other state was.
  */
 export function ThemeToggle({ compact = false }: { compact?: boolean }) {
@@ -49,7 +49,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
       type="button"
       onClick={toggleTheme}
       aria-label="Switch operational theme"
-      className="flex h-9 items-center gap-0.5 rounded-md border border-border bg-card p-0.5"
+      className="flex h-[34px] items-center gap-0.5 rounded-md border border-border bg-card p-0.5"
     >
       {segment('SECURITY', !isPentest)}
       {segment('PENTEST', isPentest)}

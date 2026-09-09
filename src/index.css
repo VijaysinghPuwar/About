@@ -9,12 +9,12 @@
 
   The palette is deliberately flat: a neutral near-black ramp for every surface
   and border, and a single solid accent that carries state. The theme switch
-  swaps only that accent — green for defensive work, red for offensive — so the
+  swaps only that accent (green for defensive work, red for offensive), so the
   change reads as a deliberate mode, not a reskin. Nothing here glows, blurs, or
   fades into a second hue; depth comes from the border ramp instead.
 */
 @layer base {
-  :root, .theme-default, .theme-blue {
+  :root, .theme-security, .theme-default, .theme-blue {
     /* surfaces */
     --background: 240 11% 4%;
     --foreground: 240 8% 95%;
@@ -26,7 +26,7 @@
     --popover: 240 7% 6%;
     --popover-foreground: 240 8% 95%;
 
-    /* accent — defensive (green) */
+    /* accent: defensive (green) */
     --primary: 146 46% 45%;
     --primary-foreground: 240 11% 4%;
     --primary-glow: 148 50% 29%;
@@ -65,7 +65,7 @@
     --grid-color: 240 6% 8%;
   }
 
-  /* Offensive mode. Only the accent moves — the surface ramp is identical, so
+  /* Offensive mode. Only the accent moves. The surface ramp is identical, so
      the switch is legible as a change of stance rather than a change of site. */
   .theme-pentest {
     --primary: 358 75% 59%;
@@ -90,6 +90,16 @@ html {
   scroll-behavior: smooth;
   scroll-padding-top: 4.5rem;
   overflow-x: hidden;
+
+  /* Windows Chrome draws classic scrollbars that occupy layout width; macOS
+     draws overlay scrollbars that occupy none. Reserving the gutter on both
+     keeps the 1180px column in the same place on either platform, and stops
+     the page jumping sideways when a dialog sets `body { overflow: hidden }`. */
+  scrollbar-gutter: stable;
+
+  /* Chrome on Android inflates text in portrait without this. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -105,11 +115,11 @@ svg [stroke], svg [fill] {
   transition: stroke 0.25s ease, fill 0.25s ease;
 }
 
-/* Keyboard focus — visible on every interactive element.
+/* Keyboard focus, visible on every interactive element.
 
    No border-radius here. It used to set 3px, which the browser applied to the
    element itself rather than to the ring: every control changed shape the
-   moment it took focus — 8px buttons squared off, the round avatar became a
+   moment it took focus. 8px buttons squared off, the round avatar became a
    near-square. The outline already traces the element's own radius. */
 *:focus-visible {
   outline: 2px solid hsl(var(--primary));
@@ -128,7 +138,7 @@ svg [stroke], svg [fill] {
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
     font-size: 16px;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
@@ -136,13 +146,18 @@ svg [stroke], svg [fill] {
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
     font-weight: 600;
     letter-spacing: -0.022em;
   }
 
+  input, button, textarea, select {
+    font: inherit;
+    letter-spacing: inherit;
+  }
+
   code, pre, .font-mono {
-    font-family: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+    font-family: 'IBM Plex Mono', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   }
 
   ::-webkit-scrollbar {
@@ -167,7 +182,7 @@ svg [stroke], svg [fill] {
   /* Section eyebrow: mono, dim, spaced. No gradient fill. */
   .section-heading {
     @apply text-[11px] uppercase;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: 'IBM Plex Mono', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
     letter-spacing: 0.22em;
     color: hsl(var(--muted-foreground-dim));
   }
@@ -180,7 +195,7 @@ svg [stroke], svg [fill] {
 
   /* Metadata label used inside cards and definition rows. */
   .meta-label {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: 'IBM Plex Mono', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
     font-size: 10.5px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -188,7 +203,7 @@ svg [stroke], svg [fill] {
   }
 
   /* Formerly a translucent blur panel. Now a solid surface with a hairline
-     border — the same object everywhere, so cards stack without haze. */
+     border, the same object everywhere, so cards stack without haze. */
   .glass-card,
   .panel {
     background: hsl(var(--card));
@@ -226,6 +241,17 @@ svg [stroke], svg [fill] {
     opacity: 0.88;
   }
 
+  /* Page gutter.
+
+     Every full-width band (nav, sections, footer) is centred on the same
+     1180px column and shares this inline padding, so the left edge of the
+     logo, of a section title and of the copyright line all agree. It grows
+     with the viewport rather than sitting at a fixed 20px, which on a wide
+     monitor left the column pinned to the very edge of its own container. */
+  .page-gutter {
+    padding-inline: clamp(20px, 3.6vw, 40px);
+  }
+
   .btn-outline {
     border: 1px solid hsl(var(--border-strong));
     color: hsl(var(--foreground));
@@ -245,18 +271,18 @@ svg [stroke], svg [fill] {
 }
 
 /*
-  Theme switch shutter — see `src/lib/theme-transition.ts` for the geometry and
+  Theme switch shutter. See `src/lib/theme-transition.ts` for the geometry and
   the timings that hang off it.
 
   Each plate crosses in over the first 12% of its run, holds the viewport closed
   until 88%, then crosses out the far side. Because plate n starts n * 40ms
   late, the window where *every* plate is down is shorter than any one plate's
-  hold — that sealed window is what the class swap hides inside, and it is sized
+  hold. That sealed window is what the class swap hides inside, and it is sized
   around the label, not the other way round: the mode name resolves, sits still
   long enough to be read, and only then do the plates continue.
 
   `data-theme-sweep` kills the 250ms colour cross-fades for the duration, so the
-  new palette is fully settled — not mid-fade — when the plates lift.
+  new palette is fully settled (not mid-fade) when the plates lift.
 */
 @keyframes theme-plate-down {
   0% { transform: translate3d(0, -101%, 0); animation-timing-function: cubic-bezier(.5, 0, .2, 1); }
@@ -292,7 +318,7 @@ html[data-theme-sweep] * {
   Hero schematic (see `components/SecurityDiagram.tsx`).
 
   The traced chain draws leg by leg in the order its steps are numbered, then
-  each step label resolves as its leg lands — a small overshoot on the way in so
+  each step label resolves as its leg lands, a small overshoot on the way in so
   the label reads as arriving at the node rather than fading up over it. Both
   are one-shot, `forwards`, and only ever run on load or on a mode switch.
 */
@@ -308,7 +334,7 @@ html[data-theme-sweep] * {
 
 /*
   The terminal's sideways scroller. Command output is laid out in padded
-  columns, so on a phone it scrolls rather than wraps — and the default bar is
+  columns, so on a phone it scrolls rather than wraps. The default bar was
   a bright slab across the bottom of the output. Touch browsers overlay their
   own and ignore this; it is for the narrow pointer case.
 */
@@ -347,10 +373,6 @@ html[data-theme-sweep] * {
   animation: none;
 }
 
-.timeline-line-gradient {
-  background: hsl(var(--border));
-}
-
 /* Reduced motion: every decorative animation stops, the layout does not change. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -368,7 +390,7 @@ html[data-theme-sweep] * {
   Touch targets.
 
   Every control here is sized for a mouse: a 30px skill chip, a 32px close
-  button, an 18px social glyph. On a finger that is a miss waiting to happen —
+  button, an 18px social glyph. On a finger that is a miss waiting to happen.
   WCAG 2.2 asks for 24px, Apple and Google both ask for 44px. Rather than
   inflate the controls and lose the compact chip that the design is built on,
   `.tap-44` grows only the *hit area*, with a centred pseudo-element that takes
@@ -376,7 +398,7 @@ html[data-theme-sweep] * {
 
   Scoped to a coarse pointer so the desktop geometry is untouched.
 
-  In a dense wrapped row — the skill chips run a 30px chip on a 37px pitch —
+  In a dense wrapped row (the skill chips run a 30px chip on a 37px pitch)
   neighbouring hit areas do overlap, and a tap in the gutter resolves to
   whichever chip paints last. That is still strictly better than the gutter
   swallowing the tap outright, which is what it does today.
@@ -400,7 +422,7 @@ html[data-theme-sweep] * {
 
   /* iOS Safari zooms the whole page in when a focused field is under 16px and
      never zooms back out, which leaves the layout stranded mid-scale. The two
-     fields on the site — the terminal prompt and the project index filter —
+     fields on the site (the terminal prompt and the project index filter)
      both set 13-14px for the monospace look. Hold the rendered size at 16px on
      touch; the zoom is a worse artefact than the slightly larger caret. */
   input,

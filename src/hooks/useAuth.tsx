@@ -97,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (error) {
-        // Backend not provisioned with profiles table — treat as "no profile",
+        // Backend not provisioned with profiles table, treat as "no profile",
         // do not toast, do not retry. Public portfolio still renders fine.
         if (isMissingTableError(error)) {
           setProfile(null);
@@ -174,7 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // non-critical; do not surface
       }
 
-      // Log auth event for suspicious login detection — silent on failure.
+      // Log auth event for suspicious login detection, silent on failure.
       try {
         await supabase.functions.invoke('log-auth-event', {
           body: {
@@ -188,7 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // silent
       }
     } catch {
-      // silent fail — don't block login
+      // silent fail, don't block login
     }
   };
 
@@ -204,7 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   //
   // It stays brokered because the native flow is not actually available:
   // GET /auth/v1/authorize?provider=google on this project answers
-  // "Unsupported provider: missing OAuth secret" — Google is toggled on in
+  // "Unsupported provider: missing OAuth secret". Google is toggled on in
   // Supabase but no client secret was ever stored there. To move this to the
   // native flow (and get sign-in working on localhost), set the Google client
   // ID and secret under Supabase → Authentication → Providers → Google, add

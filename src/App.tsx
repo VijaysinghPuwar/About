@@ -17,12 +17,12 @@ import { CyberGrid } from "@/components/CyberGrid";
 
   The site previously ran a cursor spotlight, a cursor trail, a mouse-reactive
   canvas grid, a preloader, a theme-transition scan line with synthesized audio,
-  and a Konami-code rainbow mode — all at once. Individually clever, collectively
+  and a Konami-code rainbow mode, all at once. Individually clever, collectively
   noise, and none of them helped anyone read the work. What survives:
 
-    1. A static rule grid behind the hero (CyberGrid) — it frames the terminal
+    1. A static rule grid behind the hero (CyberGrid). It frames the terminal
        and fades out before the content.
-    2. Section fade-up on scroll (SectionReveal) — it marks where a section
+    2. Section fade-up on scroll (SectionReveal). It marks where a section
        begins without decorating it.
 
   Everything else was removed rather than tuned down.
@@ -63,7 +63,7 @@ const App = () => (
                   <Route path="/auth/callback" element={<AuthCallback />} />
                   <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
                   <Route path="/blocked" element={<Blocked />} />
-                  {/* Public on purpose — no ProtectedRoute. Resume.tsx is now
+                  {/* Public on purpose, no ProtectedRoute. Resume.tsx is now
                       transcribed from the canonical /resume.pdf, so the page and
                       the download agree. It previously went unrouted because the
                       page contradicted the verified record; that content is gone. */}

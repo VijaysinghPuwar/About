@@ -31,7 +31,7 @@ export function storeNext(value: string | null | undefined): void {
   try {
     if (safe) window.sessionStorage.setItem(KEY, safe);
   } catch {
-    // storage unavailable (private mode) — fall back to default destination
+    // storage unavailable (private mode), fall back to default destination
   }
 }
 

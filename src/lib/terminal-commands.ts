@@ -8,7 +8,7 @@ import {
  * The command set behind the hero terminal.
  *
  * Every command does something the visitor could otherwise only do by
- * scrolling and clicking — there are no jokes or fake shells here. Commands
+ * scrolling and clicking. There are no jokes or fake shells here. Commands
  * that would need an account say so rather than pretending to work.
  *
  * The intro transcript types out `whoami`, `cat role.txt`, `ls defense/` and
@@ -57,8 +57,8 @@ export interface OutputLine {
  *
  * `silent` is how `clear` gets out of the way: it empties the log itself, so
  * the line that ran it must not be appended afterwards. Reading that off the
- * raw input meant `clear` worked and `clear all` left a stray prompt behind —
- * the command now says so itself, and every alias of it inherits that.
+ * raw input meant `clear` worked and `clear all` left a stray prompt behind.
+ * The command now says so itself, and every alias of it inherits that.
  */
 export interface CommandResult {
   output: OutputLine[];
@@ -82,7 +82,7 @@ const error = (text: string): OutputLine => ({ text, tone: 'error' });
 
 /**
  * Pads to a column width without pulling in a dependency, and marks anything it
- * had to cut — a title that simply stops mid-word reads as a rendering fault
+ * had to cut, a title that simply stops mid-word reads as a rendering fault
  * rather than as a column doing its job.
  */
 const pad = (text: string, width: number) =>
@@ -142,7 +142,7 @@ export const TOOLSETS = {
 /** The readable files, so `cat` and `ls` agree on what exists. */
 const FILES: Record<string, (ctx: CommandContext) => OutputLine[]> = {
   'role.txt': () => [
-    plain('Cybersecurity Engineer — New York, NY'),
+    plain('Cybersecurity Engineer, New York, NY'),
     muted('IT Emerging Talent Intern, MTA (Staten Island Railway)'),
   ],
   'mission.txt': () =>
@@ -154,7 +154,7 @@ const FILES: Record<string, (ctx: CommandContext) => OutputLine[]> = {
   'contact.txt': ctx => [
     plain('github.com/vijaysinghpuwar'),
     plain('linkedin.com/in/vijaysinghpuwar'),
-    ctx.isAuthed ? plain('Email unlocked — see the contact section')
+    ctx.isAuthed ? plain('Email unlocked. See the contact section')
                  : muted('Email unlocks after sign-in. Run: contact'),
   ],
 };
@@ -192,7 +192,7 @@ export const COMMANDS: CommandSpec[] = [
     usage: 'whoami',
     summary: 'Who I am and what I do.',
     run: () => [
-      plain('Vijaysingh Puwar — Cybersecurity Engineer, New York'),
+      plain('Vijaysingh Puwar, Cybersecurity Engineer, New York'),
       muted('IT Emerging Talent Intern at the MTA.'),
       muted('M.S. Cybersecurity at Pace (GPA 3.92).'),
       muted('Security+, CySA+, CCNA.'),
@@ -265,7 +265,7 @@ export const COMMANDS: CommandSpec[] = [
         muted(`${matches.length} project${matches.length === 1 ? '' : 's'}${q ? ` matching "${q}"` : ''}:`),
         ...shown.map(p => plain(`  ${pad(p.id, 22)}${pad(p.title, 27)}${p.year}`)),
         ...(matches.length > shown.length
-          ? [muted(`  ...and ${matches.length - shown.length} more — projects <filter>`)]
+          ? [muted(`  ...and ${matches.length - shown.length} more: projects <filter>`)]
           : []),
         muted(''),
         muted('Open one with: open <id>'),
@@ -339,7 +339,7 @@ export const COMMANDS: CommandSpec[] = [
       if (!n) return [error(`Nothing here uses "${q}". Run skills for the list.`)];
 
       emitFilterSkill({ label, aliases });
-      return [accent(`${n} project${n === 1 ? '' : 's'} use ${label} — filtering below`)];
+      return [accent(`${n} project${n === 1 ? '' : 's'} use ${label}, filtering below`)];
     },
   },
   {
@@ -375,7 +375,7 @@ export const COMMANDS: CommandSpec[] = [
     run: (_args, ctx) => {
       scrollToSection('contact');
       return ctx.isAuthed
-        ? [accent('Contact — email is unlocked below')]
+        ? [accent('Contact: email is unlocked below')]
         : [accent('Contact'), muted('Email unlocks after sign-in; GitHub and LinkedIn are open.')];
     },
   },
@@ -412,7 +412,7 @@ export const COMMANDS: CommandSpec[] = [
     summary: 'Commands run this session.',
     run: (_args, ctx) => {
       // The line running `history` is not in it yet, which is what a real shell
-      // shows too — the entry is written when the command returns.
+      // shows too. The entry is written when the command returns.
       if (!ctx.history.length) return [muted('No commands yet.')];
       return ctx.history.map((h, i) => plain(`  ${pad(String(i + 1), 5)}${h}`));
     },
@@ -435,7 +435,7 @@ for (const cmd of COMMANDS) {
   for (const alias of cmd.aliases ?? []) BY_NAME.set(alias, cmd);
 }
 
-/** Edit distance, capped — only ever used to rank a handful of short names. */
+/** Edit distance, capped, only ever used to rank a handful of short names. */
 function distance(a: string, b: string): number {
   const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
   for (let i = 1; i <= a.length; i++) {
@@ -515,7 +515,7 @@ function commonPrefix(items: string[]): string {
  * Completions for Tab.
  *
  * A single match is filled in and a space added. Several matches fill in as far
- * as they agree and hand back the list to print — which is what bash does, and
+ * as they agree and hand back the list to print, which is what bash does, and
  * what the previous version did not do at all: it returned nothing unless
  * exactly one command matched, so Tab on `c` or `s` looked like a dead key.
  */

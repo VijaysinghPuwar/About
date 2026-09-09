@@ -8,8 +8,7 @@ import { useMemo } from 'react';
  * nothing, and the animated SVG cost more to render than it returned. Here each
  * skill instead carries the number of shipped projects that actually use it,
  * counted from the project data, and clicking one filters the work below to
- * exactly those projects. A skill with no project behind it still appears —
- * it just doesn't claim a number.
+ * exactly those projects. A skill with no project behind it still appears. It just doesn't claim a number.
  */
 
 interface SkillMatrixProps {
@@ -123,6 +122,12 @@ export function SkillMatrix({ projects, onSelectSkill, activeSkill }: SkillMatri
   // grid is sized in six tracks and each card is told how many to take:
   //   two columns  → 2 + 2 + 1-wide-as-2   (the fifth spans the row)
   //   six columns  → 3 + 2                 (last two take three tracks each)
+  //
+  // These break at `md` rather than at the 980px the nav, hero and timeline
+  // share. That breakpoint is structural: it is where the page stops being two
+  // columns of layout. A card holding a title, a line of prose and a dozen
+  // chips has its own answer, and at 834px two of them read better than one
+  // card stretched across the full measure with its chips adrift in it.
   const spanFor = (i: number) =>
     [i === GROUPS.length - 1 ? 'md:col-span-2' : '', i < 3 ? 'xl:col-span-2' : 'xl:col-span-3']
       .filter(Boolean)

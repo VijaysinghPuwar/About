@@ -3,8 +3,7 @@ import { Helmet } from 'react-helmet-async';
 
 /*
   This page was the Vite/Lovable scaffold until now: "Oops! Page not found", a
-  bare underlined anchor, and a console.error on every miss. Three problems —
-  the voice was nothing like the rest of the site, the <a href="/"> threw away
+  bare underlined anchor, and a console.error on every miss. Three problems: the voice was nothing like the rest of the site, the <a href="/"> threw away
   the SPA and reloaded the whole bundle to get home, and the console.error
   shipped to production, so a mistyped URL logged an error a visitor could open
   the devtools and read. It now speaks in the site's own register and returns

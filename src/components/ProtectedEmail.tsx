@@ -5,7 +5,7 @@ import { loginHref } from '@/lib/auth-redirect';
 import { cn } from '@/lib/utils';
 import { contactEmail, maskedContactEmail } from '@/lib/contact-email';
 
-// Assembled only when an authenticated user is rendering it — see
+// Assembled only when an authenticated user is rendering it, see
 // `@/lib/contact-email` for why this is not written as a single literal.
 const EMAIL = contactEmail();
 const MASKED = maskedContactEmail();
@@ -83,9 +83,9 @@ export function ProtectedEmail({
       >
         <span className="meta-label flex items-center gap-1.5">
           <Lock className="h-[9px] w-[9px]" aria-hidden="true" />
-          Email — protected
+          Email (protected)
         </span>
-        <span className="truncate font-mono text-[14px] text-muted-foreground" aria-hidden="true">
+        <span className="truncate font-mono text-[13px] text-muted-foreground" aria-hidden="true">
           {MASKED}
         </span>
       </button>
