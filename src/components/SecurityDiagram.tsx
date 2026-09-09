@@ -307,17 +307,38 @@ export function SecurityDiagram() {
         </div>
       </div>
 
-      {/* Three facts, each one checkable. This is what the pulsing status dots
-          were standing in for. */}
-      <dl className="border-t border-border sm:mt-7">
+      {/* Three facts, each one checkable, set as a status readout.
+
+          These were a label in small caps against a sentence in the body face,
+          which is the shape of a specification table and belongs to no part of
+          this page. Written as `key  value` in the mono face they read as the
+          output of the terminal directly above, which is what they are: the
+          same three answers the shell would give.
+
+          Availability is the only line that breathes, because it is the only
+          one of the three that can change while someone is reading it. */}
+      <dl className="mt-6 border-t border-border font-mono sm:mt-7">
+        <div className="flex items-center gap-2.5 border-b border-border py-2.5 text-[11px] tracking-[0.16em] text-muted-dim">
+          <span className="text-primary" aria-hidden="true">$</span>
+          <span>cat status</span>
+        </div>
         {[
-          ['FOCUS', 'Infrastructure · Network · Application security'],
-          ['CURRENT', 'MTA, Staten Island Railway'],
-          ['AVAILABILITY', 'Open to security engineering roles'],
-        ].map(([label, value]) => (
-          <div key={label} className="flex items-baseline justify-between gap-6 border-b border-border py-2.5">
-            <dt className="meta-label shrink-0">{label}</dt>
-            <dd className="text-right text-[13.5px] text-foreground">{value}</dd>
+          { key: 'focus', value: 'Infrastructure · Network · Application security' },
+          { key: 'current', value: 'MTA, Staten Island Railway' },
+          { key: 'availability', value: 'Open to security engineering roles', live: true },
+        ].map(({ key, value, live }) => (
+          <div
+            key={key}
+            className="group flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-border py-[9px]"
+          >
+            <dt className="w-[92px] shrink-0 text-[11px] tracking-[0.1em] text-muted-dim transition-colors duration-300 group-hover:text-primary">
+              {key}
+            </dt>
+            {/* Grown from the left so the value stays anchored to its key, and
+                by a transform so no row moves under the cursor. */}
+            <dd className="flex min-w-0 flex-1 origin-left items-baseline gap-2 text-[12.5px] leading-[1.5] text-foreground transition-transform duration-300 ease-out group-hover:scale-[1.06] motion-reduce:transition-none motion-reduce:group-hover:scale-100">
+              <span className={live ? 'live-glow' : undefined}>{value}</span>
+            </dd>
           </div>
         ))}
       </dl>

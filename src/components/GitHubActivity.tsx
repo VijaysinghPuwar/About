@@ -64,12 +64,20 @@ interface Activity {
   privateCount?: number;
 }
 
+/**
+ * Age only, at its shortest.
+ *
+ * This used to read "pushed 2d ago", which spends the words "pushed" and
+ * "ago" three times over on a strip whose whole job is to be read at a glance.
+ * The heading already says these are things being built, and a bare age next
+ * to a repository name cannot mean anything else.
+ */
 function ago(iso: string): string {
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
-  if (days <= 0) return 'pushed today';
-  if (days === 1) return 'pushed yesterday';
-  if (days < 30) return `pushed ${days}d ago`;
-  return `pushed ${Math.floor(days / 30)}mo ago`;
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 30) return `${days}d`;
+  return `${Math.floor(days / 30)}mo`;
 }
 
 function dayKeys(): string[] {
@@ -220,7 +228,7 @@ export function GitHubActivity() {
 
   return (
     <div className="page-gutter container mx-auto max-w-[1180px]">
-      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-3 border-y border-border py-[22px]">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2.5 border-y border-border py-[18px]">
         <div className="flex flex-none items-center gap-2.5">
           <span
             aria-hidden="true"
@@ -243,7 +251,7 @@ export function GitHubActivity() {
             href={repo.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex flex-none items-baseline gap-2.5 whitespace-nowrap font-mono text-[13.5px] text-foreground transition-colors hover:text-primary"
+            className="flex flex-none items-baseline gap-2 whitespace-nowrap font-mono text-[13px] text-foreground transition-colors hover:text-primary"
           >
             {repo.name}
             <span className="text-[12px] text-muted-dim">{repo.when}</span>
@@ -304,7 +312,7 @@ export function GitHubActivity() {
                 under the cursor while there is one. Reserving the width stops
                 the row reflowing as you sweep across the chart. */}
             <span
-              className="flex-none whitespace-nowrap font-mono text-[12px] text-muted-dim wide:min-w-[19rem]"
+              className="flex-none whitespace-nowrap font-mono text-[11.5px] text-muted-dim wide:min-w-[17rem]"
               aria-live="polite"
             >
               {shown ? (
@@ -317,7 +325,7 @@ export function GitHubActivity() {
                   {shown.repos.length > 0 && ` · ${shown.repos.join(', ')}`}
                 </>
               ) : (
-                `${data.total} ${data.unit} / ${DAYS}d`
+                `${data.total} ${data.unit}, ${DAYS}d`
               )}
             </span>
           </>

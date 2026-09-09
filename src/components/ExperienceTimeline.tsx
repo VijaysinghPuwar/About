@@ -28,7 +28,12 @@ function Chips({ items }: { items: string[] }) {
       {items.map(item => (
         <span
           key={item}
-          className="rounded-md border border-border bg-card-elevated px-2.5 py-1 text-[12px] text-muted-foreground"
+          /* Lifted above its neighbours while it grows, since at 1.5x it
+             crosses them, and grown with a transform so the rows of chips
+             never reflow under the cursor. The accent comes from the mode
+             token, so the same hover reads green in defensive mode and red in
+             offensive without a second rule. */
+          className="relative origin-left rounded-md border border-border bg-card-elevated px-2.5 py-1 text-[12px] text-muted-foreground transition-[transform,color,border-color] duration-300 ease-out hover:z-10 hover:scale-150 hover:border-primary hover:text-primary motion-reduce:transition-none motion-reduce:hover:scale-100"
         >
           {item}
         </span>
@@ -204,6 +209,15 @@ const certifications = [
 /* ── One entry ── */
 function TimelineEntry({ row, index }: { row: Row; index: number }) {
   const [open, setOpen] = useState(false);
+  /* Correctness before animation.
+
+     Three attempts at animating this open failed in ways that left the panel
+     shut: `0fr` to `1fr` resolved to zero in an auto-height grid, and a
+     measured `max-height` reported zero at some widths even when set inline.
+     A disclosure that sometimes refuses to open is a worse fault than one that
+     opens without sliding, so the height is no longer animated at all: the
+     content mounts when open and fades in. The chevron still turns, and
+     nothing can clip a chip because nothing clips. */
   const panelId = `${row.id}-panel`;
   /* Odd entries sit left of the rule, even entries right. Below the
      breakpoint every card takes the single content column instead. */
@@ -235,7 +249,7 @@ function TimelineEntry({ row, index }: { row: Row; index: number }) {
           <span
             aria-hidden="true"
             className={cn(
-              'mt-0.5 shrink-0 text-[14px] text-muted-dim transition-transform',
+              'mt-0.5 shrink-0 text-[14px] text-muted-dim transition-transform duration-500 ease-out motion-reduce:transition-none',
               open && 'rotate-180',
             )}
           >
@@ -259,14 +273,28 @@ function TimelineEntry({ row, index }: { row: Row; index: number }) {
             </div>
           </div>
         </div>
+      </button>
 
-        {open && (
-          <div id={panelId} className="mt-3.5 border-t border-border pt-3.5 text-left">
+      {open && (
+        <div id={panelId} className="animate-disclose text-left">
+          <div className="mt-3.5 border-t border-border px-5 pb-[18px] pt-3.5 wide:px-[38px]">
             <ul className="flex flex-col gap-2">
               {row.bullets.map((bullet, i) => (
-                <li key={i} className="flex gap-2.5 text-[14px] leading-[1.55] text-muted-foreground">
-                  <span className="shrink-0 text-primary" aria-hidden="true">·</span>
-                  <span>{bullet}</span>
+                <li key={i} className="flex gap-3 text-[14px] leading-[1.55] text-muted-foreground">
+                  {/* Box-drawing rather than a dot. The last item closes the
+                      branch, so four lines read as one group instead of four
+                      unrelated sentences, and it speaks the same monospace
+                      language as the terminal at the top of the page. */}
+                  <span
+                    className="mt-[3px] shrink-0 font-mono text-[13px] leading-none text-muted-dim"
+                    aria-hidden="true"
+                  >
+                    {i === row.bullets.length - 1 ? '└─' : '├─'}
+                  </span>
+                  {/* Justified, with hyphenation on. Justification without it
+                      opens rivers of white space in a measure this narrow,
+                      because the browser can only stretch the spaces it has. */}
+                  <span className="hyphens-auto text-justify">{bullet}</span>
                 </li>
               ))}
             </ul>
@@ -282,8 +310,8 @@ function TimelineEntry({ row, index }: { row: Row; index: number }) {
 
             {row.detail && <div className="mt-4">{row.detail}</div>}
           </div>
-        )}
-      </button>
+        </div>
+      )}
     </div>
   );
 
@@ -330,27 +358,27 @@ function TimelineEntry({ row, index }: { row: Row; index: number }) {
 */
 function CertRow({ name, org, earned }: { name: string; org: string; earned: boolean }) {
   return (
-    <li className="group relative">
+    <li className="group relative hover:z-10">
       {/* Scaled rather than sized, so the wipe costs no layout. */}
       <span
         aria-hidden="true"
         className="absolute left-0 top-0 h-full w-[2px] origin-top scale-y-0 bg-primary transition-transform duration-[220ms] ease-[cubic-bezier(.2,.8,.3,1)] group-hover:scale-y-100 motion-reduce:transition-none"
       />
-      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 rounded-md px-0 py-[15px] transition-colors duration-200 group-hover:bg-card wide:px-[18px]">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 rounded-md px-0 py-[18px] transition-colors duration-200 group-hover:bg-card wide:px-[18px]">
         <span className="flex min-w-0 items-baseline gap-3">
           {/* The gutter is present on every row, so the names keep one left
               edge whether or not there is a mark to put in front of them. */}
-          <span className="flex w-3.5 shrink-0 translate-y-[3px] justify-center" aria-hidden="true">
+          <span className="flex w-6 shrink-0 translate-y-[5px] justify-center" aria-hidden="true">
             {!earned && (
-              <svg viewBox="0 0 14 14" className="h-3.5 w-3.5 animate-spin [animation-duration:1.6s] motion-reduce:animate-none">
-                <circle cx="7" cy="7" r="5.6" fill="none" stroke="hsl(var(--border-strong))" strokeWidth="1.4" />
+              <svg viewBox="0 0 14 14" className="h-6 w-6 animate-spin [animation-duration:2.2s] motion-reduce:animate-none">
+                <circle cx="7" cy="7" r="5.6" fill="none" stroke="hsl(var(--border-strong))" strokeWidth="1.5" />
                 <circle
                   cx="7"
                   cy="7"
                   r="5.6"
                   fill="none"
                   stroke="hsl(var(--primary))"
-                  strokeWidth="1.4"
+                  strokeWidth="1.5"
                   strokeLinecap="round"
                   strokeDasharray="9 26"
                 />
@@ -359,15 +387,23 @@ function CertRow({ name, org, earned }: { name: string; org: string; earned: boo
           </span>
           <span
           className={cn(
-            /* Grown with a transform rather than a larger font size: the row
-               height stays put, so sweeping down the list does not shunt the
-               rows below the cursor around. `origin-left` keeps the left edge
-               of every name on the same line while it grows. */
-            'origin-left text-[clamp(18px,2vw,23px)] font-semibold leading-[1.3] tracking-[-0.018em]',
-            'transition-[color,transform] duration-200 ease-out',
-            'group-hover:translate-x-1 group-hover:scale-[1.035] group-hover:text-primary',
-            'motion-reduce:transition-none motion-reduce:group-hover:translate-x-0 motion-reduce:group-hover:scale-100',
-            earned ? 'text-foreground' : 'text-muted-foreground',
+            /* The colour change is the wipe; see `.cert-wipe` in index.css.
+
+               Grown with a transform rather than a larger font size, so the
+               row height stays put and sweeping down the list does not shunt
+               the rows below the cursor around. `origin-left` grows the name
+               into the empty measure on its right instead of off the page. At
+               this magnification it necessarily crosses its neighbours, which
+               is why the row lifts above them while hovered. */
+            /* No `transition-*` utility here. That utility is a `transition:`
+               shorthand too, and being a utility it beat `.cert-wipe` in the
+               cascade: it replaced the background-position transition with a
+               transform one at the default 150ms, so the wipe never animated
+               and the zoom ran six times too fast. Both timings live together
+               in the one rule in index.css now. */
+            'cert-wipe origin-left text-[clamp(20px,2.4vw,28px)] font-semibold leading-[1.25] tracking-[-0.02em]',
+            'group-hover:scale-[2]',
+            'motion-reduce:group-hover:scale-100',
           )}
           >
             {name}

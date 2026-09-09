@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
 import { Helmet } from 'react-helmet-async';
+import { GitHubMark, LinkedInMark } from '@/components/BrandMarks';
 import projectsData from '@/data/projects.json';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
@@ -102,27 +103,36 @@ export default function Index() {
 
               {/* Signature row.
 
-                  Spelled out rather than shown as glyphs. The handle is the
-                  useful part of either link, a reader can copy it without
-                  following it, and it survives being printed. The email is not
-                  repeated here: it has its own card in the contact section and
-                  its own `contact` command in the terminal above. */}
-              <div className="mt-4 flex flex-wrap gap-x-[22px] gap-y-2 text-[12px]">
+                  Spelled-out URLs were replaced by the owners' own marks. The
+                  handle is the useful half of either address, but reading it
+                  is not what anyone does with these: they are recognised, not
+                  read, and the real glyph is recognised faster than any label.
+                  The accessible name still carries the full handle, and the
+                  title shows the address on hover for anyone who wants it.
+
+                  The email is not repeated here. It has its own card in the
+                  contact section and its own `contact` command in the terminal
+                  above. */}
+              <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3">
                 <a
                   href="https://github.com/vijaysinghpuwar"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="tap-44 font-mono text-muted-foreground transition-colors hover:text-primary"
+                  aria-label="GitHub: vijaysinghpuwar"
+                  title="github.com/vijaysinghpuwar"
+                  className="tap-44 text-muted-foreground transition-[color,transform] duration-200 ease-out hover:scale-110 hover:text-primary"
                 >
-                  github.com/vijaysinghpuwar
+                  <GitHubMark className="h-[19px] w-[19px]" />
                 </a>
                 <a
                   href="https://linkedin.com/in/vijaysinghpuwar"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="tap-44 font-mono text-muted-foreground transition-colors hover:text-primary"
+                  aria-label="LinkedIn: vijaysinghpuwar"
+                  title="linkedin.com/in/vijaysinghpuwar"
+                  className="tap-44 text-muted-foreground transition-[color,transform] duration-200 ease-out hover:scale-110 hover:text-primary"
                 >
-                  linkedin.com/in/vijaysinghpuwar
+                  <LinkedInMark className="h-[18px] w-[18px]" />
                 </a>
               </div>
             </div>
