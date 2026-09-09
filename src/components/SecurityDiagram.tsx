@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useReducedMotion } from 'framer-motion';
 import { useTheme } from '@/hooks/useTheme';
 import { sweepHold } from '@/lib/theme-transition';
@@ -40,11 +41,37 @@ const NODE_LABEL = {
   letterSpacing: '0.09em',
 } as const;
 
+/*
+  A label sits wherever its leg lands, and legs land in a crowded drawing: the
+  numbered steps all cross either a traced leg, a topology line or the boundary
+  at some point, and a bright accent word with a line running under it reads as
+  a smudge rather than as a word.
+
+  So the glyphs knock the line out around themselves. `paint-order: stroke`
+  lays the background colour down first, in a stroke that follows the
+  letterforms, and fills over it, which leaves a hairline of clearance shaped
+  like the word. Nothing is added to the palette and nothing glows: the halo is
+  the page's own background, and its only job is that the line behind stops
+  short of the letters and resumes after them.
+
+  Moving the labels instead was the other option and it does not survive: the
+  two modes put nine labels on the same drawing, several land in the same
+  wedges, and any position solved by hand is one geometry change away from
+  being wrong again.
+*/
+const LABEL_KNOCKOUT = {
+  paintOrder: 'stroke',
+  stroke: 'hsl(var(--background))',
+  strokeWidth: '2.6px',
+  strokeLinejoin: 'round',
+} as const;
+
 const STEP_LABEL = {
   fontFamily: "'IBM Plex Mono', monospace",
   fontSize: '9px',
   letterSpacing: '0.06em',
   fill: 'hsl(var(--primary))',
+  ...LABEL_KNOCKOUT,
 } as const;
 
 /*
@@ -134,7 +161,15 @@ const DETECTION = {
 };
 
 /* Intrusion: one continuous walk inward, each leg landing on the node its
-   label names. */
+   label names.
+
+   01 and 02 name the two ends of the same leg and sit on opposite sides of
+   it, which is deliberate. 02 was on the same side as 01, close enough to the
+   line that the leg ran the length of the words and split `02` from
+   `FOOTHOLD`. A knockout answers a line that crosses a label; it cannot help
+   one that travels along it, so this one moves. Up and left of the edge
+   device puts it in the only clear space near the node it names, and just
+   inside the boundary, which is where a foothold is. */
 const ATTACK = {
   ...schedule([
     { d: 'M544 48 L393 120' },
@@ -144,7 +179,7 @@ const ATTACK = {
   ]),
   steps: [
     { text: '01 RECON', x: 474, y: 64, leg: 0, anchor: 'end' },
-    { text: '02 FOOTHOLD', x: 408, y: 108, leg: 0 },
+    { text: '02 FOOTHOLD', x: 378, y: 106, leg: 0, anchor: 'end' },
     { text: '03 ESCALATE', x: 402, y: 276, leg: 1 },
     { text: '04 PIVOT', x: 334, y: 252, leg: 2 },
     { text: '05 LATERAL', x: 220, y: 298, leg: 3 },
@@ -300,78 +335,108 @@ export function SecurityDiagram() {
             )}
           </g>
 
-          {/* nodes */}
+          {/* nodes
+
+              `LABEL_KNOCKOUT` is spread onto each label rather than set on
+              this group: the group holds the marks as well as the names, and
+              a stroke set here would be inherited by every child that does not
+              declare one of its own. The endpoint dots declare only a fill, so
+              they would each pick up a 2.6-wide ring of background colour and
+              punch a hole in the topology around themselves, and the invisible
+              hit boxes would do the same along their edges. */}
           <g style={NODE_LABEL}>
-            {/* Hit targets, sized for a pointer rather than for the ink. Each
-                is focusable so the notes are reachable from the keyboard. */}
+            {/* Hit targets.
+
+                A box per node rather than a disc on the dot, because the dot
+                is not what anyone aims at: the label beside it is the part
+                that reads as the node, and a target that stops at the ink
+                leaves the name inert. Each box covers the mark and its label
+                together.
+
+                They are drawn before the ink and the ink is inert, so the
+                whole box answers including its exact centre. As discs behind
+                live ink, the one pixel a reader actually points at, the dot,
+                was the one pixel that did nothing.
+
+                `Link`, not `<a href>`: an href inside the SVG reloaded the
+                whole document, which re-ran the theme boot and redrew this
+                diagram from step one just to move down the page.
+
+                Each is focusable, so the notes are reachable from the
+                keyboard. */}
             {[
-              { id: 'internet', cx: 544, cy: 48 },
-              { id: 'firewall', cx: 393, cy: 120 },
-              { id: 'ad', cx: 300, cy: 218 },
-              { id: 'endpoints', cx: 206, cy: 218 },
-              { id: 'm365', cx: 388, cy: 292 },
-              { id: 'splunk', cx: 300, cy: 368 },
+              { id: 'internet', name: 'Internet', x: 512, y: 18, w: 64, h: 42 },
+              { id: 'firewall', name: 'Firewall', x: 382, y: 110, w: 82, h: 36 },
+              { id: 'ad', name: 'Active Directory', x: 247, y: 170, w: 106, h: 74 },
+              { id: 'endpoints', name: 'Endpoints', x: 117, y: 156, w: 97, h: 124 },
+              { id: 'm365', name: 'Microsoft 365', x: 380, y: 284, w: 106, h: 28 },
+              { id: 'splunk', name: 'Splunk', x: 292, y: 358, w: 64, h: 20 },
             ].map(hit => (
-              <a
+              <Link
                 key={hit.id}
-                href={`/environment#${hit.id}`}
-                aria-label={`${hit.id}: ${NODE_NOTES[hit.id]}`}
+                to={`/environment#${hit.id}`}
+                aria-label={`${hit.name}: ${NODE_NOTES[hit.id]}`}
                 onMouseEnter={() => setNode(hit.id)}
                 onMouseLeave={() => setNode(null)}
                 onFocus={() => setNode(hit.id)}
                 onBlur={() => setNode(null)}
               >
-                <circle
-                  cx={hit.cx}
-                  cy={hit.cy}
-                  r="26"
+                <rect
+                  x={hit.x}
+                  y={hit.y}
+                  width={hit.w}
+                  height={hit.h}
                   fill="transparent"
                   style={{ cursor: 'pointer', outlineOffset: '2px' }}
                 />
-              </a>
+              </Link>
             ))}
-            <circle style={{ transformOrigin: '544px 48px', transform: node === 'internet' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="544" cy="48" r="4.5" fill="hsl(var(--background))" stroke={node === 'internet' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground-dim))'} strokeWidth="1.3" />
-            <text x="544" y="30" textAnchor="middle" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>INTERNET</text>
+            {/* The ink. Inert, so the boxes above own every pixel of a
+                node including the one under the mark itself. */}
+            <g style={{ pointerEvents: 'none' }}>
+              <circle style={{ transformOrigin: '544px 48px', transform: node === 'internet' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="544" cy="48" r="4.5" fill="hsl(var(--background))" stroke={node === 'internet' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground-dim))'} strokeWidth="1.3" />
+              <text x="544" y="30" textAnchor="middle" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>INTERNET</text>
 
-            <circle style={{ transformOrigin: '393px 120px', transform: node === 'firewall' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="393" cy="120" r="6" fill="hsl(var(--background))" stroke="hsl(var(--primary))" strokeWidth="1.5" />
-            <text x="408" y="140" style={{ fill: 'hsl(var(--muted-foreground))' }}>FIREWALL</text>
+              <circle style={{ transformOrigin: '393px 120px', transform: node === 'firewall' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="393" cy="120" r="6" fill="hsl(var(--background))" stroke="hsl(var(--primary))" strokeWidth="1.5" />
+              <text x="408" y="140" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground))' }}>FIREWALL</text>
 
-            <path
-              d="M300 196 L319 207 L319 229 L300 240 L281 229 L281 207 Z"
-              fill="hsl(var(--card-elevated))"
-              stroke={node === 'ad' ? 'hsl(var(--primary))' : 'hsl(var(--foreground))'}
-              strokeWidth="1.4"
-              style={{
-                transformOrigin: '300px 218px',
-                transform: node === 'ad' ? 'scale(1.5)' : undefined,
-                transition: 'transform .3s ease',
-              }}
-            />
-            <text x="300" y="180" textAnchor="middle" style={{ fill: 'hsl(var(--foreground))' }}>ACTIVE DIRECTORY</text>
+              <path
+                d="M300 196 L319 207 L319 229 L300 240 L281 229 L281 207 Z"
+                fill="hsl(var(--card-elevated))"
+                stroke={node === 'ad' ? 'hsl(var(--primary))' : 'hsl(var(--foreground))'}
+                strokeWidth="1.4"
+                style={{
+                  transformOrigin: '300px 218px',
+                  transform: node === 'ad' ? 'scale(1.5)' : undefined,
+                  transition: 'transform .3s ease',
+                }}
+              />
+              <text x="300" y="180" textAnchor="middle" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--foreground))' }}>ACTIVE DIRECTORY</text>
 
-            <circle
-              cx="206"
-              cy="164"
-              r="3.5"
-              fill={node === 'endpoints' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'}
-              style={{ transformOrigin: '206px 164px', transform: node === 'endpoints' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }}
-            />
-            <circle
-              cx="206"
-              cy="272"
-              r="3.5"
-              fill={node === 'endpoints' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'}
-              style={{ transformOrigin: '206px 272px', transform: node === 'endpoints' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }}
-            />
-            <text x="176" y="222" textAnchor="end" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>ENDPOINTS</text>
+              <circle
+                cx="206"
+                cy="164"
+                r="3.5"
+                fill={node === 'endpoints' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'}
+                style={{ transformOrigin: '206px 164px', transform: node === 'endpoints' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }}
+              />
+              <circle
+                cx="206"
+                cy="272"
+                r="3.5"
+                fill={node === 'endpoints' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'}
+                style={{ transformOrigin: '206px 272px', transform: node === 'endpoints' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }}
+              />
+              <text x="176" y="222" textAnchor="end" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>ENDPOINTS</text>
 
-            <circle style={{ transformOrigin: '388px 292px', transform: node === 'm365' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="388" cy="292" r="4.5" fill="hsl(var(--background))" stroke={node === 'm365' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'} strokeWidth="1.3" />
-            <text x="398" y="308" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>MICROSOFT 365</text>
+              <circle style={{ transformOrigin: '388px 292px', transform: node === 'm365' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="388" cy="292" r="4.5" fill="hsl(var(--background))" stroke={node === 'm365' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'} strokeWidth="1.3" />
+              <text x="398" y="308" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>MICROSOFT 365</text>
 
-            <circle style={{ transformOrigin: '300px 368px', transform: node === 'splunk' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="300" cy="368" r="4.5" fill="hsl(var(--background))" stroke={node === 'splunk' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'} strokeWidth="1.3" />
-            <text x="314" y="372" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>SPLUNK</text>
+              <circle style={{ transformOrigin: '300px 368px', transform: node === 'splunk' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="300" cy="368" r="4.5" fill="hsl(var(--background))" stroke={node === 'splunk' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'} strokeWidth="1.3" />
+              <text x="314" y="372" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>SPLUNK</text>
 
-            <text x="96" y="104" style={{ fill: 'hsl(var(--muted-foreground-dim))' }}>ENTERPRISE NETWORK</text>
+              <text x="96" y="104" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>ENTERPRISE NETWORK</text>
+            </g>
           </g>
         </svg>
 

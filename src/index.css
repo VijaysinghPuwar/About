@@ -443,6 +443,30 @@ html[data-theme-sweep] * {
 }
 
 /*
+  Hero schematic (see `components/SecurityDiagram.tsx`).
+
+  The traced chain draws leg by leg in the order its steps are numbered, then
+  each step label resolves as its leg lands, a small overshoot on the way in so
+  the label reads as arriving at the node rather than fading up over it. Both
+  are one-shot, `forwards`, and only ever run on load or on a mode switch.
+
+  They were deleted once, in the commit that renamed the nodes, and nothing
+  failed loudly: a missing keyframe leaves the legs at `stroke-dashoffset: 1`
+  and every step label at `opacity: 0`, so the whole traced chain and its
+  numbering simply never appear. Do not remove them without removing the two
+  `animation` shorthands in the component that name them.
+*/
+@keyframes diagram-trace {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes diagram-step-in {
+  0% { opacity: 0; transform: scale(0.82); }
+  62% { opacity: 1; transform: scale(1.07); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/*
   The terminal's sideways scroller. Command output is laid out in padded
   columns, so on a phone it scrolls rather than wraps. The default bar was
   a bright slab across the bottom of the output. Touch browsers overlay their
