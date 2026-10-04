@@ -30,3 +30,12 @@ dist-ssr
 
 # local env backups (never commit)
 .env.local.*
+
+# macOS custom folder icon. Zero bytes on disk; the icon itself lives in the
+# resource fork, so it is ignored rather than deleted. The name really does end
+# in a carriage return, and git strips one trailing CR when it parses this
+# file, so the line below carries two. With one it silently matches nothing.
+Icon
+
+# Supabase CLI scratch (version cache, linked-project state)
+supabase/.temp/
