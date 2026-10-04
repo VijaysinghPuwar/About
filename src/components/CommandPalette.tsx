@@ -231,8 +231,7 @@ export function CommandPalette() {
         >
           {/* Overlay */}
           <div
-            className="absolute inset-0 "
-            style={{ background: 'rgba(5,8,22,0.7)' }}
+            className="absolute inset-0 bg-background/80"
             onClick={() => setIsOpen(false)}
           />
 
@@ -241,21 +240,19 @@ export function CommandPalette() {
             role="dialog"
             aria-modal="true"
             aria-label="Command palette"
-            className="relative w-[95vw] md:w-[90vw] max-w-[560px] h-fit rounded-lg overflow-hidden"
-            style={{
-              background: 'rgba(15,23,42,0.95)',
-              backdropFilter: 'blur(24px)',
-              border: '1px solid rgba(100,220,255,0.12)',
-              boxShadow: '0 0 40px rgba(0,229,255,0.06)',
-            }}
+            // A solid card on the site's own tokens. It was a hardcoded cyan and
+            // navy panel with a 24px backdrop blur and a cyan glow: the one part
+            // of the site that ignored pentest mode, and on an integrated GPU the
+            // blur re-sampled the whole page behind it every frame it was open.
+            className="relative w-[95vw] md:w-[90vw] max-w-[560px] h-fit rounded-lg overflow-hidden border border-border-strong bg-card"
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.15 }}
           >
             {/* Search input */}
-            <div className="flex items-center px-5 py-4" style={{ borderBottom: '1px solid rgba(100,220,255,0.08)' }}>
-              <Search className="w-[18px] h-[18px] mr-3 shrink-0" style={{ color: '#64748b' }} />
+            <div className="flex items-center border-b border-border px-5 py-4">
+              <Search className="w-[18px] h-[18px] mr-3 shrink-0 text-muted-foreground" />
               <input
                 ref={inputRef}
                 value={query}
@@ -265,8 +262,7 @@ export function CommandPalette() {
                 className="flex-1 bg-transparent text-[15px] text-foreground placeholder:text-muted-foreground outline-none"
               />
               <span
-                className="ml-3 shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px]"
-                style={{ background: 'rgba(100,220,255,0.1)', color: '#64748b' }}
+                className="ml-3 shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
               >
                 ESC
               </span>
@@ -295,13 +291,12 @@ export function CommandPalette() {
                             data-idx={item.globalIdx}
                             onClick={() => execute(item)}
                             onMouseEnter={() => setSelectedIndex(item.globalIdx)}
-                            className="w-full flex items-center gap-3 px-5 py-2.5 text-left transition-colors"
-                            style={{
-                              background: isSelected ? 'rgba(0,229,255,0.06)' : 'transparent',
-                              borderLeft: isSelected ? '2px solid #00e5ff' : '2px solid transparent',
-                            }}
+                            className={
+                              'w-full flex items-center gap-3 border-l-2 px-5 py-2.5 text-left transition-colors ' +
+                              (isSelected ? 'border-primary bg-primary/[0.06]' : 'border-transparent')
+                            }
                           >
-                            <Icon className="w-[18px] h-[18px] shrink-0" style={{ color: isSelected ? '#00e5ff' : '#64748b' }} />
+                            <Icon className={'w-[18px] h-[18px] shrink-0 ' + (isSelected ? 'text-primary' : 'text-muted-foreground')} />
                             <span className="flex-1 text-[13px] md:text-sm text-foreground truncate">{item.label}</span>
                             {item.hint && (
                               <span className="text-[11px] text-muted-foreground shrink-0">{item.hint}</span>
@@ -317,8 +312,7 @@ export function CommandPalette() {
 
             {/* Footer */}
             <div
-              className="flex items-center gap-3 px-5 py-2.5 font-mono text-[11px]"
-              style={{ borderTop: '1px solid rgba(100,220,255,0.08)', color: '#475569' }}
+              className="flex items-center gap-3 border-t border-border px-5 py-2.5 font-mono text-[11px] text-muted-dim"
             >
               <span>↑↓ Navigate</span>
               <span>·</span>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { usePauseOffscreen } from '@/hooks/usePauseOffscreen';
 
 /*
   A one-line proof that the work is ongoing.
@@ -168,6 +169,7 @@ async function load(): Promise<Activity | null> {
 }
 
 export function GitHubActivity() {
+  const pauseRef = usePauseOffscreen<HTMLDivElement>();
   const [data, setData] = useState<Activity | null>(null);
   /** Index of the day under the cursor or keyboard focus, if any. */
   const [active, setActive] = useState<number | null>(null);
@@ -227,7 +229,7 @@ export function GitHubActivity() {
     new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
   return (
-    <div className="page-gutter container mx-auto max-w-[1180px]">
+    <div ref={pauseRef} className="page-gutter container mx-auto max-w-[1180px]">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2.5 border-y border-border py-[18px]">
         <div className="flex flex-none items-center gap-2.5">
           <span

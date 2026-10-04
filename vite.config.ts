@@ -31,7 +31,11 @@ export default defineConfig(({ mode }) => ({
             id.includes("/react/") ||
             id.includes("/react-dom/") ||
             id.includes("/react-router") ||
-            id.includes("/scheduler/")
+            id.includes("/scheduler/") ||
+            // Icons are shared by the home page and the lazy routes; left to
+            // Rollup they split into one tiny chunk per icon, each a round
+            // trip on the critical path of a slow connection.
+            id.includes("/lucide-react/")
           ) {
             return "react-radix-vendor";
           }

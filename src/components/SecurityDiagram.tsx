@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useReducedMotion } from 'framer-motion';
 import { useTheme } from '@/hooks/useTheme';
 import { sweepHold } from '@/lib/theme-transition';
+import { usePauseOffscreen } from '@/hooks/usePauseOffscreen';
 
 /*
   The hero's second column.
@@ -189,6 +190,7 @@ const ATTACK = {
 
 export function SecurityDiagram() {
   const { isPentest } = useTheme();
+  const pauseRef = usePauseOffscreen<HTMLDivElement>();
   /** The node under the cursor or keyboard focus, if any. */
   const [node, setNode] = useState<string | null>(null);
   const reduced = useReducedMotion();
@@ -232,7 +234,7 @@ export function SecurityDiagram() {
       : undefined;
 
   return (
-    <div>
+    <div ref={pauseRef}>
       {/* The schematic needs width to stay legible, so on a phone it is dropped
           rather than shrunk. The three facts underneath are the part a phone
           reader actually needs, and they stay at every width.
