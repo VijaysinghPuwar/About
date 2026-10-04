@@ -291,27 +291,94 @@ svg [stroke], svg [fill] {
      One 60px cell diagonally over two minutes, which is about half a pixel a
      second: too slow to catch the eye, fast enough that the page is never
      quite still. Because the travel is exactly one cell the loop closes on
-     itself with no jump, and because it moves `background-position` rather
-     than the element there is no layer to composite and no layout to redo.
+     itself with no jump.
+
+     It moves the layer with `transform`, never `background-position`. The
+     background-position version could not be composited and repainted the
+     whole masked viewport every frame, which on an integrated GPU was the
+     largest single cost of the idle page. See CyberGrid.tsx.
 
      The grid's opacity is untouched. It should stay at the edge of visible. */
   @keyframes rule-grid-drift {
     from {
-      background-position: 0 0;
+      transform: translate3d(0, 0, 0);
     }
     to {
-      background-position: 60px 60px;
+      transform: translate3d(60px, 60px, 0);
     }
   }
 
+  /* Stepped, not linear: 60 one-pixel steps, one every two seconds. At half a
+     pixel a second a linear drift asked for a new frame sixty times a second
+     to move a hairline nobody can see move; stepped, the compositor does one
+     cheap update every two seconds and the drift reads exactly the same. */
   .rule-grid-drift {
-    animation: rule-grid-drift 120s linear infinite;
+    animation: rule-grid-drift 120s steps(60, end) infinite;
+    will-change: transform;
   }
 
   @media (prefers-reduced-motion: reduce) {
     .rule-grid-drift {
       animation: none;
     }
+  }
+
+  /* Section entrance. See SectionReveal.tsx.
+
+     The revealed state is `transform: none`, never a zero translate: any
+     transform makes the section the containing block for `position: fixed`
+     descendants, and the project detail modal is one. No `will-change` for
+     the same reason. */
+  .section-reveal {
+    opacity: 0;
+    transform: translateY(12px);
+    transition:
+      opacity 0.4s ease-out,
+      transform 0.4s ease-out;
+  }
+
+  @media (min-width: 768px) {
+    .section-reveal {
+      transform: translateY(20px);
+    }
+  }
+
+  .section-reveal[data-revealed] {
+    opacity: 1;
+    transform: none;
+  }
+
+  @keyframes section-rule-draw {
+    0% {
+      transform: scaleX(0);
+      opacity: 1;
+    }
+    55% {
+      transform: scaleX(1);
+      opacity: 1;
+    }
+    100% {
+      transform: scaleX(1);
+      opacity: 0;
+    }
+  }
+
+  .section-rule-draw {
+    animation: section-rule-draw 1.1s ease-out both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .section-reveal {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+  }
+
+  /* Loops scrolled out of view stop. Set by `usePauseOffscreen`. */
+  [data-offscreen],
+  [data-offscreen] * {
+    animation-play-state: paused !important;
   }
 
   /* Disclosure content, fading up as it mounts. */

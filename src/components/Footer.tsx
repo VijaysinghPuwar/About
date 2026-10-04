@@ -23,9 +23,13 @@ export function Footer() {
     }
   }, []);
 
+  /* The back-to-top button is fixed 20-24px from the right edge and is always
+     showing by the time the footer is on screen. Below ~1240px the footer's
+     column reaches under it, and it sat on the last link: at 854px "Contact"
+     read as "Co". The right padding reserves the button's width there. */
   return (
     <footer className="relative z-[1] border-t border-border">
-      <div className="page-gutter container mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-6 gap-y-4 py-6">
+      <div className="page-gutter container mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-6 gap-y-4 py-6 max-[1239px]:!pr-[76px]">
         <LogoIcon size={22} />
         <span className="font-mono text-[11.5px] text-muted-dim">
           © {new Date().getFullYear()} Vijaysingh Puwar

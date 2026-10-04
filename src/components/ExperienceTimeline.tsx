@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { usePauseOffscreen } from '@/hooks/usePauseOffscreen';
 
 /*
   Experience and education as an alternating sequence.
@@ -424,8 +425,9 @@ function CertRow({ name, org, earned }: { name: string; org: string; earned: boo
 
 /* ── Main Component ── */
 export function ExperienceTimeline() {
+  const pauseRef = usePauseOffscreen<HTMLDivElement>();
   return (
-    <div className="mt-10">
+    <div ref={pauseRef} className="mt-10">
       <div className="relative">
         {rows.map((row, i) => (
           <TimelineEntry key={row.id} row={row} index={i} />

@@ -1,8 +1,17 @@
 import { useRef, useState, useEffect } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { useReducedMotion } from 'framer-motion';
 
-/** Shared: fires once when `ref` first scrolls into view. */
+/**
+ * Shared: fires once when `ref` first scrolls into view.
+ *
+ * It triggers on the element's top edge crossing a line a little above the
+ * bottom of the viewport, not on a share of its area. The old trigger was
+ * `threshold: 0.15`, 15% of the element visible at once, and a section can be
+ * far taller than the viewport: on a phone the Work section is several screens
+ * long, so it sat invisible while the reader scrolled through the empty space
+ * where it should have been, and a section more than about six screens tall
+ * could never reach 15% at all.
+ */
 function useEnteredView(ref: React.RefObject<HTMLElement>, skip: boolean) {
   const [entered, setEntered] = useState(false);
 
@@ -18,7 +27,7 @@ function useEnteredView(ref: React.RefObject<HTMLElement>, skip: boolean) {
       ([entry]) => {
         if (entry.isIntersecting) setEntered(true);
       },
-      { threshold: 0.15 },
+      { threshold: 0, rootMargin: '0px 0px -12% 0px' },
     );
     observer.observe(el);
     return () => observer.disconnect();
@@ -44,15 +53,7 @@ export function SectionRule() {
   return (
     <span ref={ref} aria-hidden="true" className="pointer-events-none absolute inset-x-0 -top-px block h-px">
       {entered && !prefersReducedMotion && (
-        <motion.span
-          className="absolute inset-0 block origin-center bg-primary"
-          initial={{ scaleX: 0, opacity: 1 }}
-          animate={{ scaleX: 1, opacity: 0 }}
-          transition={{
-            scaleX: { duration: 0.6, ease: 'easeOut' },
-            opacity: { duration: 0.45, delay: 0.65, ease: 'easeIn' },
-          }}
-        />
+        <span className="section-rule-draw absolute inset-0 block origin-center bg-primary" />
       )}
     </span>
   );
@@ -67,23 +68,24 @@ interface SectionRevealProps {
  * Section content entrance: a short lift, nothing else. The previous version
  * held the content back 300ms behind the rule above, so every section arrived
  * late; the two now run together.
+ *
+ * Plain CSS transitions on `opacity` and `transform` (see `.section-reveal` in
+ * index.css), so the browser runs them on the compositor instead of a
+ * JavaScript loop stepping each frame, which is the difference between a
+ * smooth lift and a stutter on a low-power machine.
  */
 export function SectionReveal({ children, className = '' }: SectionRevealProps) {
   const ref = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
   const triggered = useEnteredView(ref, !!prefersReducedMotion);
-  const isMobile = useIsMobile();
-  const translateY = isMobile ? 12 : 20;
 
   return (
-    <motion.div
+    <div
       ref={ref}
-      className={`relative ${className}`}
-      initial={prefersReducedMotion ? false : { opacity: 0, y: translateY }}
-      animate={triggered ? { opacity: 1, y: 0 } : { opacity: 0, y: translateY }}
-      transition={{ duration: 0.4, ease: 'easeOut' }}
+      className={`section-reveal relative ${className}`}
+      data-revealed={triggered || prefersReducedMotion ? '' : undefined}
     >
       {children}
-    </motion.div>
+    </div>
   );
 }

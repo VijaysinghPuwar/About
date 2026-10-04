@@ -37,6 +37,15 @@ Ambient motion is capped at two effects: the static rule grid behind the hero
 (`CyberGrid`) and the section fade-up (`SectionReveal`). Anything beyond that
 needs to earn its place by aiding comprehension.
 
+The site is tested on a low-power Windows laptop (Intel UHD 630) and must stay
+smooth there. Animate only `transform` and `opacity`; never loop
+`background-position`, `box-shadow`, `filter` or `backdrop-filter`, which
+repaint every frame (the grid's old `background-position` drift was the
+single biggest cost of the idle page). The grid scrolls with the document
+rather than being fixed. Any loop that keeps running (live glow, schematic
+dots, timeline cursor) must sit under `usePauseOffscreen` so it stops when
+scrolled away. Routes other than `/` are lazy-loaded; keep it that way.
+
 The typewriter intro is paced to be watched once, not admired: about three
 seconds end to end, and a click or any keystroke finishes it immediately.
 Reduced motion never sees it type at all — including on the first load, which

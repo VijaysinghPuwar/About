@@ -32,14 +32,19 @@ const CommandPalette = lazy(() =>
 );
 
 import Index from "./pages/Index";
-import Login from "./pages/Login";
-import AuthCallback from "./pages/AuthCallback";
-import Blocked from "./pages/Blocked";
-import OAuthConsent from "./pages/OAuthConsent";
-import Admin from "./pages/Admin";
-import Resume from "./pages/Resume";
-import Environment from "./pages/Environment";
-import NotFound from "./pages/NotFound";
+
+/* Only the home page ships in the entry bundle. Every other route, the admin
+   console above all, used to be imported eagerly, so a first visit parsed and
+   compiled a few hundred kilobytes of code it would never run. On a slow CPU
+   that is the difference between the hero arriving and the hero waiting. */
+const Login = lazy(() => import("./pages/Login"));
+const AuthCallback = lazy(() => import("./pages/AuthCallback"));
+const Blocked = lazy(() => import("./pages/Blocked"));
+const OAuthConsent = lazy(() => import("./pages/OAuthConsent"));
+const Admin = lazy(() => import("./pages/Admin"));
+const Resume = lazy(() => import("./pages/Resume"));
+const Environment = lazy(() => import("./pages/Environment"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
@@ -58,6 +63,7 @@ const App = () => (
               </Suspense>
               <Navigation />
               <main className="relative z-[1]">
+                <Suspense fallback={<div className="min-h-[100dvh]" />}>
                 <Routes>
                   <Route path="/" element={<Index />} />
                   <Route path="/login" element={<Login />} />
@@ -75,6 +81,7 @@ const App = () => (
                   <Route path="/admin" element={<ProtectedRoute requireAdmin><Admin /></ProtectedRoute>} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
+                </Suspense>
               </main>
               <Footer />
               <BackToTop />
