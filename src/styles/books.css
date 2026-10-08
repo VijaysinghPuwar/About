@@ -507,3 +507,108 @@
   background: hsl(var(--primary));
   transform-origin: left center;
 }
+
+/* ------------------------------------------------------------------ */
+/* Pages                                                               */
+/* ------------------------------------------------------------------ */
+
+/*
+  The chapter as a strip of columns, each one page. BookReader sets the
+  column width, gap and --page-h from the measured frame and slides the strip
+  with a transform; nothing here scrolls.
+*/
+.book-pages {
+  column-fill: auto;
+  will-change: transform;
+  orphans: 2;
+  widows: 2;
+}
+
+.book-pages.is-turning {
+  transition: transform 0.42s cubic-bezier(0.22, 0.8, 0.28, 1);
+}
+
+/* The first element of a column must not carry a top margin into it. */
+.book-pages .book-prose > section:first-child > h1:first-child {
+  margin-top: 0;
+}
+
+.book-pages h1,
+.book-pages h2,
+.book-pages h3,
+.book-pages h4 {
+  break-after: avoid;
+  break-inside: avoid;
+}
+
+/* Code wraps on a page. A sideways scroll inside a sideways-turning page
+   fights the swipe, and a listing taller than a page could not be split. */
+.book-pages pre,
+.book-pages pre code {
+  white-space: pre-wrap;
+  overflow: visible;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.book-pages div.sourceCode,
+.book-pages pre {
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* Tables fit the page width and continue onto the next page row by row,
+   as in a printed book. A scroll box would be a page inside a page: rows
+   hidden below its edge, and a swipe that scrolls instead of turning. */
+.book-pages .table-scroll {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+}
+
+.book-pages table {
+  table-layout: fixed;
+  border-top: 1px solid hsl(var(--r-border));
+}
+
+.book-pages th {
+  white-space: normal;
+}
+
+.book-pages td,
+.book-pages th {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 8px 10px;
+}
+
+.book-pages tr {
+  break-inside: avoid;
+}
+
+/* A figure always fits on one page. */
+.book-pages figure,
+.book-pages img {
+  break-inside: avoid;
+}
+
+.book-pages img {
+  /* Half a page: tall enough to read a diagram, short enough that it usually
+     fits under the text before it instead of leaving that page half empty.
+     Tap-to-zoom is the pinch the frame allows. */
+  max-height: calc(var(--page-h) * 0.5);
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.book-pages .callout,
+.book-pages .chapter-end,
+.book-pages li {
+  break-inside: avoid;
+}
+
+/* Long callouts are allowed to split rather than leave a page half empty. */
+.book-pages .callout:has(> :nth-child(4)) {
+  break-inside: auto;
+}

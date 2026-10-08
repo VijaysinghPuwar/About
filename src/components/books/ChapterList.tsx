@@ -79,9 +79,7 @@ export function ChapterList({
                         <Check className="h-3.5 w-3.5 text-[hsl(var(--r-accent))]" aria-label="Read" />
                       ) : mark && mark.p > 0.02 ? (
                         <span aria-label={`${Math.round(mark.p * 100)}% read`}>{Math.round(mark.p * 100)}%</span>
-                      ) : (
-                        <span>{ch.minutes}m</span>
-                      )}
+                      ) : null}
                     </span>
                   </Link>
                   {current && ch.sections.length > 0 && (

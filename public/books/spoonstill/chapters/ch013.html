@@ -12,7 +12,7 @@
 <section id="parsing-with-clap" class="level2">
 <h2><span class="header-section-number">10.2</span> Parsing with clap</h2>
 <p><code>clap</code>'s derive macros build the parser from Rust types: <code>#[derive(Parser)]</code> on <code>Cli</code>, <code>#[derive(Subcommand)]</code> on <code>enum Command</code> (each variant becomes a subcommand, its doc comment becomes help text), and <code>#[derive(Args)]</code> on each argument struct. Constraints like <code>conflicts_with = "short_edge"</code> are declared on fields, so <code>--resolution 4k --short-edge 1080</code> is rejected by clap before any spoonstill code runs.</p>
-<div class="table-scroll" tabindex="0"><table>
+<div class="table-scroll"><table>
 <colgroup>
 <col style="width: 33%">
 <col style="width: 33%">

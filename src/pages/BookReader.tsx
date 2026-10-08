@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { ReaderContents } from '@/components/books/ReaderContents';
 import { ReaderSettingsPanel } from '@/components/books/ReaderSettingsPanel';
 import {
@@ -22,22 +22,25 @@ import { BookNotFound } from '@/pages/BookDetail';
 import '@/styles/books.css';
 
 /*
-  The reader.
+  The reader: pages, not a scroll.
 
-  One chapter per page, scrolled, not paginated: the books are full of code
-  listings and wide tables, and a paginated layout would cut both. The site
-  navigation and footer step aside (App hides them on this route) and the
-  reader's own bar takes over: back to the book, the chapter, the contents,
-  and "Aa" for page, typeface and size.
+  A chapter is laid out with CSS columns, each exactly the size of the page
+  frame, and the strip of columns is slid sideways one page at a time. On a
+  wide screen two columns sit side by side as an open spread; on a tablet or
+  phone, one. The frame is measured, not assumed, so rotating a phone or
+  resizing a window re-paginates and keeps the reader on the same passage.
 
-  The bar gets out of the way while reading. It slides up when the reader
-  scrolls down, comes back on any scroll up, at the end of the chapter, or on
-  a tap in the text on a touch screen, which is how Apple Books does it.
+  Turning: tap the right or left edge, swipe (touch; the page follows the
+  finger), the arrow buttons in the margins, ← → / Space / Page Up and Down,
+  or a trackpad swipe. Past the last page is the next chapter; back from the
+  first is the previous chapter, opened at its last page.
 
-  Where the reader is gets recorded on every scroll frame into the
-  reading-progress store, which batches the writes (see reading-progress.ts).
-  Opening a chapter returns to the saved spot in it; a link with a #section
-  goes to that section instead.
+  Nothing on a page scrolls: code listings wrap, and tables fit the page
+  width and continue onto the next page row by row, as they would in print.
+
+  The place is recorded on every turn as a fraction through the chapter, so a
+  place saved on a phone (one page per screen) opens on the right spread on a
+  desktop, and survives a change of type size.
 */
 
 const PAGE_BG: Record<ReaderSettings['page'], string> = {
@@ -46,11 +49,28 @@ const PAGE_BG: Record<ReaderSettings['page'], string> = {
   paper: '#f6f0e3',
 };
 
+/** What a chapter view exposes to the shell's keyboard handler. */
+interface PagerApi {
+  next: () => void;
+  prev: () => void;
+}
+
 export default function BookReader() {
   const { slug, chapterId } = useParams();
   const book = getBook(slug);
-  const { books, ready } = useReadingProgress();
+  const { books, ready: localReady, synced } = useReadingProgress();
   const [settings] = useReaderSettings();
+  const pager = useRef<PagerApi | null>(null);
+
+  // On a new device the place lives only on the server. Wait for it before
+  // choosing a chapter or a page, but never more than a moment: a slow or
+  // absent backend must not keep a reader from reading.
+  const [waited, setWaited] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setWaited(true), 2500);
+    return () => window.clearTimeout(t);
+  }, []);
+  const ready = localReady && (synced || waited);
 
   // The page colour reaches past the reader into the overscroll area and the
   // mobile browser's toolbar, so a white page does not bounce onto black.
@@ -67,41 +87,41 @@ export default function BookReader() {
     };
   }, [settings.page]);
 
+  // Pages do not scroll. Hold the document still while the reader is open.
+  useEffect(() => {
+    const root = document.documentElement;
+    const prev = root.style.overflow;
+    root.style.overflow = 'hidden';
+    window.scrollTo(0, 0);
+    return () => { root.style.overflow = prev; };
+  }, []);
+
   // Leaving the reader is the moment a reader expects their place to be safe.
   useEffect(() => () => flushReadingProgress(), []);
 
-  // ← and → turn chapters, unless focus is somewhere the arrows already mean
-  // something (a field, or a code block or table that scrolls sideways).
-  //
-  // Bound here, in the shell that stays mounted, rather than in the chapter
-  // view that is replaced on every turn: there, a key pressed in the moment
-  // between one view unmounting and the next binding its listener was lost.
-  // The ref is advanced on the keypress itself, so quick presses chain.
-  const navigate = useNavigate();
-  const currentRef = useRef(chapterId);
-  currentRef.current = chapterId;
+  // Keys are bound here, in the shell that stays mounted across chapters, and
+  // forwarded to whichever chapter view is current.
   useEffect(() => {
-    if (!book) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const el = document.activeElement as HTMLElement | null;
-      if (el?.closest('input, textarea, select, [contenteditable], pre, .table-scroll, [role="dialog"], [role="menu"]')) return;
-      const i = chapterIndex(book, currentRef.current);
-      if (i < 0) return;
-      const target = book.chapters[e.key === 'ArrowRight' ? i + 1 : i - 1];
-      if (!target) return;
-      currentRef.current = target.id;
-      navigate(chapterUrl(book.slug, target.id));
+      if (el?.closest('input, textarea, select, [contenteditable], [role="dialog"], [role="menu"]')) return;
+      const forward = e.key === 'ArrowRight' || e.key === 'PageDown' || (e.key === ' ' && !e.shiftKey);
+      const back = e.key === 'ArrowLeft' || e.key === 'PageUp' || (e.key === ' ' && e.shiftKey);
+      if (!forward && !back) return;
+      if (el?.closest('a, button') && e.key === ' ') return;
+      e.preventDefault();
+      if (forward) pager.current?.next();
+      else pager.current?.prev();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [book, navigate]);
+  }, []);
 
   if (!book) return <BookNotFound />;
 
   if (!chapterId || chapterIndex(book, chapterId) < 0) {
-    if (!ready) return <ReaderShell settings={settings} />;
+    if (!ready) return <div className="reader fixed inset-0" data-page={settings.page} />;
     const saved = books[book.slug]?.chapterId;
     const target = saved && chapterIndex(book, saved) >= 0 ? saved : book.chapters[0].id;
     return <Navigate to={chapterUrl(book.slug, target)} replace />;
@@ -117,21 +137,14 @@ export default function BookReader() {
       progress={books[book.slug]}
       ready={ready}
       settings={settings}
+      pagerRef={pager}
     />
-  );
-}
-
-function ReaderShell({ settings }: { settings: ReaderSettings }) {
-  return (
-    <div className="reader min-h-[100dvh]" data-page={settings.page}>
-      <ProseSkeleton />
-    </div>
   );
 }
 
 function ProseSkeleton() {
   return (
-    <div className="mx-auto max-w-[42rem] px-5 pt-28 sm:px-8" aria-busy="true" aria-label="Loading chapter">
+    <div aria-busy="true" aria-label="Loading chapter" className="max-w-[640px]">
       <div className="h-3 w-24 rounded bg-[hsl(var(--r-surface))]" />
       <div className="mt-5 h-9 w-4/5 rounded bg-[hsl(var(--r-surface))]" />
       <div className="mt-12 space-y-3.5">
@@ -143,14 +156,28 @@ function ProseSkeleton() {
   );
 }
 
-function scrollRange() {
-  return Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+interface Geometry {
+  /** Pages side by side: 2 on a wide screen, else 1. */
+  cols: number;
+  /** Gap between pages, and between one spread and the next. */
+  gap: number;
+  /** Widest the frame (page or spread) may be. */
+  maxW: number;
+  /** Horizontal margin outside the frame; room for the turn buttons. */
+  padX: number;
+  /** Space between the bars and the text. */
+  padY: number;
 }
 
-/** 0..1 down the page. A chapter shorter than the screen counts as seen. */
-function currentPosition() {
-  const range = scrollRange();
-  return range < 40 ? 1 : Math.min(1, Math.max(0, window.scrollY / range));
+/** Page geometry for a viewport. A spread only where both pages stay readable. */
+function geometryFor(vw: number, vh: number): Geometry {
+  if (vw >= 1100 && vh >= 560) return { cols: 2, gap: 80, maxW: 1240, padX: 96, padY: 36 };
+  if (vw >= 768) return { cols: 1, gap: 96, maxW: 660, padX: 88, padY: 32 };
+  return { cols: 1, gap: 48, maxW: 640, padX: 22, padY: 20 };
+}
+
+function sameGeometry(a: Geometry, b: Geometry) {
+  return a.cols === b.cols && a.gap === b.gap && a.maxW === b.maxW && a.padX === b.padX && a.padY === b.padY;
 }
 
 function ChapterView({
@@ -160,6 +187,7 @@ function ChapterView({
   progress,
   ready,
   settings,
+  pagerRef,
 }: {
   book: Book;
   chapter: BookChapter;
@@ -167,19 +195,35 @@ function ChapterView({
   progress?: BookProgress;
   ready: boolean;
   settings: ReaderSettings;
+  pagerRef: MutableRefObject<PagerApi | null>;
 }) {
   const navigate = useNavigate();
-  const { hash } = useLocation();
+  const location = useLocation();
+  const { hash } = location;
+  const openAtEnd = (location.state as { at?: string } | null)?.at === 'end';
+
   const [html, setHtml] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const [chrome, setChrome] = useState(true);
-  const [minutesLeft, setMinutesLeft] = useState(chapter.minutes);
-  const meterRef = useRef<HTMLSpanElement>(null);
-  const tracking = useRef(false);
+  const [geom, setGeom] = useState(() => geometryFor(window.innerWidth, window.innerHeight));
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const [spread, setSpread] = useState(0);
+  const [spreads, setSpreads] = useState(1);
+  const [columns, setColumns] = useState(1);
+  const [fontsReady, setFontsReady] = useState(0);
+  const [drag, setDrag] = useState(0);
+  const [animate, setAnimate] = useState(false);
+
+  const frameRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const endRef = useRef<HTMLSpanElement>(null);
   const restored = useRef(false);
-  const lastPos = useRef(0);
-  const lastY = useRef(0);
+  /** Where the reader is, 0..1 through the chapter. The source of truth;
+      the spread is derived from it whenever the pages are counted. */
+  const fraction = useRef(0);
+  /** Set once the reader turns a page themselves. Until then, re-pagination
+      (fonts arriving, a resize) must not round the saved place away. */
+  const moved = useRef(false);
 
   const prev = index > 0 ? book.chapters[index - 1] : null;
   const next = index < book.chapters.length - 1 ? book.chapters[index + 1] : null;
@@ -198,120 +242,221 @@ function ChapterView({
     return () => { live = false; };
   }, [book.slug, chapter.id, next, attempt]);
 
-  // Return to the saved place once, when both the text and the history exist.
-  useLayoutEffect(() => {
-    if (!html || !ready || restored.current) return;
-    restored.current = true;
-    const target = hash ? document.getElementById(decodeURIComponent(hash.slice(1))) : null;
-    if (target) {
-      target.scrollIntoView({ behavior: 'instant' as ScrollBehavior });
-    } else if (progress?.chapterId === chapter.id && progress.position > 0.005 && progress.position < 0.995) {
-      window.scrollTo({ top: progress.position * scrollRange(), behavior: 'instant' as ScrollBehavior });
-    } else {
-      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
-    }
-    lastY.current = window.scrollY;
-    tracking.current = true;
-    const pos = currentPosition();
-    lastPos.current = pos;
-    recordPosition(book.slug, chapter.id, pos);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per chapter by design
-  }, [html, ready]);
+  // Web fonts change line breaks, so paginate again once they have arrived.
+  useEffect(() => {
+    let live = true;
+    document.fonts?.ready.then(() => live && setFontsReady(n => n + 1));
+    return () => { live = false; };
+  }, []);
 
-  // A #section link within the chapter that is already open: the view is not
-  // remounted, so the restore above does not run again. Go to the section.
+  // Measure the frame. Rotation, a window resize and a mobile toolbar
+  // showing or hiding all land here.
+  useLayoutEffect(() => {
+    const el = frameRef.current;
+    if (!el) return;
+    const measure = () => {
+      const g = geometryFor(window.innerWidth, window.innerHeight);
+      setGeom(prev => (sameGeometry(prev, g) ? prev : g));
+      const w = Math.floor(el.clientWidth);
+      const h = Math.floor(el.clientHeight);
+      setSize(s => (s && s.w === w && s.h === h ? s : { w, h }));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener('resize', measure);
+    return () => { ro.disconnect(); window.removeEventListener('resize', measure); };
+  }, []);
+
+  const step = size ? size.w + geom.gap : 0;
+  const colW = size ? (size.w - (geom.cols - 1) * geom.gap) / geom.cols : 0;
+
+  /** Which spread an element starts on. Its first fragment, not its union
+      box: a section split over several pages reports them all as one rect. */
+  const spreadOf = useCallback((el: Element) => {
+    const track = trackRef.current;
+    if (!track || !step) return 0;
+    const first = el.getClientRects()[0] ?? el.getBoundingClientRect();
+    const x = first.left - track.getBoundingClientRect().left;
+    return Math.max(0, Math.floor((x + 2) / step));
+  }, [step]);
+
+  // Paginate: count the spreads, then put the reader on the right one.
+  useLayoutEffect(() => {
+    const track = trackRef.current;
+    const end = endRef.current;
+    if (!html || !size || !track || !end || !ready) return;
+    const x = end.getBoundingClientRect().left - track.getBoundingClientRect().left;
+    const total = Math.max(1, Math.floor((x + 2) / step) + 1);
+    setSpreads(total);
+    setColumns(Math.max(1, Math.floor((x + 2) / (colW + geom.gap)) + 1));
+    setAnimate(false);
+
+    let target: number;
+    if (!restored.current) {
+      restored.current = true;
+      const anchor = hash ? document.getElementById(decodeURIComponent(hash.slice(1))) : null;
+      if (anchor && track.contains(anchor)) {
+        target = spreadOf(anchor);
+        moved.current = true;
+      } else {
+        fraction.current = openAtEnd
+          ? 1
+          : progress?.chapterId === chapter.id && progress.position < 0.999
+            ? progress.position
+            : 0;
+        target = Math.round(fraction.current * (total - 1));
+      }
+    } else {
+      // Re-paginated (resize, type size, fonts): stay on the same passage.
+      target = Math.round(fraction.current * (total - 1));
+    }
+    setSpread(Math.min(total - 1, Math.max(0, target)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on layout inputs only, by design
+  }, [html, size, geom, ready, settings.size, settings.font, fontsReady]);
+
+  // Record the place on every turn.
+  useEffect(() => {
+    if (!restored.current) return;
+    if (moved.current) fraction.current = spreads > 1 ? spread / (spreads - 1) : 1;
+    recordPosition(book.slug, chapter.id, fraction.current);
+  }, [spread, spreads, book.slug, chapter.id]);
+
+  const spreadRef = useRef(spread);
+  spreadRef.current = spread;
+
+  const goNext = useCallback(() => {
+    if (spreadRef.current < spreads - 1) {
+      moved.current = true;
+      setAnimate(true);
+      setSpread(spreadRef.current + 1);
+    } else if (next) {
+      navigate(chapterUrl(book.slug, next.id));
+    }
+  }, [spreads, next, navigate, book.slug]);
+
+  const goPrev = useCallback(() => {
+    if (spreadRef.current > 0) {
+      moved.current = true;
+      setAnimate(true);
+      setSpread(spreadRef.current - 1);
+    } else if (prev) {
+      navigate(chapterUrl(book.slug, prev.id), { state: { at: 'end' } });
+    }
+  }, [prev, navigate, book.slug]);
+
+  useEffect(() => {
+    pagerRef.current = html ? { next: goNext, prev: goPrev } : null;
+    return () => { pagerRef.current = null; };
+  }, [html, goNext, goPrev, pagerRef]);
+
+  // A #section link within the open chapter: turn to the page it is on.
   const seenHash = useRef(hash);
   useEffect(() => {
     if (!html || hash === seenHash.current) return;
     seenHash.current = hash;
-    const target = hash ? document.getElementById(decodeURIComponent(hash.slice(1))) : null;
-    target?.scrollIntoView({ behavior: 'instant' as ScrollBehavior });
-  }, [hash, html]);
+    const anchor = hash ? document.getElementById(decodeURIComponent(hash.slice(1))) : null;
+    if (anchor) { moved.current = true; setAnimate(false); setSpread(spreadOf(anchor)); }
+  }, [hash, html, spreadOf]);
 
-  // A size or typeface change reflows the whole chapter. Hold the reader's
-  // place through it rather than leaving them wherever the old offset lands.
-  const firstSettings = useRef(true);
-  useLayoutEffect(() => {
-    if (firstSettings.current) { firstSettings.current = false; return; }
-    if (!tracking.current) return;
-    window.scrollTo({ top: lastPos.current * scrollRange(), behavior: 'instant' as ScrollBehavior });
-  }, [settings.size, settings.font]);
+  /* ---------- touch: swipe with the page under the finger, tap the edges ---------- */
 
-  useEffect(() => {
-    let frame = 0;
-    const update = () => {
-      frame = 0;
-      const pos = currentPosition();
-      if (meterRef.current) meterRef.current.style.transform = `scaleX(${pos})`;
-      setMinutesLeft(Math.max(0, Math.ceil(chapter.minutes * (1 - pos))));
+  const touch = useRef<{ x: number; y: number; t: number; id: number; horizontal: boolean | null } | null>(null);
 
-      const y = window.scrollY;
-      const dy = y - lastY.current;
-      if (y < 80 || pos > 0.97) setChrome(true);
-      else if (dy > 8) setChrome(false);
-      else if (dy < -8) setChrome(true);
-      if (Math.abs(dy) > 8) lastY.current = y;
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType === 'mouse') return;
+    if ((e.target as HTMLElement).closest('a, button')) return;
+    touch.current = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId, horizontal: null };
+  };
 
-      if (tracking.current) {
-        lastPos.current = pos;
-        recordPosition(book.slug, chapter.id, pos);
-      }
-    };
-    const onScroll = () => { if (!frame) frame = requestAnimationFrame(update); };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onScroll);
-      if (frame) cancelAnimationFrame(frame);
-    };
-  }, [book.slug, chapter.id, chapter.minutes]);
-
-  // Links inside the chapter are plain anchors from the EPUB. Route internal
-  // ones through the router instead of reloading the app; on a touch screen,
-  // a tap anywhere else in the text shows or hides the bars.
-  const onProseClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const target = e.target as HTMLElement;
-    const a = target.closest('a');
-    if (a) {
-      const href = a.getAttribute('href') || '';
-      if (href.startsWith('/') && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
-        e.preventDefault();
-        navigate(href);
-      }
-      return;
+  const onPointerMove = (e: React.PointerEvent) => {
+    const t = touch.current;
+    if (!t || t.id !== e.pointerId) return;
+    const dx = e.clientX - t.x;
+    const dy = e.clientY - t.y;
+    if (t.horizontal === null && Math.hypot(dx, dy) > 8) t.horizontal = Math.abs(dx) > Math.abs(dy);
+    if (t.horizontal) {
+      // Resist past the first and last page instead of sliding into nothing.
+      const atEdge = (dx > 0 && spread === 0 && !prev) || (dx < 0 && spread === spreads - 1 && !next);
+      setAnimate(false);
+      setDrag(atEdge ? dx / 4 : dx);
     }
-    if (
-      window.matchMedia('(pointer: coarse)').matches &&
-      !target.closest('button, pre, .table-scroll, img, figure') &&
-      !window.getSelection()?.toString()
-    ) {
-      setChrome(c => !c);
-    }
-  }, [navigate]);
+  };
 
+  const onPointerUp = (e: React.PointerEvent) => {
+    const t = touch.current;
+    touch.current = null;
+    if (!t || t.id !== e.pointerId) return;
+    const dx = e.clientX - t.x;
+    const dy = e.clientY - t.y;
+    const dt = performance.now() - t.t;
+    if (t.horizontal) {
+      const flick = Math.abs(dx) > 30 && dt < 250;
+      const far = Math.abs(dx) > Math.min(120, window.innerWidth * 0.18);
+      setAnimate(true);
+      setDrag(0);
+      if (flick || far) (dx < 0 ? goNext : goPrev)();
+    } else if (Math.hypot(dx, dy) < 10 && !window.getSelection()?.toString()) {
+      // A tap. The outer thirds turn; the middle is for reading and selecting.
+      const x = e.clientX / window.innerWidth;
+      if (x > 0.66) goNext();
+      else if (x < 0.34) goPrev();
+    }
+  };
+
+  const onPointerCancel = () => {
+    touch.current = null;
+    setAnimate(true);
+    setDrag(0);
+  };
+
+  // Trackpads: one turn per swipe, however many wheel events it produces,
+  // momentum included. The lock holds until the events have stopped for a
+  // moment, so a long swipe is still one turn.
+  const wheel = useRef({ acc: 0, lockedUntil: 0 });
+  const onWheel = (e: React.WheelEvent) => {
+    const now = performance.now();
+    const w = wheel.current;
+    if (now < w.lockedUntil) { w.lockedUntil = Math.max(w.lockedUntil, now + 300); return; }
+    w.acc += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (Math.abs(w.acc) > 40) {
+      (w.acc > 0 ? goNext : goPrev)();
+      w.acc = 0;
+      w.lockedUntil = now + 500;
+    }
+  };
+
+  // Links inside the chapter are plain anchors from the EPUB: route internal
+  // ones through the router instead of reloading the app.
+  const onClick = (e: React.MouseEvent) => {
+    const a = (e.target as HTMLElement).closest('a');
+    if (!a) return;
+    const href = a.getAttribute('href') || '';
+    if (href.startsWith('/') && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
+      e.preventDefault();
+      navigate(href);
+    }
+  };
+
+  const ready2 = !!html && !!size;
   const percent = progress?.chapterId === chapter.id ? progress.percent : null;
+  const firstPage = spread * geom.cols + 1;
+  const lastPage = Math.min(columns, firstPage + geom.cols - 1);
+  const pageLabel = ready2
+    ? `${firstPage >= lastPage ? `Page ${Math.min(firstPage, columns)}` : `Pages ${firstPage}–${lastPage}`} of ${columns}`
+    : '';
+  const atStart = spread === 0 && !prev;
+  const atEnd = spread === spreads - 1 && !next;
 
   return (
-    <div className="reader min-h-[100dvh]" data-page={settings.page}>
+    <div className="reader fixed inset-0 overflow-hidden" data-page={settings.page}>
       <Helmet>
         <title>{`${chapter.number ? `${chapter.number}. ` : ''}${chapter.title} | ${shortTitle(book)}`}</title>
         <meta name="robots" content="noindex" />
       </Helmet>
 
-      <a href="#chapter" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[70] focus:rounded-md focus:bg-[hsl(var(--r-surface))] focus:px-3 focus:py-2">
-        Skip to chapter text
-      </a>
-
-      <header
-        className={cn(
-          'reader-bar fixed inset-x-0 top-0 z-50 border-b pt-[env(safe-area-inset-top)] transition-transform duration-300 ease-out',
-          !chrome && '-translate-y-full',
-        )}
-        // Focus inside the bar brings it back, so keyboard users never tab into a hidden control.
-        onFocus={() => setChrome(true)}
-      >
-        <div className="mx-auto flex h-14 max-w-[1180px] items-center gap-1 px-2 sm:gap-2 sm:px-4">
+      <header className="reader-bar absolute inset-x-0 top-0 z-20 border-b pt-[env(safe-area-inset-top)]">
+        <div className="mx-auto flex h-14 max-w-[1240px] items-center gap-1 px-2 sm:gap-2 sm:px-4">
           <Link
             to={`/books/${book.slug}`}
             className="reader-btn flex h-10 min-w-10 shrink-0 items-center gap-1 px-2 text-[14px]"
@@ -332,65 +477,118 @@ function ChapterView({
         </div>
         <div className="absolute inset-x-0 -bottom-px h-[2px]" aria-hidden="true">
           <span
-            ref={meterRef}
-            className="block h-full origin-left bg-[hsl(var(--r-accent))]"
-            style={{ transform: 'scaleX(0)' }}
+            className="block h-full origin-left bg-[hsl(var(--r-accent))] transition-transform duration-300"
+            style={{ transform: `scaleX(${spreads > 1 ? spread / (spreads - 1) : ready2 ? 1 : 0})` }}
           />
         </div>
       </header>
 
-      <main id="chapter" tabIndex={-1} className="mx-auto max-w-[42rem] px-5 pb-28 pt-24 outline-none sm:px-8 sm:pt-28">
-        {chapter.part && (
-          <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.18em] text-[hsl(var(--r-dim))]">{chapter.part}</p>
-        )}
-
-        {error ? (
-          <div className="py-16">
-            <p className="text-[17px] font-medium text-[hsl(var(--r-strong))]">This chapter did not load.</p>
-            <p className="mt-2 text-[14.5px] text-[hsl(var(--r-muted))]">Check the connection and try again. Your place is saved.</p>
-            <button
-              type="button"
-              onClick={() => setAttempt(a => a + 1)}
-              className="mt-6 inline-flex h-11 items-center rounded-md bg-[hsl(var(--r-accent))] px-5 text-[14.5px] font-semibold text-[hsl(var(--r-accent-ink))]"
+      {/* The page frame, sized between the bars, so its measured box is the
+          page on any device. */}
+      {/* The whole band between the bars takes taps, swipes and the wheel,
+          margins included: on a phone the edge a thumb reaches for is the
+          margin, not the text. */}
+      <main
+        id="chapter"
+        className="absolute inset-x-0"
+        style={{
+          top: `calc(56px + env(safe-area-inset-top) + ${geom.padY}px)`,
+          bottom: `calc(44px + env(safe-area-inset-bottom) + ${geom.padY}px)`,
+          touchAction: 'pinch-zoom',
+        }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
+        onWheel={onWheel}
+        onClick={onClick}
+      >
+        <div
+          ref={frameRef}
+          className="relative mx-auto h-full overflow-hidden"
+          style={{ width: `min(calc(100vw - ${geom.padX * 2}px), ${geom.maxW}px)` }}
+        >
+          {error ? (
+            <div className="py-10">
+              <p className="text-[17px] font-medium text-[hsl(var(--r-strong))]">This chapter did not load.</p>
+              <p className="mt-2 text-[14.5px] text-[hsl(var(--r-muted))]">Check the connection and try again. Your place is saved.</p>
+              <button
+                type="button"
+                onClick={() => setAttempt(a => a + 1)}
+                className="mt-6 inline-flex h-11 items-center rounded-md bg-[hsl(var(--r-accent))] px-5 text-[14.5px] font-semibold text-[hsl(var(--r-accent-ink))]"
+              >
+                Try again
+              </button>
+            </div>
+          ) : !ready2 ? (
+            <ProseSkeleton />
+          ) : (
+            <div
+              ref={trackRef}
+              className={cn('book-pages h-full', animate && 'is-turning')}
+              style={{
+                width: size!.w,
+                columnWidth: `${colW}px`,
+                columnGap: `${geom.gap}px`,
+                ['--page-h' as string]: `${size!.h}px`,
+                transform: `translate3d(${-spread * step + drag}px, 0, 0)`,
+              }}
             >
-              Try again
-            </button>
-          </div>
-        ) : html === null ? (
-          <div className="-mx-5 sm:-mx-8"><ProseSkeleton /></div>
-        ) : (
-          <>
-            <article
-              className="book-prose"
-              data-font={settings.font}
-              style={{ ['--prose-size' as string]: `${TEXT_SIZES[settings.size]}px` }}
-              onClick={onProseClick}
-              dangerouslySetInnerHTML={{ __html: html }}
-            />
-            <ChapterEnd book={book} prev={prev} next={next} />
-          </>
-        )}
+              {chapter.part && (
+                <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.18em] text-[hsl(var(--r-dim))]">{chapter.part}</p>
+              )}
+              <article
+                className="book-prose"
+                data-font={settings.font}
+                style={{ ['--prose-size' as string]: `${TEXT_SIZES[settings.size]}px` }}
+                dangerouslySetInnerHTML={{ __html: html! }}
+              />
+              <ChapterEnd book={book} next={next} />
+              <span ref={endRef} aria-hidden="true" className="block h-px" />
+            </div>
+          )}
+        </div>
       </main>
 
-      <footer
-        className={cn(
-          'reader-bar pointer-events-none fixed inset-x-0 bottom-0 z-40 border-t pb-[env(safe-area-inset-bottom)] transition-opacity duration-300',
-          chrome && html ? 'opacity-100' : 'opacity-0',
-        )}
-        aria-hidden="true"
-      >
-        <div className="mx-auto flex h-9 max-w-[1180px] items-center justify-between px-5 font-mono text-[11px] tabular-nums text-[hsl(var(--r-dim))] sm:px-6">
-          <span>{minutesLeft > 0 ? `${minutesLeft} min left in chapter` : 'End of chapter'}</span>
-          <span>{percent !== null ? formatPercent(percent) : ''}</span>
+      {/* Turn buttons in the margins, where there is room for them. Touch
+          screens also turn by tapping the edges or swiping. */}
+      {ready2 && (
+        <>
+          <button
+            type="button"
+            onClick={goPrev}
+            disabled={atStart}
+            aria-label={spread === 0 ? 'Previous chapter' : 'Previous page'}
+            className="reader-btn absolute left-2 top-1/2 z-10 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full disabled:invisible md:flex lg:left-5"
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </button>
+          <button
+            type="button"
+            onClick={goNext}
+            disabled={atEnd}
+            aria-label={spread === spreads - 1 ? 'Next chapter' : 'Next page'}
+            className="reader-btn absolute right-2 top-1/2 z-10 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full disabled:invisible md:flex lg:right-5"
+          >
+            <ChevronRight className="h-6 w-6" />
+          </button>
+        </>
+      )}
+
+      <footer className="reader-bar absolute inset-x-0 bottom-0 z-20 border-t pb-[env(safe-area-inset-bottom)]">
+        <div className="mx-auto grid h-11 max-w-[1240px] grid-cols-[1fr_auto_1fr] items-center gap-3 px-5 font-mono text-[11px] tabular-nums text-[hsl(var(--r-dim))] sm:px-6">
+          <span className="truncate">{chapter.number ? `Chapter ${chapter.number}` : ''}</span>
+          <span className="text-center" aria-live="polite">{pageLabel}</span>
+          <span className="truncate text-right">{percent !== null ? `${formatPercent(percent)} of book` : ''}</span>
         </div>
       </footer>
     </div>
   );
 }
 
-function ChapterEnd({ book, prev, next }: { book: Book; prev: BookChapter | null; next: BookChapter | null }) {
+function ChapterEnd({ book, next }: { book: Book; next: BookChapter | null }) {
   return (
-    <nav aria-label="Chapters" className="mt-20 border-t border-[hsl(var(--r-border))] pt-8">
+    <nav aria-label="Next chapter" className="chapter-end mt-12 border-t border-[hsl(var(--r-border))] pt-8">
       {next ? (
         <Link
           to={chapterUrl(book.slug, next.id)}
@@ -400,7 +598,6 @@ function ChapterEnd({ book, prev, next }: { book: Book; prev: BookChapter | null
             {next.number ? `Next · Chapter ${next.number}` : 'Next'}
           </span>
           <span className="mt-2 block text-[19px] font-semibold leading-snug text-[hsl(var(--r-strong))]">{next.title}</span>
-          <span className="mt-1.5 block font-mono text-[11.5px] text-[hsl(var(--r-dim))]">{next.minutes} min read</span>
         </Link>
       ) : (
         <div className="rounded-lg border border-[hsl(var(--r-border-strong))] p-5">
@@ -416,20 +613,6 @@ function ChapterEnd({ book, prev, next }: { book: Book; prev: BookChapter | null
           </div>
         </div>
       )}
-      {prev && (
-        <Link
-          to={chapterUrl(book.slug, prev.id)}
-          className="mt-3 flex min-h-[44px] items-center gap-2 rounded-md px-1 text-[14px] text-[hsl(var(--r-muted))] transition-colors hover:text-[hsl(var(--r-strong))]"
-        >
-          <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="truncate">
-            Previous: {prev.number ? `${prev.number}. ` : ''}{prev.title}
-          </span>
-        </Link>
-      )}
-      <p className="mt-6 hidden text-center font-mono text-[11px] text-[hsl(var(--r-dim))] [@media(pointer:fine)]:block">
-        ← → to turn chapters
-      </p>
     </nav>
   );
 }

@@ -117,8 +117,18 @@ the `reading_progress` table (one row per reader per book) on a debounce, and
 merged per book on sign-in. If the table is missing it falls back to local
 only, without errors, the same way `useAuth` treats a missing `profiles`.
 
+The reader is paginated, not scrolled: a chapter is laid out in CSS columns
+the size of the measured page frame (two side by side on a wide screen) and
+slid sideways a spread at a time. Nothing on a page scrolls, so code wraps and
+tables fit the width and continue onto the next page; do not reintroduce an
+`overflow: auto` box inside `.book-pages`. The saved place is a fraction
+through the chapter, not a page number, so it survives a different screen,
+a rotation or a type-size change; page counts are display only. The library
+shows a percentage, never a time estimate: these are text books, and an hour
+figure reads as an audiobook length.
+
 The reader has three page themes (Site, Plain, Paper) defined as `--r-*`
 variables in `src/styles/books.css`; write reader UI against those, never the
 site tokens, or it breaks on the light pages. Navigation, Footer and BackToTop
-return null on reader routes (`isReaderPath`), and arrow keys turn chapters
-from the persistent `BookReader` shell, not the per-chapter view.
+return null on reader routes (`isReaderPath`). Keys are bound in the
+persistent `BookReader` shell and forwarded to the current chapter view.

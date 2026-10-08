@@ -2,9 +2,10 @@ import type { Book } from '@/lib/books';
 import { cn } from '@/lib/utils';
 
 /**
- * A cover at its own proportions. The two books are not the same shape
- * (2:3 and A4), and squeezing them into one box would crop one of them, so
- * the shelf aligns covers on their bottom edge the way a real shelf does.
+ * Every cover in the same 2:3 frame, so the shelf reads as one row of books.
+ * The source images are not all that shape (spoonstill's is A4, a little
+ * narrower); `object-fit: cover` trims the difference from the side margins,
+ * which on these covers are empty.
  */
 export function BookCover({
   book,
@@ -27,8 +28,7 @@ export function BookCover({
   }
   return (
     <div
-      className={cn('book-cover', className)}
-      style={{ aspectRatio: `${book.cover.width} / ${book.cover.height}` }}
+      className={cn('book-cover aspect-[2/3]', className)}
     >
       <img
         src={book.cover.src}

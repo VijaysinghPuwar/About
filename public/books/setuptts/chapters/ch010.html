@@ -55,7 +55,7 @@
 <section id="the-plan" class="level3">
 <h3><span class="header-section-number">6.5.1</span> The plan</h3>
 <p><code>_chunk_plan_for</code> (<code>tts_worker.py:167-232</code>) returns a <code>_ChunkPlan</code> from the job’s length, script and voice:</p>
-<div class="table-scroll" tabindex="0"><table>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>Job length (cleaned chars)</th>
@@ -191,7 +191,7 @@
 <img src="/books/setuptts/media/file5.webp" alt="The timeouts inside one attempt. Each catches a different failure: no connection, no first audio, a stalled stream, or an attempt that simply takes too long." width="1680" height="720" loading="lazy" decoding="async">
 <figcaption><strong>Figure 6.3.</strong> The timeouts inside one attempt. Each catches a different failure: no connection, no first audio, a stalled stream, or an attempt that simply takes too long.</figcaption>
 </figure>
-<div class="table-scroll" tabindex="0"><table>
+<div class="table-scroll"><table>
 <colgroup>
 <col style="width: 33%">
 <col style="width: 33%">
@@ -247,7 +247,7 @@
 <section id="failure-classification" class="level2">
 <h2><span class="header-section-number">6.11</span> Failure classification</h2>
 <p>Every exception from an attempt passes through <code>_classify_attempt_failure</code> (<code>tts_worker.py:2718-2817</code>), which turns it into an <code>_AttemptFailure</code> with a <code>kind</code>. The kind decides the retry policy, the health tracking and the final user message.</p>
-<div class="table-scroll" tabindex="0"><table>
+<div class="table-scroll"><table>
 <colgroup>
 <col style="width: 33%">
 <col style="width: 33%">
