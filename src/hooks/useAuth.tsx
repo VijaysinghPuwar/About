@@ -170,6 +170,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsAdmin(!!data);
     } catch {
       setIsAdmin(false);
+    } finally {
+      // The roles query has answered (or failed): the admin gate may decide.
+      setAdminLoading(false);
     }
   };
 
@@ -242,6 +245,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
     setProfileError(null);
     setIsAdmin(false);
+    setAdminLoading(false);
   };
 
   return (
