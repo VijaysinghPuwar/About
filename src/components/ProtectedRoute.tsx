@@ -10,11 +10,13 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
-  const { user, profile, profileError, loading, isAdmin, refetchProfile, signOut } = useAuth();
+  const { user, profile, profileError, loading, adminLoading, isAdmin, refetchProfile, signOut } = useAuth();
   const location = useLocation();
   const signInPath = loginHref(location.pathname + location.search + location.hash);
 
-  if (loading) {
+  // Wait for the roles check too, not just the profile: an admin who refreshes
+  // /admin must not be bounced to "/" while the user_roles query is in flight.
+  if (loading || (requireAdmin && adminLoading)) {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
