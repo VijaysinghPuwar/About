@@ -1,0 +1,77 @@
+<section id="performance" class="level1">
+<h1><span class="header-section-number">11</span> Performance</h1>
+<section id="local-time-and-remote-time" class="level2">
+<h2><span class="header-section-number">11.1</span> Local time and remote time</h2>
+<p>Every second of a SetupTTS job is spent in one of two places, and it helps to keep them apart:</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Local processing (your computer)</th>
+<th>Remote service time (Microsoft)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>decoding the file, cleaning and profiling the text (once per job)</td>
+<td>TLS and WebSocket handshake for every attempt</td>
+</tr>
+<tr>
+<td>cutting the next chunk and measuring its payload</td>
+<td>waiting for the first audio of each request</td>
+</tr>
+<tr>
+<td>checking the stream for completeness</td>
+<td>streaming the audio, which runs at the voice’s own pace</td>
+</tr>
+<tr>
+<td>writing a chunk file with <code>fsync</code> and rewriting the manifest</td>
+<td>back-off waits after failures (also spent waiting)</td>
+</tr>
+<tr>
+<td>final assembly and duration scan (once per job)</td>
+<td></td>
+</tr>
+</tbody>
+</table></div>
+<p>The local column is milliseconds per chunk. The remote column is seconds to minutes per chunk.</p>
+<figure id="fig-timebudget">
+<img src="/books/setuptts/media/file12.webp" alt="Measured timing of one short request. Almost all of the wall time is the service." width="1680" height="552" loading="lazy" decoding="async">
+<figcaption><strong>Figure 11.1.</strong> Measured timing of one short request. Almost all of the wall time is the service.</figcaption>
+</figure>
+<div class="callout experiment">
+<p><strong>Verified by runtime experiment.</strong> A 158-character, three-sentence text streamed with <code>en-US-AndrewNeural</code> produced its first audio after 0.98 s and finished after 4.00 s, delivering 8.74 s of speech: about 2.2 times faster than real time. The README’s statement that “low CPU use while generating is expected” follows directly: the CPU is waiting.</p>
+</div>
+</section>
+<section id="why-a-300-mbps-connection-does-not-make-it-300-times-faster" class="level2">
+<h2><span class="header-section-number">11.2</span> Why a 300 Mbps connection does not make it 300 times faster</h2>
+<p>The audio arrives at 48 kbit/s <strong>of audio</strong>. Even if a voice streamed at 8 times real time (the code comments mention Christopher at about 8x), the transfer rate would be 8 x 48 = 384 kbit/s, about one eight-hundredth of a 300 Mbps link. The text going the other way is a few kilobytes per request.</p>
+<p>So bandwidth is almost never the bottleneck. What limits speed is:</p>
+<ol type="1">
+<li><strong>How fast the service synthesises.</strong> Speech is generated on Microsoft’s side and streamed as it is produced. Some voices are fast, some stream slower than real time for long stretches. Nothing on the client can change that.</li>
+<li><strong>Per-request latency.</strong> Each of the roughly 214 requests in a 12-hour book pays a handshake and a wait for first audio, about a second each in the measurement above.</li>
+<li><strong>Failures.</strong> A chunk that needs five attempts spends 2 + 4 + 8 + 16 = 30 seconds in back-off alone, plus the failed attempts themselves.</li>
+</ol>
+<p>A faster connection helps only with what it can affect: lower latency per handshake, and fewer drops if the old connection was unreliable. A stable connection matters far more than a fast one.</p>
+<p>A useful mental model (Inference, not a formula in the code):</p>
+<pre class="text"><code>wall time  ~=  audio length / streaming speed
+             + requests x per-request latency
+             + retry attempts and back-off</code></pre>
+</section>
+<section id="the-levers-setuptts-controls" class="level2">
+<h2><span class="header-section-number">11.3</span> The levers SetupTTS controls</h2>
+<p><strong>Chunk size and number of requests.</strong> Bigger chunks mean fewer handshakes but more work lost per failure and longer timeouts. SetupTTS takes the largest chunk the payload limit allows while things go well, and shrinks after trouble. The v1.6.2 change to the definition of a “slow” chunk was explicitly a speed fix: slow-streaming voices had been pinned at small chunks, causing “3-5x more requests”.</p>
+<p><strong>Connection reuse.</strong> There is none, by design. Each attempt opens a new WebSocket (edge-tts creates a new <code>aiohttp.ClientSession</code> per request anyway). The cost is one handshake per request; the benefit is that a broken connection can never leak into the next attempt.</p>
+<p><strong>Chunk cutting speed.</strong> Measuring a candidate chunk means XML-escaping it and encoding it to UTF-8. The old cutter did this for every candidate boundary from longest to shortest, about a second per chunk on text without paragraph breaks. Binary search over the boundaries made it about 150 times faster.</p>
+<p><strong>Disk.</strong> Each chunk write is about 1 MB with an <code>fsync</code>, negligible next to minutes of streaming. Final assembly copies roughly 260 MB sequentially for a 12-hour book and then scans it once for duration, in 1 MiB blocks.</p>
+<p><strong>Memory.</strong> At any moment a worker holds one attempt’s audio, around a megabyte. The test <code>test_twelve_hour_job_does_not_accumulate_audio_in_memory</code> keeps this true.</p>
+<p><strong>UI updates.</strong> The worker emits <code>progress</code> only when the integer percentage changes, speed at most once per second, and the editor’s heavy work waits for a 250 ms pause in typing. Voice search is debounced by 150 ms. The voice-guidance profile samples at most 120,000 characters, after a 20 MB document was measured freezing the window for about 35 seconds per edit.</p>
+</section>
+<section id="running-two-jobs" class="level2">
+<h2><span class="header-section-number">11.4</span> Running two jobs</h2>
+<p>Two jobs run concurrently (Chapter 12). Because each job spends most of its time waiting on the service, two jobs can come close to doubling throughput, provided the service does not slow down per client (Inference; there is no measurement of this in the repository). The limit of two is described in the code as “safe limit for simultaneous edge_tts connections”.</p>
+</section>
+</section>

@@ -1,0 +1,322 @@
+<section id="the-text-to-speech-pipeline" class="level1">
+<h1><span class="header-section-number">6</span> The Text-to-Speech Pipeline</h1>
+<p>This chapter follows one job from the moment the worker starts to the moment the MP3 exists. Figure 6.1 is the map; the sections below take it one box at a time.</p>
+<figure id="fig-pipeline">
+<img src="/books/setuptts/media/file3.webp" alt="The pipeline. Plain boxes are local work, dashed boxes are network round trips, tinted boxes write to disk. The loop repeats once per chunk." width="1680" height="1896" loading="lazy" decoding="async">
+<figcaption><strong>Figure 6.1.</strong> The pipeline. Plain boxes are local work, dashed boxes are network round trips, tinted boxes write to disk. The loop repeats once per chunk.</figcaption>
+</figure>
+<section id="text-import" class="level2">
+<h2><span class="header-section-number">6.1</span> Text import</h2>
+<p>Text arrives either from the editor or from a file decoded by <code>decode_text_file</code> (Chapter 5). Either way the worker receives a Python <code>str</code>. Nothing downstream knows or cares where it came from.</p>
+</section>
+<section id="text-normalization" class="level2">
+<h2><span class="header-section-number">6.2</span> Text normalization</h2>
+<p>The first thing the worker does with that string is clean it, via <code>build_text_profile</code> → <code>normalize_text_for_tts</code> (<code>app/services/tts_quality.py:467-515</code>). The goal stated in its docstring is narrow: “Clean punctuation and noisy unicode without changing the meaning.” In order, it:</p>
+<ol type="1">
+<li>Applies Unicode <strong>NFKC</strong> normalisation, which folds compatibility forms (full-width Latin letters, ligatures) into their ordinary equivalents.</li>
+<li>Maps typographic punctuation to plain ASCII: curly quotes to straight quotes, all dash variants to <code>-</code>, <code>…</code> to <code>...</code>, CJK corner quotes to <code>"</code>, CJK lenticular and tortoise-shell brackets to <code>[ ]</code>, non-breaking spaces to spaces.</li>
+<li>Normalises line endings and removes invisible characters: zero-width space, direction marks, BOM, and the <strong>soft hyphen</strong> (U+00AD), which e-books scatter through words so that “inter­national” would otherwise be read as two words.</li>
+<li>Removes Markdown bullets, replaces Unicode bullets with commas, and drops decorative symbols (stars, hearts, card suits).</li>
+<li>Collapses <code>!!!!</code> to <code>!!</code> and long ellipses to <code>...</code>.</li>
+<li>Replaces control characters and unspoken symbols with spaces, <strong>but keeps</strong> the symbols voices actually read: <code>° © ® ™ ℃ ℉ № ℗</code>.</li>
+<li>Keeps zero-width joiners (ZWNJ, ZWJ) <strong>inside words</strong>, where they change how Persian and Indic words are shaped, and after a virama, where they select a letter form. Elsewhere, such as the leftovers of an emoji family, they become spaces.</li>
+<li>Cleans each line: separator lines such as <code>-----</code> vanish, <code>[Narrator] Hello</code> becomes <code>Narrator: Hello</code>, arrows become ” to “, pipes become commas.</li>
+<li>Collapses more than two consecutive blank lines.</li>
+</ol>
+<p>An important property: <strong>this cleanup is not idempotent.</strong> Cleaning already-clean text can change it again. The docstring of <code>_build_profile</code> (<code>tts_worker.py:1148</code>) gives the example <code>"Stop ! ! !"</code> → <code>"Stop!!!"</code> → <code>"Stop!!"</code>. That fact caused a real bug, covered in Chapter 7.</p>
+<div class="callout drift">
+<p><strong>Code that never runs.</strong> <code>normalize_text_for_tts</code> contains a rule meant to turn runs of Unicode dashes into <code>-</code> (<code>_EXTRA_DASH_RE</code>, <code>tts_quality.py:22</code>, applied at <code>:482</code>). It never matches, because step 2 has already converted every Unicode dash to an ASCII <code>-</code>. Running the function on two em-dash characters between letters returns two ASCII hyphens, not <code>-</code>. Nothing breaks, but it is a small example of why behaviour should be checked by running code rather than by reading it.</p>
+</div>
+</section>
+<section id="language-and-voice-selection" class="level2">
+<h2><span class="header-section-number">6.3</span> Language and voice selection</h2>
+<p><code>build_text_profile</code> (<code>tts_quality.py:619-735</code>) then guesses what the text is:</p>
+<ul>
+<li><strong>Script</strong> by counting letters per Unicode range (Latin, Devanagari, Arabic, Cyrillic, Han, Hiragana, Katakana, Hangul, Thai and sixteen more). Any Hiragana or Katakana means Japanese.</li>
+<li><strong>Mixed</strong> if a second script has at least 4 letters and at least 18 % of all letters.</li>
+<li><strong>Language</strong> for Latin and a few other scripts by counting common function words (“the”, “and”, “der”, “und”, “है”, “это”…), plus character hints such as <code>þ ð</code> for Icelandic and <code>і ї є ґ</code> for Ukrainian.</li>
+</ul>
+<p><code>assess_voice_compatibility</code> compares that profile with the selected voice’s locale and returns a severity: <code>ok</code>, <code>warning</code> (for example a multilingual voice reading a different language in the same script) or <code>mismatch</code> (wrong script entirely, “likely to produce poor pronunciation or gibberish”). It also proposes a voice via <code>recommend_voice</code>, preferring the exact locale, then the language, then the script, matching the current voice’s gender.</p>
+<p>This runs twice. In the UI, <code>build_guidance_profile</code> profiles at most 120,000 characters (start, middle and end samples) so the warning card can update while typing without freezing the window. In the worker, the full text is profiled on the worker thread, and a mismatch stops the job before any audio is requested unless the user chose <strong>Generate Anyway</strong> (<code>allow_voice_mismatch</code>) or the job is a resume, which was already confirmed when it first started (<code>tts_worker.py:1319-1343</code>).</p>
+</section>
+<section id="why-chunking-exists" class="level2">
+<h2><span class="header-section-number">6.4</span> Why chunking exists</h2>
+<p>The service, as reached through edge-tts, accepts text in requests of bounded size. edge-tts itself splits any text longer than <strong>4,096 bytes</strong> (after XML escaping) into several requests inside a single <code>Communicate</code> object (<code>edge_tts/communicate.py:351</code>). SetupTTS keeps every chunk <strong>below</strong> that limit on purpose. The comment at <code>tts_worker.py:68-70</code> says why: “so each SetupTTS chunk maps to one actual provider request”. If SetupTTS sent a 20,000-byte chunk, edge-tts would quietly turn it into five requests, and SetupTTS could no longer tell which of the five failed, retry just that one, or record exactly which characters the audio covers.</p>
+<p>Even if the service accepted a whole book in one request, a single request would be the wrong design:</p>
+<ul>
+<li><strong>Failure cost.</strong> A dropped connection at hour 9 of a single 10-hour stream loses 9 hours. With chunks it loses one chunk, about three and a half minutes of audio.</li>
+<li><strong>Verification.</strong> A short request can be checked against the service’s own sentence timing. A 10-hour stream could only be checked at the end.</li>
+<li><strong>Resumability.</strong> Progress can only be saved at boundaries the program controls.</li>
+<li><strong>Proportionate timeouts.</strong> A deadline can be sized for 3,000 characters. It cannot sensibly be sized for 700,000.</li>
+</ul>
+</section>
+<section id="how-chunk-size-is-decided" class="level2">
+<h2><span class="header-section-number">6.5</span> How chunk size is decided</h2>
+<section id="the-plan" class="level3">
+<h3><span class="header-section-number">6.5.1</span> The plan</h3>
+<p><code>_chunk_plan_for</code> (<code>tts_worker.py:167-232</code>) returns a <code>_ChunkPlan</code> from the job’s length, script and voice:</p>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>Job length (cleaned chars)</th>
+<th>Max chars</th>
+<th>Max payload bytes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>under 12,000</td>
+<td>10,500</td>
+<td>3,750</td>
+</tr>
+<tr>
+<td>12,000 to 44,999</td>
+<td>10,000</td>
+<td>3,700</td>
+</tr>
+<tr>
+<td>45,000 to 89,999</td>
+<td>9,600</td>
+<td>3,650</td>
+</tr>
+<tr>
+<td>90,000 and over</td>
+<td>9,200</td>
+<td>3,600</td>
+</tr>
+</tbody>
+</table></div>
+<p>Every plan also has a <strong>warm-up</strong> size for the first chunk (1,200 chars / 1,350 bytes) and a <strong>ramp</strong> size for the second (3,200 / 2,600). Complex scripts get much smaller limits from <code>_COMPLEX_SCRIPT_LIMITS</code>: Han text, for example, is capped at 3,100 chars and 2,150 bytes, because each Han character is three bytes in UTF-8. Multilingual voices on jobs of 45,000+ characters are shrunk to 78 % or 84 % of the normal ceiling, because, in the code’s words, multilingual voices “are more resource-intensive on the provider side”.</p>
+</section>
+<section id="characters-versus-bytes" class="level3">
+<h3><span class="header-section-number">6.5.2</span> Characters versus bytes</h3>
+<p>A chunk must fit <strong>both</strong> limits. The byte measure is what edge-tts will actually send: <code>_edge_payload_size</code> applies edge-tts’s own <code>remove_incompatible_characters</code> and XML <code>escape</code>, then counts UTF-8 bytes (<code>tts_worker.py:255-258</code>). For English prose the byte limit binds long before the character limit, so the 9,200-character ceiling is mostly theoretical.</p>
+<div class="callout experiment">
+<p><strong>Verified by runtime experiment.</strong> The test suite’s own 12-hour fixture (<code>_build_book(12)</code> in <code>tests/test_long_form_scale.py</code>, 701,783 characters after cleanup) was cut with the production plan. It produced <strong>214 chunks</strong> averaging 3,277 characters, the largest 3,595 characters. The 6-hour fixture produced 107.</p>
+</div>
+<div class="callout drift">
+<p><strong>Docs and code disagree.</strong> The docstring of <code>tests/test_long_form_scale.py</code> estimates “~35 production chunks” for 6 hours and “~70” for 12 hours. That assumes chunks near the character ceiling. Because the payload limit binds first, the real counts are about three times higher. The tests’ assertions are about coverage and bounds, so they still pass; only the comment is off.</p>
+</div>
+</section>
+<section id="adaptive-sizing-during-the-job" class="level3">
+<h3><span class="header-section-number">6.5.3</span> Adaptive sizing during the job</h3>
+<p>The size is not fixed. After each chunk, <code>_retune_after_chunk</code> (<code>tts_worker.py:2487-2552</code>) adjusts the limits for the next one:</p>
+<ul>
+<li>First chunk at the warm-up size, second at the ramp size.</li>
+<li>Healthy chunks grow both limits by <strong>x1.18</strong>, up to the plan’s ceiling.</li>
+<li>A chunk that needed a retry, needed recovery, or streamed <strong>slower than real time</strong> shrinks the next one by <strong>x0.82</strong>.</li>
+<li>After any no-audio failure (a window of 4 chunks) or a second timeout (3 chunks), a <strong>conservative window</strong> caps sizes at 74 % of the ceiling; each clean chunk counts the window down.</li>
+</ul>
+<figure id="fig-adaptive">
+<img src="/books/setuptts/media/file4.webp" alt="Limits over the first 16 chunks of a 700,000-character job, computed by calling the real _retune_after_chunk. Chunk 9 is simulated as needing a retry after two timeout failures, which shrinks the next chunk and opens a 3-chunk conservative window." width="1680" height="864" loading="lazy" decoding="async">
+<figcaption><strong>Figure 6.2.</strong> Limits over the first 16 chunks of a 700,000-character job, computed by calling the real _retune_after_chunk. Chunk 9 is simulated as needing a retry after two timeout failures, which shrinks the next chunk and opens a 3-chunk conservative window.</figcaption>
+</figure>
+<p>The definition of “slow” was a v1.6.2 fix. Before, any chunk that took longer than 32 seconds counted as slow, which kept slow-streaming voices such as Andrew pinned at 1,000 to 2,000-character chunks: “3-5x more requests, each one a failure risk”. Now a chunk is slow only if it took over 32 seconds <strong>and</strong> produced less audio than the time it took, or if its first audio arrived very late.</p>
+</section>
+</section>
+<section id="where-to-cut" class="level2">
+<h2><span class="header-section-number">6.6</span> Where to cut</h2>
+<p>Knowing the limit is half the job; the other half is choosing a boundary that does not split a sentence or a word. <code>_take_chunk_at</code> (<code>tts_worker.py:491-544</code>) searches the window in tiers and takes the <strong>largest</strong> candidate that fits:</p>
+<ol type="1">
+<li><strong>Paragraph</strong> breaks (<code>\n\n</code>).</li>
+<li><strong>Sentence</strong> ends: <code>. ! ?</code> followed by space, also after a closing quote or bracket, and the full-width <code>。！？</code>, which are not followed by spaces in Chinese and Japanese.</li>
+<li><strong>Clause</strong> marks: <code>，、；：</code> and <code>, ; :</code> followed by space, but only if the resulting chunk is at least 40 % of the window. Otherwise “Well, &lt;3,000 words&gt;” would become a 5-character request.</li>
+<li><strong>Whitespace</strong>.</li>
+<li>A <strong>hard split</strong> by binary search, for pathological text such as a long URL.</li>
+</ol>
+<p>Before v1.6.2, the CJK sentence marks were only recognised when followed by whitespace, so every Chinese or Japanese chunk fell through to the hard splitter and was cut mid-sentence (<code>test_cjk_chunks_end_at_sentence_boundaries</code>).</p>
+<p>Finding “the largest prefix that fits” also used to be slow. The payload of a prefix grows with its length, so <code>_largest_fitting_boundary</code> binary-searches the sorted candidates instead of trying them one by one; the commit message reports about 150x faster cutting on text without paragraph breaks.</p>
+<section id="the-cursor-and-the-gap-bug" class="level3">
+<h3><span class="header-section-number">6.6.1</span> The cursor and the gap bug</h3>
+<p>Chunks are taken by a <code>_ChunkCursor</code> (<code>tts_worker.py:440-488</code>) that walks the cleaned text by <strong>absolute position</strong> and returns <code>(text, payload, start, end)</code>. The spoken text is stripped of surrounding whitespace, but the recorded range is not:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><span class="kw">def</span> take_next(<span class="va">self</span>, max_chars, max_payload_bytes):</span>
+<span id="cb1-2">    <span class="co">"""...The range starts at the cursor, *not* at the first non-whitespace</span></span>
+<span id="cb1-3"><span class="co">    character: whitespace between two chunks belongs to the later one."""</span></span>
+<span id="cb1-4">    start <span class="op">=</span> <span class="va">self</span>.position</span>
+<span id="cb1-5">    chunk, _, end, payload <span class="op">=</span> _take_chunk_at(</span>
+<span id="cb1-6">        <span class="va">self</span>.source_text, start, max_chars, max_payload_bytes)</span>
+<span id="cb1-7">    <span class="va">self</span>.position <span class="op">=</span> end</span>
+<span id="cb1-8">    <span class="cf">return</span> chunk, payload, start, end</span></code></pre></div>
+<p>The docstring records why. When the range began at the first non-whitespace character, a split that landed inside a blank line left a one- or two-character gap between two recorded ranges. The final coverage check (Chapter 9) then refused to assemble the file on every attempt and every resume, because the same text always cut the same way. The v1.6.2 notes say this “affected many Andrew audiobooks”. <code>test_paragraph_break_on_the_warmup_boundary_still_completes</code> is the regression test.</p>
+</section>
+</section>
+<section id="before-the-first-chunk-preflight" class="level2">
+<h2><span class="header-section-number">6.7</span> Before the first chunk: preflight</h2>
+<p>Several cheap checks run before any chunk, so a doomed job fails in seconds instead of hours:</p>
+<ul>
+<li><strong>Voice catalogue.</strong> <code>_list_voices_with_retry</code> fetches the voice list (cached for 15 minutes) with up to three attempts and 2 s / 4 s waits, and confirms the selected voice still exists. A single failed DNS lookup used to end the job here with raw aiohttp text.</li>
+<li><strong>Compatibility gate.</strong> As described above.</li>
+<li><strong>Startup synthesis.</strong> For texts of at least <code>preflight_threshold</code> characters (4,000 for Latin script, lower for complex scripts), a sample of about 220 characters is synthesised with a 45-second limit, up to twice. If it returns no audio, the voice list is refreshed to tell “voice removed” apart from “voice cannot read this text”.</li>
+<li><strong>Disk space.</strong> <code>_check_free_space</code> estimates the output at 350 bytes per character, doubles it because chunks are staged before being concatenated, adds 15 %, and refuses the job if either the staging or the output volume has less free space. A 700,000-character book needs about 564 MB.</li>
+</ul>
+</section>
+<section id="the-request-lifecycle" class="level2">
+<h2><span class="header-section-number">6.8</span> The request lifecycle</h2>
+<p>Each attempt at a chunk calls <code>_synthesise_attempt</code> (<code>tts_worker.py:2333-2454</code>), which builds a <strong>fresh</strong> <code>edge_tts.Communicate</code> through <code>build_communicate</code>. Reusing one after a failure could carry “half-dead websocket/session state” into the next attempt.</p>
+<p>Inside edge-tts 7.2.8, one request looks like this:</p>
+<ol type="1">
+<li>Open a WebSocket to <code>wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1</code> with a connection id and a time-based <code>Sec-MS-GEC</code> token computed by the library. TLS uses SetupTTS’s context; the proxy is SetupTTS’s <code>system_proxy()</code>.</li>
+<li>Send a <code>speech.config</code> message asking for <code>audio-24khz-48kbitrate-mono-mp3</code> with sentence-boundary metadata enabled.</li>
+<li>Send the text wrapped in SSML with the voice, rate and volume.</li>
+<li>Receive messages: text frames for <code>turn.start</code>, <code>response</code>, <code>audio.metadata</code> (one per sentence: offset, duration, text) and finally <code>turn.end</code>; binary frames carrying MP3 audio.</li>
+<li>On <code>turn.end</code>, stop. If no audio arrived at all, raise <code>NoAudioReceived</code>.</li>
+</ol>
+<p>SetupTTS consumes that stream with its own watchdog:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><span class="cf">async</span> <span class="kw">def</span> _consume_stream() <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb2-2">    stream <span class="op">=</span> communicate.stream().<span class="fu">__aiter__</span>()</span>
+<span id="cb2-3">    deadline <span class="op">=</span> stats.started_at <span class="op">+</span> timeout_s</span>
+<span id="cb2-4">    <span class="cf">while</span> <span class="va">True</span>:</span>
+<span id="cb2-5">        <span class="cf">if</span> <span class="va">self</span>._cancelled:</span>
+<span id="cb2-6">            <span class="cf">raise</span> asyncio.CancelledError()</span>
+<span id="cb2-7">        now <span class="op">=</span> time.monotonic()</span>
+<span id="cb2-8">        <span class="cf">if</span> now <span class="op">&gt;=</span> deadline:</span>
+<span id="cb2-9">            <span class="cf">raise</span> asyncio.<span class="pp">TimeoutError</span>()</span>
+<span id="cb2-10">        <span class="cf">if</span> stats.audio_bytes <span class="op">==</span> <span class="dv">0</span>:</span>
+<span id="cb2-11">            wait_timeout <span class="op">=</span> <span class="bu">min</span>(deadline <span class="op">-</span> now, first_audio_wait)</span>
+<span id="cb2-12">        <span class="cf">else</span>:</span>
+<span id="cb2-13">            wait_timeout <span class="op">=</span> <span class="bu">min</span>(deadline <span class="op">-</span> now, idle_wait)</span>
+<span id="cb2-14">        <span class="cf">try</span>:</span>
+<span id="cb2-15">            event <span class="op">=</span> <span class="cf">await</span> asyncio.wait_for(stream.<span class="fu">__anext__</span>(),</span>
+<span id="cb2-16">                                           timeout<span class="op">=</span><span class="bu">max</span>(wait_timeout, <span class="fl">1.0</span>))</span>
+<span id="cb2-17">        <span class="cf">except</span> <span class="pp">StopAsyncIteration</span>:</span>
+<span id="cb2-18">            <span class="cf">break</span></span>
+<span id="cb2-19">        <span class="co"># audio -&gt; append to an in-memory buffer</span></span>
+<span id="cb2-20">        <span class="co"># SentenceBoundary -&gt; record (offset, duration, text), update progress</span></span></code></pre></div>
+<p>Audio goes into an <code>io.BytesIO</code> buffer for this attempt only. Nothing is written to disk until the whole attempt has succeeded <strong>and</strong> passed the completeness check, so “failed retries never poison the final MP3” (module docstring).</p>
+</section>
+<section id="timeouts" class="level2">
+<h2><span class="header-section-number">6.9</span> Timeouts</h2>
+<p>A streaming request can fail in different ways at different moments, so there are layered timeouts rather than one.</p>
+<figure id="fig-timeouts">
+<img src="/books/setuptts/media/file5.webp" alt="The timeouts inside one attempt. Each catches a different failure: no connection, no first audio, a stalled stream, or an attempt that simply takes too long." width="1680" height="720" loading="lazy" decoding="async">
+<figcaption><strong>Figure 6.3.</strong> The timeouts inside one attempt. Each catches a different failure: no connection, no first audio, a stalled stream, or an attempt that simply takes too long.</figcaption>
+</figure>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Timeout</th>
+<th>Formula (<code>tts_worker.py:2464-2485</code>, <code>tts_service.py:84</code>)</th>
+<th>Catches</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Connect</td>
+<td>20 s</td>
+<td>service unreachable</td>
+</tr>
+<tr>
+<td>First audio</td>
+<td><code>base + payload/220</code>, clamped to 18-40 s</td>
+<td>service accepted the request but is not producing audio</td>
+</tr>
+<tr>
+<td>Idle between events</td>
+<td><code>12 + payload/260</code>, clamped to 12-40 s</td>
+<td>stream stalled mid-way</td>
+</tr>
+<tr>
+<td>edge-tts socket read</td>
+<td>deadline minus 15 s, clamped to 60-180 s</td>
+<td>same, at the aiohttp level</td>
+</tr>
+<tr>
+<td>Whole attempt</td>
+<td><code>30 + expected_audio / 0.45</code>, clamped to 90-600 s</td>
+<td>everything else</td>
+</tr>
+</tbody>
+</table></div>
+<p>The whole-attempt deadline is the interesting one. Expected audio is <code>len(text) / (15.8 x rate multiplier)</code> seconds, where 15.8 characters per second was measured at normal speed, and 0.45 is the slowest observed streaming speed relative to real time. So the deadline is generous enough for the slowest voice to stream the whole chunk, at the speed the user chose: slower speech means more audio for the same text.</p>
+<div class="callout experiment">
+<p><strong>Verified by runtime experiment.</strong> Calling the real <code>_chunk_timeout_for</code> gives 198 s for a 1,200-character chunk and 536 s for 3,600 characters at normal speed; at -50 % speed the 1,200-character deadline becomes 367 s. The idle timeout for a 3,600-byte chunk is 25 s and the first-audio timeout 40 s.</p>
+</div>
+<p>This formula replaced a fixed floor of 65 seconds. The comment at <code>tts_worker.py:110-115</code> records the evidence: Andrew and the multilingual voices “often stream at ~1.5x real time and dip below 0.5x”, and in one user’s log “22 of 29 such failures … hit exactly 65 s”. The old deadline was killing healthy streams. Real stalls are caught by the idle timeout, which is short.</p>
+</section>
+<section id="retries-and-back-off" class="level2">
+<h2><span class="header-section-number">6.10</span> Retries and back-off</h2>
+<p><code>_process_chunk</code> (<code>tts_worker.py:1991-2269</code>) allows up to <strong>5 attempts</strong> per chunk. Before attempt <em>n</em> (for n = 2 to 5) it waits <code>2 x 2^(n-2)</code> seconds: 2, 4, 8 and 16 s. After a failure where audio had started and then stalled (<code>timeout_after_audio</code>), the next deadline is multiplied by 1.5 per attempt, up to the 600-second cap, because “the same limit just failed on this text”.</p>
+<p>Two failure kinds stop early and go straight to splitting after <strong>2</strong> attempts instead of 5: no audio (<code>no_audio</code>, <code>metadata_without_audio</code>) and timeouts before any audio (<code>timeout_waiting_for_audio</code>). Hammering the same doomed request five times wastes about 30 seconds of back-off and rarely helps; a smaller request often does.</p>
+<p>The back-off has no random jitter. With at most two concurrent jobs per machine, the classic reason for jitter (thousands of clients retrying in lockstep) does not really apply (Inference).</p>
+</section>
+<section id="failure-classification" class="level2">
+<h2><span class="header-section-number">6.11</span> Failure classification</h2>
+<p>Every exception from an attempt passes through <code>_classify_attempt_failure</code> (<code>tts_worker.py:2718-2817</code>), which turns it into an <code>_AttemptFailure</code> with a <code>kind</code>. The kind decides the retry policy, the health tracking and the final user message.</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Raised when</th>
+<th>Typical cause</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>timeout_waiting_for_audio</code></td>
+<td>timeout, no audio and no metadata yet</td>
+<td>service slow or overloaded</td>
+</tr>
+<tr>
+<td><code>metadata_without_audio</code></td>
+<td>sentence metadata arrived but no audio</td>
+<td>provider-side failure for this text or voice</td>
+</tr>
+<tr>
+<td><code>timeout_after_audio</code></td>
+<td>timeout after some audio, <strong>or</strong> a stream that ended early</td>
+<td>connection dropped mid-stream</td>
+</tr>
+<tr>
+<td><code>no_audio</code></td>
+<td>edge-tts raised <code>NoAudioReceived</code></td>
+<td>voice cannot read this text, or provider hiccup</td>
+</tr>
+<tr>
+<td><code>dns</code></td>
+<td><code>ClientConnectorDNSError</code> or “getaddrinfo failed”</td>
+<td>offline, DNS broken</td>
+</tr>
+<tr>
+<td><code>invalid_voice</code></td>
+<td><code>ValueError</code> mentioning voice</td>
+<td>voice removed from catalogue</td>
+</tr>
+<tr>
+<td><code>network</code></td>
+<td>aiohttp connection errors, WebSocket errors, “503”, “ssl”, “invalid response status”</td>
+<td>network or service outage, TLS interception</td>
+</tr>
+<tr>
+<td><code>service_response</code></td>
+<td>edge-tts <code>UnexpectedResponse</code> / <code>UnknownResponse</code></td>
+<td>protocol change</td>
+</tr>
+<tr>
+<td><code>unexpected</code></td>
+<td>anything else</td>
+<td>bug</td>
+</tr>
+</tbody>
+</table></div>
+<p>HTTP-level problems surface in this table indirectly. A 503 or 429 during the WebSocket handshake arrives as an aiohttp error whose text contains the status, and is classified as <code>network</code>. A 403 is handled inside edge-tts itself: <code>stream()</code> catches <code>ClientResponseError</code> with status 403, adjusts its clock-skew correction for the token, and retries once.</p>
+</section>
+<section id="audio-validation" class="level2">
+<h2><span class="header-section-number">6.12</span> Audio validation</h2>
+<p>When an attempt ends without an exception, SetupTTS still does not trust it. Two questions are asked:</p>
+<ol type="1">
+<li><strong>Did any audio arrive?</strong> If not, the attempt fails as <code>no_audio</code> or <code>metadata_without_audio</code>.</li>
+<li><strong>Is the audio complete?</strong> <code>_stream_incomplete_reason</code> compares the received audio and the announced sentences with the chunk’s text. If either check fails, the attempt is discarded and treated as <code>timeout_after_audio</code>, which is retried like any mid-stream stall.</li>
+</ol>
+<p>The second check is the most important reliability mechanism in the project, and the reason is historical. Chapter 8 tells that story.</p>
+</section>
+</section>

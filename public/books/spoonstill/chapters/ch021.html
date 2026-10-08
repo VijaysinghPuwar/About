@@ -1,0 +1,107 @@
+<section id="audio-and-text-to-speech" class="level1">
+<h1><span class="header-section-number">17</span> Audio and Text-to-Speech</h1>
+<figure>
+<img src="/books/spoonstill/media/file10.svg" alt="The audio path: every source becomes a measured, normalized WAV." width="718" height="535" loading="lazy" decoding="async">
+<figcaption>The audio path: every source becomes a measured, normalized WAV.</figcaption>
+</figure>
+<section id="three-sources-one-result" class="level2">
+<h2><span class="header-section-number">17.1</span> Three sources, one result</h2>
+<p>Every scene's audio is one of three <code>AudioSource</code> variants, and every variant resolves to the same thing: a normalized WAV file plus its <strong>measured</strong> duration. Nothing after that point needs to know where the audio came from (D-020).</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Source</th>
+<th>Work done</th>
+<th>Cache file</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Tts { text, provider, voice }</code></td>
+<td>speak (if the raw speech is not cached), then normalize with trimming</td>
+<td><code>spoken-&lt;key&gt;.spoken</code> then <code>tts-&lt;key&gt;.wav</code></td>
+</tr>
+<tr>
+<td><code>File { recording }</code></td>
+<td>normalize, never trimmed</td>
+<td><code>file-&lt;key&gt;.wav</code></td>
+</tr>
+<tr>
+<td><code>Silent { seconds }</code></td>
+<td>generate exact-length silence</td>
+<td><code>silent-&lt;key&gt;.wav</code></td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="supported-recordings" class="level2">
+<h2><span class="header-section-number">17.2</span> Supported recordings</h2>
+<p>Recordings with extensions <code>mp3 m4a wav aac flac ogg opus wma</code> are accepted in convention mode (anything FFmpeg can decode works in a manifest). Each is probed during validation: no audio stream or no duration is a <code>NotUsableMedia</code> problem with a plain sentence first and the evidence after.</p>
+</section>
+<section id="normalization-two-ffmpeg-passes" class="level2">
+<h2><span class="header-section-number">17.3</span> Normalization: two FFmpeg passes</h2>
+<p><strong>Pass 1, analyse</strong> (real command from the analysis log):</p>
+<pre class="text"><code>ffmpeg -hide_banner -nostats -loglevel info -i &lt;run&gt;/renderable/audio/002.mp3
+       -map 0:a:0 -vn -af loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json -f null -</code></pre>
+<p><code>loudnorm</code> here is used only to <strong>measure</strong> loudness and true peak; for speech, <code>silencedetect=n=-45dB:d=0.05</code> is appended to find leading and trailing silence. <code>-map 0:a:0 -vn</code> takes only the first audio stream and ignores an MP3's embedded cover art. <code>-f null -</code> throws the output away.</p>
+<p><strong>Pass 2, write</strong>:</p>
+<pre class="text"><code>ffmpeg -hide_banner -nostats -loglevel warning -y -i &lt;run&gt;/renderable/audio/002.mp3
+       -map 0:a:0 -vn -af volume=5.84dB -ar 48000 -ac 2 -c:a pcm_s16le -f wav
+       &lt;run&gt;/renderable/.spoonstill/cache/audio/.file-64bbaa4704c542e8.wav.partial-16446-0.wav</code></pre>
+<p>The gain is computed in Rust:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb3-1"><span class="co">// crates/spoonstill-media/src/audio.rs:284-296</span></span>
+<span id="cb3-2"><span class="kw">fn</span> gain_db(analysis<span class="op">:</span> <span class="op">&amp;</span>Analysis) <span class="op">-&gt;</span> <span class="dt">Option</span><span class="op">&lt;</span><span class="dt">f64</span><span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb3-3">    <span class="kw">let</span> loudness <span class="op">=</span> analysis<span class="op">.</span>loudness<span class="op">?;</span></span>
+<span id="cb3-4">    <span class="kw">let</span> wanted <span class="op">=</span> LOUDNESS_TARGET_LUFS <span class="op">-</span> loudness<span class="op">;</span></span>
+<span id="cb3-5">    <span class="kw">let</span> allowed <span class="op">=</span> analysis</span>
+<span id="cb3-6">        <span class="op">.</span>peak</span>
+<span id="cb3-7">        <span class="op">.</span>map_or(<span class="dt">f64</span><span class="pp">::</span><span class="cn">INFINITY</span><span class="op">,</span> <span class="op">|</span>peak<span class="op">|</span> TRUE_PEAK_CEILING_DBTP <span class="op">-</span> peak)<span class="op">;</span></span>
+<span id="cb3-8">    <span class="kw">let</span> gain <span class="op">=</span> wanted<span class="op">.</span>min(allowed)<span class="op">.</span>clamp(<span class="op">-</span>MAX_GAIN_DB<span class="op">,</span> MAX_GAIN_DB)<span class="op">;</span></span>
+<span id="cb3-9">    (gain<span class="op">.</span>abs() <span class="op">&gt;=</span> <span class="dv">0.05</span>)<span class="op">.</span>then_some(gain)</span>
+<span id="cb3-10"><span class="op">}</span></span></code></pre></div>
+<p>Read it as: aim for -16 LUFS, but never push the peak above -1.5 dBTP, never change by more than 24 dB, and skip a change too small to matter. A single constant <code>volume</code> gain is used instead of <code>loudnorm</code>'s own correction mode, because that mode compresses dynamics and can change between FFmpeg versions; a constant gain is byte-identical run to run (D-084). The trade-off: a very peaky recording stops short of -16 LUFS rather than clipping.</p>
+<p>For <strong>speech only</strong>, <code>atrim</code> cuts the provider's leading and trailing silence down to <code>tts.trim_head</code> (0.10 s) and <code>tts.trim_tail</code> (0.25 s). Your own recordings are <strong>never trimmed</strong>: their pauses are a choice; a provider's are an artifact.</p>
+</section>
+<section id="silence" class="level2">
+<h2><span class="header-section-number">17.4</span> Silence</h2>
+<pre class="text"><code>ffmpeg -hide_banner -nostats -loglevel warning -y -f lavfi -i anullsrc=r=48000:cl=stereo
+       -af atrim=end_sample=96000 -c:a pcm_s16le -f wav &lt;...&gt;/.silent-2cc0b07ecacda096.wav.partial-16446-2.wav</code></pre>
+<p>A 2.0 s silent scene is exactly 96 000 samples. Silence is a real audio track so a silent scene follows exactly the same path as a narrated one.</p>
+</section>
+<section id="measuring" class="level2">
+<h2><span class="header-section-number">17.5</span> Measuring</h2>
+<p><code>measure</code> first checks the WAV's own header: the RIFF size plus 8 must equal the file length, and a <code>data</code> chunk must fit inside the file. Only then does it run ffprobe and check <code>pcm_s16le</code>, 48 000 Hz, 2 channels, and a positive duration. The header check exists because a cached WAV truncated to 200 bytes still probes as valid audio of 0.0006 s, which once turned an 18.055 s fixture film into a 12.788 s film with exit code 0 (D-190).</p>
+</section>
+<section id="how-narration-controls-scene-length" class="level2">
+<h2><span class="header-section-number">17.6</span> How narration controls scene length</h2>
+<pre class="text"><code>duration (measured from the WAV)  -&gt;  frames = ceil(duration x fps)
+                                  -&gt;  samples = frames x 48000 / fps
+segment: video exactly `frames` long; audio = WAV + silence, cut at `samples`</code></pre>
+<p>The narration is <strong>padded, never trimmed</strong> (D-022). A narration longer than expected simply makes a longer scene; spoonstill never squeezes speech to fit a picture. The only upper limit is <code>MAX_SCENE_SECONDS = 3 600</code>.</p>
+</section>
+<section id="the-text-to-speech-path" class="level2">
+<h2><span class="header-section-number">17.7</span> The text-to-speech path</h2>
+<pre class="text"><code>text in 001.txt (UTF-8, &lt;= 256 KiB, BOM stripped, trimmed)
+  -&gt; AudioSource::Tts { text, provider: "edge", voice }
+  -&gt; speech key = hash("tts", text, provider, voice, settings)
+  -&gt; cached spoken-&lt;key&gt;.spoken ?  yes: skip the network entirely
+  -&gt; no: Edge::speak
+        pace gate (2 in flight, 1.2 s apart, cool-down on refusal)
+        edge-tts --voice V --rate --volume --pitch --file script.txt --write-media out
+        retry transient failures (3 attempts)
+        check bytes look like audio; join pieces; rename into the cache
+  -&gt; normalize (trim provider padding, -16 LUFS) -&gt; tts-&lt;key&gt;.wav
+  -&gt; measure -&gt; duration -&gt; frames</code></pre>
+<p>In the analysis run, the line "The harbour wakes slowly, one light at a time." produced 21 312 bytes of MP3 from <code>en-GB-RyanNeural</code>, normalized and trimmed to <strong>2.836 s</strong>, which became <strong>86 frames</strong> (2.867 s) at 30 fps.</p>
+<p>Ownership is clear: spoonstill's Rust decides what to say, in which voice, how to retry and how to check the result; the <code>edge-tts</code> tool (Python, third party) talks to Microsoft's service over a websocket; FFmpeg normalizes and measures what came back.</p>
+<p>Limits worth knowing: the Edge service returns 24 kHz mono MP3 at 48 kb/s, so a TTS line can never be better than that (README); the service throttles heavy use, which is why the pace gate exists; and it is an unofficial endpoint, which is why the plan calls for an official provider with your own key in a commercial build (D-023, not built).</p>
+<div class="callout exercise">
+<p><strong>Exercise 17.1 (Intermediate).</strong> A recording measures -22 LUFS with a true peak of -3 dBTP. What gain does <code>gain_db</code> return? What if the peak were -6 dBTP?</p>
+</div>
+</section>
+</section>

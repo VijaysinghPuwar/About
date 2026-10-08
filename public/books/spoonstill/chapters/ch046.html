@@ -1,0 +1,140 @@
+<section id="appendix-a-how-this-report-was-verified" class="level1 unnumbered">
+<h1 class="unnumbered">Appendix A: How This Report Was Verified</h1>
+<section id="repository-state" class="level2 unnumbered">
+<h2 class="unnumbered">Repository state</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Repository</td>
+<td><a href="https://github.com/VijaysinghPuwar/spoonstill" class="uri" target="_blank" rel="noopener noreferrer">https://github.com/VijaysinghPuwar/spoonstill</a> (<code>origin</code>, HTTPS)</td>
+</tr>
+<tr>
+<td>Default branch</td>
+<td><code>master</code></td>
+</tr>
+<tr>
+<td>Analysed commit</td>
+<td><code>7948f2496e08e5f7d22a7f57f04a83a69e4c66cd</code> ("Version 0.1.19", tag <code>v0.1.19</code>, 2026-10-04)</td>
+</tr>
+<tr>
+<td>Local clone before analysis</td>
+<td><code>master</code> at <code>0dd74eb</code> (v0.1.18), 2 commits behind <code>origin/master</code> after <code>git fetch --all --prune</code></td>
+</tr>
+<tr>
+<td>Local working tree</td>
+<td><strong>not clean</strong>: modified <code>README.md</code>, <code>decisions.md</code>, <code>crates/spoonstill-app/src/arrange.rs</code>, <code>crates/spoonstill-app/src/picture.rs</code>; untracked <code>AGENTS.md</code>, <code>AI Model/</code>, <code>chatgpt.md</code>, <code>gemini.md</code>, <code>solution-chatgpt-gemini.md</code></td>
+</tr>
+<tr>
+<td>Synchronisation method</td>
+<td>the incoming commits also touch <code>README.md</code> and <code>decisions.md</code>, so a fast-forward pull would refuse; to avoid any risk to uncommitted work, <code>origin/master</code> was checked out with <code>git worktree add --detach &lt;scratchpad&gt;/repo origin/master</code>. The worktree was removed after the book was generated. The user's working tree and branch were not modified.</td>
+</tr>
+<tr>
+<td>Analysis date</td>
+<td>2026-10-07</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="environment" class="level2 unnumbered">
+<h2 class="unnumbered">Environment</h2>
+<p>macOS 26.7.1 (build 25G241), Apple M5, 24 GB RAM; Rust 1.94.0 and Cargo 1.94.0 (from <code>rust-toolchain.toml</code>); FFmpeg 9.0.1 (Homebrew); <code>edge-tts</code> installed; Node.js, <code>actionlint</code> and <code>shellcheck</code> installed.</p>
+</section>
+<section id="commands-executed-all-in-the-worktree" class="level2 unnumbered">
+<h2 class="unnumbered">Commands executed (all in the worktree)</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Command</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cargo fmt --all -- --check</code></td>
+<td>passed</td>
+</tr>
+<tr>
+<td><code>cargo check --workspace</code></td>
+<td>passed</td>
+</tr>
+<tr>
+<td><code>cargo clippy --workspace --all-targets -- -D warnings</code></td>
+<td>passed</td>
+</tr>
+<tr>
+<td><code>cargo test --workspace --no-fail-fast</code></td>
+<td><strong>756 passed, 0 failed, 11 ignored</strong>, 116 s</td>
+</tr>
+<tr>
+<td><code>cargo build --workspace</code></td>
+<td>passed</td>
+</tr>
+<tr>
+<td><code>make workflows</code> (actionlint)</td>
+<td>passed</td>
+</tr>
+<tr>
+<td><code>make shell</code> (shellcheck)</td>
+<td>passed</td>
+</tr>
+<tr>
+<td><code>make ui</code> (node <code>--check</code> and <code>ui-smoke.mjs</code>)</td>
+<td>passed</td>
+</tr>
+<tr>
+<td><code>make gates</code></td>
+<td><strong>M0 8/8, M1 8/8, M2 23/23</strong>, 347 s</td>
+</tr>
+<tr>
+<td><code>still --version</code>, <code>--help</code>, <code>doctor</code>, <code>diagnostics export --help</code>, <code>validate --help</code></td>
+<td>inspected</td>
+</tr>
+<tr>
+<td><code>still validate</code>, <code>still render</code> (twice) on <code>fixtures/projects/renderable</code></td>
+<td>6 scenes, 541 frames, 18.055 s; second run reused 6 of 6</td>
+</tr>
+<tr>
+<td><code>still new</code> with two photos and one recording</td>
+<td>starter <code>project.yaml</code> written</td>
+</tr>
+<tr>
+<td><code>still new</code> + <code>still render --subtitles boxed --voice en-GB-RyanNeural</code> with one text line</td>
+<td>one live TTS request; 2.836 s narration, 86 frames</td>
+</tr>
+<tr>
+<td><code>ffprobe</code> on the rendered film</td>
+<td>profile as stated in Chapter 1</td>
+</tr>
+</tbody>
+</table></div>
+<p>Runtime experiments set <code>HOME</code> to a scratch folder so the author's real <code>runs.csv</code> and settings were not touched. The ignored tests (<code>make tts-live</code>, the caption benchmark) were not run. Nothing was run on Windows; Windows statements come from source code, CI configuration and the project's recorded Windows measurements.</p>
+</section>
+<section id="sources-consulted" class="level2 unnumbered">
+<h2 class="unnumbered">Sources consulted</h2>
+<p><strong>Source code (read in full or in large part):</strong> every file under <code>crates/*/src</code>, <code>crates/*/tests</code>, <code>apps/desktop/src</code>, <code>apps/desktop/ui</code>, <code>apps/desktop/tests</code>, plus <code>apps/desktop/tauri.conf.json</code>, <code>apps/desktop/capabilities/default.json</code>, every <code>Cargo.toml</code>, <code>Cargo.lock</code> (versions), <code>rust-toolchain.toml</code>, <code>.cargo/audit.toml</code>, <code>Makefile</code>, <code>.github/workflows/ci.yml</code> and <code>release.yml</code>, and every file in <code>scripts/</code>.</p>
+<p><strong>Documentation:</strong> <code>README.md</code>, <code>decisions.md</code> (all 165 decisions skimmed; about 30 read closely, D-195 to D-198 in full), <code>plan.md</code>, <code>ffmpeg-findings.md</code>, <code>findings.md</code>, <code>PROCESS.md</code>, <code>refergit.md</code>, <code>CLAUDE.md</code>, <code>THIRD-PARTY-NOTICES.md</code>.</p>
+<p><strong>External:</strong> YouTube oEmbed and watch pages for the 15 videos (2026-10-07). No other external documentation was relied on for claims about this project.</p>
+</section>
+<section id="method" class="level2 unnumbered">
+<h2 class="unnumbered">Method</h2>
+<p>Source reading was split across several parallel research passes, each writing notes with file and line references; contested facts (for example the number of default voices, whether the architecture test reads <code>apps/</code>, and the location of <code>without_verbatim_prefix</code>) were re-checked by direct grep before writing. Measurements quoted from <code>ffmpeg-findings.md</code> and <code>decisions.md</code> are the project's own and are labelled as such; numbers labelled "Verified by runtime experiment" were produced for this book.</p>
+</section>
+<section id="style-notes" class="level2 unnumbered">
+<h2 class="unnumbered">Style notes</h2>
+<p>Em dashes have been removed throughout, including from quoted code comments, where they were replaced with a comma or hyphen; output lines quoted from the program had their long dashes shown as hyphens. Code excerpts are otherwise verbatim apart from trimmed comments marked <code>// ...</code> or "abridged".</p>
+</section>
+</section>

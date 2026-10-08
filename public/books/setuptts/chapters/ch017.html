@@ -1,0 +1,110 @@
+<section id="multi-job-and-concurrency-architecture" class="level1">
+<h1><span class="header-section-number">12</span> Multi-Job and Concurrency Architecture</h1>
+<section id="the-job-queue" class="level2">
+<h2><span class="header-section-number">12.1</span> The job queue</h2>
+<p><code>JobQueue</code> (<code>app/workers/job_queue.py</code>) is a <code>QObject</code> on the UI thread. It holds three collections:</p>
+<ul>
+<li><code>_pending</code>: a FIFO list of <code>JobItem</code>s waiting for a slot;</li>
+<li><code>_running</code>: a dictionary from job id to <code>(JobItem, TTSWorker)</code>, at most <code>MAX_CONCURRENT = 2</code> entries;</li>
+<li><code>_finishing</code>: cancelled workers that have left <code>_running</code> but whose threads have not exited yet.</li>
+</ul>
+<figure id="fig-queue">
+<img src="/books/setuptts/media/file13.webp" alt="Jobs move from pending to running as slots free up. A cancelled worker keeps its output path reserved until it has really stopped." width="1680" height="720" loading="lazy" decoding="async">
+<figcaption><strong>Figure 12.1.</strong> Jobs move from pending to running as slots free up. A cancelled worker keeps its output path reserved until it has really stopped.</figcaption>
+</figure>
+<p><code>submit</code> appends to <code>_pending</code> and calls <code>_try_start</code>, which starts pending jobs while fewer than two are running. Every completion, failure and cancellation calls <code>_try_start</code> again, so the queue drains on its own.</p>
+</section>
+<section id="what-each-job-owns" class="level2">
+<h2><span class="header-section-number">12.2</span> What each job owns</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Resource</th>
+<th>Per job?</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Thread</td>
+<td>yes</td>
+<td>its own <code>TTSWorker</code> (<code>QThread</code>)</td>
+</tr>
+<tr>
+<td>asyncio loop</td>
+<td>yes</td>
+<td>created and closed inside <code>run()</code></td>
+</tr>
+<tr>
+<td>WebSocket</td>
+<td>yes</td>
+<td>a fresh one per attempt</td>
+</tr>
+<tr>
+<td>Staging folder</td>
+<td>yes</td>
+<td><code>staging/&lt;job_id&gt;/</code>; the queue’s 8-character id is used as the folder name, or a fresh 32-character id when a failed resume starts over</td>
+</tr>
+<tr>
+<td>Output path</td>
+<td>yes</td>
+<td>no two active jobs may share one</td>
+</tr>
+<tr>
+<td>Retry and health state</td>
+<td>yes</td>
+<td><code>_RollingHealthState</code>, <code>_JobStats</code> live on the worker</td>
+</tr>
+<tr>
+<td>Voice catalogue cache</td>
+<td><strong>shared</strong></td>
+<td>module-level in <code>tts_service.py</code>, 15-minute lifetime</td>
+</tr>
+<tr>
+<td>Live-folder registry</td>
+<td><strong>shared</strong></td>
+<td><code>_LIVE_DIRS</code>, protected by a <code>threading.Lock</code></td>
+</tr>
+<tr>
+<td>History and settings</td>
+<td><strong>shared</strong></td>
+<td>only touched on the UI thread</td>
+</tr>
+</tbody>
+</table></div>
+<p>Isolation by construction is the main concurrency strategy. Two workers never write the same file because each has its own folder and its own output path, so almost no locking is needed. The one shared mutable structure that two threads really do touch, the set of live staging folders, has a lock.</p>
+</section>
+<section id="duplicate-jobs" class="level2">
+<h2><span class="header-section-number">12.3</span> Duplicate jobs</h2>
+<p><code>has_active_output_path</code> refuses a second job for a destination that is running, pending, or still held by a finishing cancelled worker. Paths are compared after <code>resolve()</code> and <code>normcase</code>, and additionally lower-cased on macOS, whose default file system is case-insensitive. Before v1.6.2, <code>Book.mp3</code> and <code>book.mp3</code> were accepted as two jobs writing the same file (<code>test_same_output_file_with_different_case_is_one_destination</code>). The same text may be exported twice to different files; that is not a duplicate.</p>
+</section>
+<section id="cancellation" class="level2">
+<h2><span class="header-section-number">12.4</span> Cancellation</h2>
+<p>Cancelling a <strong>pending</strong> job removes it from the list. Cancelling a <strong>running</strong> job does four things immediately (<code>job_queue.py:169-194</code>): removes it from <code>_running</code> (freeing the slot), marks the item cancelled, calls <code>worker.cancel()</code>, and moves the worker to <code>_finishing</code>. Then <code>_try_start</code> fills the free slot.</p>
+<p>There is one race worth knowing. Final assembly runs to the end once it starts. If Cancel arrives during assembly, the worker finishes writing a complete, verified file and emits <code>completed</code>. Rather than lose that, the queue keeps cancelled running items in <code>_cancelled_running</code> and reports the completion normally (“Cancelled too late to stop the final save; the file is done”).</p>
+</section>
+<section id="two-jobs-at-once-concretely" class="level2">
+<h2><span class="header-section-number">12.5</span> Two jobs at once, concretely</h2>
+<p>Suppose <code>chapter-1.mp3</code> and <code>chapter-2.mp3</code> are submitted a second apart:</p>
+<ol type="1">
+<li>Both start immediately, each in its own thread with its own loop.</li>
+<li>Both fetch the voice catalogue; the second probably gets it from the 15-minute cache.</li>
+<li>Each runs its own preflight, creates its own staging folder and streams its own chunks. Their requests interleave freely on the network.</li>
+<li>Signals from both arrive on the UI thread tagged with their job ids and update separate rows.</li>
+<li>If one fails, its error dialog is queued; the other job keeps running.</li>
+<li>When the first finishes, the slot goes to <code>chapter-3.mp3</code> if one is pending.</li>
+</ol>
+<div class="callout drift">
+<p><strong>Limitation found while preparing this book.</strong> The disk-space pre-flight (<code>_check_free_space</code>) compares a job’s estimated need with the free space <strong>now</strong>. It does not subtract what other running jobs are about to use, so two large jobs started together can each pass the check and still fill the disk between them. The failure is handled safely (a resumable <code>staging_io</code> error), but the up-front check is per job, not global.</p>
+</div>
+</section>
+<section id="shutdown-with-jobs-running" class="level2">
+<h2><span class="header-section-number">12.6</span> Shutdown with jobs running</h2>
+<p>Quitting asks first (“Audio is still being generated … the audio finished so far is kept”). If the user quits, <code>cancel_all</code> cancels pending items, cancels running workers and waits up to 4 seconds for each, then waits for finishing workers the same way. A worker still alive after that is <code>terminate()</code>d as a last resort. Because chunks are checkpointed, even that loses at most the chunk in flight.</p>
+</section>
+</section>

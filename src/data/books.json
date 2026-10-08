@@ -1,0 +1,2428 @@
+[
+  {
+    "slug": "setuptts",
+    "title": "SetupTTS: Technical Architecture and Learning Guide",
+    "subtitle": "Understanding the Desktop TTS Application, Audio Pipeline, Reliability Architecture, and Distribution System",
+    "author": "Prepared for Vijay Puwar",
+    "date": "2026-10-07",
+    "description": "A study guide to the SetupTTS repository at v1.6.2 (commit c6c43fe): architecture, the text-to-speech pipeline, long-form reliability, packaging, CI/CD and testing.",
+    "subjects": [
+      "Python",
+      "PySide6",
+      "text-to-speech",
+      "asyncio",
+      "reliability engineering",
+      "PyInstaller"
+    ],
+    "cover": {
+      "src": "/books/setuptts/cover.webp",
+      "width": 640,
+      "height": 960
+    },
+    "words": 25875,
+    "minutes": 118,
+    "chapters": [
+      {
+        "id": "ch001",
+        "title": "About This Book",
+        "number": null,
+        "part": null,
+        "words": 673,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "what-this-book-documents",
+            "title": "What this book documents",
+            "number": null
+          },
+          {
+            "id": "how-to-read-the-evidence-labels",
+            "title": "How to read the evidence labels",
+            "number": null
+          },
+          {
+            "id": "how-the-book-is-organised",
+            "title": "How the book is organised",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch003",
+        "title": "Project Overview",
+        "number": "1",
+        "part": "Part I: The Product",
+        "words": 647,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "what-setuptts-does",
+            "title": "What SetupTTS does",
+            "number": "1.1"
+          },
+          {
+            "id": "the-problem-it-actually-solves",
+            "title": "The problem it actually solves",
+            "number": "1.2"
+          },
+          {
+            "id": "who-it-is-for",
+            "title": "Who it is for",
+            "number": "1.3"
+          },
+          {
+            "id": "the-main-workflow",
+            "title": "The main workflow",
+            "number": "1.4"
+          },
+          {
+            "id": "platforms-provider-and-network",
+            "title": "Platforms, provider and network",
+            "number": "1.5"
+          }
+        ]
+      },
+      {
+        "id": "ch004",
+        "title": "Technology Stack",
+        "number": "2",
+        "part": "Part I: The Product",
+        "words": 1156,
+        "minutes": 5,
+        "sections": [
+          {
+            "id": "python",
+            "title": "Python",
+            "number": "2.1"
+          },
+          {
+            "id": "pyside6-and-qt",
+            "title": "PySide6 and Qt",
+            "number": "2.2"
+          },
+          {
+            "id": "edge-tts",
+            "title": "edge-tts",
+            "number": "2.3"
+          },
+          {
+            "id": "asyncio-and-aiohttp",
+            "title": "asyncio and aiohttp",
+            "number": "2.4"
+          },
+          {
+            "id": "tls-ssl-and-certifi",
+            "title": "TLS: ssl and certifi",
+            "number": "2.5"
+          },
+          {
+            "id": "platformdirs-json-and-sqlite",
+            "title": "platformdirs, JSON and SQLite",
+            "number": "2.6"
+          },
+          {
+            "id": "pyinstaller-inno-setup-and-the-macos-tools",
+            "title": "PyInstaller, Inno Setup and the macOS tools",
+            "number": "2.7"
+          },
+          {
+            "id": "github-actions",
+            "title": "GitHub Actions",
+            "number": "2.8"
+          }
+        ]
+      },
+      {
+        "id": "ch005",
+        "title": "Repository Structure",
+        "number": "3",
+        "part": "Part I: The Product",
+        "words": 687,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "how-the-directories-relate",
+            "title": "How the directories relate",
+            "number": "3.1"
+          },
+          {
+            "id": "size-of-the-codebase",
+            "title": "Size of the codebase",
+            "number": "3.2"
+          }
+        ]
+      },
+      {
+        "id": "ch007",
+        "title": "Application Architecture",
+        "number": "4",
+        "part": "Part II: Architecture",
+        "words": 1430,
+        "minutes": 6,
+        "sections": [
+          {
+            "id": "the-big-picture",
+            "title": "The big picture",
+            "number": "4.1"
+          },
+          {
+            "id": "the-layers-mapped-to-real-classes",
+            "title": "The layers, mapped to real classes",
+            "number": "4.2"
+          },
+          {
+            "id": "start-up-step-by-step",
+            "title": "Start-up, step by step",
+            "number": "4.3"
+          },
+          {
+            "id": "threads-and-event-loops",
+            "title": "Threads and event loops",
+            "number": "4.4"
+          },
+          {
+            "id": "keeping-thread-objects-alive",
+            "title": "Keeping thread objects alive",
+            "number": "4.5"
+          },
+          {
+            "id": "one-running-copy",
+            "title": "One running copy",
+            "number": "4.6"
+          }
+        ]
+      },
+      {
+        "id": "ch008",
+        "title": "UI Architecture",
+        "number": "5",
+        "part": "Part II: Architecture",
+        "words": 1454,
+        "minutes": 7,
+        "sections": [
+          {
+            "id": "window-layout",
+            "title": "Window layout",
+            "number": "5.1"
+          },
+          {
+            "id": "the-panels",
+            "title": "The panels",
+            "number": "5.2"
+          },
+          {
+            "id": "how-a-click-reaches-the-backend",
+            "title": "How a click reaches the backend",
+            "number": "5.3"
+          },
+          {
+            "id": "how-the-backend-reaches-the-ui",
+            "title": "How the backend reaches the UI",
+            "number": "5.4"
+          },
+          {
+            "id": "responsive-layout",
+            "title": "Responsive layout",
+            "number": "5.5"
+          },
+          {
+            "id": "styling",
+            "title": "Styling",
+            "number": "5.6"
+          }
+        ]
+      },
+      {
+        "id": "ch010",
+        "title": "The Text-to-Speech Pipeline",
+        "number": "6",
+        "part": "Part III: The Audio Pipeline",
+        "words": 3069,
+        "minutes": 14,
+        "sections": [
+          {
+            "id": "text-import",
+            "title": "Text import",
+            "number": "6.1"
+          },
+          {
+            "id": "text-normalization",
+            "title": "Text normalization",
+            "number": "6.2"
+          },
+          {
+            "id": "language-and-voice-selection",
+            "title": "Language and voice selection",
+            "number": "6.3"
+          },
+          {
+            "id": "why-chunking-exists",
+            "title": "Why chunking exists",
+            "number": "6.4"
+          },
+          {
+            "id": "how-chunk-size-is-decided",
+            "title": "How chunk size is decided",
+            "number": "6.5"
+          },
+          {
+            "id": "where-to-cut",
+            "title": "Where to cut",
+            "number": "6.6"
+          },
+          {
+            "id": "before-the-first-chunk-preflight",
+            "title": "Before the first chunk: preflight",
+            "number": "6.7"
+          },
+          {
+            "id": "the-request-lifecycle",
+            "title": "The request lifecycle",
+            "number": "6.8"
+          },
+          {
+            "id": "timeouts",
+            "title": "Timeouts",
+            "number": "6.9"
+          },
+          {
+            "id": "retries-and-back-off",
+            "title": "Retries and back-off",
+            "number": "6.10"
+          },
+          {
+            "id": "failure-classification",
+            "title": "Failure classification",
+            "number": "6.11"
+          },
+          {
+            "id": "audio-validation",
+            "title": "Audio validation",
+            "number": "6.12"
+          }
+        ]
+      },
+      {
+        "id": "ch011",
+        "title": "Long-Form Audiobook Architecture",
+        "number": "7",
+        "part": "Part III: The Audio Pipeline",
+        "words": 1106,
+        "minutes": 5,
+        "sections": [
+          {
+            "id": "why-a-10-hour-book-is-a-different-problem",
+            "title": "Why a 10-hour book is a different problem",
+            "number": "7.1"
+          },
+          {
+            "id": "the-long-form-pipeline",
+            "title": "The long-form pipeline",
+            "number": "7.2"
+          },
+          {
+            "id": "progress-for-a-job-you-will-not-watch",
+            "title": "Progress for a job you will not watch",
+            "number": "7.3"
+          },
+          {
+            "id": "checkpoints",
+            "title": "Checkpoints",
+            "number": "7.4"
+          },
+          {
+            "id": "resume",
+            "title": "Resume",
+            "number": "7.5"
+          },
+          {
+            "id": "multilingual-voices-on-long-jobs",
+            "title": "Multilingual voices on long jobs",
+            "number": "7.6"
+          },
+          {
+            "id": "how-long-form-behaviour-is-tested",
+            "title": "How long-form behaviour is tested",
+            "number": "7.7"
+          }
+        ]
+      },
+      {
+        "id": "ch012",
+        "title": "Failure and Recovery Architecture",
+        "number": "8",
+        "part": "Part III: The Audio Pipeline",
+        "words": 1434,
+        "minutes": 7,
+        "sections": [
+          {
+            "id": "fail-closed",
+            "title": "Fail closed",
+            "number": "8.1"
+          },
+          {
+            "id": "how-the-project-learned-this",
+            "title": "How the project learned this",
+            "number": "8.2"
+          },
+          {
+            "id": "detecting-a-stream-that-ended-early",
+            "title": "Detecting a stream that ended early",
+            "number": "8.3"
+          },
+          {
+            "id": "the-failure-catalogue",
+            "title": "The failure catalogue",
+            "number": "8.4"
+          },
+          {
+            "id": "recovery-splitting",
+            "title": "Recovery splitting",
+            "number": "8.5"
+          },
+          {
+            "id": "health-tracking-across-chunks",
+            "title": "Health tracking across chunks",
+            "number": "8.6"
+          },
+          {
+            "id": "telling-the-user",
+            "title": "Telling the user",
+            "number": "8.7"
+          }
+        ]
+      },
+      {
+        "id": "ch013",
+        "title": "Manifest and Coverage System",
+        "number": "9",
+        "part": "Part III: The Audio Pipeline",
+        "words": 1330,
+        "minutes": 6,
+        "sections": [
+          {
+            "id": "the-staging-folder",
+            "title": "The staging folder",
+            "number": "9.1"
+          },
+          {
+            "id": "the-manifest",
+            "title": "The manifest",
+            "number": "9.2"
+          },
+          {
+            "id": "the-invariants",
+            "title": "The invariants",
+            "number": "9.3"
+          },
+          {
+            "id": "coverage-what-happens-when-chunk-2-fails",
+            "title": "Coverage: what happens when chunk 2 fails",
+            "number": "9.4"
+          },
+          {
+            "id": "the-coverage-report",
+            "title": "The coverage report",
+            "number": "9.5"
+          },
+          {
+            "id": "resume-validation",
+            "title": "Resume validation",
+            "number": "9.6"
+          },
+          {
+            "id": "manifest-status",
+            "title": "Manifest status",
+            "number": "9.7"
+          },
+          {
+            "id": "atomic-writes",
+            "title": "Atomic writes",
+            "number": "9.8"
+          },
+          {
+            "id": "legacy-manifests-and-cleanup",
+            "title": "Legacy manifests and cleanup",
+            "number": "9.9"
+          }
+        ]
+      },
+      {
+        "id": "ch014",
+        "title": "Audio Assembly",
+        "number": "10",
+        "part": "Part III: The Audio Pipeline",
+        "words": 823,
+        "minutes": 4,
+        "sections": [
+          {
+            "id": "why-concatenation-is-enough",
+            "title": "Why concatenation is enough",
+            "number": "10.1"
+          },
+          {
+            "id": "order-and-completeness",
+            "title": "Order and completeness",
+            "number": "10.2"
+          },
+          {
+            "id": "measuring-duration-without-ffmpeg",
+            "title": "Measuring duration without FFmpeg",
+            "number": "10.3"
+          },
+          {
+            "id": "the-duration-window",
+            "title": "The duration window",
+            "number": "10.4"
+          },
+          {
+            "id": "why-the-file-exists-proves-nothing",
+            "title": "Why “the file exists” proves nothing",
+            "number": "10.5"
+          },
+          {
+            "id": "when-a-job-counts-as-successful",
+            "title": "When a job counts as successful",
+            "number": "10.6"
+          }
+        ]
+      },
+      {
+        "id": "ch016",
+        "title": "Performance",
+        "number": "11",
+        "part": "Part IV: Running It",
+        "words": 804,
+        "minutes": 4,
+        "sections": [
+          {
+            "id": "local-time-and-remote-time",
+            "title": "Local time and remote time",
+            "number": "11.1"
+          },
+          {
+            "id": "why-a-300-mbps-connection-does-not-make-it-300-times-faster",
+            "title": "Why a 300 Mbps connection does not make it 300 times faster",
+            "number": "11.2"
+          },
+          {
+            "id": "the-levers-setuptts-controls",
+            "title": "The levers SetupTTS controls",
+            "number": "11.3"
+          },
+          {
+            "id": "running-two-jobs",
+            "title": "Running two jobs",
+            "number": "11.4"
+          }
+        ]
+      },
+      {
+        "id": "ch017",
+        "title": "Multi-Job and Concurrency Architecture",
+        "number": "12",
+        "part": "Part IV: Running It",
+        "words": 736,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "the-job-queue",
+            "title": "The job queue",
+            "number": "12.1"
+          },
+          {
+            "id": "what-each-job-owns",
+            "title": "What each job owns",
+            "number": "12.2"
+          },
+          {
+            "id": "duplicate-jobs",
+            "title": "Duplicate jobs",
+            "number": "12.3"
+          },
+          {
+            "id": "cancellation",
+            "title": "Cancellation",
+            "number": "12.4"
+          },
+          {
+            "id": "two-jobs-at-once-concretely",
+            "title": "Two jobs at once, concretely",
+            "number": "12.5"
+          },
+          {
+            "id": "shutdown-with-jobs-running",
+            "title": "Shutdown with jobs running",
+            "number": "12.6"
+          }
+        ]
+      },
+      {
+        "id": "ch018",
+        "title": "Settings, Logging and History",
+        "number": "13",
+        "part": "Part IV: Running It",
+        "words": 1056,
+        "minutes": 5,
+        "sections": [
+          {
+            "id": "where-everything-lives",
+            "title": "Where everything lives",
+            "number": "13.1"
+          },
+          {
+            "id": "settings",
+            "title": "Settings",
+            "number": "13.2"
+          },
+          {
+            "id": "logging",
+            "title": "Logging",
+            "number": "13.3"
+          },
+          {
+            "id": "history",
+            "title": "History",
+            "number": "13.4"
+          }
+        ]
+      },
+      {
+        "id": "ch019",
+        "title": "Security and Privacy",
+        "number": "14",
+        "part": "Part IV: Running It",
+        "words": 768,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "what-leaves-your-computer",
+            "title": "What leaves your computer",
+            "number": "14.1"
+          },
+          {
+            "id": "what-stays-local",
+            "title": "What stays local",
+            "number": "14.2"
+          },
+          {
+            "id": "credentials",
+            "title": "Credentials",
+            "number": "14.3"
+          },
+          {
+            "id": "network-security",
+            "title": "Network security",
+            "number": "14.4"
+          },
+          {
+            "id": "distribution-security",
+            "title": "Distribution security",
+            "number": "14.5"
+          },
+          {
+            "id": "local-safety-measures",
+            "title": "Local safety measures",
+            "number": "14.6"
+          }
+        ]
+      },
+      {
+        "id": "ch021",
+        "title": "Packaging and Distribution",
+        "number": "15",
+        "part": "Part V: Shipping It",
+        "words": 1145,
+        "minutes": 5,
+        "sections": [
+          {
+            "id": "the-problem-packaging-solves",
+            "title": "The problem packaging solves",
+            "number": "15.1"
+          },
+          {
+            "id": "what-pyinstaller-does",
+            "title": "What PyInstaller does",
+            "number": "15.2"
+          },
+          {
+            "id": "the-spec-file",
+            "title": "The spec file",
+            "number": "15.3"
+          },
+          {
+            "id": "making-the-frozen-app-work-like-the-source-app",
+            "title": "Making the frozen app work like the source app",
+            "number": "15.4"
+          },
+          {
+            "id": "the-packaged-self-test",
+            "title": "The packaged self-test",
+            "number": "15.5"
+          },
+          {
+            "id": "local-builds",
+            "title": "Local builds",
+            "number": "15.6"
+          }
+        ]
+      },
+      {
+        "id": "ch022",
+        "title": "GitHub Actions and CI/CD",
+        "number": "16",
+        "part": "Part V: Shipping It",
+        "words": 845,
+        "minutes": 4,
+        "sections": [
+          {
+            "id": "when-it-runs",
+            "title": "When it runs",
+            "number": "16.1"
+          },
+          {
+            "id": "the-pipeline",
+            "title": "The pipeline",
+            "number": "16.2"
+          },
+          {
+            "id": "versioning",
+            "title": "Versioning",
+            "number": "16.3"
+          }
+        ]
+      },
+      {
+        "id": "ch023",
+        "title": "Testing Strategy",
+        "number": "17",
+        "part": "Part V: Shipping It",
+        "words": 725,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "the-suite-at-a-glance",
+            "title": "The suite at a glance",
+            "number": "17.1"
+          },
+          {
+            "id": "techniques-worth-copying",
+            "title": "Techniques worth copying",
+            "number": "17.2"
+          },
+          {
+            "id": "packaging-and-platform-tests",
+            "title": "Packaging and platform tests",
+            "number": "17.3"
+          },
+          {
+            "id": "what-the-automated-suite-does-not-cover",
+            "title": "What the automated suite does not cover",
+            "number": "17.4"
+          },
+          {
+            "id": "before-every-release",
+            "title": "Before every release",
+            "number": "17.5"
+          }
+        ]
+      },
+      {
+        "id": "ch025",
+        "title": "How to Debug SetupTTS",
+        "number": "18",
+        "part": "Part VI: Working With It",
+        "words": 1279,
+        "minutes": 6,
+        "sections": [
+          {
+            "id": "where-the-evidence-is",
+            "title": "Where the evidence is",
+            "number": "18.1"
+          },
+          {
+            "id": "by-symptom",
+            "title": "By symptom",
+            "number": "18.2"
+          }
+        ]
+      },
+      {
+        "id": "ch026",
+        "title": "Engineering Lessons",
+        "number": "19",
+        "part": "Part VI: Working With It",
+        "words": 1451,
+        "minutes": 7,
+        "sections": [
+          {
+            "id": "asynchronous-programming",
+            "title": "Asynchronous programming",
+            "number": "19.1"
+          },
+          {
+            "id": "gui-architecture-and-the-event-loop",
+            "title": "GUI architecture and the event loop",
+            "number": "19.2"
+          },
+          {
+            "id": "worker-threads",
+            "title": "Worker threads",
+            "number": "19.3"
+          },
+          {
+            "id": "event-driven-programming",
+            "title": "Event-driven programming",
+            "number": "19.4"
+          },
+          {
+            "id": "network-programming",
+            "title": "Network programming",
+            "number": "19.5"
+          },
+          {
+            "id": "retries-and-exponential-backoff",
+            "title": "Retries and exponential backoff",
+            "number": "19.6"
+          },
+          {
+            "id": "fault-tolerance-and-failing-closed",
+            "title": "Fault tolerance and failing closed",
+            "number": "19.7"
+          },
+          {
+            "id": "checkpointing",
+            "title": "Checkpointing",
+            "number": "19.8"
+          },
+          {
+            "id": "data-integrity",
+            "title": "Data integrity",
+            "number": "19.9"
+          },
+          {
+            "id": "working-with-a-service-you-do-not-control",
+            "title": "Working with a service you do not control",
+            "number": "19.10"
+          },
+          {
+            "id": "chunking",
+            "title": "Chunking",
+            "number": "19.11"
+          },
+          {
+            "id": "state-machines",
+            "title": "State machines",
+            "number": "19.12"
+          },
+          {
+            "id": "persistence",
+            "title": "Persistence",
+            "number": "19.13"
+          },
+          {
+            "id": "packaging",
+            "title": "Packaging",
+            "number": "19.14"
+          },
+          {
+            "id": "cicd",
+            "title": "CI/CD",
+            "number": "19.15"
+          },
+          {
+            "id": "cross-platform-development",
+            "title": "Cross-platform development",
+            "number": "19.16"
+          },
+          {
+            "id": "measure-before-you-tune",
+            "title": "Measure before you tune",
+            "number": "19.17"
+          }
+        ]
+      },
+      {
+        "id": "ch027",
+        "title": "What to Learn Next",
+        "number": "20",
+        "part": "Part VI: Working With It",
+        "words": 403,
+        "minutes": 2,
+        "sections": []
+      },
+      {
+        "id": "ch028",
+        "title": "Fifteen Videos to Learn From",
+        "number": "21",
+        "part": "Part VI: Working With It",
+        "words": 1041,
+        "minutes": 5,
+        "sections": []
+      },
+      {
+        "id": "ch029",
+        "title": "Appendix A: How This Book Was Verified",
+        "number": null,
+        "part": "Appendices",
+        "words": 579,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "repository-state",
+            "title": "Repository state",
+            "number": null
+          },
+          {
+            "id": "environment",
+            "title": "Environment",
+            "number": null
+          },
+          {
+            "id": "what-was-read",
+            "title": "What was read",
+            "number": null
+          },
+          {
+            "id": "commands-and-experiments",
+            "title": "Commands and experiments",
+            "number": null
+          },
+          {
+            "id": "style-and-integrity-checks-on-the-finished-book",
+            "title": "Style and integrity checks on the finished book",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch030",
+        "title": "Appendix B: Where Do I Look?",
+        "number": null,
+        "part": "Appendices",
+        "words": 208,
+        "minutes": 1,
+        "sections": []
+      },
+      {
+        "id": "ch031",
+        "title": "Appendix C: Glossary",
+        "number": null,
+        "part": "Appendices",
+        "words": 415,
+        "minutes": 2,
+        "sections": []
+      },
+      {
+        "id": "ch032",
+        "title": "Appendix D: Knowledge Check",
+        "number": null,
+        "part": "Appendices",
+        "words": 611,
+        "minutes": 3,
+        "sections": []
+      }
+    ]
+  },
+  {
+    "slug": "spoonstill",
+    "title": "Understanding spoonstill",
+    "subtitle": null,
+    "author": "Generated for Vijay Puwar",
+    "date": "2026-10-07",
+    "description": "A study guide to the spoonstill repository at commit 7948f2496e08e5f7d22a7f57f04a83a69e4c66cd (v0.1.19).",
+    "subjects": [],
+    "cover": {
+      "src": "/books/spoonstill/cover.webp",
+      "width": 640,
+      "height": 905
+    },
+    "words": 39707,
+    "minutes": 180,
+    "chapters": [
+      {
+        "id": "ch001",
+        "title": "About This Book",
+        "number": null,
+        "part": null,
+        "words": 661,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "what-this-book-documents",
+            "title": "What this book documents",
+            "number": null
+          },
+          {
+            "id": "how-to-read-the-evidence-labels",
+            "title": "How to read the evidence labels",
+            "number": null
+          },
+          {
+            "id": "how-the-book-is-organised",
+            "title": "How the book is organised",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch003",
+        "title": "What spoonstill Is, and Why It Exists",
+        "number": "1",
+        "part": "Part I: The Product",
+        "words": 1090,
+        "minutes": 5,
+        "sections": [
+          {
+            "id": "the-problem-in-one-paragraph",
+            "title": "The problem in one paragraph",
+            "number": "1.1"
+          },
+          {
+            "id": "who-uses-it",
+            "title": "Who uses it",
+            "number": "1.2"
+          },
+          {
+            "id": "what-goes-in-and-what-comes-out",
+            "title": "What goes in and what comes out",
+            "number": "1.3"
+          },
+          {
+            "id": "a-concrete-example",
+            "title": "A concrete example",
+            "number": "1.4"
+          },
+          {
+            "id": "why-a-batch-renderer-and-not-a-timeline-editor",
+            "title": "Why a batch renderer and not a timeline editor",
+            "number": "1.5"
+          },
+          {
+            "id": "who-does-what",
+            "title": "Who does what",
+            "number": "1.6"
+          },
+          {
+            "id": "the-name",
+            "title": "The name",
+            "number": "1.7"
+          }
+        ]
+      },
+      {
+        "id": "ch004",
+        "title": "A First Render, From the Outside",
+        "number": "2",
+        "part": "Part I: The Product",
+        "words": 824,
+        "minutes": 4,
+        "sections": [
+          {
+            "id": "installing-the-pieces",
+            "title": "Installing the pieces",
+            "number": "2.1"
+          },
+          {
+            "id": "making-a-project-the-easy-way",
+            "title": "Making a project the easy way",
+            "number": "2.2"
+          },
+          {
+            "id": "checking-it",
+            "title": "Checking it",
+            "number": "2.3"
+          },
+          {
+            "id": "rendering-it",
+            "title": "Rendering it",
+            "number": "2.4"
+          },
+          {
+            "id": "a-spoken-captioned-scene",
+            "title": "A spoken, captioned scene",
+            "number": "2.5"
+          },
+          {
+            "id": "where-things-ended-up",
+            "title": "Where things ended up",
+            "number": "2.6"
+          }
+        ]
+      },
+      {
+        "id": "ch005",
+        "title": "Video and Audio From Zero",
+        "number": "3",
+        "part": "Part I: The Product",
+        "words": 1366,
+        "minutes": 6,
+        "sections": [
+          {
+            "id": "frames-and-frame-rate",
+            "title": "Frames and frame rate",
+            "number": "3.1"
+          },
+          {
+            "id": "resolution-and-aspect",
+            "title": "Resolution and aspect",
+            "number": "3.2"
+          },
+          {
+            "id": "pixels-pixel-formats-and-colour-range",
+            "title": "Pixels, pixel formats and colour range",
+            "number": "3.3"
+          },
+          {
+            "id": "sample-aspect-ratio-sar",
+            "title": "Sample aspect ratio (SAR)",
+            "number": "3.4"
+          },
+          {
+            "id": "codecs-and-containers",
+            "title": "Codecs and containers",
+            "number": "3.5"
+          },
+          {
+            "id": "quality-settings-crf-and-presets",
+            "title": "Quality settings: CRF and presets",
+            "number": "3.6"
+          },
+          {
+            "id": "key-frames-and-why-concatenation-is-easy-here",
+            "title": "Key frames, and why concatenation is easy here",
+            "number": "3.7"
+          },
+          {
+            "id": "time-bases",
+            "title": "Time bases",
+            "number": "3.8"
+          },
+          {
+            "id": "digital-audio",
+            "title": "Digital audio",
+            "number": "3.9"
+          },
+          {
+            "id": "loudness",
+            "title": "Loudness",
+            "number": "3.10"
+          },
+          {
+            "id": "filters-and-filter-graphs",
+            "title": "Filters and filter graphs",
+            "number": "3.11"
+          },
+          {
+            "id": "the-ken-burns-effect",
+            "title": "The Ken Burns effect",
+            "number": "3.12"
+          },
+          {
+            "id": "putting-it-together-for-one-scene",
+            "title": "Putting it together for one scene",
+            "number": "3.13"
+          }
+        ]
+      },
+      {
+        "id": "ch007",
+        "title": "The Big Picture",
+        "number": "4",
+        "part": "Part II: Architecture",
+        "words": 1039,
+        "minutes": 5,
+        "sections": [
+          {
+            "id": "the-simple-version",
+            "title": "The simple version",
+            "number": "4.1"
+          },
+          {
+            "id": "the-real-dependency-graph",
+            "title": "The real dependency graph",
+            "number": "4.2"
+          },
+          {
+            "id": "why-these-boundaries",
+            "title": "Why these boundaries",
+            "number": "4.3"
+          },
+          {
+            "id": "how-the-rules-are-enforced",
+            "title": "How the rules are enforced",
+            "number": "4.4"
+          },
+          {
+            "id": "where-each-kind-of-logic-lives",
+            "title": "Where each kind of logic lives",
+            "number": "4.5"
+          },
+          {
+            "id": "size-of-the-codebase",
+            "title": "Size of the codebase",
+            "number": "4.6"
+          }
+        ]
+      },
+      {
+        "id": "ch008",
+        "title": "spoonstill-core: The Pure Domain Model",
+        "number": "5",
+        "part": "Part II: Architecture",
+        "words": 2116,
+        "minutes": 10,
+        "sections": [
+          {
+            "id": "why-it-exists",
+            "title": "Why it exists",
+            "number": "5.1"
+          },
+          {
+            "id": "module-map",
+            "title": "Module map",
+            "number": "5.2"
+          },
+          {
+            "id": "motion-how-a-still-is-told-to-move",
+            "title": "motion: how a still is told to move",
+            "number": "5.3"
+          },
+          {
+            "id": "geometry-legal-frame-sizes",
+            "title": "geometry: legal frame sizes",
+            "number": "5.4"
+          },
+          {
+            "id": "timing-the-frame-arithmetic",
+            "title": "timing: the frame arithmetic",
+            "number": "5.5"
+          },
+          {
+            "id": "project-scenes-and-problems",
+            "title": "project: scenes and problems",
+            "number": "5.6"
+          },
+          {
+            "id": "captions-subtitle-themes-and-timing",
+            "title": "captions: subtitle themes and timing",
+            "number": "5.7"
+          },
+          {
+            "id": "chapter-cutting-a-chapter-into-scenes",
+            "title": "chapter: cutting a chapter into scenes",
+            "number": "5.8"
+          },
+          {
+            "id": "path_safety-keeping-paths-inside-the-project",
+            "title": "path_safety: keeping paths inside the project",
+            "number": "5.9"
+          },
+          {
+            "id": "hash-stable-hashing",
+            "title": "hash: stable hashing",
+            "number": "5.10"
+          },
+          {
+            "id": "language-remedy-diagnostics",
+            "title": "language, remedy, diagnostics",
+            "number": "5.11"
+          },
+          {
+            "id": "tests",
+            "title": "Tests",
+            "number": "5.12"
+          }
+        ]
+      },
+      {
+        "id": "ch009",
+        "title": "spoonstill-media: The Process Boundary",
+        "number": "6",
+        "part": "Part II: Architecture",
+        "words": 1655,
+        "minutes": 8,
+        "sections": [
+          {
+            "id": "why-it-exists-1",
+            "title": "Why it exists",
+            "number": "6.1"
+          },
+          {
+            "id": "module-map-1",
+            "title": "Module map",
+            "number": "6.2"
+          },
+          {
+            "id": "command.rs-one-way-to-start-a-program",
+            "title": "command.rs: one way to start a program",
+            "number": "6.3"
+          },
+          {
+            "id": "tools.rs-finding-programs",
+            "title": "tools.rs: finding programs",
+            "number": "6.4"
+          },
+          {
+            "id": "probe.rs",
+            "title": "probe.rs",
+            "number": "6.5"
+          },
+          {
+            "id": "profile.rs-the-segment-profile",
+            "title": "profile.rs: the segment profile",
+            "number": "6.6"
+          },
+          {
+            "id": "scene.rs-one-segment",
+            "title": "scene.rs: one segment",
+            "number": "6.7"
+          },
+          {
+            "id": "audio.rs-concat.rs-caption.rs-atomic.rs",
+            "title": "audio.rs, concat.rs, caption.rs, atomic.rs",
+            "number": "6.8"
+          },
+          {
+            "id": "hardware.rs",
+            "title": "hardware.rs",
+            "number": "6.9"
+          },
+          {
+            "id": "error.rs",
+            "title": "error.rs",
+            "number": "6.10"
+          },
+          {
+            "id": "tests-1",
+            "title": "Tests",
+            "number": "6.11"
+          }
+        ]
+      },
+      {
+        "id": "ch010",
+        "title": "spoonstill-tts: Turning Text Into Speech",
+        "number": "7",
+        "part": "Part II: Architecture",
+        "words": 1490,
+        "minutes": 7,
+        "sections": [
+          {
+            "id": "why-it-exists-2",
+            "title": "Why it exists",
+            "number": "7.1"
+          },
+          {
+            "id": "the-provider-trait",
+            "title": "The Provider trait",
+            "number": "7.2"
+          },
+          {
+            "id": "how-edge-speaks-a-line",
+            "title": "How Edge speaks a line",
+            "number": "7.3"
+          },
+          {
+            "id": "retries-and-classification",
+            "title": "Retries and classification",
+            "number": "7.4"
+          },
+          {
+            "id": "the-pace-gate-a-rate-limiter-you-can-read",
+            "title": "The pace gate: a rate limiter you can read",
+            "number": "7.5"
+          },
+          {
+            "id": "whose-code-is-whose",
+            "title": "Whose code is whose",
+            "number": "7.6"
+          },
+          {
+            "id": "installing-edge-tts",
+            "title": "Installing edge-tts",
+            "number": "7.7"
+          },
+          {
+            "id": "tests-2",
+            "title": "Tests",
+            "number": "7.8"
+          }
+        ]
+      },
+      {
+        "id": "ch011",
+        "title": "spoonstill-state: Logs and the Activity Record",
+        "number": "8",
+        "part": "Part II: Architecture",
+        "words": 657,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "why-it-exists-3",
+            "title": "Why it exists",
+            "number": "8.1"
+          },
+          {
+            "id": "the-per-project-log-json-lines",
+            "title": "The per-project log: JSON Lines",
+            "number": "8.2"
+          },
+          {
+            "id": "the-machine-wide-runs.csv",
+            "title": "The machine-wide runs.csv",
+            "number": "8.3"
+          },
+          {
+            "id": "journal-two-sinks-as-one",
+            "title": "Journal: two sinks as one",
+            "number": "8.4"
+          },
+          {
+            "id": "the-diagnostics-bundle",
+            "title": "The diagnostics bundle",
+            "number": "8.5"
+          },
+          {
+            "id": "tests-3",
+            "title": "Tests",
+            "number": "8.6"
+          }
+        ]
+      },
+      {
+        "id": "ch012",
+        "title": "spoonstill-app: The Orchestration Layer",
+        "number": "9",
+        "part": "Part II: Architecture",
+        "words": 1526,
+        "minutes": 7,
+        "sections": [
+          {
+            "id": "why-it-exists-4",
+            "title": "Why it exists",
+            "number": "9.1"
+          },
+          {
+            "id": "module-map-2",
+            "title": "Module map",
+            "number": "9.2"
+          },
+          {
+            "id": "the-render-path-in-one-page",
+            "title": "The render path in one page",
+            "number": "9.3"
+          },
+          {
+            "id": "import-folder-to-project",
+            "title": "Import: folder to project",
+            "number": "9.4"
+          },
+          {
+            "id": "ingest-getting-files-in",
+            "title": "Ingest: getting files in",
+            "number": "9.5"
+          },
+          {
+            "id": "the-audio-cache",
+            "title": "The audio cache",
+            "number": "9.6"
+          },
+          {
+            "id": "pools-bounded-parallelism",
+            "title": "Pools: bounded parallelism",
+            "number": "9.7"
+          },
+          {
+            "id": "capacity-how-many-at-once",
+            "title": "Capacity: how many at once",
+            "number": "9.8"
+          },
+          {
+            "id": "arrange-and-picture-moving-files-safely",
+            "title": "Arrange and picture: moving files safely",
+            "number": "9.9"
+          },
+          {
+            "id": "voice-who-chose-it",
+            "title": "Voice: who chose it",
+            "number": "9.10"
+          },
+          {
+            "id": "machine-settings",
+            "title": "Machine settings",
+            "number": "9.11"
+          },
+          {
+            "id": "tests-4",
+            "title": "Tests",
+            "number": "9.12"
+          }
+        ]
+      },
+      {
+        "id": "ch013",
+        "title": "spoonstill-cli: The still Command",
+        "number": "10",
+        "part": "Part II: Architecture",
+        "words": 708,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "the-design-rule",
+            "title": "The design rule",
+            "number": "10.1"
+          },
+          {
+            "id": "parsing-with-clap",
+            "title": "Parsing with clap",
+            "number": "10.2"
+          },
+          {
+            "id": "main-run-dispatch",
+            "title": "main, run, dispatch",
+            "number": "10.3"
+          },
+          {
+            "id": "progress-and-ctrl-c",
+            "title": "Progress and Ctrl-C",
+            "number": "10.4"
+          },
+          {
+            "id": "the-clis-tests",
+            "title": "The CLI's tests",
+            "number": "10.5"
+          }
+        ]
+      },
+      {
+        "id": "ch014",
+        "title": "The Desktop Application",
+        "number": "11",
+        "part": "Part II: Architecture",
+        "words": 1015,
+        "minutes": 5,
+        "sections": [
+          {
+            "id": "what-it-is",
+            "title": "What it is",
+            "number": "11.1"
+          },
+          {
+            "id": "configuration-and-permissions",
+            "title": "Configuration and permissions",
+            "number": "11.2"
+          },
+          {
+            "id": "state-held-in-rust",
+            "title": "State held in Rust",
+            "number": "11.3"
+          },
+          {
+            "id": "the-commands",
+            "title": "The commands",
+            "number": "11.4"
+          },
+          {
+            "id": "the-screens",
+            "title": "The screens",
+            "number": "11.5"
+          },
+          {
+            "id": "a-render-click-end-to-end",
+            "title": "A Render click, end to end",
+            "number": "11.6"
+          },
+          {
+            "id": "tests-5",
+            "title": "Tests",
+            "number": "11.7"
+          }
+        ]
+      },
+      {
+        "id": "ch016",
+        "title": "Tracing Everyday Operations",
+        "number": "12",
+        "part": "Part III: How It Works",
+        "words": 710,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "creating-a-project-still-new-dir-file...",
+            "title": "Creating a project: still new DIR FILE...",
+            "number": "12.1"
+          },
+          {
+            "id": "adding-files-still-add-dir-file...",
+            "title": "Adding files: still add DIR FILE...",
+            "number": "12.2"
+          },
+          {
+            "id": "validating-still-validate-dir",
+            "title": "Validating: still validate DIR",
+            "number": "12.3"
+          },
+          {
+            "id": "checking-tools-still-doctor---install",
+            "title": "Checking tools: still doctor [--install]",
+            "number": "12.4"
+          },
+          {
+            "id": "voices-still-voices-filter---use-name---forget---install",
+            "title": "Voices: still voices [FILTER] [--use NAME] [--forget] [--install]",
+            "number": "12.5"
+          }
+        ]
+      },
+      {
+        "id": "ch017",
+        "title": "The Project Format and Its State",
+        "number": "13",
+        "part": "Part III: How It Works",
+        "words": 1459,
+        "minutes": 7,
+        "sections": [
+          {
+            "id": "two-kinds-of-files",
+            "title": "Two kinds of files",
+            "number": "13.1"
+          },
+          {
+            "id": "a-realistic-project-tree",
+            "title": "A realistic project tree",
+            "number": "13.2"
+          },
+          {
+            "id": "convention-mode-and-manifest-mode",
+            "title": "Convention mode and manifest mode",
+            "number": "13.3"
+          },
+          {
+            "id": "project.yaml-every-key",
+            "title": "project.yaml: every key",
+            "number": "13.4"
+          },
+          {
+            "id": "content-addressed-caches",
+            "title": "Content-addressed caches",
+            "number": "13.5"
+          },
+          {
+            "id": "the-render-lock",
+            "title": "The render lock",
+            "number": "13.6"
+          },
+          {
+            "id": "machine-wide-state",
+            "title": "Machine-wide state",
+            "number": "13.7"
+          },
+          {
+            "id": "temporary-files",
+            "title": "Temporary files",
+            "number": "13.8"
+          },
+          {
+            "id": "versioning-and-migration",
+            "title": "Versioning and migration",
+            "number": "13.9"
+          }
+        ]
+      },
+      {
+        "id": "ch018",
+        "title": "The Render Path, Step by Step",
+        "number": "14",
+        "part": "Part III: How It Works",
+        "words": 974,
+        "minutes": 4,
+        "sections": [
+          {
+            "id": "entry",
+            "title": "Entry",
+            "number": "14.1"
+          },
+          {
+            "id": "the-steps",
+            "title": "The steps",
+            "number": "14.2"
+          },
+          {
+            "id": "errors",
+            "title": "Errors",
+            "number": "14.3"
+          },
+          {
+            "id": "cancellation-everywhere",
+            "title": "Cancellation everywhere",
+            "number": "14.4"
+          },
+          {
+            "id": "determinism",
+            "title": "Determinism",
+            "number": "14.5"
+          }
+        ]
+      },
+      {
+        "id": "ch019",
+        "title": "The Video Pipeline: From Still to Moving Picture",
+        "number": "15",
+        "part": "Part III: How It Works",
+        "words": 1862,
+        "minutes": 8,
+        "sections": [
+          {
+            "id": "the-idea-simply",
+            "title": "The idea, simply",
+            "number": "15.1"
+          },
+          {
+            "id": "the-real-mechanism",
+            "title": "The real mechanism",
+            "number": "15.2"
+          },
+          {
+            "id": "the-complete-segment-command",
+            "title": "The complete segment command",
+            "number": "15.3"
+          },
+          {
+            "id": "validate-then-rename",
+            "title": "Validate, then rename",
+            "number": "15.4"
+          },
+          {
+            "id": "joining-the-film",
+            "title": "Joining the film",
+            "number": "15.5"
+          }
+        ]
+      },
+      {
+        "id": "ch020",
+        "title": "FFmpeg Integration in Depth",
+        "number": "16",
+        "part": "Part III: How It Works",
+        "words": 1158,
+        "minutes": 5,
+        "sections": [
+          {
+            "id": "why-a-separate-program-and-not-a-library",
+            "title": "Why a separate program and not a library",
+            "number": "16.1"
+          },
+          {
+            "id": "shell-injection-simply",
+            "title": "Shell injection, simply",
+            "number": "16.2"
+          },
+          {
+            "id": "finding-the-binary",
+            "title": "Finding the binary",
+            "number": "16.3"
+          },
+          {
+            "id": "running-watching-stopping",
+            "title": "Running, watching, stopping",
+            "number": "16.4"
+          },
+          {
+            "id": "temporary-files-and-cleanup",
+            "title": "Temporary files and cleanup",
+            "number": "16.5"
+          },
+          {
+            "id": "ffprobe-as-the-source-of-truth",
+            "title": "ffprobe as the source of truth",
+            "number": "16.6"
+          },
+          {
+            "id": "software-and-hardware-encoders",
+            "title": "Software and hardware encoders",
+            "number": "16.7"
+          },
+          {
+            "id": "macos-and-windows-differences-at-this-boundary",
+            "title": "macOS and Windows differences at this boundary",
+            "number": "16.8"
+          }
+        ]
+      },
+      {
+        "id": "ch021",
+        "title": "Audio and Text-to-Speech",
+        "number": "17",
+        "part": "Part III: How It Works",
+        "words": 974,
+        "minutes": 4,
+        "sections": [
+          {
+            "id": "three-sources-one-result",
+            "title": "Three sources, one result",
+            "number": "17.1"
+          },
+          {
+            "id": "supported-recordings",
+            "title": "Supported recordings",
+            "number": "17.2"
+          },
+          {
+            "id": "normalization-two-ffmpeg-passes",
+            "title": "Normalization: two FFmpeg passes",
+            "number": "17.3"
+          },
+          {
+            "id": "silence",
+            "title": "Silence",
+            "number": "17.4"
+          },
+          {
+            "id": "measuring",
+            "title": "Measuring",
+            "number": "17.5"
+          },
+          {
+            "id": "how-narration-controls-scene-length",
+            "title": "How narration controls scene length",
+            "number": "17.6"
+          },
+          {
+            "id": "the-text-to-speech-path",
+            "title": "The text-to-speech path",
+            "number": "17.7"
+          }
+        ]
+      },
+      {
+        "id": "ch022",
+        "title": "Captions: Drawing Text Into the Picture",
+        "number": "18",
+        "part": "Part III: How It Works",
+        "words": 625,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "why-spoonstill-draws-its-own-text",
+            "title": "Why spoonstill draws its own text",
+            "number": "18.1"
+          },
+          {
+            "id": "fonts-and-shaping",
+            "title": "Fonts and shaping",
+            "number": "18.2"
+          },
+          {
+            "id": "layout",
+            "title": "Layout",
+            "number": "18.3"
+          },
+          {
+            "id": "how-a-cue-reaches-ffmpeg",
+            "title": "How a cue reaches FFmpeg",
+            "number": "18.4"
+          },
+          {
+            "id": "when-a-scene-is-captioned",
+            "title": "When a scene is captioned",
+            "number": "18.5"
+          }
+        ]
+      },
+      {
+        "id": "ch023",
+        "title": "What Happens When I Press Render?",
+        "number": "19",
+        "part": "Part III: How It Works",
+        "words": 1140,
+        "minutes": 5,
+        "sections": []
+      },
+      {
+        "id": "ch025",
+        "title": "Learning Rust Through spoonstill",
+        "number": "20",
+        "part": "Part IV: Engineering",
+        "words": 1678,
+        "minutes": 8,
+        "sections": [
+          {
+            "id": "crates-modules-and-the-workspace",
+            "title": "Crates, modules and the workspace",
+            "number": "20.1"
+          },
+          {
+            "id": "ownership-borrowing-and-references",
+            "title": "Ownership, borrowing and references",
+            "number": "20.2"
+          },
+          {
+            "id": "string-versus-str-pathbuf-versus-path-osstring",
+            "title": "String versus &str, PathBuf versus &Path, OsString",
+            "number": "20.3"
+          },
+          {
+            "id": "option-and-result",
+            "title": "Option and Result",
+            "number": "20.4"
+          },
+          {
+            "id": "error-propagation-with",
+            "title": "Error propagation with ?",
+            "number": "20.5"
+          },
+          {
+            "id": "enums-with-data-and-pattern-matching",
+            "title": "Enums with data, and pattern matching",
+            "number": "20.6"
+          },
+          {
+            "id": "structs-newtypes-and-encapsulation",
+            "title": "Structs, newtypes and encapsulation",
+            "number": "20.7"
+          },
+          {
+            "id": "traits-and-trait-objects",
+            "title": "Traits and trait objects",
+            "number": "20.8"
+          },
+          {
+            "id": "generics-and-closures",
+            "title": "Generics and closures",
+            "number": "20.9"
+          },
+          {
+            "id": "iterators",
+            "title": "Iterators",
+            "number": "20.10"
+          },
+          {
+            "id": "concurrency-threads-atomics-mutexes-condition-variables-channels",
+            "title": "Concurrency: threads, atomics, mutexes, condition variables, channels",
+            "number": "20.11"
+          },
+          {
+            "id": "raii-and-drop",
+            "title": "RAII and Drop",
+            "number": "20.12"
+          },
+          {
+            "id": "serialization-with-serde",
+            "title": "Serialization with serde",
+            "number": "20.13"
+          },
+          {
+            "id": "process-spawning-and-the-filesystem",
+            "title": "Process spawning and the filesystem",
+            "number": "20.14"
+          },
+          {
+            "id": "conditional-compilation",
+            "title": "Conditional compilation",
+            "number": "20.15"
+          },
+          {
+            "id": "lints-and-attributes",
+            "title": "Lints and attributes",
+            "number": "20.16"
+          }
+        ]
+      },
+      {
+        "id": "ch026",
+        "title": "Error Handling",
+        "number": "21",
+        "part": "Part IV: Engineering",
+        "words": 671,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "the-philosophy",
+            "title": "The philosophy",
+            "number": "21.1"
+          },
+          {
+            "id": "the-layers-of-error-types",
+            "title": "The layers of error types",
+            "number": "21.2"
+          },
+          {
+            "id": "problems-versus-errors",
+            "title": "Problems versus errors",
+            "number": "21.3"
+          },
+          {
+            "id": "realistic-failures-traced",
+            "title": "Realistic failures, traced",
+            "number": "21.4"
+          },
+          {
+            "id": "logging-every-failure",
+            "title": "Logging every failure",
+            "number": "21.5"
+          },
+          {
+            "id": "rendering-is-never-failed-by-bookkeeping",
+            "title": "Rendering is never failed by bookkeeping",
+            "number": "21.6"
+          }
+        ]
+      },
+      {
+        "id": "ch027",
+        "title": "The Security Model",
+        "number": "22",
+        "part": "Part IV: Engineering",
+        "words": 1011,
+        "minutes": 5,
+        "sections": [
+          {
+            "id": "command-execution-and-shell-injection",
+            "title": "Command execution and shell injection",
+            "number": "22.1"
+          },
+          {
+            "id": "which-binaries-run",
+            "title": "Which binaries run",
+            "number": "22.2"
+          },
+          {
+            "id": "paths-and-directory-traversal",
+            "title": "Paths and directory traversal",
+            "number": "22.3"
+          },
+          {
+            "id": "overwriting-and-data-loss",
+            "title": "Overwriting and data loss",
+            "number": "22.4"
+          },
+          {
+            "id": "untrusted-media-and-text",
+            "title": "Untrusted media and text",
+            "number": "22.5"
+          },
+          {
+            "id": "the-desktop-window",
+            "title": "The desktop window",
+            "number": "22.6"
+          },
+          {
+            "id": "logs-and-secrets",
+            "title": "Logs and secrets",
+            "number": "22.7"
+          },
+          {
+            "id": "network",
+            "title": "Network",
+            "number": "22.8"
+          },
+          {
+            "id": "install-scripts-and-releases",
+            "title": "Install scripts and releases",
+            "number": "22.9"
+          },
+          {
+            "id": "unsafe_code-forbid",
+            "title": "unsafe_code = \"forbid\"",
+            "number": "22.10"
+          }
+        ]
+      },
+      {
+        "id": "ch028",
+        "title": "Performance",
+        "number": "23",
+        "part": "Part IV: Engineering",
+        "words": 792,
+        "minutes": 4,
+        "sections": [
+          {
+            "id": "where-the-time-goes",
+            "title": "Where the time goes",
+            "number": "23.1"
+          },
+          {
+            "id": "parallelism",
+            "title": "Parallelism",
+            "number": "23.2"
+          },
+          {
+            "id": "memory",
+            "title": "Memory",
+            "number": "23.3"
+          },
+          {
+            "id": "caching-is-the-biggest-lever",
+            "title": "Caching is the biggest lever",
+            "number": "23.4"
+          },
+          {
+            "id": "overlapping-network-and-cpu",
+            "title": "Overlapping network and CPU",
+            "number": "23.5"
+          },
+          {
+            "id": "scaling-with-scene-count",
+            "title": "Scaling with scene count",
+            "number": "23.6"
+          },
+          {
+            "id": "things-that-hurt-performance",
+            "title": "Things that hurt performance",
+            "number": "23.7"
+          }
+        ]
+      },
+      {
+        "id": "ch029",
+        "title": "Cross-Platform Design: macOS and Windows",
+        "number": "24",
+        "part": "Part IV: Engineering",
+        "words": 488,
+        "minutes": 2,
+        "sections": [
+          {
+            "id": "the-approach",
+            "title": "The approach",
+            "number": "24.1"
+          },
+          {
+            "id": "differences-that-matter",
+            "title": "Differences that matter",
+            "number": "24.2"
+          },
+          {
+            "id": "how-windows-is-checked",
+            "title": "How Windows is checked",
+            "number": "24.3"
+          }
+        ]
+      },
+      {
+        "id": "ch030",
+        "title": "Testing Strategy",
+        "number": "25",
+        "part": "Part IV: Engineering",
+        "words": 1121,
+        "minutes": 5,
+        "sections": [
+          {
+            "id": "the-numbers",
+            "title": "The numbers",
+            "number": "25.1"
+          },
+          {
+            "id": "categories",
+            "title": "Categories",
+            "number": "25.2"
+          },
+          {
+            "id": "representative-tests-explained",
+            "title": "Representative tests, explained",
+            "number": "25.3"
+          },
+          {
+            "id": "what-cargo-test---workspace-covers-and-what-it-does-not",
+            "title": "What cargo test --workspace covers, and what it does not",
+            "number": "25.4"
+          },
+          {
+            "id": "make-gates-the-milestone-exit-gates",
+            "title": "make gates: the milestone exit gates",
+            "number": "25.5"
+          },
+          {
+            "id": "the-testing-culture",
+            "title": "The testing culture",
+            "number": "25.6"
+          }
+        ]
+      },
+      {
+        "id": "ch031",
+        "title": "CI/CD and Release Engineering",
+        "number": "26",
+        "part": "Part IV: Engineering",
+        "words": 701,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "continuous-integration-ci.yml",
+            "title": "Continuous integration: ci.yml",
+            "number": "26.1"
+          },
+          {
+            "id": "releases-release.yml",
+            "title": "Releases: release.yml",
+            "number": "26.2"
+          },
+          {
+            "id": "the-installers",
+            "title": "The installers",
+            "number": "26.3"
+          },
+          {
+            "id": "what-is-not-done-m5",
+            "title": "What is not done (M5)",
+            "number": "26.4"
+          }
+        ]
+      },
+      {
+        "id": "ch032",
+        "title": "Dependencies",
+        "number": "27",
+        "part": "Part IV: Engineering",
+        "words": 448,
+        "minutes": 2,
+        "sections": [
+          {
+            "id": "rust-crates-used-directly",
+            "title": "Rust crates used directly",
+            "number": "27.1"
+          },
+          {
+            "id": "not-rust-but-required-or-used",
+            "title": "Not Rust, but required or used",
+            "number": "27.2"
+          },
+          {
+            "id": "what-these-dependencies-save",
+            "title": "What these dependencies save",
+            "number": "27.3"
+          }
+        ]
+      },
+      {
+        "id": "ch033",
+        "title": "Important Engineering Decisions",
+        "number": "28",
+        "part": "Part IV: Engineering",
+        "words": 1058,
+        "minutes": 5,
+        "sections": [
+          {
+            "id": "a-short-timeline",
+            "title": "A short timeline",
+            "number": "28.1"
+          }
+        ]
+      },
+      {
+        "id": "ch034",
+        "title": "Design Tradeoffs",
+        "number": "29",
+        "part": "Part IV: Engineering",
+        "words": 479,
+        "minutes": 2,
+        "sections": []
+      },
+      {
+        "id": "ch036",
+        "title": "How to Debug spoonstill",
+        "number": "30",
+        "part": "Part V: Working With the Code",
+        "words": 786,
+        "minutes": 4,
+        "sections": [
+          {
+            "id": "the-three-places-evidence-lives",
+            "title": "The three places evidence lives",
+            "number": "30.1"
+          },
+          {
+            "id": "useful-commands",
+            "title": "Useful commands",
+            "number": "30.2"
+          },
+          {
+            "id": "by-symptom",
+            "title": "By symptom",
+            "number": "30.3"
+          }
+        ]
+      },
+      {
+        "id": "ch037",
+        "title": "How to Modify the Project Safely",
+        "number": "31",
+        "part": "Part V: Working With the Code",
+        "words": 591,
+        "minutes": 3,
+        "sections": []
+      },
+      {
+        "id": "ch038",
+        "title": "Limitations, Technical Debt and Future Areas",
+        "number": "32",
+        "part": "Part V: Working With the Code",
+        "words": 731,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "current-limitations-true-of-the-code-at-this-commit",
+            "title": "Current limitations (true of the code at this commit)",
+            "number": "32.1"
+          },
+          {
+            "id": "documentation-drift-found-while-preparing-this-book",
+            "title": "Documentation drift found while preparing this book",
+            "number": "32.2"
+          },
+          {
+            "id": "planned-in-plan.md-or-the-readme-roadmap",
+            "title": "Planned (in plan.md or the README roadmap)",
+            "number": "32.3"
+          },
+          {
+            "id": "open-questions",
+            "title": "Open questions",
+            "number": "32.4"
+          },
+          {
+            "id": "historical-ideas-recorded-not-committed-to",
+            "title": "Historical ideas (recorded, not committed to)",
+            "number": "32.5"
+          },
+          {
+            "id": "possible-improvements-suggested-by-this-review-the-authors-call-not-project-commitments",
+            "title": "Possible improvements suggested by this review (the author's call, not project commitments)",
+            "number": "32.6"
+          }
+        ]
+      },
+      {
+        "id": "ch039",
+        "title": "File Map: Where Do I Look?",
+        "number": "33",
+        "part": "Part V: Working With the Code",
+        "words": 575,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "where-do-i-look-if...",
+            "title": "Where do I look if...",
+            "number": "33.1"
+          }
+        ]
+      },
+      {
+        "id": "ch040",
+        "title": "A Code Reading Guide",
+        "number": "34",
+        "part": "Part V: Working With the Code",
+        "words": 354,
+        "minutes": 2,
+        "sections": []
+      },
+      {
+        "id": "ch042",
+        "title": "Glossary",
+        "number": "35",
+        "part": "Part VI: Study Aids",
+        "words": 693,
+        "minutes": 3,
+        "sections": []
+      },
+      {
+        "id": "ch043",
+        "title": "Frequently Asked Questions",
+        "number": "36",
+        "part": "Part VI: Study Aids",
+        "words": 621,
+        "minutes": 3,
+        "sections": []
+      },
+      {
+        "id": "ch044",
+        "title": "Knowledge Check",
+        "number": "37",
+        "part": "Part VI: Study Aids",
+        "words": 457,
+        "minutes": 2,
+        "sections": []
+      },
+      {
+        "id": "ch045",
+        "title": "A 15-Video Learning Curriculum",
+        "number": "38",
+        "part": "Part VI: Study Aids",
+        "words": 1199,
+        "minutes": 5,
+        "sections": [
+          {
+            "id": "the-videos",
+            "title": "The videos",
+            "number": "38.1"
+          },
+          {
+            "id": "a-learning-order",
+            "title": "A learning order",
+            "number": "38.2"
+          }
+        ]
+      },
+      {
+        "id": "ch046",
+        "title": "Appendix A: How This Report Was Verified",
+        "number": null,
+        "part": "Appendices",
+        "words": 646,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "repository-state",
+            "title": "Repository state",
+            "number": null
+          },
+          {
+            "id": "environment",
+            "title": "Environment",
+            "number": null
+          },
+          {
+            "id": "commands-executed-all-in-the-worktree",
+            "title": "Commands executed (all in the worktree)",
+            "number": null
+          },
+          {
+            "id": "sources-consulted",
+            "title": "Sources consulted",
+            "number": null
+          },
+          {
+            "id": "method",
+            "title": "Method",
+            "number": null
+          },
+          {
+            "id": "style-notes",
+            "title": "Style notes",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch047",
+        "title": "Appendix B: Answers",
+        "number": null,
+        "part": "Appendices",
+        "words": 1558,
+        "minutes": 7,
+        "sections": [
+          {
+            "id": "exercise-answers",
+            "title": "Exercise answers",
+            "number": null
+          },
+          {
+            "id": "knowledge-check-answers",
+            "title": "Knowledge check answers",
+            "number": null
+          }
+        ]
+      }
+    ]
+  }
+]

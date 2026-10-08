@@ -1,0 +1,188 @@
+<section id="testing-strategy" class="level1">
+<h1><span class="header-section-number">25</span> Testing Strategy</h1>
+<section id="the-numbers" class="level2">
+<h2><span class="header-section-number">25.1</span> The numbers</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr>
+<th>Crate</th>
+<th><code>#[test]</code> functions</th>
+<th>Passed on the analysis machine</th>
+<th>Ignored</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>spoonstill-core</td>
+<td>163</td>
+<td>152 unit + 6 integration</td>
+<td>0</td>
+</tr>
+<tr>
+<td>spoonstill-media</td>
+<td>185</td>
+<td>147 unit + 31 integration</td>
+<td>2 unit + 2 integration</td>
+</tr>
+<tr>
+<td>spoonstill-state</td>
+<td>20</td>
+<td>20</td>
+<td>0</td>
+</tr>
+<tr>
+<td>spoonstill-tts</td>
+<td>72</td>
+<td>53 unit + 12 integration</td>
+<td>7 (live service)</td>
+</tr>
+<tr>
+<td>spoonstill-app</td>
+<td>265</td>
+<td>264</td>
+<td>0</td>
+</tr>
+<tr>
+<td>spoonstill-cli</td>
+<td>34</td>
+<td>11 unit + 23 integration</td>
+<td>0</td>
+</tr>
+<tr>
+<td>apps/desktop</td>
+<td>37</td>
+<td>13 unit + 24 integration</td>
+<td>0</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>776</strong></td>
+<td><strong>756 passed, 0 failed</strong></td>
+<td><strong>11</strong></td>
+</tr>
+</tbody>
+</table></div>
+<p>(Verified by test run: <code>cargo test --workspace --no-fail-fast</code> on 2026-10-07, 116 s. The difference between 776 functions and 767 run is tests compiled only on other platforms, such as Windows-only cases, plus counting differences between attributes and executed tests; this was not itemised.)</p>
+</section>
+<section id="categories" class="level2">
+<h2><span class="header-section-number">25.2</span> Categories</h2>
+<ul>
+<li><strong>Unit tests</strong> live beside the code in <code>#[cfg(test)] mod tests</code> blocks. Pure logic (filter strings, frame maths, validation, cue splitting, hashing, the pace schedule) is tested directly with no I/O.</li>
+<li><strong>Real-FFmpeg integration tests</strong> in <code>crates/spoonstill-media/tests/</code> render actual media. <code>tests/common/mod.rs</code> builds fixtures in Rust (so Windows needs no bash) and gives each test run its own output folder so parallel sessions do not delete each other's files (D-180).</li>
+<li><strong>Architecture tests</strong> (<code>architecture.rs</code>, <code>no_shell_strings.rs</code>) read manifests and source text to enforce structure.</li>
+<li><strong>Documentation tests</strong> (<code>readme_claims.rs</code>, <code>cited_decisions.rs</code>, <code>release_assets.rs</code>) keep the README's numbers, the decision citations and the release asset names honest.</li>
+<li><strong>Contract tests</strong> (<code>ui_contract.rs</code>) check the Rust/JavaScript seam by reading both as text.</li>
+<li><strong>Property tests</strong>: 1 500 random chapters per run; sweeps of texts x durations x budgets for captions.</li>
+<li><strong>Golden values</strong>: the exact filter string; a segment key computed by hand in Python and pinned as a literal <code>u64</code> (<code>0x342b94f321039a02</code>, D-172); byte-for-byte caption output.</li>
+<li><strong>Live tests</strong> (<code>edge_live.rs</code>) are <code>#[ignore]</code> and run with <code>make tts-live</code>.</li>
+<li><strong>Benchmarks</strong> (<code>caption_bench.rs</code>) are <code>#[ignore]</code> and print a table instead of asserting a time.</li>
+</ul>
+</section>
+<section id="representative-tests-explained" class="level2">
+<h2><span class="header-section-number">25.3</span> Representative tests, explained</h2>
+<p><strong><code>the_emitted_chain_is_exactly_the_documented_recipe</code></strong> (core, <code>motion.rs:563</code>). <em>Behaviour:</em> the filter string for a known input. <em>Why:</em> the string decides every pixel and is part of every cache key. <em>Prevents:</em> an innocent-looking edit silently changing every film or invalidating every cache. <em>How:</em> compares the full string.</p>
+<p><strong><code>odd_dimensions_sar</code></strong> (media, <code>segment_integrity.rs</code>). <em>Behaviour:</em> a 1999x1001 photo renders with SAR 1:1 in every aspect. <em>Why:</em> the measured trap in §4. <em>Prevents:</em> stretched pictures in films. <em>How:</em> renders with real FFmpeg and asserts the full profile; the fixture asserts its own oddness so the test cannot pass by accident (§8b).</p>
+<p><strong><code>hostile_paths_survive_the_process_boundary</code></strong> (media). <em>Behaviour:</em> names with quotes, <code>$(...)</code>, <code>;</code>, <code>&amp;</code>, leading spaces and dashes, and Unicode render correctly. <em>Why:</em> shell injection and option injection. <em>How:</em> renders 15 frames from such paths and checks that no <code>pwd</code> file was created.</p>
+<p><strong><code>cancellation_leaves_no_valid_looking_stub</code></strong> (media). <em>Behaviour:</em> cancelling a long render leaves no output file. <em>Why:</em> a valid-looking partial file would be reused as a finished segment. <em>How:</em> cancels after the first progress report and checks the destination and every temporary.</p>
+<p><strong><code>the_black_edge_probe_catches_a_real_letterbox</code></strong> (media, <code>motion_matrix.rs</code>). <em>Behaviour:</em> the probe that checks "no black edges" reads 0 on a real letterbox. <em>Why:</em> a probe that always says "fine" makes 54 other renders meaningless. This is a <strong>control test</strong>.</p>
+<p><strong><code>concurrent_writers_produce_one_header_and_whole_rows</code></strong> (state). Eight threads write 40 rows each; the file must have exactly one header and 321 whole lines (D-122).</p>
+<p><strong><code>eight_workers_wanting_one_photograph_read_it_once</code></strong> (app). A barrier releases eight threads at once; an atomic counter proves the photo was read once (D-173).</p>
+<p><strong><code>results_come_back_in_input_order</code></strong> (app, pool). Determinism of the joined film depends on it.</p>
+<p><strong><code>every_command_the_frontend_calls_is_registered_in_rust</code></strong> (desktop). A typo in an <code>invoke("name")</code> would fail silently in the webview; this test fails the build instead.</p>
+</section>
+<section id="what-cargo-test---workspace-covers-and-what-it-does-not" class="level2">
+<h2><span class="header-section-number">25.4</span> What <code>cargo test --workspace</code> covers, and what it does not</h2>
+<p>It runs every unit and integration test in all seven packages, including real FFmpeg renders (FFmpeg must be installed). It does <strong>not</strong> run the ignored live TTS tests, the benchmarks, the shell gates, the JavaScript checks, actionlint or shellcheck, and it cannot click the window.</p>
+</section>
+<section id="make-gates-the-milestone-exit-gates" class="level2">
+<h2><span class="header-section-number">25.5</span> <code>make gates</code>: the milestone exit gates</h2>
+<p><code>make gates</code> runs <code>scripts/m0-gates.sh</code>, <code>m1-gates.sh</code> and <code>m2-gates.sh</code>: <strong>39 checks</strong> (8 + 8 + 23) that build the release CLI, generate fixtures, and drive the real <code>still</code> binary end to end. A selection:</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Gate</th>
+<th>Checks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>M0 2-4</td>
+<td><code>cargo test</code>, clippy with <code>-D warnings</code>, <code>cargo fmt --check</code></td>
+</tr>
+<tr>
+<td>M0 5</td>
+<td>the first commit is the planning corpus, before any code</td>
+</tr>
+<tr>
+<td>M0 6</td>
+<td><code>cargo tree -p spoonstill-core</code> contains nothing concrete</td>
+</tr>
+<tr>
+<td>M1 1</td>
+<td><code>render-scene</code> of a 3.717 s narration gives exactly 112 frames, SAR 1:1, 1920x1080, 30/1</td>
+</tr>
+<tr>
+<td>M1 5</td>
+<td>Ctrl-C mid-render: non-zero exit, no output, no partial file (skipped on Windows, where the signal does not reach a native process)</td>
+</tr>
+<tr>
+<td>M2 2</td>
+<td>film duration equals the independently computed sum within a frame</td>
+</tr>
+<tr>
+<td>M2 3</td>
+<td><code>--jobs 1</code> and <code>--jobs 4</code> films are byte-identical</td>
+</tr>
+<tr>
+<td>M2 4</td>
+<td>a second render reuses every narration and segment</td>
+</tr>
+<tr>
+<td>M2 4b</td>
+<td>a different narration of the same length re-renders; restoring the original reproduces the first film byte for byte</td>
+</tr>
+<tr>
+<td>M2 4d</td>
+<td>the segment cache is bounded at live plus two generations</td>
+</tr>
+<tr>
+<td>M2 5</td>
+<td>a second live render is refused and <code>--force</code> cannot override</td>
+</tr>
+<tr>
+<td>M2 7</td>
+<td>spoken + recorded + silent scenes make one film; without <code>edge-tts</code>, the render fails and names the tool</td>
+</tr>
+<tr>
+<td>M2 7b</td>
+<td>2K, 4K and a vertical Short render at the right size; 8K is refused</td>
+</tr>
+<tr>
+<td>M2 7g</td>
+<td>a render never writes <code>project.yaml</code></td>
+</tr>
+</tbody>
+</table></div>
+<div class="callout verified">
+<p><strong>Verified by test run.</strong> On the analysis machine, <code>make gates</code> reported <strong>M0 8/8, M1 8/8, M2 23/23</strong> in 347 s. <code>cargo fmt --check</code>, <code>cargo check --workspace</code>, <code>cargo clippy --workspace --all-targets -- -D warnings</code>, <code>make workflows</code> (actionlint), <code>make shell</code> (shellcheck) and <code>make ui</code> (Node checks of <code>app.js</code>) all passed.</p>
+</div>
+<p>The gates have their own safety measures: a guard refuses to run if <code>mktemp -d</code> returns something unsafe before any <code>rm -rf</code> (D-175); <code>with_machine_state</code> redirects <code>HOME</code>, <code>APPDATA</code> and <code>XDG_CONFIG_HOME</code> so the gates never write to the operator's real <code>runs.csv</code>; and the <code>check</code> helper fails if called with no command, after a split line once let a gate "pass" while running nothing (D-153).</p>
+</section>
+<section id="the-testing-culture" class="level2">
+<h2><span class="header-section-number">25.6</span> The testing culture</h2>
+<p><code>PROCESS.md</code> describes the working rule: reproduce a defect first, fix it, then <strong>prove the new test fails without the fix</strong>. The decisions record many cases where a first test passed against the broken code (D-116, D-156, D-174), which is why so many tests are paired with control tests or mutation checks.</p>
+<div class="callout exercise">
+<p><strong>Exercise 25.1 (Beginner).</strong> Run <code>cargo test -p spoonstill-core motion</code> and count how many tests run. Then find one of them in <code>motion.rs</code> and explain what it protects.</p>
+</div>
+</section>
+</section>

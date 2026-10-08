@@ -1,0 +1,116 @@
+<section id="testing-strategy" class="level1">
+<h1><span class="header-section-number">17</span> Testing Strategy</h1>
+<section id="the-suite-at-a-glance" class="level2">
+<h2><span class="header-section-number">17.1</span> The suite at a glance</h2>
+<p>The suite runs with <code>QT_QPA_PLATFORM=offscreen pytest -q</code>. On the analysis machine all <strong>383 tests passed in about 2 minutes</strong>. <code>tests/conftest.py</code> puts the repository on <code>sys.path</code> and points <code>SETUPTTS_DATA_DIR</code> at a temporary folder, so tests never touch real settings, history or staging.</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 30%">
+<col style="width: 40%">
+<col style="width: 30%">
+</colgroup>
+<thead>
+<tr>
+<th>Module</th>
+<th>Tests</th>
+<th>What it covers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_ui_layout.py</code></td>
+<td>149</td>
+<td>sidebar, history strip and dialogs at many window sizes and font sizes; no clipping; CTA always visible; no inline stylesheets; safe shutdown</td>
+</tr>
+<tr>
+<td><code>test_reliability_regressions.py</code></td>
+<td>59</td>
+<td>the v1.6.0 long-form defects: mid-chunk disconnects, whitespace gaps, non-idempotent cleanup on resume, sweeping, disk-full staging, DNS blips, live staging folders, atomic writes</td>
+</tr>
+<tr>
+<td><code>test_product_polish.py</code></td>
+<td>54</td>
+<td>voice naming, file-name validation, encoding detection, error splitting, “Keep Both” naming, settings and history behaviour</td>
+</tr>
+<tr>
+<td><code>test_v162_regressions.py</code></td>
+<td>52</td>
+<td>the v1.6.2 fixes: slow-voice deadlines, CJK splitting, fast cutting, normalisation, damaged or locked settings and history files, resume safety, preview stop</td>
+</tr>
+<tr>
+<td><code>test_chunk_store.py</code></td>
+<td>16</td>
+<td>coverage report (gaps, overlaps, duplicates, corrupt sizes, hash mismatches), finalisation refusals, resume truncation</td>
+</tr>
+<tr>
+<td><code>test_long_form_scale.py</code></td>
+<td>14</td>
+<td>6- and 12-hour jobs with production chunk sizes: exact reproduction, tiling, memory, deep failures, resume seams, disk pre-flight</td>
+</tr>
+<tr>
+<td><code>test_tts_worker.py</code></td>
+<td>14</td>
+<td>probe chunk, absolute ranges, preflight, voice gate, recovery, adaptive sizing, resume reuse, fail-closed sub-chunks, duration check</td>
+</tr>
+<tr>
+<td><code>test_network_setup.py</code></td>
+<td>13</td>
+<td>TLS context (certifi plus system store), proxy detection and bypass, SOCKS refusal, plain certificate error text</td>
+</tr>
+<tr>
+<td><code>test_tts_quality.py</code></td>
+<td>6</td>
+<td>normalisation and script/language detection, voice recommendations</td>
+</tr>
+<tr>
+<td><code>test_long_form_coverage.py</code></td>
+<td>3</td>
+<td>coverage manifest, resume after interruption, duplicate submission</td>
+</tr>
+<tr>
+<td><code>test_mp3_duration.py</code></td>
+<td>2</td>
+<td>frame parser on synthetic frames and junk</td>
+</tr>
+<tr>
+<td><code>test_job_queue.py</code></td>
+<td>1</td>
+<td>duplicate output paths refused</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="techniques-worth-copying" class="level2">
+<h2><span class="header-section-number">17.2</span> Techniques worth copying</h2>
+<p><strong>Stub the network at the narrowest seam.</strong> Worker tests replace <code>tts_worker.build_communicate</code> with a fake whose <code>stream()</code> yields scripted events: audio bytes sized at the real 6,000 bytes per second, sentence boundaries with real 100-nanosecond offsets, exceptions at chosen moments, or an early silent end. The rest of the worker, including chunking, retries, recovery, staging and assembly, runs for real. <code>list_voices</code> and, where needed, <code>_chunk_plan_for</code> are monkeypatched too; a tiny plan of 160 characters makes multi-chunk behaviour fast to exercise.</p>
+<p><strong>Make the output a transcript.</strong> The long-form tests echo each chunk’s text back as its “audio”. The assembled file must then equal the source text exactly, which turns “is anything missing or duplicated?” into a string comparison.</p>
+<p><strong>Regression tests that fail on the old code.</strong> Names describe the behaviour, not the function: <code>test_mid_chunk_disconnect_is_retried_not_saved</code>, <code>test_paragraph_break_on_the_warmup_boundary_still_completes</code>, <code>test_resume_reuses_saved_chunks_even_when_cleanup_is_not_idempotent</code>. The README states these “fail on the pre-fix code”.</p>
+<p><strong>UI tests across geometry and fonts.</strong> pytest-qt creates real widgets offscreen; layout tests are parametrised over window sizes and enlarged system fonts, because Windows’ default UI font is wider than macOS’s and most UI regressions in August 2026 were clipping under wider fonts.</p>
+<p><strong>Measure memory directly.</strong> <code>tracemalloc</code> bounds peak allocation during a simulated 12-hour job.</p>
+</section>
+<section id="packaging-and-platform-tests" class="level2">
+<h2><span class="header-section-number">17.3</span> Packaging and platform tests</h2>
+<p>Unit tests cannot see a missing Qt plugin or an unbundled module. Those are caught by the CI self-tests, run against six artifacts across two operating systems, four of them with live network synthesis (Chapter 16). Platform-specific code (Windows proxy reading, the Proactor loop, Windows file-lock retries) runs for real only on the Windows runner.</p>
+</section>
+<section id="what-the-automated-suite-does-not-cover" class="level2">
+<h2><span class="header-section-number">17.4</span> What the automated suite does not cover</h2>
+<ul>
+<li>Real multi-hour synthesis against the live service. That is <code>scripts/stress_longform.py</code>, run manually.</li>
+<li>Playback in the Preview feature (it shells out to <code>afplay</code> or Windows MCI).</li>
+<li>Code signing and Gatekeeper behaviour, since builds are unsigned.</li>
+<li>Intel Macs and macOS versions below 15, which are unsupported.</li>
+</ul>
+</section>
+<section id="before-every-release" class="level2">
+<h2><span class="header-section-number">17.5</span> Before every release</h2>
+<p>A practical checklist, assembled from the workflow and the project’s own release notes:</p>
+<ol type="1">
+<li><code>QT_QPA_PLATFORM=offscreen pytest -q</code> passes locally on macOS, and on Windows if any platform code changed.</li>
+<li><code>APP_VERSION</code> and <code>pyproject.toml</code> agree; <code>release_notes/vX.Y.Z.md</code> exists.</li>
+<li>If dependencies changed: the pins in <code>requirements.txt</code> were updated deliberately, and the minimum-macOS check still passes.</li>
+<li>For pipeline changes: a manual <code>workflow_dispatch</code> run is green before tagging.</li>
+<li>For reliability changes: a live run of <code>scripts/stress_longform.py</code> for at least an hour of audio with a slow voice such as Andrew.</li>
+<li>Tag and push; confirm all four artifacts and the notes appear on the release page.</li>
+</ol>
+</section>
+</section>

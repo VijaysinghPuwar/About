@@ -247,6 +247,42 @@ export type Database = {
         }
         Relationships: []
       }
+      reading_progress: {
+        Row: {
+          book_slug: string
+          chapter_id: string
+          chapters: Json
+          finished_at: string | null
+          percent: number
+          position: number
+          started_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          book_slug: string
+          chapter_id: string
+          chapters?: Json
+          finished_at?: string | null
+          percent?: number
+          position?: number
+          started_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          book_slug?: string
+          chapter_id?: string
+          chapters?: Json
+          finished_at?: string | null
+          percent?: number
+          position?: number
+          started_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string

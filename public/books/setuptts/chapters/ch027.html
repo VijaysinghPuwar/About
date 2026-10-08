@@ -1,0 +1,18 @@
+<section id="what-to-learn-next" class="level1">
+<h1><span class="header-section-number">20</span> What to Learn Next</h1>
+<p>These subjects are ordered by how much they would deepen your understanding of this particular codebase. Each lists what to study and where in SetupTTS to apply it.</p>
+<ol type="1">
+<li><strong>Python async programming.</strong> Coroutines, tasks, <code>await</code>, async generators, <code>asyncio.wait_for</code>, cancellation semantics and <code>CancelledError</code>, <code>call_soon_threadsafe</code>. Then re-read <code>_synthesise_attempt</code> and <code>TTSWorker.cancel</code> until every line is obvious.</li>
+<li><strong>The asyncio event loop itself.</strong> How a loop schedules callbacks and waits on sockets (selectors versus Windows’ Proactor), and why a loop belongs to one thread. This explains the “one loop per QThread” design.</li>
+<li><strong>PySide6 and Qt architecture.</strong> The object tree and ownership, the event loop, signals and slots, connection types, <code>QThread</code> and thread affinity, layouts and size policies, stylesheets. Apply it to <code>JobQueue._start_job</code> and <code>MainWindow._apply_responsive_layout</code>.</li>
+<li><strong>HTTP, TLS and WebSockets.</strong> The HTTP Upgrade handshake, WebSocket text and binary frames, certificate chains and trust stores, proxies and CONNECT tunnels. Apply it to edge-tts’s <code>__stream</code> and <code>build_ssl_context</code>.</li>
+<li><strong>How neural TTS works.</strong> Text normalisation, phonemes and prosody, acoustic models and neural vocoders, and why sentence-level metadata exists. This explains why text cleanup and sentence boundaries matter so much here.</li>
+<li><strong>Digital audio and MP3.</strong> Sampling, bit rate, constant versus variable bit rate, MPEG frames and headers, ID3 tags. Then read <code>mp3_duration.py</code>; you should be able to derive “144 bytes per frame” yourself.</li>
+<li><strong>Distributed-systems reliability.</strong> Partial failure, timeouts as failure detectors, at-least-once versus exactly-once, idempotency. Apply it to why retrying a chunk is safe (nothing is saved until an attempt fully succeeds).</li>
+<li><strong>Retry and back-off strategies.</strong> Exponential back-off, jitter, retry budgets, circuit breakers. Compare them with <code>_process_chunk</code> and <code>_RollingHealthState</code>, which is a simple circuit-breaker cousin.</li>
+<li><strong>State persistence and crash consistency.</strong> Atomic rename, <code>fsync</code> and what it guarantees, write-ahead logging, SQLite’s WAL mode and <code>user_version</code> migrations. Apply it to <code>_atomic_write_bytes</code> and <code>HistoryService</code>.</li>
+<li><strong>Python packaging and PyInstaller.</strong> Wheels, <code>pyproject.toml</code>, how PyInstaller’s analysis and hooks work, onefile versus onedir, data files and <code>_MEIPASS</code>. Apply it to both spec files.</li>
+<li><strong>CI/CD with GitHub Actions.</strong> Triggers, jobs and <code>needs</code>, runners, artifacts, permissions, concurrency groups, release actions. Then extend <code>build.yml</code> with a <code>pull_request</code> trigger that only runs the tests.</li>
+<li><strong>Cross-platform desktop development.</strong> Platform conventions for data folders, code signing and notarisation, installers, file locking and path rules on Windows. The project’s next step here would be signing the macOS app and Windows installer.</li>
+</ol>
+</section>

@@ -1,0 +1,121 @@
+<section id="video-and-audio-from-zero" class="level1">
+<h1><span class="header-section-number">3</span> Video and Audio From Zero</h1>
+<p>This chapter teaches just enough multimedia to read the rest of the book. Each idea is tied to the place spoonstill uses it.</p>
+<section id="frames-and-frame-rate" class="level2">
+<h2><span class="header-section-number">3.1</span> Frames and frame rate</h2>
+<p>A video is a sequence of still pictures called <strong>frames</strong>, shown quickly enough that motion looks smooth. <strong>Frame rate</strong> (fps) is how many frames per second. spoonstill's default is 30 fps and it accepts 1 to 120 (<code>OutputSpec::new</code> in <code>crates/spoonstill-core/src/geometry.rs</code>).</p>
+<p><strong>spoonstill connection.</strong> A scene's length is a whole number of frames. The rule (<code>frames_for_duration</code>, <code>crates/spoonstill-core/src/timing.rs:25-38</code>) is: frames = round <strong>up</strong> (narration seconds x fps). A 3.717 s narration at 30 fps is 111.51, rounded up to <strong>112 frames</strong>, which is 3.7333 s. The extra 16 ms is filled with silence. Rounding down would cut off the last syllable.</p>
+</section>
+<section id="resolution-and-aspect" class="level2">
+<h2><span class="header-section-number">3.2</span> Resolution and aspect</h2>
+<p><strong>Resolution</strong> is the frame's size in pixels, for example 1920x1080. <strong>Aspect ratio</strong> is its shape: 16:9 landscape, 9:16 portrait (Shorts, Reels, TikTok), 1:1 square.</p>
+<p><strong>spoonstill connection.</strong> You name the <strong>short edge</strong>, not the width: <code>1080p</code> means 1920x1080 in landscape and 1080x1920 in portrait. The four named sizes are 720p, 1080p, 1440p (also called <code>2k</code>) and 2160p (<code>4k</code>). 4K is the ceiling; 8K is refused (Chapter 15 explains why it is derived from the H.264 level table).</p>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th></th>
+<th>16:9</th>
+<th>9:16</th>
+<th>1:1</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>720p</code></td>
+<td>1280x720</td>
+<td>720x1280</td>
+<td>720x720</td>
+</tr>
+<tr>
+<td><code>1080p</code> (default)</td>
+<td>1920x1080</td>
+<td>1080x1920</td>
+<td>1080x1080</td>
+</tr>
+<tr>
+<td><code>1440p</code> / <code>2k</code></td>
+<td>2560x1440</td>
+<td>1440x2560</td>
+<td>1440x1440</td>
+</tr>
+<tr>
+<td><code>2160p</code> / <code>4k</code></td>
+<td>3840x2160</td>
+<td>2160x3840</td>
+<td>2160x2160</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="pixels-pixel-formats-and-colour-range" class="level2">
+<h2><span class="header-section-number">3.3</span> Pixels, pixel formats and colour range</h2>
+<p>Each pixel stores colour. Video rarely stores red, green and blue directly; it stores <strong>YUV</strong>: brightness (Y) plus two colour-difference channels (U, V). <strong>yuv420p</strong> means the colour channels are stored at a quarter of the resolution (half width, half height), which the eye barely notices and which saves space. It also means the frame's width and height must be even numbers, which is why <code>OutputSpec::new</code> refuses odd sizes.</p>
+<p><strong>Colour range</strong> is subtle. "Limited" or <strong>tv</strong> range uses brightness values 16 to 235; "full" or <strong>pc</strong> range uses 0 to 255. JPEG photos are full range. If that flag leaks through, FFmpeg labels the output <code>yuvj420p</code>, a different format.</p>
+<p><strong>spoonstill connection.</strong> The project measured this trap (<code>ffmpeg-findings.md</code> §7b) and pins colour explicitly in the filter chain: <code>out_range=tv</code> on the first scale and <code>setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709</code> near the end (decision D-037). Every segment must come out <code>yuv420p</code>, <code>tv</code>, <code>bt709</code>, or it fails the profile check.</p>
+</section>
+<section id="sample-aspect-ratio-sar" class="level2">
+<h2><span class="header-section-number">3.4</span> Sample aspect ratio (SAR)</h2>
+<p>Some files say their pixels are not square. <strong>SAR</strong> (sample aspect ratio) records that. A 1999x1001 photo, scaled and cropped, can come out of FFmpeg with SAR <code>30007:30000</code>: nearly square, but not exactly, and players will stretch the picture slightly.</p>
+<p><strong>spoonstill connection.</strong> <code>setsar=1</code> is always the last filter before <code>format=yuv420p</code> (D-033), and the test fixture <code>odd.jpg</code> is generated at exactly 1999x1001 and <strong>asserted</strong> to be odd so the test can never pass by accident (<code>scripts/gen-fixtures.sh</code>).</p>
+</section>
+<section id="codecs-and-containers" class="level2">
+<h2><span class="header-section-number">3.5</span> Codecs and containers</h2>
+<p>A <strong>codec</strong> is a way to compress video or audio. <strong>H.264</strong> (also called AVC) is the most widely supported video codec; <strong>AAC</strong> is the matching audio codec. A <strong>container</strong> is the file format that holds compressed streams together with timing information: <strong>MP4</strong> is the container here.</p>
+<ul>
+<li><strong>Encoding</strong> turns raw frames into compressed data. spoonstill uses <code>libx264</code>, a software H.264 encoder, by default.</li>
+<li><strong>Muxing</strong> (multiplexing) puts the video and audio streams into the container. <strong>Demuxing</strong> takes them back out.</li>
+<li><strong>Profile</strong> and <strong>level</strong> are H.264 labels saying which features and how much work a decoder needs. spoonstill always asks for the <strong>High</strong> profile and computes the level from the frame size and rate (<code>h264_level</code> in <code>crates/spoonstill-media/src/profile.rs:381-412</code>): 1080p30 is level 4.0, 4K30 is level 5.1.</li>
+</ul>
+</section>
+<section id="quality-settings-crf-and-presets" class="level2">
+<h2><span class="header-section-number">3.6</span> Quality settings: CRF and presets</h2>
+<p><code>libx264</code> has a <strong>CRF</strong> (constant rate factor) setting: lower means better quality and bigger files; 18 is visually near-lossless for most material. The <strong>preset</strong> trades encoding speed for compression efficiency; <code>medium</code> is the balanced default. Both are configurable in <code>project.yaml</code> under <code>encode:</code>.</p>
+</section>
+<section id="key-frames-and-why-concatenation-is-easy-here" class="level2">
+<h2><span class="header-section-number">3.7</span> Key frames, and why concatenation is easy here</h2>
+<p>H.264 stores some frames completely (<strong>key frames</strong>, or I-frames) and most others as differences from nearby frames. Each spoonstill segment is an independent file that starts with a key frame, so segments can be joined end to end with a <strong>stream copy</strong>: the compressed bytes are copied, nothing is decoded or re-encoded. That is fast, but it requires every segment to have identical parameters. FFmpeg does <strong>not</strong> check this for you (Chapter 16).</p>
+</section>
+<section id="time-bases" class="level2">
+<h2><span class="header-section-number">3.8</span> Time bases</h2>
+<p>Inside a container, each frame has a timestamp counted in ticks of a <strong>time base</strong>. spoonstill pins the video time base to <strong>1/90000</strong> (<code>-video_track_timescale 90000</code>), because 90 000 divides evenly by 24, 25, 30, 50 and 60 fps. Without the pin, the MP4 muxer chooses a time base per frame rate (1/15360 at 30 fps), and two segments with different time bases would join badly.</p>
+</section>
+<section id="digital-audio" class="level2">
+<h2><span class="header-section-number">3.9</span> Digital audio</h2>
+<p>Sound is a pressure wave. Digital audio measures it many times a second: the <strong>sample rate</strong>. spoonstill normalizes every narration to <strong>48 000 samples per second</strong>, <strong>stereo</strong> (2 channels), <strong>16-bit PCM</strong> (<code>pcm_s16le</code>) in a WAV file. PCM means uncompressed. Using uncompressed audio for the intermediate files avoids compressing twice (once in the source MP3, once in the final AAC).</p>
+<p><strong>Bitrate</strong> is how many bits per second a compressed stream uses. The final AAC audio uses 192 kb/s.</p>
+<p><strong>spoonstill connection.</strong> Because the audio is cut by sample count, the trim is exact: a 112-frame scene at 30 fps needs exactly 112 x 48000 / 30 = <strong>179 200 samples</strong>, and the filter says <code>atrim=end_sample=179200</code>, not a rounded decimal time.</p>
+</section>
+<section id="loudness" class="level2">
+<h2><span class="header-section-number">3.10</span> Loudness</h2>
+<p>Different recordings are recorded at different volumes. <strong>LUFS</strong> (Loudness Units relative to Full Scale) measures perceived loudness. spoonstill measures each narration and applies <strong>one constant gain</strong> so it lands at <strong>-16 LUFS</strong> integrated, without letting the peak exceed <strong>-1.5 dBTP</strong> (true peak), and never boosting more than 24 dB (Verified from source: <code>crates/spoonstill-media/src/audio.rs:72-84</code>). The constant gain is deterministic, which matters for caching (Chapter 17).</p>
+</section>
+<section id="filters-and-filter-graphs" class="level2">
+<h2><span class="header-section-number">3.11</span> Filters and filter graphs</h2>
+<p>A <strong>filter</strong> transforms frames or audio samples: scale, crop, pad, overlay, resample. FFmpeg chains filters with commas and connects chains with labelled pads into a <strong>filter graph</strong>:</p>
+<pre class="text"><code>[0:v]scale=...,crop=...,zoompan=...,setparams=...,setsar=1,format=yuv420p[v];
+[1:a]aresample=48000,apad,atrim=end_sample=179200,asetpts=N/SR/TB[a]</code></pre>
+<p><code>[0:v]</code> means "the video of input 0", <code>[v]</code> names the result. <code>-filter_complex</code> passes the whole graph as one argument.</p>
+</section>
+<section id="the-ken-burns-effect" class="level2">
+<h2><span class="header-section-number">3.12</span> The Ken Burns effect</h2>
+<p>In plain words: <em>a still photo is larger than the visible frame; a window slowly changes position or size; repeated frames make the photo appear to move.</em> It is named after the documentary filmmaker who popularised it.</p>
+<p>spoonstill's version, in one sentence: scale the photo up to <strong>three times</strong> the output size so it covers the frame, crop it to the output's shape, then let FFmpeg's <code>zoompan</code> filter move a window over it, producing exactly N output frames from one still. Chapter 15 works through the arithmetic with real numbers.</p>
+</section>
+<section id="putting-it-together-for-one-scene" class="level2">
+<h2><span class="header-section-number">3.13</span> Putting it together for one scene</h2>
+<pre class="text"><code>photo (any size) ----+
+                     |  filter graph: cover-fit 3x, crop, zoompan (N frames),
+                     |  pin colour, setsar=1, yuv420p
+                     v
+                H.264 video, N frames ------+
+                                            +--&gt; mux into seg-&lt;key&gt;.mp4
+normalized WAV --&gt; pad + trim to exact      |    (checked with ffprobe)
+                   sample count --&gt; AAC ----+
+
+all segments --&gt; concat demuxer, stream copy --&gt; film.mp4 (checked again)</code></pre>
+<div class="callout exercise">
+<p><strong>Exercise 3.1 (Beginner).</strong> A 4.0 s silent scene at 25 fps: how many frames, and how many audio samples at 48 kHz? Check your answer against <code>samples_for_frames</code> in <code>crates/spoonstill-core/src/timing.rs</code>.</p>
+<p><strong>Exercise 3.2 (Intermediate).</strong> Why must yuv420p frames have even width and height? Find the line in <code>geometry.rs</code> that refuses an odd short edge.</p>
+</div>
+</section>
+</section>

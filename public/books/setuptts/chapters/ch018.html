@@ -1,0 +1,205 @@
+<section id="settings-logging-and-history" class="level1">
+<h1><span class="header-section-number">13</span> Settings, Logging and History</h1>
+<section id="where-everything-lives" class="level2">
+<h2><span class="header-section-number">13.1</span> Where everything lives</h2>
+<p><code>AppPaths</code> (<code>app/utils/paths.py</code>) asks <code>platformdirs</code> for per-user folders, creating them and falling back to a folder under the data directory or the system temp folder if creation fails. Setting the environment variable <code>SETUPTTS_DATA_DIR</code> puts everything under one folder instead; the tests and the stress script use it so they never touch real user data.</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th></th>
+<th>macOS</th>
+<th>Windows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Data</td>
+<td><code>~/Library/Application Support/SetupTTS/</code></td>
+<td><code>%LOCALAPPDATA%\SetupTTSApp\SetupTTS\</code></td>
+</tr>
+<tr>
+<td>Logs</td>
+<td><code>~/Library/Logs/SetupTTS/</code></td>
+<td><code>%LOCALAPPDATA%\SetupTTSApp\SetupTTS\Logs\</code></td>
+</tr>
+<tr>
+<td>Cache</td>
+<td><code>~/Library/Caches/SetupTTS/</code></td>
+<td><code>%LOCALAPPDATA%\SetupTTSApp\SetupTTS\Cache\</code></td>
+</tr>
+</tbody>
+</table></div>
+<div class="callout experiment">
+<p><strong>Verified by runtime experiment.</strong> <code>platformdirs</code> 4.9.4 on the analysis Mac returned exactly the three macOS folders above for <code>("SetupTTS", "SetupTTSApp")</code>. The Windows column follows platformdirs’ documented layout and matches the paths in the README and the <code>AppPaths</code> docstring.</p>
+</div>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>File</th>
+<th>Folder</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>settings.json</code></td>
+<td>data</td>
+<td>preferences</td>
+</tr>
+<tr>
+<td><code>history.db</code> (+ <code>-wal</code>, <code>-shm</code>)</td>
+<td>data</td>
+<td>recent conversions</td>
+</tr>
+<tr>
+<td><code>staging/&lt;job&gt;/</code></td>
+<td>data</td>
+<td>resumable jobs</td>
+</tr>
+<tr>
+<td><code>setuptts.lock</code></td>
+<td>data</td>
+<td>single-instance lock</td>
+</tr>
+<tr>
+<td><code>voices.json</code></td>
+<td>cache</td>
+<td>last voice list, for offline start</td>
+</tr>
+<tr>
+<td><code>setuptts.log</code> (+ <code>.1</code> to <code>.3</code>)</td>
+<td>logs</td>
+<td>application log</td>
+</tr>
+<tr>
+<td><code>crash.log</code></td>
+<td>logs</td>
+<td>native crash dumps</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="settings" class="level2">
+<h2><span class="header-section-number">13.2</span> Settings</h2>
+<p><code>AppSettings</code> (<code>app/config/settings.py</code>) is a thin wrapper around a dictionary that starts from <code>_DEFAULTS</code>:</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>voice</code></td>
+<td><code>en-US-AvaNeural</code></td>
+<td>last used voice</td>
+</tr>
+<tr>
+<td><code>rate</code></td>
+<td>5</td>
+<td>percent, clamped to -50 to 100</td>
+</tr>
+<tr>
+<td><code>volume</code></td>
+<td>0</td>
+<td>percent, clamped to -50 to 50; there is no UI control, so it stays 0 (<code>+0%</code>) unless <code>settings.json</code> is edited</td>
+</tr>
+<tr>
+<td><code>language_filter</code>, <code>gender_filter</code></td>
+<td><code>en-US</code>, <code>All</code></td>
+<td>voice picker filters</td>
+</tr>
+<tr>
+<td><code>recently_used_voices</code></td>
+<td><code>[]</code></td>
+<td>up to 5</td>
+</tr>
+<tr>
+<td><code>auto_switch_recommended_voice</code></td>
+<td>false</td>
+<td>Settings ▸ Voice</td>
+</tr>
+<tr>
+<td><code>output_dir</code></td>
+<td><code>""</code></td>
+<td>empty means the Desktop</td>
+</tr>
+<tr>
+<td>window geometry, <code>show_history</code>, <code>history_panel_height</code></td>
+<td></td>
+<td>restored at start-up, clamped to a real screen</td>
+</tr>
+</tbody>
+</table></div>
+<p>Two choices keep a damaged or locked settings file from breaking the app:</p>
+<ul>
+<li><strong>Per-key validation on load.</strong> <code>_coerce</code> converts each value to the type of its default and clamps numbers. A bad value resets only its own key, with a warning in the log. Unknown keys from a newer version are dropped. A file that is not JSON at all is renamed <code>settings.json.corrupt</code>. Before v1.6.2 a hand-edited <code>"rate": "abc"</code> crashed the app at every launch until the file was deleted.</li>
+<li><strong>Atomic save.</strong> <code>save()</code> writes <code>settings.json.tmp</code>, <code>fsync</code>s, then replaces, clearing a read-only flag and retrying briefly if antivirus or OneDrive holds the file. A plain <code>write_text</code> truncates first, so a crash mid-write would reset every preference.</li>
+</ul>
+<p>Settings are saved on every Generate, when the Settings dialog is accepted, and at shutdown.</p>
+</section>
+<section id="logging" class="level2">
+<h2><span class="header-section-number">13.3</span> Logging</h2>
+<p><code>setup_logging</code> (<code>app/utils/app_logging.py:36-77</code>) configures the root logger:</p>
+<ul>
+<li><strong>File:</strong> <code>setuptts.log</code>, DEBUG and above, rotating at 10 MB with 3 backups (at most about 40 MB).</li>
+<li><strong>stderr:</strong> WARNING and above, but only if a stderr exists; a windowed Windows build has none.</li>
+<li><strong>Third-party noise:</strong> <code>edge_tts</code>, <code>aiohttp</code> and friends are limited to WARNING.</li>
+</ul>
+<p><code>install_crash_logging</code> adds the parts a windowed app needs to leave evidence:</p>
+<ul>
+<li><code>sys.excepthook</code> and <code>threading.excepthook</code> route uncaught exceptions, including those in worker threads, into the log with a session id.</li>
+<li><code>faulthandler</code> writes native crash stacks (a segfault in Qt or a C extension) to <code>crash.log</code>, which Python logging cannot do because the interpreter is already dead.</li>
+<li>A Qt message handler forwards Qt’s own warnings into the log.</li>
+</ul>
+<p>At start-up <code>log_environment</code> writes one block: app version, build kind (source, macOS app, Windows installed or portable), executable path, OS, Python, Qt, edge-tts, aiohttp and certifi versions, and locale encoding. The same block, plus the log file and app data paths, is what <strong>Settings ▸ Copy Diagnostic Info</strong> copies.</p>
+<p>Log lines are formatted as <code>2026-10-05 01:30:00  INFO      app.workers.tts_worker  &lt;message&gt;</code>. During a job the most useful lines are:</p>
+<pre class="text"><code>Starting: job=... voice=... rate=... chars=701783 chunk_ceiling=9200 payload_limit=3600
+          resume_chunk=0 resume_chars=0 output=...
+chunk 12/214 succeeded (attempt 1) in 31.20s chars=3412 range=[37120,40532) bytes=...
+          first_audio=1.02s receive=29.80s
+chunk 13/214 failed on attempt 1: ... [kind=timeout_after_audio cause=... chars=... range=[...]]
+Job summary [completed] job=... chunks_ok=214 attempts=229 retried_chunks=11 ...</code></pre>
+<p>The format strings are the real ones from <code>tts_worker.py</code>; the values are illustrative. The <strong>Job summary</strong> line, written however the job ends, exists so that one line answers “was the connection flaky, or did one chunk keep failing?” without reading hundreds of per-chunk lines.</p>
+<p>The log file was called <code>voicecraft.log</code> before v1.6.0, “a leftover from the project’s old name”; it is renamed on first run.</p>
+</section>
+<section id="history" class="level2">
+<h2><span class="header-section-number">13.4</span> History</h2>
+<p><code>HistoryService</code> (<code>app/services/history_service.py</code>) stores one row per completed job in SQLite:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode sql"><code class="sourceCode sql"><span id="cb2-1"><span class="kw">CREATE</span> <span class="kw">TABLE</span> <span class="cf">IF</span> <span class="kw">NOT</span> <span class="kw">EXISTS</span> jobs (</span>
+<span id="cb2-2">    <span class="kw">id</span>              <span class="dt">INTEGER</span> <span class="kw">PRIMARY</span> <span class="kw">KEY</span> AUTOINCREMENT,</span>
+<span id="cb2-3">    text_preview    TEXT    <span class="kw">NOT</span> <span class="kw">NULL</span>,      <span class="co">-- first 80 characters</span></span>
+<span id="cb2-4">    voice           TEXT    <span class="kw">NOT</span> <span class="kw">NULL</span>,</span>
+<span id="cb2-5">    rate            TEXT    <span class="kw">NOT</span> <span class="kw">NULL</span>,</span>
+<span id="cb2-6">    output_path     TEXT    <span class="kw">NOT</span> <span class="kw">NULL</span>,</span>
+<span id="cb2-7">    created_at      TEXT    <span class="kw">NOT</span> <span class="kw">NULL</span>,      <span class="co">-- ISO timestamp</span></span>
+<span id="cb2-8">    duration_secs   <span class="dt">REAL</span>    <span class="kw">NOT</span> <span class="kw">NULL</span> <span class="kw">DEFAULT</span> <span class="dv">0</span>,   <span class="co">-- wall-clock generation time</span></span>
+<span id="cb2-9">    status          TEXT    <span class="kw">NOT</span> <span class="kw">NULL</span> <span class="kw">DEFAULT</span> <span class="st">'completed'</span>,</span>
+<span id="cb2-10">    error_message   TEXT    <span class="kw">NOT</span> <span class="kw">NULL</span> <span class="kw">DEFAULT</span> <span class="st">''</span></span>
+<span id="cb2-11">);</span>
+<span id="cb2-12"><span class="co">-- schema v2 adds: audio_secs REAL  (measured MP3 length)</span></span></code></pre></div>
+<p>The “Took” column is <code>duration_secs</code>, the generation time. The “Length” column is <code>audio_secs</code>, the measured length of the MP3, which shows as a dash for jobs recorded before 1.6.0.</p>
+<p>The service is written so that history can never stop the app:</p>
+<ul>
+<li><strong>WAL mode</strong> lets readers and a writer coexist.</li>
+<li><strong>Migrations</strong> are numbered by <code>PRAGMA user_version</code> and additive only, so an older build can still read a newer table. If the version is up to date, start-up only reads, so it never needs the write lock.</li>
+<li>A database <strong>newer</strong> than the build (an old portable copy launched after an upgrade) opens <strong>read-only</strong>.</li>
+<li>A <strong>busy</strong> database (another process holds the lock) opens read-only for the session instead of being treated as corrupt, a v1.6.2 fix: before, Windows failed to start and macOS set the user’s history aside as damaged.</li>
+<li>A genuinely <strong>corrupt</strong> database is moved to <code>history.db.corrupt</code> and a new one started.</li>
+<li>Every call opens and <strong>closes</strong> its own connection. <code>with sqlite3.connect(...)</code> commits but never closes, which leaked a file handle on Windows per call.</li>
+</ul>
+<p>Only completed jobs are written. The schema and the <code>JobStatus</code> enum allow failed and cancelled rows, and the panel knows how to show them, but at v1.6.2 <code>OutputPanel</code> only calls <code>add_job</code> from <code>_on_job_completed</code>. Failed jobs live on as resumable staging folders instead.</p>
+</section>
+</section>

@@ -1,0 +1,225 @@
+<section id="the-video-pipeline-from-still-to-moving-picture" class="level1">
+<h1><span class="header-section-number">15</span> The Video Pipeline: From Still to Moving Picture</h1>
+<section id="the-idea-simply" class="level2">
+<h2><span class="header-section-number">15.1</span> The idea, simply</h2>
+<p>A photograph does not move. To make it feel alive, spoonstill makes a picture slightly larger than the screen and slides a window across it, or shrinks the window so the picture seems to come closer. Each output frame is what the window sees at that moment. Thirty slightly different windows per second look like smooth motion.</p>
+</section>
+<section id="the-real-mechanism" class="level2">
+<h2><span class="header-section-number">15.2</span> The real mechanism</h2>
+<p>spoonstill does not compute frames in Rust. It writes one FFmpeg <strong>filter chain</strong> (<code>spoonstill_core::motion::build_filter</code>) and FFmpeg executes it. Here is the exact string pinned by the test <code>the_emitted_chain_is_exactly_the_documented_recipe</code> for a 4000x3000 photo, 1920x1080 at 30 fps, ZoomIn 0.10 at Center, 112 frames (shown on several lines; the real string has none):</p>
+<pre class="text"><code>scale=5760:3240:force_original_aspect_ratio=increase:out_range=tv,
+crop=5760:3240,
+zoompan=z='1+0.100000*min(on/111,1)':x='(0.500000)*(iw-iw/zoom)':
+        y='(0.500000)*(ih-ih/zoom)':d=112:s=1920x1080:fps=30,
+setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709,
+setsar=1,format=yuv420p</code></pre>
+<figure>
+<img src="/books/spoonstill/media/file8.svg" alt="How the filter chain turns one still into a zoom. The numbers are the pinned test case." width="900" height="520" loading="lazy" decoding="async">
+<figcaption>How the filter chain turns one still into a zoom. The numbers are the pinned test case.</figcaption>
+</figure>
+<section id="filter-by-filter" class="level3">
+<h3><span class="header-section-number">15.2.1</span> Filter by filter</h3>
+<ol start="0" type="1">
+<li><strong>Square-pixel correction (only sometimes).</strong> If the source's SAR is not 1:1, a first <code>scale=W:H,</code> stretches it to square pixels. A 720x576 image with SAR 16:11 becomes <code>scale=1048:576,</code> first.</li>
+<li><strong><code>scale=5760:3240:force_original_aspect_ratio=increase:out_range=tv</code>.</strong> Scale to the <strong>prescale canvas</strong>, three times the output (5760 = 3 x 1920). <code>increase</code> means "scale until the picture covers the box in both directions" (cover-fit), so it may overhang one side: 4000x3000 becomes 5760x4320. <code>out_range=tv</code> converts the JPEG's full colour range to limited range right here, at the first scaler (D-037).</li>
+<li><strong><code>crop=5760:3240</code>.</strong> Cut the overhang. With no x and y given, FFmpeg centres the crop. Now the canvas is exactly the output's shape, three times as large, with picture everywhere: the window can never show a black edge (D-034).</li>
+<li><strong><code>zoompan=...:d=112:s=1920x1080:fps=30</code>.</strong> For one input image, emit <code>d=112</code> output frames of size 1920x1080. For each output frame number <code>on</code> (0 to 111), evaluate:
+<ul>
+<li><code>z</code> (zoom): <code>1+0.1*min(on/111,1)</code> rises from 1.0 to 1.1;</li>
+<li><code>x</code>, <code>y</code> (top-left corner of the window): a fraction times the legal travel <code>iw - iw/zoom</code>.</li>
+</ul></li>
+<li><strong><code>setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709</code>.</strong> Pin all four colour properties. Encoder options alone left two of them unset in a measurement (<code>ffmpeg-findings.md</code> §7b).</li>
+<li><strong><code>setsar=1</code></strong> then <strong><code>format=yuv420p</code>.</strong> <code>setsar=1</code> must be last before the format conversion; an earlier <code>setsar</code> does not survive and a 1999x1001 source came out with SAR 30007:30000 (§4, D-033).</li>
+</ol>
+</section>
+<section id="the-motion-maths" class="level3">
+<h3><span class="header-section-number">15.2.2</span> The motion maths</h3>
+<p>Progress is linear: <code>p = min(on/(N-1), 1)</code>, from 0 on the first frame to exactly 1 on the last. There is <strong>no easing curve</strong>. <code>N-1</code> is computed in Rust and written as a number, and a one-frame scene writes <code>0</code> instead, so FFmpeg never evaluates <code>on/0</code> (which gives NaN and would break the crop silently).</p>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>zoom <code>z</code></th>
+<th>x fraction</th>
+<th>y fraction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ZoomIn</td>
+<td><code>1 + a*p</code></td>
+<td>anchor x</td>
+<td>anchor y</td>
+</tr>
+<tr>
+<td>ZoomOut</td>
+<td><code>1 + a - a*p</code></td>
+<td>anchor x</td>
+<td>anchor y</td>
+</tr>
+<tr>
+<td>PanRight</td>
+<td><code>1 + a</code> (constant)</td>
+<td><code>p</code></td>
+<td>anchor y</td>
+</tr>
+<tr>
+<td>PanLeft</td>
+<td><code>1 + a</code></td>
+<td><code>1 - p</code></td>
+<td>anchor y</td>
+</tr>
+<tr>
+<td>PanDown</td>
+<td><code>1 + a</code></td>
+<td>anchor x</td>
+<td><code>p</code></td>
+</tr>
+<tr>
+<td>PanUp</td>
+<td><code>1 + a</code></td>
+<td>anchor x</td>
+<td><code>1 - p</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>Anchors are fractions in [0, 1]: Center is (0.5, 0.5), NorthWest is (0, 0), SouthEast is (1, 1). Because the window's top-left <code>x</code> is always a fraction between 0 and 1 of the legal travel <code>iw - iw/zoom</code>, the window can never leave the canvas. As the source comment puts it, "There is no clamp because there is nothing to clamp."</p>
+<p>Worked numbers for the pinned case:</p>
+<ul>
+<li>Frame 0: zoom 1.0, the window is the whole 5760x3240 canvas, scaled down 3x to 1920x1080.</li>
+<li>Frame 55: p = 0.4955, zoom 1.0496, the window is about 5488x3087, x about 136, y about 76.</li>
+<li>Frame 111: p = 1, zoom 1.1, the window is about 5236x2945, x about 262, y about 147.</li>
+</ul>
+<p>Even at the last frame, the window is scaled <strong>down</strong> by about 2.73x, so every output pixel still has more than one source pixel behind it. That is the purpose of the 3x prescale: at 2x, 280 of 300 frames were unique and the motion visibly stepped; at 3x, all 300 were unique; 4x and 6x improved nothing and were slower (<code>ffmpeg-findings.md</code> §1, D-032).</p>
+</section>
+<section id="why-zoompan-and-not-animated-scale-plus-crop" class="level3">
+<h3><span class="header-section-number">15.2.3</span> Why <code>zoompan</code> and not animated <code>scale</code> plus <code>crop</code></h3>
+<p>A common alternative scales and crops per frame with <code>eval=frame</code>. Measured on this project's machine (§3): 4 s at 1080p30 took <strong>8.32 s and 1 501 MB</strong> that way, against <strong>1.08 s and 757 MB</strong> with <code>zoompan</code>, because the alternative re-resamples the whole prescaled image every frame while <code>zoompan</code> resamples only the window. A reference repository had switched away from <code>zoompan</code> to escape a different bug: using <code>-loop 1</code> with <code>zoompan</code> and no frame limit produces frames forever (killed at 8 400 frames and 312 MB in a test). spoonstill avoids that by giving <code>zoompan</code> a single, non-looped still and <code>d=N</code>, so the frame count is structural (D-030, D-031).</p>
+</section>
+</section>
+<section id="the-complete-segment-command" class="level2">
+<h2><span class="header-section-number">15.3</span> The complete segment command</h2>
+<p>This command was captured from a real render log on the analysis machine (scene <code>001</code> of the fixture project, 960x540 output, paths shortened to <code>&lt;run&gt;</code>). It is the argument vector <code>scene.rs</code> builds, displayed with POSIX quoting:</p>
+<pre class="text"><code>/opt/homebrew/bin/ffmpeg -progress pipe:1 -hide_banner -nostats -loglevel warning -y
+  -i &lt;run&gt;/renderable/img/001.jpg
+  -i &lt;run&gt;/renderable/.spoonstill/cache/audio/file-6595651cd59129ac.wav
+  -filter_complex '[0:v]scale=2880:1620:force_original_aspect_ratio=increase:out_range=tv,crop=2880:1620,zoompan=z='\''1+0.100000*min(on/111,1)'\'':x='\''(0.500000)*(iw-iw/zoom)'\'':y='\''(0.500000)*(ih-ih/zoom)'\'':d=112:s=960x540:fps=30,setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709,setsar=1,format=yuv420p[v];[1:a]aresample=48000,apad,atrim=end_sample=179200,asetpts=N/SR/TB[a]'
+  -map '[v]' -map '[a]'
+  -frames:v 112
+  -c:v libx264 -preset medium -crf 18
+  -profile:v high -level:v 40
+  -c:a aac -b:a 192k -ar 48000 -ac 2
+  -video_track_timescale 90000
+  &lt;run&gt;/renderable/.spoonstill/segments/.seg-b1e892e91177a56c.mp4.partial-16446-11.mp4</code></pre>
+<p>The <code>'\''</code> sequences are only how a POSIX shell would spell an embedded single quote; the real argument contains plain <code>'</code> characters, which are FFmpeg's own expression quoting. No shell ever sees this line.</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Why it is there</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/opt/homebrew/bin/ffmpeg</code></td>
+<td>an absolute path found by <code>tools::locate</code>, never a bare name</td>
+</tr>
+<tr>
+<td><code>-progress pipe:1</code></td>
+<td>machine-readable progress on stdout, parsed by a reader thread</td>
+</tr>
+<tr>
+<td><code>-hide_banner -nostats -loglevel warning</code></td>
+<td>keep stderr short so the retained tail is the useful part</td>
+</tr>
+<tr>
+<td><code>-y</code></td>
+<td>overwrite the temporary without asking (FFmpeg would otherwise wait for an answer)</td>
+</tr>
+<tr>
+<td><code>-i image</code></td>
+<td>input 0: the still. <strong>No <code>-loop 1</code>, no <code>-framerate</code></strong>: <code>zoompan d=N</code> creates the frames</td>
+</tr>
+<tr>
+<td><code>-i audio</code></td>
+<td>input 1: the normalized 48 kHz stereo WAV</td>
+</tr>
+<tr>
+<td><code>-filter_complex</code></td>
+<td>the whole graph as one argument</td>
+</tr>
+<tr>
+<td><code>[1:a]aresample=48000,apad,atrim=end_sample=179200,asetpts=N/SR/TB[a]</code></td>
+<td>resample defensively, pad with endless silence, cut at exactly 112 frames' worth of samples, restart timestamps at zero</td>
+</tr>
+<tr>
+<td><code>-map [v] -map [a]</code></td>
+<td>output exactly those two streams, video first (order is part of the profile)</td>
+</tr>
+<tr>
+<td><code>-frames:v 112</code></td>
+<td>the frame count enforced a second time</td>
+</tr>
+<tr>
+<td><code>-c:v libx264 -preset medium -crf 18</code></td>
+<td>the default encoder and quality (D-036)</td>
+</tr>
+<tr>
+<td><code>-profile:v high -level:v 40</code></td>
+<td>pin the H.264 profile and the derived level so the encoder does not choose</td>
+</tr>
+<tr>
+<td><code>-c:a aac -b:a 192k -ar 48000 -ac 2</code></td>
+<td>AAC-LC, 192 kb/s, 48 kHz, stereo</td>
+</tr>
+<tr>
+<td><code>-video_track_timescale 90000</code></td>
+<td>one time base for every segment so they join cleanly</td>
+</tr>
+<tr>
+<td><code>.seg-&lt;key&gt;.mp4.partial-&lt;pid&gt;-&lt;n&gt;.mp4</code></td>
+<td>a hidden temporary beside the final name; the <code>.mp4</code> ending lets FFmpeg pick the MP4 muxer</td>
+</tr>
+</tbody>
+</table></div>
+<p>Things a reader might expect but that are <strong>not</strong> there: no <code>-movflags</code>, no <code>-x264-params</code>, no <code>-color_range</code> or <code>-colorspace</code> output flags (colour is pinned in the filter), no <code>-r</code> (the rate comes from <code>zoompan fps=</code>).</p>
+<p>With captions on, each cue adds one raw-image input and one <code>overlay</code> (Chapter 18). With a hardware encoder, <code>-c:v</code> and the quality flags change (Chapter 16).</p>
+</section>
+<section id="validate-then-rename" class="level2">
+<h2><span class="header-section-number">15.4</span> Validate, then rename</h2>
+<p>After FFmpeg exits 0, <code>scene.rs</code> does not trust it. It runs a <strong>counting</strong> probe (<code>ffprobe -count_frames</code>, which decodes every frame), checks the full <code>SegmentProfile</code>, and requires the decoded frame count to equal the planned count exactly. Only then does it rename the temporary to <code>seg-&lt;key&gt;.mp4</code>. If anything fails, the temporary is deleted and the scene fails with every mismatching field listed. A cancelled render never leaves a valid-looking file (tested by <code>cancellation_leaves_no_valid_looking_stub</code>).</p>
+</section>
+<section id="joining-the-film" class="level2">
+<h2><span class="header-section-number">15.5</span> Joining the film</h2>
+<p>When all segments exist, <code>concat.rs</code> writes a list file beside them, one line per segment:</p>
+<pre class="text"><code>file 'seg-21ecedf4779e604e.mp4'
+file 'seg-84af12ca28a5ed0a.mp4'
+...</code></pre>
+<p>Instead of escaping names, it <strong>refuses</strong> any name it did not generate: only ASCII letters, digits, <code>-</code>, <code>_</code> and <code>.</code>, and not starting with a dot. Then:</p>
+<pre class="text"><code>ffmpeg -hide_banner -nostats -loglevel warning -y
+  -f concat -safe 0 -i &lt;segments&gt;/.concat.txt.partial-16446-12.txt
+  -c copy &lt;run&gt;/.film.mp4.partial-16446-13.mp4</code></pre>
+<p><code>-f concat</code> uses the concat demuxer; <code>-safe 0</code> allows the relative names (the list was written by spoonstill, so the "safe mode" protection against untrusted playlists is not needed); <code>-c copy</code> copies compressed packets without re-encoding, so joining 500 segments costs only disk I/O.</p>
+<p>Then the film is checked with a header probe: the same profile, a declared frame count equal to the sum of the segments, a video duration within one frame, and a container duration within one frame plus one AAC frame (the 21.3 ms the muxer adds once per film, D-078). If the film is <strong>short</strong>, <code>stopped_at</code> finds the first segment where the running frame total passes the actual count, <strong>deletes that cached segment</strong>, and reports which scene it was (D-178):</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb5-1"><span class="co">// crates/spoonstill-media/src/concat.rs:119-128</span></span>
+<span id="cb5-2"><span class="kw">pub</span> <span class="kw">fn</span> stopped_at(segment_frames<span class="op">:</span> <span class="op">&amp;</span>[<span class="dt">u64</span>]<span class="op">,</span> actual<span class="op">:</span> <span class="dt">u64</span>) <span class="op">-&gt;</span> <span class="dt">Option</span><span class="op">&lt;</span><span class="dt">usize</span><span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb5-3">    <span class="kw">let</span> <span class="kw">mut</span> running <span class="op">=</span> <span class="dv">0u64</span><span class="op">;</span></span>
+<span id="cb5-4">    <span class="cf">for</span> (index<span class="op">,</span> frames) <span class="kw">in</span> segment_frames<span class="op">.</span>iter()<span class="op">.</span>enumerate() <span class="op">{</span></span>
+<span id="cb5-5">        running <span class="op">=</span> running<span class="op">.</span>saturating_add(<span class="op">*</span>frames)<span class="op">;</span></span>
+<span id="cb5-6">        <span class="cf">if</span> running <span class="op">&gt;</span> actual <span class="op">{</span></span>
+<span id="cb5-7">            <span class="cf">return</span> <span class="cn">Some</span>(index)<span class="op">;</span></span>
+<span id="cb5-8">        <span class="op">}</span></span>
+<span id="cb5-9">    <span class="op">}</span></span>
+<span id="cb5-10">    <span class="cn">None</span></span>
+<span id="cb5-11"><span class="op">}</span></span></code></pre></div>
+<p>This was found in a real log: a segment damaged on a network volume still had a valid header, the cache accepted it, and FFmpeg stopped the join there <strong>with exit 0</strong>. Finally, cancellation is checked once more and the film is renamed into place.</p>
+<div class="callout exercise">
+<p><strong>Exercise 15.1 (Intermediate).</strong> For a 9:16 film at 1080p (1080x1920), what is the prescale canvas? Which filter decides that, and what does the <code>crop</code> keep from a 4000x3000 landscape photo?</p>
+<p><strong>Exercise 15.2 (Advanced).</strong> Why is <code>apad</code> needed before <code>atrim</code> in the audio chain? What would happen to a 112-frame scene whose WAV is 3.717 s long without it?</p>
+</div>
+</section>
+</section>

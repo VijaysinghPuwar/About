@@ -1,0 +1,41 @@
+<section id="what-happens-when-i-press-render" class="level1">
+<h1><span class="header-section-number">19</span> What Happens When I Press Render?</h1>
+<p>This chapter answers one question in order, without skipping layers: <em>what exactly happens inside my computer after I press Render?</em> It follows the desktop app, and notes where the CLI differs. The example is a three-scene project: <code>001.jpg</code> with <code>001.txt</code>, <code>002.jpg</code> with <code>002.m4a</code>, and <code>003.jpg</code> alone.</p>
+<p><strong>1. You click Render.</strong> The button was clickable only because <code>renderBlocker()</code> in <code>app.js</code> found nothing wrong: a project is open, FFmpeg was found, the project has no errors, the output path is valid, and a voice has been chosen. (In the CLI, you type <code>still render ~/film</code> and clap parses it.)</p>
+<p><strong>2. The page asks two last questions.</strong> <code>render()</code> asks Rust which voice will actually be used (<code>voice_choice</code>) and where the film will go (<code>resolve_output</code>). Path joining happens in Rust, never in JavaScript.</p>
+<p><strong>3. The page prepares to listen.</strong> It draws one row per scene <strong>in film order</strong>, creates a progress <code>Channel</code>, and calls <code>invoke("render_project", { request, onProgress })</code>. The request is JSON: the project path, voice, output folder and name, subtitle choices, aspect and size.</p>
+<p><strong>4. Rust receives the request.</strong> Tauri deserializes the JSON into a <code>RenderRequest</code> struct. The command parses each override and refuses a bad one immediately. It claims the window's single render slot (a second Render is refused) and creates a fresh <code>Cancel</code> flag.</p>
+<p><strong>5. Work moves off the UI thread.</strong> <code>spawn_blocking</code> starts a worker thread that calls <code>spoonstill_app::render_project</code>, the same function the CLI calls. From here on, the GUI and the CLI share every line of code.</p>
+<p><strong>6. The project is read.</strong> <code>import::load</code> reads <code>project.yaml</code> (here, the starter file with <code>motion_seed: v2</code>), lists the folder, and groups files by stem: scene 001 is spoken, 002 is a recording, 003 is silent. Every path is checked to stay inside the project.</p>
+<p><strong>7. Every file is inspected.</strong> In parallel, <code>ffprobe</code> opens each photo (width, height, pixel shape) and the recording (has audio, has a duration). Problems are collected, not thrown one at a time.</p>
+<p><strong>8. Settings are applied in memory.</strong> Your chosen voice replaces the scene's voice for this run; the chosen size builds a new <code>OutputSpec</code> (say 1920x1080 at 30 fps). <code>project.yaml</code> is never written.</p>
+<p><strong>9. A last check.</strong> Any error means stop now, with every problem listed. Warnings (for example "your photos are smaller than the frame") are sent to the page <strong>before</strong> work starts.</p>
+<p><strong>10. The machine is sized up.</strong> <code>capacity::plan</code> divides 70% of your RAM by about 0.8 GB per 1080p worker and takes the smaller of that and half your cores, at most 4.</p>
+<p><strong>11. The project is locked.</strong> <code>.spoonstill/render.lock</code> is locked by the operating system so a second render of this project (from another window or terminal) is refused.</p>
+<p><strong>12. Tools are found.</strong> Absolute paths for <code>ffmpeg</code> and <code>ffprobe</code> are fixed for the whole run, and the FFmpeg version is logged.</p>
+<p><strong>13. The voice service is checked once.</strong> Scene 001's speech is not cached yet, so Edge must be available. If <code>edge-tts</code> were missing, the render would stop here, before any work, naming the tool and the Install fix.</p>
+<p><strong>14. Audio starts.</strong> Up to <code>audio_jobs</code> workers resolve narrations:</p>
+<ul>
+<li>scene 001: the text's cache key is computed; no cached speech, so the pace gate lets the request through; <code>edge-tts</code> writes an MP3 into the cache; FFmpeg measures its loudness and silence, then writes a trimmed, -16 LUFS, 48 kHz stereo WAV; the WAV is measured: say 2.836 s;</li>
+<li>scene 002: FFmpeg measures and normalizes the recording (not trimmed);</li>
+<li>scene 003: FFmpeg generates exactly 4.0 s of silence (192 000 samples).</li>
+</ul>
+<p>Each finished narration sends an <code>audio</code> event; the page updates that row.</p>
+<p><strong>15. Video starts as soon as each scene's audio is ready.</strong> Segment workers do not wait for all narrations. For scene 001:</p>
+<ul>
+<li>frames = ceil(2.836 x 30) = 86; samples = 86 x 48000 / 30 = 137 600;</li>
+<li>the photo's bytes are hashed (once, even if several scenes use it);</li>
+<li>the motion is chosen from the hash of (folder name, occurrence, photo hash), for example <code>pan-up@east:0.1000</code>;</li>
+<li>the segment key is computed from all of the above plus size, encoder and captions;</li>
+<li>if <code>seg-&lt;key&gt;.mp4</code> already exists and passes the profile and frame-count check, it is reused instantly.</li>
+</ul>
+<p><strong>16. FFmpeg makes the segment.</strong> Otherwise a child process starts with an argument vector like the one in Chapter 15. FFmpeg decodes the JPEG, scales it to 5760x3240 (cover-fit), crops, and <code>zoompan</code> emits 86 frames of 1920x1080, each a slightly different window; it pins the colour, converts to yuv420p, encodes H.264 with libx264, pads and trims the WAV to 137 600 samples, encodes AAC, and writes an MP4 to a hidden temporary file. Progress lines flow back through a pipe.</p>
+<p><strong>17. The segment is checked.</strong> <code>ffprobe -count_frames</code> decodes it: exactly 86 frames, High profile, level 4.0, yuv420p, tv, bt709, SAR 1:1, 1/90000, AAC 48 kHz stereo. Only then is it renamed to <code>seg-&lt;key&gt;.mp4</code>. A <code>segment</code> event goes to the page.</p>
+<p><strong>18. All segments are joined.</strong> <code>concat.rs</code> writes a list of the three segment names and runs <code>ffmpeg -f concat -safe 0 -i list -c copy</code> into a hidden temporary beside your output. No re-encoding: the compressed bytes are copied.</p>
+<p><strong>19. The film is checked.</strong> A header probe confirms the profile, a frame count equal to the sum of segments, and durations within one frame (plus the one AAC frame the container adds). If the film stopped early, the guilty segment is named and deleted so the next render rebuilds only it.</p>
+<p><strong>20. Last chance to stop.</strong> If you pressed Stop during the join, the film is <strong>not</strong> published.</p>
+<p><strong>21. The film appears.</strong> The temporary is renamed to <code>film.mp4</code> in one atomic step: anything watching the folder sees either the old file or the new one, never a half-written one.</p>
+<p><strong>22. Housekeeping.</strong> Old cache generations beyond two spares are swept; a <code>film complete</code> row is written to the project log and <code>runs.csv</code>; the lock is released when the function returns.</p>
+<p><strong>23. The page is told.</strong> The worker thread returns a <code>FilmView</code>; the render slot is freed; the promise in <code>app.js</code> resolves; the page shows "Done", the duration, and how many scenes were reused, with <strong>Play</strong> and <strong>Reveal</strong> buttons. (The CLI prints the path and statistics and exits 0.)</p>
+<p>If you press <strong>Stop</strong> at any point: the shared flag is set; no new scene is started; each running FFmpeg receives <code>q</code>, then is killed after 2 s if it has not stopped; finished segments stay in the cache; nothing is published; the page shows "Stopped. The film file was not written." The next Render picks up where this one left off.</p>
+</section>

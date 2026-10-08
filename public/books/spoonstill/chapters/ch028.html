@@ -1,0 +1,116 @@
+<section id="performance" class="level1">
+<h1><span class="header-section-number">23</span> Performance</h1>
+<section id="where-the-time-goes" class="level2">
+<h2><span class="header-section-number">23.1</span> Where the time goes</h2>
+<p>The measured answer, repeated on three platforms: <strong>the FFmpeg filter graph</strong> (scaling a large prescale canvas and resampling a window for every frame) dominates. Encoding with x264 is a minority share at normal CPU speeds. spoonstill's own orchestration is cheap.</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Measurement</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>zoompan</code> 1.08 s / 757 MB vs <code>scale</code>+<code>crop</code> 8.32 s / 1 501 MB (4 s of 1080p)</td>
+<td><code>ffmpeg-findings.md</code> §3</td>
+</tr>
+<tr>
+<td>Prescale 3x: 1.96 s; 6x: 4.73 s; memory nearly flat (744 to 805 MB)</td>
+<td>§1</td>
+</tr>
+<tr>
+<td>4K: filter alone 3.59 s; plus x264 medium 4.19 s; encoder about 14%</td>
+<td>§12c (macOS)</td>
+</tr>
+<tr>
+<td>Windows 4K: libx264 5.86 s; NVENC 4.78 s (1.23x)</td>
+<td>§13c</td>
+</tr>
+<tr>
+<td>Fully cached 32-scene re-render on Windows: 1.16 s (36 ms per scene)</td>
+<td>§13d</td>
+</tr>
+<tr>
+<td><code>still validate</code>, 200 scenes: 11.82 s before D-149, 1.31 s after</td>
+<td><code>findings.md</code>, D-149</td>
+</tr>
+</tbody>
+</table></div>
+<p>All of these are the project's own measurements on named machines (macOS arm64 with FFmpeg 8.0.1 for §1 to §10; Windows 11 with an RTX 3060 for §13). This book did not re-measure them.</p>
+</section>
+<section id="parallelism" class="level2">
+<h2><span class="header-section-number">23.2</span> Parallelism</h2>
+<p>The default worker count is half the cores, at most 4. On macOS (12 scenes at 1080p) the speed-up was 1.55x at 2 workers, 1.83x at 3, 1.85x at 4, 2.02x at 6, and 1.92x at 8: it flattens because x264 already uses about 2.7 cores per worker (§10). On a 16-core Windows machine, 4 workers took 19.9 s and 12 took 19.8 s (§13b). More workers mostly buy memory use.</p>
+</section>
+<section id="memory" class="level2">
+<h2><span class="header-section-number">23.3</span> Memory</h2>
+<p>Each worker's peak memory follows the prescale canvas. Measured per FFmpeg child (§12): 369 MB at 720p, 768 MB at 1080p, 1 219 MB at 1440p, 2 630 MB at 4K. The capacity model (<code>192 MiB + 36 bytes per prescale pixel</code>) sits 5% to 29% above every measurement on purpose. With a budget of 70% of RAM, an 8 GB machine gets 2 workers at 4K instead of the 4 that froze a real machine (D-144).</p>
+</section>
+<section id="caching-is-the-biggest-lever" class="level2">
+<h2><span class="header-section-number">23.4</span> Caching is the biggest lever</h2>
+<p>A second render reuses everything: in the analysis run, the 6-scene fixture's first render took 1.4 s and the second re-encoded nothing. At the design point, the project measured 500 scenes at 1080p: cold renders of 161, 151 and 154 s; 499 of 500 segments reused after editing one narration; and a resume after a kill reusing exactly the 167 finished scenes (D-154).</p>
+<p>Single-flight caching avoids duplicate work: eight workers needing one narration do it once (D-108); one photo used by many scenes is hashed once (D-173); one silence file is measured once per run instead of 500 times (D-184).</p>
+</section>
+<section id="overlapping-network-and-cpu" class="level2">
+<h2><span class="header-section-number">23.5</span> Overlapping network and CPU</h2>
+<p>Before D-146, all narrations were resolved first and then all segments rendered. With speech coming from the network, the CPU sat idle during fetching and vice versa. The pipeline overlaps them; with a stand-in voice service that waits before answering, 12 scenes went from about 22 to 25 s down to about 14 to 16 s, three runs out of three, with no extra memory.</p>
+</section>
+<section id="scaling-with-scene-count" class="level2">
+<h2><span class="header-section-number">23.6</span> Scaling with scene count</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Cost as scenes grow</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>validation</td>
+<td>linear in scenes, parallel probes (two per scene)</td>
+</tr>
+<tr>
+<td>audio</td>
+<td>linear in <strong>distinct</strong> narrations; zero for cached</td>
+</tr>
+<tr>
+<td>segments</td>
+<td>linear in <strong>distinct</strong> segment keys; zero for cached</td>
+</tr>
+<tr>
+<td>join</td>
+<td>linear in bytes (stream copy), one process</td>
+</tr>
+<tr>
+<td>film check</td>
+<td>one header probe, independent of scene count</td>
+</tr>
+<tr>
+<td>chapter cutting</td>
+<td>linear in words (a test asserts a 4x input takes far less than 16x the time)</td>
+</tr>
+</tbody>
+</table></div>
+<p>At 431 real scenes the author's cold render took 8 min 50 s with no service refusals; a 40-fold stress test (17 240 scenes, a 20 h 45 min film) completed (D-195, Not independently verified).</p>
+</section>
+<section id="things-that-hurt-performance" class="level2">
+<h2><span class="header-section-number">23.7</span> Things that hurt performance</h2>
+<ul>
+<li><strong>Undersized photos.</strong> Rendering 1376x768 stills into a 4K frame makes FFmpeg work on an 11520x6480 canvas for no extra detail. spoonstill warns and suggests a smaller <code>--short-edge</code> (D-145). This is often the biggest real-world lever.</li>
+<li><strong>Network volumes.</strong> Joining onto a network share took 38.9 s against 6.4 s locally in one log, and caused probe stalls and damaged segments (<code>findings.md</code> F-18, D-178, D-179).</li>
+<li><strong>The TTS service throttle.</strong> The pace gate limits starts to 50 per minute, so a cold project of 500 spoken lines needs at least ten minutes of speech requests.</li>
+</ul>
+<div class="callout exercise">
+<p><strong>Exercise 23.1 (Intermediate).</strong> Using <code>segment_memory_bytes</code>, estimate the per-worker memory at 1440p and how many workers a 16 GB machine would get at 1440p with 8 cores.</p>
+</div>
+</section>
+</section>

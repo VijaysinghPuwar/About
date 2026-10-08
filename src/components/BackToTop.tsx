@@ -1,15 +1,20 @@
 import { useState, useEffect } from 'react';
 import { ArrowUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLocation } from 'react-router-dom';
+import { isReaderPath } from '@/lib/routes';
 
 export function BackToTop() {
   const [show, setShow] = useState(false);
+  const { pathname } = useLocation();
 
   useEffect(() => {
     const onScroll = () => setShow(window.scrollY > 600);
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  if (isReaderPath(pathname)) return null;
 
   return (
     <AnimatePresence>
@@ -18,7 +23,11 @@ export function BackToTop() {
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.8 }}
-          onClick={() => document.getElementById('home')?.scrollIntoView({ behavior: 'smooth' })}
+          onClick={() => {
+            const home = document.getElementById('home');
+            if (home) home.scrollIntoView({ behavior: 'smooth' });
+            else window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
           // 44px, and lifted clear of the iOS home indicator: at `bottom-6`
           // on a notched phone the button sat in the gesture strip, where the
           // swipe-up wins and the tap does not register.

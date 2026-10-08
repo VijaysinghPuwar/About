@@ -1,0 +1,126 @@
+<section id="repository-structure" class="level1">
+<h1><span class="header-section-number">3</span> Repository Structure</h1>
+<p>The tree below lists every tracked file except duplicated icon copies, generated from <code>git ls-files</code> at the analysed commit. Line counts are from <code>wc -l</code>.</p>
+<pre class="text"><code>setuptts/
+|-- main.py                     entry point for PyInstaller and `python main.py`
+|-- pyproject.toml              package metadata, version 1.6.2, dependency ranges
+|-- requirements.txt            exact pins used for release builds
+|-- setuptts.spec               PyInstaller: macOS .app, Windows onedir folder
+|-- setuptts_portable.spec      PyInstaller: Windows single-file portable EXE
+|-- build_macos.sh              local macOS build + zip + verification
+|-- build_windows.ps1 / .bat    local Windows portable build
+|-- BUILD.md, README.md         developer and user documentation
+|-- installers/windows.iss      Inno Setup installer script
+|-- release_notes/v1.6.x.md     one file per release; CI uses it as the release body
+|-- scripts/
+|   |-- generate_icons.py       draws the icon set with Qt
+|   |-- stress_longform.py      live multi-hour synthesis stress test
+|   `-- entitlements.plist      macOS entitlements (not referenced by the spec)
+|-- docs/screenshot.png
+|-- .github/workflows/build.yml release pipeline
+|-- app/
+|   |-- __init__.py             APP_NAME, APP_VERSION, APP_ORG
+|   |-- main.py                 QApplication start-up, TLS env, single instance
+|   |-- selftest.py             `--selftest` mode for packaged builds
+|   |-- config/settings.py      JSON settings with validation and atomic save
+|   |-- models/job.py, voice.py dataclasses for history rows and voices
+|   |-- services/
+|   |   |-- tts_service.py      the only edge-tts gateway: TLS, proxy, voice cache
+|   |   |-- tts_quality.py      text cleanup, script/language detection, voice match
+|   |   `-- history_service.py  SQLite history with migrations and recovery
+|   |-- workers/
+|   |   |-- tts_worker.py       the generation pipeline (3,007 lines)
+|   |   |-- chunk_store.py      staging, manifest, coverage, assembly (1,154 lines)
+|   |   |-- job_queue.py        concurrency and job lifecycle
+|   |   |-- voice_loader.py     voice catalogue with retry and offline cache
+|   |   `-- preview_worker.py   short sample synthesis and playback
+|   |-- ui/
+|   |   |-- main_window.py      window, menus, responsive splits, shutdown
+|   |   |-- panels/input_panel.py   editor, file import and encoding detection
+|   |   |-- panels/output_panel.py  voice, speed, export, active jobs (2,209 lines)
+|   |   |-- panels/history_panel.py recent conversions table
+|   |   |-- dialogs/settings_dialog.py, about_dialog.py
+|   |   `-- style.py            loads app.qss and resolves asset URLs
+|   |-- utils/
+|   |   |-- paths.py            platform folders, bundled-resource lookup
+|   |   |-- app_logging.py      rotating log, crash log, exception hooks
+|   |   |-- diagnostics.py      environment report for logs and bug reports
+|   |   |-- errors.py           raw exception -&gt; plain-language message
+|   |   |-- mp3_duration.py     MPEG frame parser for duration checks
+|   |   |-- output_paths.py     file-name and folder validation, "name (2).mp3"
+|   |   `-- single_instance.py  one running copy per user
+|   `-- assets/
+|       |-- styles/app.qss      dark theme
+|       `-- icons/              app.icns, app.ico, app.png, chevron SVGs
+`-- tests/                      12 test modules, 383 tests</code></pre>
+<section id="how-the-directories-relate" class="level2">
+<h2><span class="header-section-number">3.1</span> How the directories relate</h2>
+<p>The dependency direction is strict and worth remembering:</p>
+<pre class="text"><code>ui  ──&gt;  workers  ──&gt;  services  ──&gt;  edge-tts / aiohttp
+ │          │             │
+ └──────────┴─────&gt;  utils, models, config  (no Qt widgets, no network)</code></pre>
+<ul>
+<li><strong><code>app/ui</code></strong> knows about workers and services but never talks to the network or writes staging files itself. <code>OutputPanel</code> is the controller: it reads the form, validates it and submits jobs.</li>
+<li><strong><code>app/workers</code></strong> contains everything that runs on a background thread, plus <code>JobQueue</code>, which lives on the UI thread and owns the workers. <code>tts_worker.py</code> and <code>chunk_store.py</code> together are the reliability core, about 4,100 lines.</li>
+<li><strong><code>app/services</code></strong> wraps external systems: the speech service and the SQLite database, plus the pure-Python text analysis in <code>tts_quality.py</code>.</li>
+<li><strong><code>app/utils</code>, <code>app/models</code>, <code>app/config</code></strong> are small, mostly pure helpers. Several were written specifically to move a failure from “hours into a job” to “before the job starts”: <code>output_paths.py</code> is the clearest example.</li>
+</ul>
+</section>
+<section id="size-of-the-codebase" class="level2">
+<h2><span class="header-section-number">3.2</span> Size of the codebase</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 30%">
+<col style="width: 40%">
+<col style="width: 30%">
+</colgroup>
+<thead>
+<tr>
+<th>Area</th>
+<th>Lines (with comments)</th>
+<th>Share</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>app/workers</code></td>
+<td>4,957</td>
+<td>pipeline, staging, queue, voice loading, preview</td>
+</tr>
+<tr>
+<td><code>app/ui</code></td>
+<td>4,221</td>
+<td>window, panels, dialogs, style loader</td>
+</tr>
+<tr>
+<td><code>app/services</code></td>
+<td>1,495</td>
+<td>speech client, text analysis, history</td>
+</tr>
+<tr>
+<td><code>app/utils</code>, <code>models</code>, <code>config</code></td>
+<td>1,307</td>
+<td>paths, logging, errors, MP3 parsing, settings</td>
+</tr>
+<tr>
+<td><code>app/main.py</code>, <code>selftest.py</code>, <code>__init__.py</code></td>
+<td>293</td>
+<td>start-up and packaged-build self-test</td>
+</tr>
+<tr>
+<td><code>tests</code></td>
+<td>4,450</td>
+<td>383 tests in 12 modules plus <code>conftest.py</code></td>
+</tr>
+<tr>
+<td><code>app/assets/styles/app.qss</code></td>
+<td>1,078</td>
+<td>Qt stylesheet</td>
+</tr>
+</tbody>
+</table></div>
+<div class="callout drift">
+<p><strong>Docs and code disagree.</strong> The README’s “Codebase at a glance” table was counted at v1.6.1 and says 331 tests; its badge says 382. The suite at v1.6.2 collects and passes <strong>383</strong> tests. The <code>ChunkStore</code> class docstring shows chunk files named <code>chunk_0000.mp3</code>, but <code>_chunk_filename</code> (<code>chunk_store.py:458-463</code>) uses six digits: <code>chunk_000000.mp3</code>.</p>
+</div>
+</section>
+</section>

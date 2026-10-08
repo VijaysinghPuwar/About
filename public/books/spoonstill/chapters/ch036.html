@@ -1,0 +1,40 @@
+<section id="how-to-debug-spoonstill" class="level1">
+<h1><span class="header-section-number">30</span> How to Debug spoonstill</h1>
+<section id="the-three-places-evidence-lives" class="level2">
+<h2><span class="header-section-number">30.1</span> The three places evidence lives</h2>
+<ol type="1">
+<li><strong>The terminal or window message.</strong> Every error is written as a sentence that names the scene, file or program. Read it fully; the second line often holds the tool's own output.</li>
+<li><strong>The project log</strong>, <code>&lt;project&gt;/.spoonstill/logs/spoonstill-YYYYMMDD.jsonl</code>: every event of every run of this project, including every FFmpeg command line (<code>"message":"running","command":"..."</code>), the filter chosen for each scene (<code>"scene resolved"</code>), and full stderr on failure.</li>
+<li><strong>The machine log</strong>, <code>runs.csv</code>, found with <code>still diagnostics where</code>: one row per event for every project. A command with an <code>invoked</code> row and no <code>finished</code> or <code>failed</code> row <strong>died</strong> (crash, kill, frozen machine), because spoonstill always writes one of those when it returns.</li>
+</ol>
+<p><code>still diagnostics export --project DIR --out bundle.txt</code> puts the logs and an environment description in one file, with credentials redacted.</p>
+</section>
+<section id="useful-commands" class="level2">
+<h2><span class="header-section-number">30.2</span> Useful commands</h2>
+<div class="sourceCode" id="cb1"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><span class="ex">still</span> doctor                         <span class="co"># which ffmpeg, ffprobe, edge-tts; hardware encoders</span></span>
+<span id="cb1-2"><span class="ex">still</span> validate DIR                   <span class="co"># every problem at once; exit 1 on errors</span></span>
+<span id="cb1-3"><span class="ex">still</span> validate DIR <span class="at">--list</span>            <span class="co"># also list every scene</span></span>
+<span id="cb1-4"><span class="ex">still</span> validate DIR <span class="at">--no-probe</span>        <span class="co"># skip ffprobe (is FFmpeg the problem?)</span></span>
+<span id="cb1-5"><span class="ex">still</span> render DIR <span class="at">--jobs</span> 1            <span class="co"># one scene at a time: simpler logs</span></span>
+<span id="cb1-6"><span class="ex">still</span> render-scene <span class="at">--image</span> X <span class="at">--audio</span> Y <span class="at">--out</span> /tmp/s.mp4   <span class="co"># one segment, no project</span></span>
+<span id="cb1-7"><span class="ex">still</span> diagnostics where              <span class="co"># paths of the logs</span></span>
+<span id="cb1-8"><span class="ex">ffprobe</span> <span class="at">-v</span> error <span class="at">-show_streams</span> <span class="at">-of</span> compact FILE   <span class="co"># what a file really is</span></span></code></pre></div>
+<p>To replay a failing FFmpeg call, copy its <code>command</code> field from the project log and paste it into a terminal: that is exactly what the display quoting exists for.</p>
+</section>
+<section id="by-symptom" class="level2">
+<h2><span class="header-section-number">30.3</span> By symptom</h2>
+<p><strong>Render failure.</strong> Run <code>still validate</code> first; a render refuses projects with errors, and validation lists them all. If validation is clean, read the failing scene's lines in the project log: the <code>running</code> command and the <code>exited</code> stderr.</p>
+<p><strong>FFmpeg failure (<code>ffmpeg exited N</code>).</strong> The message includes the tail of stderr indented with <code>|</code>. Paste the logged command to reproduce. Check <code>still doctor</code> for which binary is used; <code>SPOONSTILL_FFMPEG</code> can point to a different build.</p>
+<p><strong>Bad image.</strong> <code>NotUsableMedia</code> names the file and quotes ffprobe. A truncated JPEG probes as 0x0. Open the file in an image viewer; re-export it as JPEG if needed. Very small photos are not errors but trigger the undersized warning with a suggested <code>--short-edge</code>.</p>
+<p><strong>Bad narration.</strong> A recording without an audio stream or duration is refused at validation. A cached WAV that was damaged is detected by its header and rebuilt (D-190). If a film is shorter than expected, look for a <code>JoinStopped</code> error naming the scene.</p>
+<p><strong>TTS failure.</strong> <code>still voices</code> tests the service and lists voices. DNS errors mean no route to <code>speech.platform.bing.com</code> (check network, VPN, firewall). "Stopped accepting connections" means the service is throttling this machine; wait, then render again (cached lines are not re-spoken). "Cannot read this line" with a language name means the voice cannot read the script: choose the suggested voice. <code>make tts-live</code> checks the error classifier against the installed <code>edge-tts</code>.</p>
+<p><strong>Project validation failure.</strong> Typical causes: two images for one number (<code>AmbiguousScene</code>), a typo in <code>project.yaml</code> (unknown key), <code>resolution</code> and <code>short_edge</code> both set, a manifest path outside the project, leftover <code>.arranging-</code> files (run any arrange command, which recovers first).</p>
+<p><strong>Windows-only issue.</strong> Check <code>still doctor</code>'s paths (winget's <code>Gyan.FFmpeg</code> folder, Python's <code>Scripts</code>); remember that Windows forbids some names macOS allows; if test binaries fail with "An Application Control policy has blocked this file", that is Windows Smart App Control, not spoonstill (CLAUDE.md records the workaround).</p>
+<p><strong>macOS-only issue.</strong> An app opened from Finder does not see your shell's <code>PATH</code>; spoonstill searches Homebrew folders itself, so check <code>still doctor</code> from the same app. A downloaded app may be quarantined; the installer clears that, a manual download may need it cleared.</p>
+<p><strong>Performance issue.</strong> Look at the <code>Planned</code> line: how many workers and why (memory or cores). Check for the undersized-stills warning (rendering small photos at 4K is slow for nothing). Check whether the project or output is on a network share. Compare <code>reused_segments</code> and <code>spoken</code> in the <code>film complete</code> row to see whether the cache worked.</p>
+<p><strong>CI failure.</strong> Read which job failed: <code>audit</code> can fail with no code change (a new advisory); <code>windows</code> catches Windows-only warnings (run the cross-compile check locally); <code>gates</code> runs without <code>edge-tts</code>; <code>installer-*</code> depend on the latest published release. A workflow that shows no jobs at all has a syntax error: run <code>make workflows</code>.</p>
+<div class="callout exercise">
+<p><strong>Exercise 30.1 (Intermediate).</strong> Render a project, then open its <code>.jsonl</code> log and find the <code>scene resolved</code> event for one scene. Which motion was chosen? Reproduce that scene with <code>still render-scene</code> using <code>--motion</code> and <code>--anchor</code>.</p>
+</div>
+</section>
+</section>

@@ -1,0 +1,210 @@
+<section id="ffmpeg-integration-in-depth" class="level1">
+<h1><span class="header-section-number">16</span> FFmpeg Integration in Depth</h1>
+<figure>
+<img src="/books/spoonstill/media/file9.svg" alt="How spoonstill runs any external program." width="541" height="426" loading="lazy" decoding="async">
+<figcaption>How spoonstill runs any external program.</figcaption>
+</figure>
+<section id="why-a-separate-program-and-not-a-library" class="level2">
+<h2><span class="header-section-number">16.1</span> Why a separate program and not a library</h2>
+<p>spoonstill could have linked FFmpeg's C libraries through Rust bindings. Decisions D-011 and D-012 rejected that: the bindings were in maintenance mode and hard to build across platforms, a WebAssembly build is slow, and the <code>ffmpeg-sidecar</code> crate downloads FFmpeg automatically by default and lacked timeout-bounded probes. The chosen design: run the <code>ffmpeg</code> and <code>ffprobe</code> programs as <strong>child processes</strong> with argument vectors, and reimplement a small, careful process boundary.</p>
+<p>The cost: one process per job, and FFmpeg must be installed. The benefits: no C toolchain, no unsafe FFI, any FFmpeg the operator has works, and a failure is isolated in a child process.</p>
+</section>
+<section id="shell-injection-simply" class="level2">
+<h2><span class="header-section-number">16.2</span> Shell injection, simply</h2>
+<p>A <strong>shell</strong> (bash, zsh, PowerShell) reads a command line and interprets special characters: spaces split words, <code>;</code> starts a new command, <code>$(...)</code> runs a command, quotes group things. If a program builds one string and asks a shell to run it:</p>
+<pre class="text"><code>UNSAFE:  shell("ffmpeg -i " + user_filename + " out.mp4")</code></pre>
+<p>then a file named <code>holiday; rm -rf ~.jpg</code> is not a file name any more; it is a second command. That is <strong>shell injection</strong>.</p>
+<p>The safe pattern never involves a shell. The program is started directly, and each argument is passed as a separate item:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="co">// SAFE: what spoonstill does (crates/spoonstill-media/src/command.rs)</span></span>
+<span id="cb2-2"><span class="kw">let</span> <span class="kw">mut</span> command <span class="op">=</span> <span class="pp">std::process::Command::</span>new(<span class="op">&amp;</span><span class="kw">self</span><span class="op">.</span>program)<span class="op">;</span>  <span class="co">// absolute path</span></span>
+<span id="cb2-3">command<span class="op">.</span>args(<span class="op">&amp;</span><span class="kw">self</span><span class="op">.</span>args)<span class="op">;</span>                                      <span class="co">// Vec&lt;OsString&gt;</span></span></code></pre></div>
+<p>The operating system hands each item to FFmpeg as one argument, whatever characters it contains. spoonstill's test fixtures include files named <code>it's a $(pwd) \</code>name`<code>,</code>semi;colon &amp;and&amp; ampersand<code>,</code> leading space<code>,</code>-leading-dash<code>and Unicode, and</code>segment_integrity.rs<code>renders through them and checks that no stray</code>pwd` file appeared.</p>
+<p>Two more guards: a file named <code>-leading-dash.jpg</code> could be mistaken for an option, so every input goes through <code>.input(path)</code>, which always writes <code>-i</code> before it; and <strong>no path ever enters the filter graph</strong> (captions are passed as inputs, not file names inside filter text), because characters like <code>:</code> and <code>\</code> in a Windows path are filter syntax (<code>no_path_ever_enters_the_filter_graph</code>).</p>
+</section>
+<section id="finding-the-binary" class="level2">
+<h2><span class="header-section-number">16.3</span> Finding the binary</h2>
+<p><code>Tools::from_env()</code> resolves <code>ffmpeg</code> and <code>ffprobe</code> once per run to absolute paths (Chapter 6), honouring <code>SPOONSTILL_FFMPEG</code> and <code>SPOONSTILL_FFPROBE</code>. The same <code>Tools</code> value is used for every scene, so a 500-scene render cannot half-run on one FFmpeg build and half on another. <code>Tools::ready()</code> checks that the files exist and are executable without starting them; if not, validation reports <strong>one</strong> <code>ToolingMissing</code> problem with an install button, not one error per photo.</p>
+</section>
+<section id="running-watching-stopping" class="level2">
+<h2><span class="header-section-number">16.4</span> Running, watching, stopping</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Concern</th>
+<th>How it is handled</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Output pipes filling up</td>
+<td>stdout and stderr drained by threads from the start</td>
+</tr>
+<tr>
+<td>Diagnosing failures</td>
+<td>last 256 KiB of stderr kept and attached to <code>MediaError::Exit</code></td>
+</tr>
+<tr>
+<td>Progress</td>
+<td><code>-progress pipe:1</code> key=value blocks parsed into <code>Progress { frame, out_time_us, speed }</code> and sent over a channel</td>
+</tr>
+<tr>
+<td>Waiting</td>
+<td><code>try_wait</code> polled with a backoff from 1 ms to 20 ms</td>
+</tr>
+<tr>
+<td>Timeouts</td>
+<td><code>wait_until(limit)</code> kills and reaps the child, returns <code>Timeout</code></td>
+</tr>
+<tr>
+<td>Probe timeouts</td>
+<td>30 s for headers; 30 s + 5 ms per frame when counting frames; retried once (D-096, D-179)</td>
+</tr>
+<tr>
+<td>Install timeout</td>
+<td>900 s for a package manager</td>
+</tr>
+<tr>
+<td>TTS timeout</td>
+<td>60 s + 30 ms per character, at most 900 s</td>
+</tr>
+<tr>
+<td>Concat timeout</td>
+<td>3 600 s</td>
+</tr>
+<tr>
+<td>Cancellation</td>
+<td>write <code>q</code> to stdin, wait up to 2 s, then kill, then reap</td>
+</tr>
+<tr>
+<td>Windows console flash</td>
+<td><code>CREATE_NO_WINDOW</code> creation flag</td>
+</tr>
+<tr>
+<td>Exit code</td>
+<td><code>Finished::ok()</code> turns non-zero into <code>MediaError::Exit</code> with program name, code and stderr</td>
+</tr>
+</tbody>
+</table></div>
+<p>The CLI's Ctrl-C and the window's Stop only set a flag. The ladder above happens inside the child wait, so every running FFmpeg gets the same treatment.</p>
+</section>
+<section id="temporary-files-and-cleanup" class="level2">
+<h2><span class="header-section-number">16.5</span> Temporary files and cleanup</h2>
+<p>Every output is written beside its destination with a hidden partial name and renamed at the end (<code>atomic.rs</code>). RAII guards remove temporaries on every exit path: <code>Partial</code> for films, <code>Captions</code> for caption band files, <code>Scratch</code> for TTS pieces. Leftover partials from crashed runs are swept, carefully: only names that exactly match spoonstill's pattern, and beside the film only if untouched for 60 seconds.</p>
+</section>
+<section id="ffprobe-as-the-source-of-truth" class="level2">
+<h2><span class="header-section-number">16.6</span> ffprobe as the source of truth</h2>
+<p>spoonstill uses ffprobe for four different questions:</p>
+<ol type="1">
+<li><strong>Is this file usable?</strong> During validation, with a 10 s ceiling, in parallel.</li>
+<li><strong>How long is this narration?</strong> After normalization, on the WAV. Duration is never estimated from text or trusted from an MP3 header (D-021).</li>
+<li><strong>Is this segment exactly what we asked for?</strong> After rendering, decoding every frame.</li>
+<li><strong>Is this film exactly the sum of its parts?</strong> After the join, header only (decoding a 500-scene film would take minutes).</li>
+</ol>
+</section>
+<section id="software-and-hardware-encoders" class="level2">
+<h2><span class="header-section-number">16.7</span> Software and hardware encoders</h2>
+<p>The default is <strong>libx264</strong> in software (D-036). Measurements on three machines agree that the filter graph, not the encoder, is most of the cost at normal speeds: on macOS the encoder was about 14% of a 4K render (§12c); on a Windows desktop with an RTX 3060, NVENC made a render about <strong>1.2x</strong> faster (§13c, D-162); on a slow Linux laptop CPU, Intel Quick Sync was <strong>1.67x</strong> faster (D-198). Hardware encoders also saved <strong>no memory</strong>, because the memory is the CPU's prescale canvas.</p>
+<p><code>--encoder auto</code> picks the first <strong>usable</strong> hardware encoder found by actually encoding a test clip; <code>--encoder off</code> (the default) uses libx264; <code>--encoder NAME</code> must be in the usable list. Each encoder gets its own quality flags:</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Encoder</th>
+<th>Quality arguments from preset/CRF</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>libx264</code></td>
+<td><code>-preset &lt;preset&gt; -crf &lt;crf&gt;</code> (unchanged since before D-162, so old caches stay valid)</td>
+</tr>
+<tr>
+<td><code>h264_nvenc</code></td>
+<td><code>-preset p1..p7 -rc vbr -cq &lt;crf&gt; -b:v 0</code></td>
+</tr>
+<tr>
+<td><code>h264_amf</code></td>
+<td><code>-quality quality -rc cqp -qp_i &lt;crf&gt; -qp_p &lt;crf&gt; -qp_b &lt;crf&gt;</code></td>
+</tr>
+<tr>
+<td><code>h264_qsv</code></td>
+<td><code>-preset &lt;preset&gt; -global_quality &lt;crf&gt;</code></td>
+</tr>
+<tr>
+<td><code>h264_mf</code></td>
+<td><code>-rate_control quality -quality &lt;crf&gt;</code></td>
+</tr>
+<tr>
+<td><code>h264_videotoolbox</code></td>
+<td><code>-q:v &lt;100 - crf x 100 / 51, clamped 1..100&gt;</code> (higher is better)</td>
+</tr>
+</tbody>
+</table></div>
+<p>Hardware output was measured to produce exactly the same segment profile as software (High profile, level, <code>yuv420p</code>, <code>tv</code>, <code>bt709</code>, SAR 1:1, 1/90000), so hardware and software segments can be joined. The software segment key is byte-identical to the pre-D-162 key, so adding this feature re-rendered nothing for existing projects. VideoToolbox has not been measured.</p>
+</section>
+<section id="macos-and-windows-differences-at-this-boundary" class="level2">
+<h2><span class="header-section-number">16.8</span> macOS and Windows differences at this boundary</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Topic</th>
+<th>macOS</th>
+<th>Windows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Where FFmpeg is found</td>
+<td>Homebrew <code>/opt/homebrew/bin</code> or <code>/usr/local/bin</code></td>
+<td>winget <code>Gyan.FFmpeg</code> package folder (no shim on PATH)</td>
+</tr>
+<tr>
+<td>Executable name</td>
+<td><code>ffmpeg</code></td>
+<td><code>ffmpeg.exe</code></td>
+</tr>
+<tr>
+<td>Console window</td>
+<td>none</td>
+<td>suppressed with <code>CREATE_NO_WINDOW</code></td>
+</tr>
+<tr>
+<td>Paths from <code>canonicalize</code></td>
+<td>plain</td>
+<td><code>\\?\</code> prefix stripped before FFmpeg sees it (D-142)</td>
+</tr>
+<tr>
+<td>Display quoting</td>
+<td>POSIX <code>'\''</code></td>
+<td>PowerShell <code>''</code></td>
+</tr>
+<tr>
+<td>Stopping a child</td>
+<td><code>q</code> on stdin, then kill</td>
+<td>the same (no signals needed)</td>
+</tr>
+<tr>
+<td>Hardware candidates</td>
+<td>VideoToolbox</td>
+<td>NVENC, AMF, Quick Sync, Media Foundation</td>
+</tr>
+</tbody>
+</table></div>
+<div class="callout exercise">
+<p><strong>Exercise 16.1 (Beginner).</strong> Find <code>is_safe_list_name</code> in <code>concat.rs</code>. Would <code>seg-0123abcd.mp4</code>, <code>my film.mp4</code> and <code>.hidden.mp4</code> be accepted?</p>
+<p><strong>Exercise 16.2 (Advanced).</strong> <code>with_retries</code> in <code>probe.rs</code> retries only <code>MediaError::Timeout</code>. Why not retry every error?</p>
+</div>
+</section>
+</section>

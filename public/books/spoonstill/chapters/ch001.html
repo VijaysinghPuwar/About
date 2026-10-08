@@ -1,0 +1,86 @@
+<section id="about-this-book" class="level1 unnumbered">
+<h1 class="unnumbered">About This Book</h1>
+<p>This book teaches one codebase: <strong>spoonstill</strong>, the batch renderer in the repository <a href="https://github.com/VijaysinghPuwar/spoonstill" class="uri" target="_blank" rel="noopener noreferrer">https://github.com/VijaysinghPuwar/spoonstill</a>. It is written for a reader who can program but who may be new to Rust, to FFmpeg, to video, or to the engineering habits this project uses. Each topic starts in plain English, then goes deeper, then points at the exact file where the behaviour lives.</p>
+<section id="what-this-book-documents" class="level2 unnumbered">
+<h2 class="unnumbered">What this book documents</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Repository</td>
+<td><a href="https://github.com/VijaysinghPuwar/spoonstill" class="uri" target="_blank" rel="noopener noreferrer">https://github.com/VijaysinghPuwar/spoonstill</a></td>
+</tr>
+<tr>
+<td>Branch</td>
+<td><code>master</code> (default branch, verified with <code>git remote show</code> and <code>git branch</code>)</td>
+</tr>
+<tr>
+<td>Commit analysed</td>
+<td><code>7948f2496e08e5f7d22a7f57f04a83a69e4c66cd</code></td>
+</tr>
+<tr>
+<td>Tag at that commit</td>
+<td><code>v0.1.19</code> ("Version 0.1.19", committed 2026-10-04)</td>
+</tr>
+<tr>
+<td>Date of analysis</td>
+<td>2026-10-07</td>
+</tr>
+<tr>
+<td>Machine used</td>
+<td>macOS 26.7.1 on Apple M5, 24 GB RAM, Rust 1.94.0, FFmpeg 9.0.1 (Homebrew)</td>
+</tr>
+</tbody>
+</table></div>
+<p>Every line number in this book refers to that commit. If you read the book against a later commit, the ideas will mostly still hold, but line numbers will drift.</p>
+<section id="how-the-repository-was-synchronised" class="level3 unnumbered">
+<h3 class="unnumbered">How the repository was synchronised</h3>
+<p>The local clone at <code>~/Desktop/Projects/vidio</code> was on <code>master</code> at <code>0dd74eb</code> (v0.1.18), two commits behind <code>origin/master</code>. It also held uncommitted edits to <code>README.md</code>, <code>decisions.md</code>, <code>arrange.rs</code> and <code>picture.rs</code>, and the two incoming commits also changed <code>README.md</code> and <code>decisions.md</code>. A fast-forward pull would therefore have refused to run, and any stash, reset or merge would have put that in-progress work at risk. So nothing in the working tree was touched. Instead the newest remote state was checked out into a separate, temporary <strong>git worktree</strong> (<code>git worktree add --detach &lt;scratch&gt;/repo origin/master</code>), and everything in this book was read, built, tested and run there. Appendix A gives the full record.</p>
+</section>
+</section>
+<section id="how-to-read-the-evidence-labels" class="level2 unnumbered">
+<h2 class="unnumbered">How to read the evidence labels</h2>
+<p>The project's own documents are very detailed, but documents drift. This book treats the <strong>current source code and runtime behaviour as the final authority</strong>. Where it matters, a claim carries one of these labels:</p>
+<ul>
+<li><strong>Verified from source</strong>: read in the code at the commit above.</li>
+<li><strong>Verified by test</strong>: a named test asserts it, and the test suite passed on the analysis machine.</li>
+<li><strong>Verified by runtime experiment</strong>: a command was actually run for this book and its output inspected.</li>
+<li><strong>Documented intention</strong>: a design document says it; the code may not yet do it.</li>
+<li><strong>Historical decision</strong>: recorded in <code>decisions.md</code>; may have been amended later.</li>
+<li><strong>Inference</strong>: reasoning from the evidence, not directly shown.</li>
+<li><strong>Not independently verified</strong>: reported elsewhere and not re-checked here.</li>
+</ul>
+<p>Callout boxes look like this:</p>
+<div class="callout verified">
+<p><strong>Verified by runtime experiment.</strong> A six-scene fixture project was rendered twice on the analysis machine. The first run encoded six segments; the second reused all six and finished in under a second.</p>
+</div>
+<div class="callout warning">
+<p><strong>Docs and code disagree.</strong> Boxes like this mark a place where a document says one thing and the code does another. The code wins.</p>
+</div>
+<div class="callout exercise">
+<p><strong>Exercise.</strong> Boxes like this are small tasks. Answers are in Appendix B.</p>
+</div>
+</section>
+<section id="how-the-book-is-organised" class="level2 unnumbered">
+<h2 class="unnumbered">How the book is organised</h2>
+<ul>
+<li><strong>Part I, The Product</strong> explains what spoonstill is for and teaches the video and audio vocabulary you need.</li>
+<li><strong>Part II, Architecture</strong> walks through the seven components one at a time.</li>
+<li><strong>Part III, How It Works</strong> traces real operations end to end, including the long chapter "What Happens When I Press Render?".</li>
+<li><strong>Part IV, Engineering</strong> covers Rust concepts, errors, security, performance, platforms, tests, CI and releases, dependencies, decisions and tradeoffs.</li>
+<li><strong>Part V, Working With the Code</strong> is practical: debugging, safe modification, limitations, a file map and a reading order.</li>
+<li><strong>Part VI, Study Aids</strong> has the glossary, the FAQ, a 30-question knowledge check, and a 15-video curriculum.</li>
+<li>The <strong>appendices</strong> record how this report was verified and give the exercise answers.</li>
+</ul>
+<p>A note on style: this book uses no em dashes anywhere, including inside quoted code comments, where the repository's own long dashes have been replaced with a comma or a hyphen. Code excerpts are otherwise quoted as they appear, sometimes shortened with <code>// ...</code>.</p>
+</section>
+</section>

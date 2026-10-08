@@ -1,0 +1,82 @@
+<section id="cicd-and-release-engineering" class="level1">
+<h1><span class="header-section-number">26</span> CI/CD and Release Engineering</h1>
+<section id="continuous-integration-ci.yml" class="level2">
+<h2><span class="header-section-number">26.1</span> Continuous integration: <code>ci.yml</code></h2>
+<p>Triggered on every push to <code>master</code> and every pull request. Workflow-wide: <code>RUSTFLAGS: -D warnings</code> (any compiler warning fails), and the token has read-only permissions. Six independent jobs run in parallel:</p>
+<figure>
+<img src="/books/spoonstill/media/file11.svg" alt="The CI pipeline (.github/workflows/ci.yml)." width="625" height="248" loading="lazy" decoding="async">
+<figcaption>The CI pipeline (<code>.github/workflows/ci.yml</code>).</figcaption>
+</figure>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Job</th>
+<th>Runner</th>
+<th>What it proves</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>audit</code></td>
+<td>ubuntu-latest</td>
+<td><code>cargo audit --deny warnings</code> against the RustSec database; can fail without any code change</td>
+</tr>
+<tr>
+<td><code>check</code></td>
+<td>macos-14</td>
+<td>fmt, clippy, the whole test suite with real FFmpeg, the JavaScript parse and smoke test, the release-asset and architecture tests, the <code>cargo tree</code> core check</td>
+</tr>
+<tr>
+<td><code>windows</code></td>
+<td>windows-2022</td>
+<td>fmt, clippy and the whole test suite on Windows</td>
+</tr>
+<tr>
+<td><code>installer-macos</code></td>
+<td>macos-14</td>
+<td>runs <code>install.sh</code> from the checkout against the latest release; the installed <code>still --version</code> matches the tag; the <code>.app</code> carries no quarantine attribute</td>
+</tr>
+<tr>
+<td><code>installer-windows</code></td>
+<td>windows-2022</td>
+<td>runs <code>install.ps1</code>; <code>still.exe</code> runs; the install folder is an exact entry on the user <code>PATH</code></td>
+</tr>
+<tr>
+<td><code>gates</code></td>
+<td>macos-14 (full history)</td>
+<td><code>make gates</code>, deliberately <strong>without</strong> <code>edge-tts</code>, so gate 7 checks the "fail and name the missing tool" path</td>
+</tr>
+</tbody>
+</table></div>
+<p>Toolchain setup uses <code>dtolnay/rust-toolchain</code>, but <code>rust-toolchain.toml</code> pins 1.94.0 and rustup obeys the file, so every job builds with 1.94.0. <code>Swatinem/rust-cache</code> caches dependencies. All actions are pinned to full commit SHAs (D-125). Workflow syntax is checked locally with <code>actionlint</code> (<code>make workflows</code>), because a workflow GitHub rejects runs no jobs and shows no logs (D-136).</p>
+</section>
+<section id="releases-release.yml" class="level2">
+<h2><span class="header-section-number">26.2</span> Releases: <code>release.yml</code></h2>
+<p>Triggered by pushing a tag <code>v*</code> (or manually with a tag name).</p>
+<figure>
+<img src="/books/spoonstill/media/file12.svg" alt="The release pipeline (.github/workflows/release.yml)." width="482" height="384" loading="lazy" decoding="async">
+<figcaption>The release pipeline (<code>.github/workflows/release.yml</code>).</figcaption>
+</figure>
+<ol type="1">
+<li><strong>draft</strong>: the tag must equal the version in both <code>Cargo.toml</code> and <code>apps/desktop/tauri.conf.json</code>, or the job fails (D-102). A draft release is created, or reused when re-running.</li>
+<li><strong>cli</strong> (three legs, <code>fail-fast: false</code>): macOS arm64 and x86_64 (<code>tar.gz</code>), Windows x86_64 (<code>zip</code>). Each runs <code>rustup target add</code> for the pinned toolchain (the action alone added the target to the wrong toolchain, D-097), builds with <code>cargo build --release --locked</code>, packages the binary with <code>THIRD-PARTY-NOTICES.md</code>, writes a <code>.sha256</code>, smoke-tests where it can run the binary, and uploads with <code>--clobber</code> so a failed leg can be re-run.</li>
+<li><strong>desktop</strong> (two legs): a universal macOS <code>.dmg</code> and a Windows NSIS installer, built with <code>cargo tauri build -- --locked</code> after installing <code>tauri-cli =2.11.4</code> with <code>cargo binstall --locked</code>, so even a fallback source build uses tauri-cli's own lock file (D-197). Assets are renamed to friendly names (<code>spoonstill-macOS.dmg</code>, <code>spoonstill-Windows-Installer.exe</code>, D-098).</li>
+<li><strong>publish</strong>: require exactly the ten expected files (five assets plus five checksums); download each and verify <code>sha256sum -c</code>; fold the checksums into one <code>SHA256SUMS.txt</code>; delete the individual <code>.sha256</code> files; mark the release <strong>latest only if it is the newest version</strong> by <code>sort -V</code> (a re-pushed old tag once became "latest" and broke both installers, D-138); undraft.</li>
+</ol>
+<p>The release page ends with five downloads plus <code>SHA256SUMS.txt</code>: <code>spoonstill-macOS.dmg</code>, <code>still-macOS-AppleSilicon.tar.gz</code>, <code>still-macOS-Intel.tar.gz</code>, <code>spoonstill-Windows-Installer.exe</code>, <code>still-Windows.zip</code>.</p>
+</section>
+<section id="the-installers" class="level2">
+<h2><span class="header-section-number">26.3</span> The installers</h2>
+<p><code>scripts/install.sh</code> (macOS): find the latest tag through the GitHub API; download the right archive and <code>SHA256SUMS.txt</code>; refuse if the checksum line is missing or wrong; install <code>still</code> to <code>~/.local/bin</code> by staging beside and renaming; download, verify and copy the <code>.app</code> to <code>/Applications</code> (or <code>~/Applications</code>) and remove its quarantine attribute; offer <code>brew install ffmpeg</code>; print hints for <code>edge-tts</code> and <code>PATH</code>. It never uses <code>sudo</code> and never downloads FFmpeg itself.</p>
+<p><code>scripts/install.ps1</code> (Windows): the same verification; installs <code>still.exe</code> to <code>%LOCALAPPDATA%\Programs\spoonstill\bin</code>; <code>Unblock-File</code>; adds the folder to the <strong>user</strong> <code>PATH</code> after an exact (not substring) comparison (D-128); offers <code>winget install --id Gyan.FFmpeg</code>. It installs <strong>only the CLI</strong>; the Windows window is installed from the <code>.exe</code> on the release page.</p>
+</section>
+<section id="what-is-not-done-m5" class="level2">
+<h2><span class="header-section-number">26.4</span> What is not done (M5)</h2>
+<p>No code signing, no notarization, no auto-updater, no bundled FFmpeg (that needs an LGPL build first, D-062), and Rust dependency licence notices are not generated yet (<code>THIRD-PARTY-NOTICES.md</code> says so).</p>
+</section>
+</section>

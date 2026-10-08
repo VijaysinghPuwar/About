@@ -1,0 +1,109 @@
+<section id="fifteen-videos-to-learn-from" class="level1">
+<h1><span class="header-section-number">21</span> Fifteen Videos to Learn From</h1>
+<p>Every link below was checked on 7 October 2026 against YouTube’s oEmbed endpoint, which returned the exact title and channel shown. They are ordered as a learning path: Python concurrency first, then the GUI, the network, the audio, reliability, and finally shipping.</p>
+<section id="python-tutorial-asyncio---complete-guide-to-asynchronous-programming-with-animations" class="level3 unnumbered video">
+<h3 class="unnumbered video">1. Python Tutorial: AsyncIO - Complete Guide to Asynchronous Programming with Animations</h3>
+<p><strong>Channel:</strong> Corey Schafer · <strong>Difficulty:</strong> Beginner to Intermediate<br>
+<strong>Link:</strong> <a href="https://www.youtube.com/watch?v=oAkLSJNr5zY" class="uri" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=oAkLSJNr5zY</a></p>
+<p><strong>What it teaches.</strong> Coroutines, tasks, <code>gather</code>, timeouts and the event loop, with animations of what the loop is doing.<br>
+<strong>Why for SetupTTS.</strong> It is the foundation for reading <code>_synthesise_attempt</code>, where every network wait is an <code>await</code> wrapped in <code>asyncio.wait_for</code>.</p>
+</section>
+<section id="import-asyncio-learn-pythons-asyncio-playlist" class="level3 unnumbered video">
+<h3 class="unnumbered video">2. import asyncio: Learn Python’s AsyncIO (playlist)</h3>
+<p><strong>Channel:</strong> EdgeDB · <strong>Difficulty:</strong> Intermediate to Advanced<br>
+<strong>Link:</strong> <a href="https://www.youtube.com/playlist?list=PLhNSoGM2ik6SIkVGXWBwerucXjgP1rHmB" class="uri" target="_blank" rel="noopener noreferrer">https://www.youtube.com/playlist?list=PLhNSoGM2ik6SIkVGXWBwerucXjgP1rHmB</a></p>
+<p><strong>What it teaches.</strong> A series by CPython core developer Łukasz Langa on how asyncio works inside: the event loop, futures and tasks, and building real programs with it.<br>
+<strong>Why for SetupTTS.</strong> It explains why each <code>TTSWorker</code> needs its own loop, and what <code>call_soon_threadsafe</code> and task cancellation actually do.</p>
+</section>
+<section id="learn-python-gui-development-for-desktop-pyside6-and-qt-tutorial" class="level3 unnumbered video">
+<h3 class="unnumbered video">3. Learn Python GUI Development for Desktop – PySide6 and Qt Tutorial</h3>
+<p><strong>Channel:</strong> freeCodeCamp.org · <strong>Difficulty:</strong> Beginner<br>
+<strong>Link:</strong> <a href="https://www.youtube.com/watch?v=Z1N9JzNax2k" class="uri" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=Z1N9JzNax2k</a></p>
+<p><strong>What it teaches.</strong> A full PySide6 course: widgets, layouts, signals and slots, main windows and dialogs.<br>
+<strong>Why for SetupTTS.</strong> It covers the building blocks of <code>MainWindow</code>, the three panels and the dialogs.</p>
+</section>
+<section id="qtws17---multithreading-with-qt---giuseppe-dangelo-kdab" class="level3 unnumbered video">
+<h3 class="unnumbered video">4. QtWS17 - Multithreading with Qt - Giuseppe D’Angelo, KDAB</h3>
+<p><strong>Channel:</strong> Qt Group · <strong>Difficulty:</strong> Intermediate to Advanced<br>
+<strong>Link:</strong> <a href="https://www.youtube.com/watch?v=BgqT6SIeRn4" class="uri" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=BgqT6SIeRn4</a></p>
+<p><strong>What it teaches.</strong> <code>QThread</code>, thread affinity, queued signal connections across threads, and the common mistakes. The examples are C++; the concepts are identical in PySide6.<br>
+<strong>Why for SetupTTS.</strong> This is the theory behind the worker signals, the queued connections into the UI, and the care taken to keep <code>QThread</code> objects alive.</p>
+</section>
+<section id="the-clean-architecture-in-python" class="level3 unnumbered video">
+<h3 class="unnumbered video">5. The Clean Architecture in Python</h3>
+<p><strong>Channel:</strong> Next Day Video · <strong>Difficulty:</strong> Intermediate<br>
+<strong>Link:</strong> <a href="https://www.youtube.com/watch?v=DJtef410XaM" class="uri" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=DJtef410XaM</a></p>
+<p><strong>What it teaches.</strong> Brandon Rhodes on keeping I/O at the edges and core logic pure and testable.<br>
+<strong>Why for SetupTTS.</strong> It explains why functions such as <code>_take_chunk_at</code>, <code>_stream_incomplete_reason</code> and <code>coverage_report</code> are testable without a network, and suggests how the large worker could be split further.</p>
+</section>
+<section id="ssl-tls-https-explained" class="level3 unnumbered video">
+<h3 class="unnumbered video">6. SSL, TLS, HTTPS Explained</h3>
+<p><strong>Channel:</strong> ByteByteGo · <strong>Difficulty:</strong> Beginner<br>
+<strong>Link:</strong> <a href="https://www.youtube.com/watch?v=j9QmMEWmcfo" class="uri" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=j9QmMEWmcfo</a></p>
+<p><strong>What it teaches.</strong> The TLS handshake, certificates and certificate authorities, in a few minutes.<br>
+<strong>Why for SetupTTS.</strong> It is the background for <code>build_ssl_context</code> and the v1.6.1 fix for antivirus HTTPS scanning.</p>
+</section>
+<section id="websockets-crash-course---handshake-use-cases-pros-cons-and-more" class="level3 unnumbered video">
+<h3 class="unnumbered video">7. WebSockets Crash Course - Handshake, Use-cases, Pros &amp; Cons and more</h3>
+<p><strong>Channel:</strong> Hussein Nasser · <strong>Difficulty:</strong> Intermediate<br>
+<strong>Link:</strong> <a href="https://www.youtube.com/watch?v=2Nt-ZrNP22A" class="uri" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=2Nt-ZrNP22A</a></p>
+<p><strong>What it teaches.</strong> The HTTP Upgrade handshake, frames, full-duplex streaming, and what happens when a connection closes.<br>
+<strong>Why for SetupTTS.</strong> Synthesis is a WebSocket session with text and binary frames; this explains how a stream can end without an error.</p>
+</section>
+<section id="norman-casagrande-wavenet-whats-behind-googles-voice" class="level3 unnumbered video">
+<h3 class="unnumbered video">8. Norman Casagrande: WaveNet, what’s behind Google’s voice</h3>
+<p><strong>Channel:</strong> Electromagnetic Field · <strong>Difficulty:</strong> Intermediate<br>
+<strong>Link:</strong> <a href="https://www.youtube.com/watch?v=gIIZyYsB81M" class="uri" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=gIIZyYsB81M</a></p>
+<p><strong>What it teaches.</strong> How text-to-speech moved from stitched recordings to neural models that generate audio sample by sample.<br>
+<strong>Why for SetupTTS.</strong> It explains what the remote service is doing during the seconds SetupTTS spends waiting, and why some voices stream slower than others. It is about Google’s system, not Microsoft’s, but the principles are shared.</p>
+</section>
+<section id="digital-audio-compression---computerphile" class="level3 unnumbered video">
+<h3 class="unnumbered video">9. Digital Audio Compression - Computerphile</h3>
+<p><strong>Channel:</strong> Computerphile · <strong>Difficulty:</strong> Beginner<br>
+<strong>Link:</strong> <a href="https://www.youtube.com/watch?v=KGZ0een8vSE" class="uri" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=KGZ0een8vSE</a></p>
+<p><strong>What it teaches.</strong> How lossy audio compression such as MP3 works.<br>
+<strong>Why for SetupTTS.</strong> It is the background for the 48 kbit/s mono format, and for why frames can be concatenated and counted in <code>mp3_duration.py</code>.</p>
+</section>
+<section id="thundering-herd-problem-and-how-not-to-do-api-retries" class="level3 unnumbered video">
+<h3 class="unnumbered video">10. Thundering Herd Problem and How not to do API retries</h3>
+<p><strong>Channel:</strong> Arpit Bhayani · <strong>Difficulty:</strong> Intermediate<br>
+<strong>Link:</strong> <a href="https://www.youtube.com/watch?v=8sTuCPh3s0s" class="uri" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=8sTuCPh3s0s</a></p>
+<p><strong>What it teaches.</strong> Why naive retries make outages worse, and how exponential back-off and jitter help.<br>
+<strong>Why for SetupTTS.</strong> It lets you judge <code>_process_chunk</code>’s retry policy, including why its lack of jitter is acceptable at two clients and would not be at two thousand.</p>
+</section>
+<section id="distributed-systems-lecture-series-playlist" class="level3 unnumbered video">
+<h3 class="unnumbered video">11. Distributed Systems lecture series (playlist)</h3>
+<p><strong>Channel:</strong> Martin Kleppmann · <strong>Difficulty:</strong> Intermediate to Advanced<br>
+<strong>Link:</strong> <a href="https://www.youtube.com/playlist?list=PLeKd45zvjcDFUEv_ohr_HdUFe97RItdiB" class="uri" target="_blank" rel="noopener noreferrer">https://www.youtube.com/playlist?list=PLeKd45zvjcDFUEv_ohr_HdUFe97RItdiB</a></p>
+<p><strong>What it teaches.</strong> Kleppmann’s Cambridge course: system models, failure detection, fault tolerance and the impossibility of certainty over an unreliable network.<br>
+<strong>Why for SetupTTS.</strong> It gives the theory behind timeouts as failure detectors, and behind the decision to verify a stream’s completeness instead of trusting the absence of an error.</p>
+</section>
+<section id="atomic-file-replacement-os.rename-vs-os.replace-intermediate-anthony-explains-264" class="level3 unnumbered video">
+<h3 class="unnumbered video">12. atomic file replacement (os.rename vs os.replace) (intermediate) anthony explains #264</h3>
+<p><strong>Channel:</strong> anthonywritescode · <strong>Difficulty:</strong> Intermediate<br>
+<strong>Link:</strong> <a href="https://www.youtube.com/watch?v=-9eXCb3yvyY" class="uri" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=-9eXCb3yvyY</a></p>
+<p><strong>What it teaches.</strong> Writing to a temporary file and atomically replacing the target, and the cross-platform differences between <code>os.rename</code> and <code>os.replace</code>.<br>
+<strong>Why for SetupTTS.</strong> It is exactly the pattern of <code>_atomic_write_bytes</code>, <code>AppSettings.save</code> and the final output replacement.</p>
+</section>
+<section id="dustin-ingram---inside-the-cheeseshop-how-python-packaging-works---pycon-2018" class="level3 unnumbered video">
+<h3 class="unnumbered video">13. Dustin Ingram - Inside the Cheeseshop: How Python Packaging Works - PyCon 2018</h3>
+<p><strong>Channel:</strong> PyCon 2018 · <strong>Difficulty:</strong> Intermediate<br>
+<strong>Link:</strong> <a href="https://www.youtube.com/watch?v=AQsZsgJ30AE" class="uri" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=AQsZsgJ30AE</a></p>
+<p><strong>What it teaches.</strong> The history and mechanics of Python packaging: sdists, wheels, setuptools and <code>pyproject.toml</code>.<br>
+<strong>Why for SetupTTS.</strong> It explains <code>pyproject.toml</code>, <code>requirements.txt</code> pins, and what PyInstaller is collecting from site-packages.</p>
+</section>
+<section id="packaging-with-pyinstaller" class="level3 unnumbered video">
+<h3 class="unnumbered video">14. Packaging with PyInstaller</h3>
+<p><strong>Channel:</strong> Michigan Python · <strong>Difficulty:</strong> Intermediate<br>
+<strong>Link:</strong> <a href="https://www.youtube.com/watch?v=S_Bus_FNjpg" class="uri" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=S_Bus_FNjpg</a></p>
+<p><strong>What it teaches.</strong> How PyInstaller bundles an application: spec files, onefile versus onedir, hidden imports and data files.<br>
+<strong>Why for SetupTTS.</strong> It maps directly onto <code>setuptts.spec</code>, <code>setuptts_portable.spec</code>, and the onefile/onedir history in Chapter 15. It is a community meetup talk; no larger channel covers PyInstaller in comparable depth.</p>
+</section>
+<section id="github-actions-tutorial---basic-concepts-and-cicd-pipeline-with-docker" class="level3 unnumbered video">
+<h3 class="unnumbered video">15. GitHub Actions Tutorial - Basic Concepts and CI/CD Pipeline with Docker</h3>
+<p><strong>Channel:</strong> TechWorld with Nana · <strong>Difficulty:</strong> Beginner<br>
+<strong>Link:</strong> <a href="https://www.youtube.com/watch?v=R8_veQiYBjI" class="uri" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=R8_veQiYBjI</a></p>
+<p><strong>What it teaches.</strong> Workflows, events, jobs, runners and a complete CI/CD pipeline. The deployment part uses Docker, which SetupTTS does not, but the workflow concepts are the same.<br>
+<strong>Why for SetupTTS.</strong> It is the vocabulary needed to read and extend <code>.github/workflows/build.yml</code>.</p>
+</section>
+</section>

@@ -1,0 +1,224 @@
+<section id="application-architecture" class="level1">
+<h1><span class="header-section-number">4</span> Application Architecture</h1>
+<section id="the-big-picture" class="level2">
+<h2><span class="header-section-number">4.1</span> The big picture</h2>
+<p>SetupTTS has three kinds of places where code runs or data lives: the <strong>UI thread</strong>, a handful of <strong>background threads</strong>, and the <strong>local disk</strong>. The fourth participant, Microsoft’s speech service, is outside the program. Figure 4.1 shows how they connect.</p>
+<figure id="fig-architecture">
+<img src="/books/setuptts/media/file0.webp" alt="SetupTTS at a glance. The UI thread never touches the network; background threads never touch widgets." width="1680" height="1260" loading="lazy" decoding="async">
+<figcaption><strong>Figure 4.1.</strong> SetupTTS at a glance. The UI thread never touches the network; background threads never touch widgets.</figcaption>
+</figure>
+<p>Two rules shape everything else:</p>
+<ol type="1">
+<li><strong>The UI thread never waits.</strong> It never opens a socket, never sleeps, and never reads a large file in a loop. Anything slow happens on a <code>QThread</code>.</li>
+<li><strong>Background threads never touch widgets.</strong> They report through Qt signals, and Qt delivers those signals on the UI thread.</li>
+</ol>
+<p>Breaking either rule produces the classic desktop-app failures: a window that freezes while a request is in flight, or a crash because a widget was modified from the wrong thread.</p>
+</section>
+<section id="the-layers-mapped-to-real-classes" class="level2">
+<h2><span class="header-section-number">4.2</span> The layers, mapped to real classes</h2>
+<p>The request flow you might sketch on a whiteboard (“UI, controller, worker, provider, chunks, storage, validation, assembly, output, history”) maps onto SetupTTS like this:</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Class or function</th>
+<th>File</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>UI</td>
+<td><code>InputPanel</code>, <code>OutputPanel</code>, <code>HistoryPanel</code>, <code>MainWindow</code></td>
+<td><code>app/ui/</code></td>
+</tr>
+<tr>
+<td>Controller</td>
+<td><code>OutputPanel._on_generate</code>, <code>_resume_candidate</code></td>
+<td><code>app/ui/panels/output_panel.py:1145</code>, <code>:1413</code></td>
+</tr>
+<tr>
+<td>Job scheduling</td>
+<td><code>JobQueue</code> (UI thread)</td>
+<td><code>app/workers/job_queue.py</code></td>
+</tr>
+<tr>
+<td>Worker</td>
+<td><code>TTSWorker</code> (<code>QThread</code> + asyncio loop)</td>
+<td><code>app/workers/tts_worker.py:1078</code></td>
+</tr>
+<tr>
+<td>Provider gateway</td>
+<td><code>build_communicate</code>, <code>list_voices</code></td>
+<td><code>app/services/tts_service.py</code></td>
+</tr>
+<tr>
+<td>Provider</td>
+<td>edge-tts <code>Communicate.stream()</code> over WebSocket</td>
+<td>third party</td>
+</tr>
+<tr>
+<td>Chunk storage</td>
+<td><code>ChunkStore.record_chunk</code></td>
+<td><code>app/workers/chunk_store.py:471</code></td>
+</tr>
+<tr>
+<td>Validation</td>
+<td><code>_stream_incomplete_reason</code> per chunk; <code>coverage_report</code> per job</td>
+<td><code>tts_worker.py:796</code>, <code>chunk_store.py:544</code></td>
+</tr>
+<tr>
+<td>Assembly</td>
+<td><code>ChunkStore.finalize</code></td>
+<td><code>chunk_store.py:694</code></td>
+</tr>
+<tr>
+<td>Duration check</td>
+<td><code>mp3_duration_seconds</code> inside the <code>verify</code> callback</td>
+<td><code>app/utils/mp3_duration.py:40</code>, <code>tts_worker.py:1734</code></td>
+</tr>
+<tr>
+<td>History</td>
+<td><code>HistoryService.add_job</code> called from <code>OutputPanel._on_job_completed</code></td>
+<td><code>app/services/history_service.py:66</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>One detail surprises people: <strong>history is written by the UI, not by the worker.</strong> The worker only reports <code>completed(path, elapsed)</code>. <code>OutputPanel._on_job_completed</code> builds a <code>Job</code> row and calls <code>HistoryService.add_job</code>. This keeps SQLite access on one thread and keeps the worker ignorant of how results are displayed.</p>
+</section>
+<section id="start-up-step-by-step" class="level2">
+<h2><span class="header-section-number">4.3</span> Start-up, step by step</h2>
+<p><code>main.py</code> at the repository root is three lines of code that call <code>app.main.main()</code>. That function (<code>app/main.py:56-140</code>) does the following, in this order, and the order matters:</p>
+<ol type="1">
+<li><strong>TLS environment.</strong> Sets <code>SSL_CERT_FILE</code> and <code>REQUESTS_CA_BUNDLE</code> to certifi’s bundle. In a PyInstaller bundle Python cannot otherwise find any CA certificates, and “voice loading and audio generation silently fail with SSL errors”.</li>
+<li><strong>Self-test mode.</strong> If <code>--selftest</code> is on the command line, run <code>app/selftest.py</code> and exit. This happens before the single-instance check so CI can test a build while another copy is open.</li>
+<li><strong><code>QApplication</code></strong> with name, version and organisation, and a platform font (13 pt system font on macOS, Segoe UI 10 pt on Windows).</li>
+<li><strong><code>AppPaths()</code></strong> resolves the data, log and cache folders (Chapter 13).</li>
+<li><strong>Single instance.</strong> <code>SingleInstance(paths.data_dir).acquire()</code>. If another copy holds the lock, this copy asks it to raise its window and exits <strong>before</strong> logging is configured, so the second copy never writes to the shared log.</li>
+<li><strong>Logging.</strong> Rotating file log, exception hooks for the main thread and worker threads, a <code>faulthandler</code> crash log, a Qt message handler, and one block of environment details.</li>
+<li><strong>Settings, icon, stylesheet, <code>MainWindow</code>.</strong></li>
+<li><strong>Safety nets.</strong> <code>app.aboutToQuit</code> is connected to <code>window.ensure_workers_stopped</code> and to <code>instance.release</code>, so even an exit that bypasses <code>closeEvent</code> stops the threads first.</li>
+</ol>
+<div class="callout lesson">
+<p><strong>Engineering lesson.</strong> Start-up ordering is a correctness concern. Each step above was placed to avoid a specific failure: TLS before any import that might open a connection, self-test before the lock, the lock before the log file, and shutdown hooks before the event loop starts.</p>
+</div>
+</section>
+<section id="threads-and-event-loops" class="level2">
+<h2><span class="header-section-number">4.4</span> Threads and event loops</h2>
+<p>Qt has its own event loop on the main thread (<code>QApplication.exec()</code>), and asyncio needs an event loop too. SetupTTS does not try to merge them. Instead, <strong>every worker thread creates a private asyncio loop</strong>, runs one coroutine to completion and closes the loop.</p>
+<figure id="fig-threads">
+<img src="/books/setuptts/media/file1.webp" alt="The UI thread starts the worker and receives its signals; the worker runs its own asyncio loop. Cancel crosses the boundary with call_soon_threadsafe." width="1680" height="888" loading="lazy" decoding="async">
+<figcaption><strong>Figure 4.2.</strong> The UI thread starts the worker and receives its signals; the worker runs its own asyncio loop. Cancel crosses the boundary with call_soon_threadsafe.</figcaption>
+</figure>
+<p>The core of <code>TTSWorker.run</code> (<code>tts_worker.py:1174-1234</code>), lightly shortened:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><span class="kw">def</span> run(<span class="va">self</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb1-2">    start <span class="op">=</span> time.monotonic()</span>
+<span id="cb1-3">    <span class="cf">if</span> sys.platform <span class="op">==</span> <span class="st">"win32"</span>:</span>
+<span id="cb1-4">        <span class="va">self</span>._loop <span class="op">=</span> asyncio.ProactorEventLoop()</span>
+<span id="cb1-5">    <span class="cf">else</span>:</span>
+<span id="cb1-6">        <span class="va">self</span>._loop <span class="op">=</span> asyncio.new_event_loop()</span>
+<span id="cb1-7">    asyncio.set_event_loop(<span class="va">self</span>._loop)</span>
+<span id="cb1-8">    <span class="cf">try</span>:</span>
+<span id="cb1-9">        <span class="va">self</span>._loop.run_until_complete(<span class="va">self</span>._run_with_task())</span>
+<span id="cb1-10">        <span class="co"># ... cancelled-before-output check ...</span></span>
+<span id="cb1-11">        <span class="va">self</span>.completed.emit(<span class="va">self</span>._output_path, elapsed)</span>
+<span id="cb1-12">    <span class="cf">except</span> asyncio.CancelledError:</span>
+<span id="cb1-13">        logger.info(<span class="st">"Generation cancelled: </span><span class="sc">%s</span><span class="st">"</span>, <span class="va">self</span>._output_path)</span>
+<span id="cb1-14">    <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> exc:</span>
+<span id="cb1-15">        logger.exception(<span class="st">"TTS generation failed: ..."</span>)</span>
+<span id="cb1-16">        <span class="cf">if</span> <span class="kw">not</span> <span class="va">self</span>._cancelled:</span>
+<span id="cb1-17">            <span class="va">self</span>.failed.emit(<span class="va">self</span>._user_message(exc))</span>
+<span id="cb1-18">    <span class="cf">finally</span>:</span>
+<span id="cb1-19">        <span class="co"># release the staging dir, close the loop</span></span></code></pre></div>
+<p>Three details are worth understanding:</p>
+<ul>
+<li><strong>Why a private loop per thread.</strong> An asyncio loop belongs to one thread. Running the coroutine on the Qt thread would need a bridge library and would put network waits on the thread that paints the window. A private loop keeps all async code on the worker, where blocking is harmless.</li>
+<li><strong>Why the Proactor loop on Windows.</strong> <code>ProactorEventLoop</code> is asyncio’s Windows loop built on I/O completion ports, and it has been the default there since Python 3.8. Constructing it explicitly makes the choice independent of any event-loop policy set elsewhere in the process (Inference: the code does not say why). The spec files list <code>asyncio.proactor_events</code> and <code>asyncio.windows_events</code> as hidden imports so PyInstaller always includes them.</li>
+<li><strong>How cancel crosses threads.</strong> <code>cancel()</code> runs on the UI thread. It sets a flag, calls <code>requestInterruption()</code>, and schedules <code>task.cancel()</code> <strong>on the worker’s loop</strong> with <code>loop.call_soon_threadsafe</code>. Calling <code>task.cancel()</code> directly from another thread would not be thread safe. The <code>CancelledError</code> then unwinds through <code>await</code> points inside the worker, where <code>_stream_generate</code> marks the manifest cancelled and keeps finished chunks (<code>tts_worker.py:1640-1659</code>).</li>
+</ul>
+<section id="signals-as-the-only-channel-back" class="level3">
+<h3><span class="header-section-number">4.4.1</span> Signals as the only channel back</h3>
+<p><code>TTSWorker</code> declares eight signals (<code>tts_worker.py:1088-1097</code>):</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Signal</th>
+<th>Payload</th>
+<th>Used for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>progress</code></td>
+<td><code>int</code> 0 to 100</td>
+<td>progress bar</td>
+</tr>
+<tr>
+<td><code>status_changed</code></td>
+<td>short text</td>
+<td>status label</td>
+</tr>
+<tr>
+<td><code>stage_changed</code></td>
+<td><code>kind</code>, text, where kind is <code>local</code>, <code>remote</code> or <code>waiting</code></td>
+<td>the LOCAL / REMOTE / RETRY badge</td>
+</tr>
+<tr>
+<td><code>speed_updated</code></td>
+<td>characters per second</td>
+<td>speed readout</td>
+</tr>
+<tr>
+<td><code>telemetry_updated</code></td>
+<td><code>JobTelemetry</code> dataclass</td>
+<td>chunk N of ~M, ETA</td>
+</tr>
+<tr>
+<td><code>completed</code></td>
+<td>output path, elapsed seconds</td>
+<td>success</td>
+</tr>
+<tr>
+<td><code>failed</code></td>
+<td>user-facing message</td>
+<td>error dialog</td>
+</tr>
+<tr>
+<td><code>job_resumable</code></td>
+<td>staging dir, chunks kept, failed chunk, total</td>
+<td>Resume button</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>JobQueue._start_job</code> connects each one with a lambda that binds the job id (<code>lambda v, j=jid: self._on_progress(j, v)</code>) and re-emits a queue-level signal that carries the id. Because the worker emits from its own thread and the receiver lives on the UI thread, Qt’s default <code>AutoConnection</code> becomes a <strong>queued connection</strong>: the call is posted to the UI thread’s event queue and runs there. No locks appear in the UI code because none are needed.</p>
+</section>
+</section>
+<section id="keeping-thread-objects-alive" class="level2">
+<h2><span class="header-section-number">4.5</span> Keeping thread objects alive</h2>
+<p>A Python <code>QThread</code> object that is garbage-collected while its OS thread is still running aborts the process with “QThread destroyed while still running”, which macOS reports as “quit unexpectedly”. SetupTTS guards against this in three places:</p>
+<ul>
+<li><code>JobQueue._active_workers</code> holds every started worker until its <code>finished</code> signal fires (<code>job_queue.py:317</code>).</li>
+<li><code>JobQueue._finishing</code> holds workers that were cancelled and removed from the running table but have not exited yet (<code>job_queue.py:183</code>).</li>
+<li><code>OutputPanel._finishing_workers</code> does the same for a voice loader replaced by a quick Retry click.</li>
+</ul>
+<p>Shutdown is ordered (<code>main_window.py:631-689</code>): ask the user if jobs are running, then <code>ensure_workers_stopped()</code>, which calls <code>OutputPanel.shutdown()</code>. That cancels every job, waits up to 4 seconds per worker, and only then falls back to <code>terminate()</code>. Settings are saved last. <code>ensure_workers_stopped</code> is idempotent, so the <code>aboutToQuit</code> safety net can call it again harmlessly.</p>
+</section>
+<section id="one-running-copy" class="level2">
+<h2><span class="header-section-number">4.6</span> One running copy</h2>
+<p>Two copies of the app would share the same history database, log file and staging folder; a second copy could even resume a job the first is still writing. <code>app/utils/single_instance.py</code> prevents that with two Qt primitives:</p>
+<ul>
+<li>A <code>QLockFile</code> named <code>setuptts.lock</code> in the data folder, with stale time 0 so a lock left by a crashed process is detected by PID and taken over.</li>
+<li>A <code>QLocalServer</code> (a Unix socket on macOS, a named pipe on Windows) whose name is a hash of the data folder path. A second launch connects, writes <code>activate</code>, <strong>waits for the first copy to hang up</strong>, and exits.</li>
+</ul>
+<p>That last wait was a Windows fix shipped in v1.6.0 (commit <code>0248489</code>): a named-pipe client that disconnects immediately after writing can lose the message before the server reads it.</p>
+</section>
+</section>

@@ -1,0 +1,128 @@
+<section id="appendix-a-how-this-book-was-verified" class="level1 unnumbered appendix">
+<h1 class="unnumbered appendix">Appendix A: How This Book Was Verified</h1>
+<section id="repository-state" class="level2 unnumbered">
+<h2 class="unnumbered">Repository state</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Step</th>
+<th>Command or check</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Inspect</td>
+<td><code>git status</code>, <code>git branch -a</code>, <code>git stash list</code>, <code>git remote -v</code></td>
+<td>branch <code>fix/windows-voice-loading-1.6.1</code> at <code>4759c26</code>; clean tree; no stashes; <code>origin</code> is <code>github.com/VijaysinghPuwar/setuptts</code></td>
+</tr>
+<tr>
+<td>Fetch</td>
+<td><code>git fetch --all --tags --prune</code></td>
+<td><code>origin/main</code> six commits ahead at <code>c6c43fe</code> (v1.6.2)</td>
+</tr>
+<tr>
+<td>Sync</td>
+<td><code>git checkout main &amp;&amp; git pull --ff-only origin main</code></td>
+<td>fast-forward from <code>cc88904</code> to <code>c6c43fe</code>; no local work at risk</td>
+</tr>
+<tr>
+<td>Version</td>
+<td><code>app/__init__.py</code>, <code>pyproject.toml</code>, <code>git describe --tags</code></td>
+<td><code>1.6.2</code>, <code>1.6.2</code>, <code>v1.6.2</code></td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="environment" class="level2 unnumbered">
+<h2 class="unnumbered">Environment</h2>
+<p>macOS on Apple Silicon. The project’s <code>.venv</code> ran Python 3.14.7 with edge-tts 7.2.8, aiohttp 3.13.3, PySide6 6.11.0, certifi 2026.2.25, platformdirs 4.9.4, pytest 9.0.2, pytest-qt 4.5.0 and PyInstaller 6.19.0. CI builds with Python 3.12; the dependency pins are identical.</p>
+</section>
+<section id="what-was-read" class="level2 unnumbered">
+<h2 class="unnumbered">What was read</h2>
+<p>Every file under <code>app/</code> was read in full or, for the two largest UI files, section by section through every method involved in generation, resume, job events, density and preview. Also read: both PyInstaller specs, the Inno Setup script, both build scripts, the workflow, <code>requirements.txt</code>, <code>pyproject.toml</code>, the README, <code>BUILD.md</code>, all three release notes, <code>tests/conftest.py</code>, the headers and test lists of every test module, <code>scripts/stress_longform.py</code>, and the relevant parts of edge-tts 7.2.8 (<code>communicate.py</code>, <code>constants.py</code>, <code>drm.py</code>). Commit messages were read for the design history.</p>
+</section>
+<section id="commands-and-experiments" class="level2 unnumbered">
+<h2 class="unnumbered">Commands and experiments</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Experiment</th>
+<th>Result used in the book</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>QT_QPA_PLATFORM=offscreen pytest -q</code></td>
+<td>383 passed in about 2 minutes</td>
+</tr>
+<tr>
+<td><code>pytest --collect-only</code> per module</td>
+<td>the counts in Chapter 17</td>
+</tr>
+<tr>
+<td><code>python main.py --selftest ... --network</code> (isolated data dir)</td>
+<td>all six checks passed; 322 voices; 33,264-byte sample</td>
+</tr>
+<tr>
+<td>live <code>list_voices()</code></td>
+<td>322 voices, 142 locales, 75 languages, 12 multilingual</td>
+</tr>
+<tr>
+<td>live three-sentence stream with <code>en-US-AndrewNeural</code></td>
+<td>first audio 0.98 s, 4.00 s total, 52,416 bytes = 8.74 s; truncation checks on cut copies</td>
+</tr>
+<tr>
+<td><code>_chunk_plan_for</code> for several job sizes and scripts</td>
+<td>the plan table in Chapter 6</td>
+</tr>
+<tr>
+<td><code>_chunk_timeout_for</code>, <code>_first_audio_timeout_for</code>, <code>_stream_idle_timeout_for</code></td>
+<td>the timeout examples in Chapter 6</td>
+</tr>
+<tr>
+<td>cutting the 6- and 12-hour test fixtures</td>
+<td>107 and 214 chunks</td>
+</tr>
+<tr>
+<td><code>_retune_after_chunk</code> driven for 16 chunks</td>
+<td>Figure 6.2</td>
+</tr>
+<tr>
+<td><code>_estimate_duration_range_seconds(700000, "+0%", "latin")</code></td>
+<td>8.84 to 16.2 hours</td>
+</tr>
+<tr>
+<td><code>platformdirs</code> folder lookup</td>
+<td>the macOS paths in Chapter 13</td>
+</tr>
+<tr>
+<td><code>wc -l</code> over tracked files</td>
+<td>the size tables in Chapter 3</td>
+</tr>
+<tr>
+<td><code>gh run list</code>, <code>gh run view --log-failed</code>, <code>gh release list</code></td>
+<td>the CI history in Chapter 16</td>
+</tr>
+<tr>
+<td>YouTube oEmbed lookups for 15 URLs</td>
+<td>every title and channel in Chapter 21</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="style-and-integrity-checks-on-the-finished-book" class="level2 unnumbered">
+<h2 class="unnumbered">Style and integrity checks on the finished book</h2>
+<p>A second, independent pass then checked the manuscript claim by claim against the source: about 260 concrete claims (constants, line references, names, behaviours, CI and packaging details, diagram labels). It found 22 discrepancies, from a wrong back-off formula and a wrong release attribution to imprecise wording, and every one was corrected before the final build. It also surfaced the dead dash-collapsing rule described in Chapter 6.</p>
+<p>The generated text was searched for em dashes (none), for filler phrases, for duplicated headings, and for anything resembling a key, token or password (none; the edge-tts client token is deliberately not reproduced). Every YouTube URL was re-resolved after the book was built. Code excerpts were compared with the source at the analysed commit.</p>
+</section>
+</section>

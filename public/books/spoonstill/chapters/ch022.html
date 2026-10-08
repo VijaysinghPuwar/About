@@ -1,0 +1,44 @@
+<section id="captions-drawing-text-into-the-picture" class="level1">
+<h1><span class="header-section-number">18</span> Captions: Drawing Text Into the Picture</h1>
+<section id="why-spoonstill-draws-its-own-text" class="level2">
+<h2><span class="header-section-number">18.1</span> Why spoonstill draws its own text</h2>
+<p>FFmpeg can burn subtitles with its <code>subtitles</code> or <code>drawtext</code> filters, but both need the <code>libass</code> and <code>libfreetype</code> libraries, and <strong>the Homebrew <code>ffmpeg</code> that the README tells people to install has neither</strong> (measured: <code>No such filter: 'drawtext'</code>). So <code>spoonstill_media::caption</code> draws the text into an RGBA image itself, and FFmpeg only composites it with <code>overlay</code>, which every build has (D-106).</p>
+</section>
+<section id="fonts-and-shaping" class="level2">
+<h2><span class="header-section-number">18.2</span> Fonts and shaping</h2>
+<p>Six fonts are compiled into the binary with <code>include_bytes!</code>: Inter Regular, SemiBold and Bold, and Noto Sans Devanagari in the same three weights (all SIL Open Font License). <code>fontdue</code> rasterises glyphs; <code>harfrust</code> (a Rust port of HarfBuzz) <strong>shapes</strong> Devanagari, where letters combine into conjuncts and a vowel sign can be drawn to the left of the consonant it follows. Latin text is deliberately <strong>not</strong> shaped, so every existing Latin caption stays byte-identical (D-157). Characters no bundled font covers (Bengali, Tamil, Arabic, Chinese, emoji) would draw as boxes, so validation warns and names them.</p>
+</section>
+<section id="layout" class="level2">
+<h2><span class="header-section-number">18.3</span> Layout</h2>
+<p>For one cue, <code>render_cue</code>:</p>
+<ol type="1">
+<li>computes the font size and maximum width as fractions of the frame (so a theme looks the same at every resolution);</li>
+<li>wraps words greedily, never breaking a word;</li>
+<li>shrinks the text 6% at a time (down to 62%) while it needs more than the theme's maximum lines;</li>
+<li><strong>balances</strong> the lines by bisection so two lines are nearly equal in width;</li>
+<li>clamps the band so it can never be taller than the frame (a 256 KiB caption once produced a 1920x39 839 band, 291.8 MB, 49 s for one cue, D-139);</li>
+<li>draws shadow, plate, outline and fill, in that order, into a canvas the full width of the frame.</li>
+</ol>
+<p>Two optimisations made this fast enough for 4K (D-130): the outline's disc-shaped dilation became a per-row sliding-window maximum, and the blur became a running sum. At 4K the <code>punch</code> theme went from 604 ms to about 62 ms per cue, with <strong>byte-identical</strong> output (the old implementations are kept in the tests as the definition of correct).</p>
+</section>
+<section id="how-a-cue-reaches-ffmpeg" class="level2">
+<h2><span class="header-section-number">18.4</span> How a cue reaches FFmpeg</h2>
+<p>Each cue's image is written as raw RGBA bytes beside the segment's temporary file and added as an input. From the analysis run's captioned scene:</p>
+<pre class="text"><code>-f rawvideo -pixel_format rgba -video_size 1920x95 -framerate 30
+-i &lt;run&gt;/spoken/.spoonstill/segments/.seg-4629796d93191411.mp4.partial-16618-3.cap00.rgba
+-filter_complex '[0:v]...,setsar=1,format=yuv420p[vbase];
+   [vbase][2:v]overlay=x=0:y=909:enable='gte(t,0.000)*lt(t,2.836)'[v];
+   [1:a]aresample=48000,apad,atrim=end_sample=137600,asetpts=N/SR/TB[a]'</code></pre>
+<ul>
+<li>Inputs 0 and 1 are the still and the audio, so caption images start at input 2.</li>
+<li>The overlay comes <strong>after</strong> the motion chain's <code>format=yuv420p</code>, so the colour and SAR rules are untouched, and the profile check proves it.</li>
+<li>The window <code>gte(t,S)*lt(t,E)</code> is half-open: a cue is shown from S up to but not including E, so two cues never overlap on the frame they share (<code>between()</code> would include both ends).</li>
+<li>A one-frame raw input persists because <code>overlay</code> repeats the last frame.</li>
+<li>The band files are deleted by a <code>Drop</code> guard on every exit path.</li>
+</ul>
+</section>
+<section id="when-a-scene-is-captioned" class="level2">
+<h2><span class="header-section-number">18.5</span> When a scene is captioned</h2>
+<p>Captions are <strong>off by default</strong>, because burning text into pixels cannot be undone. When on (<code>subtitles.enabled: true</code>, or <code>--subtitles THEME</code>), a scene is captioned if it has words: an explicit <code>caption</code> column, else the text it speaks, else the <code>.txt</code> beside its recording. The cue text and timing are part of the segment key, so changing a caption re-renders only that scene.</p>
+</section>
+</section>

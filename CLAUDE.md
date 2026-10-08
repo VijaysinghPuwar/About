@@ -96,3 +96,29 @@ mode name to be read, and reopens, with a synthesized WebAudio cue on the same
 timeline. It is the only sound on the site; the command palette can mute it.
 Both the plates and the audio are skipped entirely under
 `prefers-reduced-motion`.
+
+## Books
+
+`/books` is a library of long-form guides, read in the site's own reader.
+`scripts/import-epub.py <slug> <file.epub>` turns a pandoc EPUB into one
+sanitised HTML fragment per chapter under `public/books/<slug>/`, WebP figures,
+a 640px cover, and an entry in `src/data/books.json` (titles, parts, sections,
+word counts). Re-run it to update a book; it replaces that book's files. The
+script is the security boundary for `dangerouslySetInnerHTML` in the reader:
+tags and attributes are allow-listed there, so loosen it there, carefully, or
+not at all.
+
+The shelf and each book page are public. Reading (`/books/:slug/read/:chapter`)
+is behind `ProtectedRoute`. That gates the experience, not the text: the
+fragments are static files and can be fetched directly.
+
+Reading history lives in `src/lib/reading-progress.ts`: local first, synced to
+the `reading_progress` table (one row per reader per book) on a debounce, and
+merged per book on sign-in. If the table is missing it falls back to local
+only, without errors, the same way `useAuth` treats a missing `profiles`.
+
+The reader has three page themes (Site, Plain, Paper) defined as `--r-*`
+variables in `src/styles/books.css`; write reader UI against those, never the
+site tokens, or it breaks on the light pages. Navigation, Footer and BackToTop
+return null on reader routes (`isReaderPath`), and arrow keys turn chapters
+from the persistent `BookReader` shell, not the per-chapter view.

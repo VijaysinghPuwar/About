@@ -1,0 +1,54 @@
+<section id="spoonstill-state-logs-and-the-activity-record" class="level1">
+<h1><span class="header-section-number">8</span> spoonstill-state: Logs and the Activity Record</h1>
+<section id="why-it-exists-3" class="level2">
+<h2><span class="header-section-number">8.1</span> Why it exists</h2>
+<p>When a render fails on someone's machine, the explanation (FFmpeg's stderr, the exact command, the file) is gone by the time they report it. Decision D-016: <strong>write every failure down as it happens</strong>, and make it easy to send. <code>spoonstill-state</code> holds the two sinks and the bundle exporter. It depends only on core.</p>
+<div class="callout warning">
+<p><strong>Docs and code disagree.</strong> The crate's module comment (<code>src/lib.rs:1-11</code>) describes "machine-owned render state, in SQLite" with typed transitions <code>Pending -&gt; Resolving -&gt; ...</code>. None of that exists; the crate has only <code>logs.rs</code> and <code>runs.rs</code>. Its <code>Cargo.toml</code> description is correct: "No SQLite yet, that is M3."</p>
+</div>
+</section>
+<section id="the-per-project-log-json-lines" class="level2">
+<h2><span class="header-section-number">8.2</span> The per-project log: JSON Lines</h2>
+<p><code>FileLog</code> writes one JSON object per line to <code>&lt;project&gt;/.spoonstill/logs/spoonstill-YYYYMMDD.jsonl</code>:</p>
+<pre class="text"><code>{"at":"2026-10-07T06:20:24.884Z","level":"info","scope":"render",
+ "message":"project invoked","root":"...","scenes":"6","jobs":"2",...}</code></pre>
+<p>The JSON is written by hand (no serde in this crate), with careful escaping so a multi-line FFmpeg error stays on one line. Files rotate at 8 MiB and the newest five are kept. A write failure disables the file and records the error once, so a full disk produces one failure, not thousands. <strong>Logging can never fail a render.</strong></p>
+<p>Secrets are scrubbed earlier, when the <code>Event</code> is built in core, so every sink receives already-redacted text.</p>
+</section>
+<section id="the-machine-wide-runs.csv" class="level2">
+<h2><span class="header-section-number">8.3</span> The machine-wide <code>runs.csv</code></h2>
+<p>Every event also goes to one CSV file for the whole machine, for the question "what went wrong?" when you do not know which folder to look in:</p>
+<ul>
+<li>macOS: <code>~/Library/Application Support/spoonstill/runs.csv</code></li>
+<li>Windows: <code>%APPDATA%\spoonstill\runs.csv</code></li>
+<li>elsewhere: <code>$XDG_CONFIG_HOME/spoonstill</code> or <code>~/.config/spoonstill</code></li>
+</ul>
+<p>Columns: <code>when, level, scope, project, what happened, details, folder</code>. Every field is quoted. Three engineering details:</p>
+<ol type="1">
+<li><strong>Formula injection.</strong> A spreadsheet treats a cell starting with <code>=</code>, <code>+</code>, <code>-</code> or <code>@</code> as a formula even inside quotes, and the <code>project</code> column is the folder name, which the operator controls. A folder called <code>=1+1</code> would become a live formula. <code>defuse_formula</code> prefixes such values with <code>'</code>, leaving real numbers like <code>-16.0</code> alone (D-122).</li>
+<li><strong>Locking across processes.</strong> Several renders may append at once. <code>append_line</code> takes the OS file lock (<code>File::lock</code>, stable in Rust since 1.89), decides whether the file is empty <strong>from the locked file's length</strong>, and writes header plus row in one <code>write_all</code>. Before this, four concurrent renders produced three header lines welded onto rows. On Windows the lock silently failed for months because an append-only handle lacks the access right <code>LockFileEx</code> needs; adding <code>.read(true)</code> to the open options fixed it (D-135).</li>
+<li><strong>Rolling.</strong> At 16 MiB the file becomes <code>runs-previous.csv</code> and a fresh one starts.</li>
+</ol>
+</section>
+<section id="journal-two-sinks-as-one" class="level2">
+<h2><span class="header-section-number">8.4</span> <code>Journal</code>: two sinks as one</h2>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="co">// crates/spoonstill-state/src/runs.rs:267-348 (abridged)</span></span>
+<span id="cb2-2"><span class="kw">pub</span> <span class="kw">struct</span> Journal <span class="op">{</span> project<span class="op">:</span> <span class="dt">Option</span><span class="op">&lt;</span>FileLog<span class="op">&gt;,</span> machine<span class="op">:</span> <span class="dt">Option</span><span class="op">&lt;</span>ActivityLog<span class="op">&gt;</span> <span class="op">}</span></span>
+<span id="cb2-3"></span>
+<span id="cb2-4"><span class="kw">impl</span> Diagnostics <span class="cf">for</span> Journal <span class="op">{</span></span>
+<span id="cb2-5">    <span class="kw">fn</span> record(<span class="op">&amp;</span><span class="kw">self</span><span class="op">,</span> event<span class="op">:</span> <span class="op">&amp;</span>Event) <span class="op">{</span></span>
+<span id="cb2-6">        <span class="cf">if</span> <span class="kw">let</span> <span class="cn">Some</span>(log) <span class="op">=</span> <span class="op">&amp;</span><span class="kw">self</span><span class="op">.</span>project <span class="op">{</span> log<span class="op">.</span>record(event)<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb2-7">        <span class="cf">if</span> <span class="kw">let</span> <span class="cn">Some</span>(index) <span class="op">=</span> <span class="op">&amp;</span><span class="kw">self</span><span class="op">.</span>machine <span class="op">{</span> index<span class="op">.</span>record(event)<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb2-8">    <span class="op">}</span></span>
+<span id="cb2-9"><span class="op">}</span></span></code></pre></div>
+<p><code>Journal::for_surface(path)</code> opens the project log <strong>only if <code>.spoonstill/</code> already exists</strong>, so running <code>still validate ~/Pictures</code> does not create state in your Pictures folder. Before <code>Journal</code>, combining two optional sinks was awkward enough that only the render command ever did it, and <code>runs.csv</code> recorded nothing else (D-148).</p>
+</section>
+<section id="the-diagnostics-bundle" class="level2">
+<h2><span class="header-section-number">8.5</span> The diagnostics bundle</h2>
+<p><code>still diagnostics export</code> writes <strong>one text file</strong> containing a plain-language header ("WHAT IS IN THIS FILE": paths and FFmpeg commands, but no keys, media or video), an ENVIRONMENT block (spoonstill version, OS, FFmpeg path and version, FFmpeg's configuration flags, the TTS tool status, usable hardware encoders, the raw <code>PATH</code>), and every JSON Lines log of the project. It is designed to be attached to a bug report.</p>
+</section>
+<section id="tests-3" class="level2">
+<h2><span class="header-section-number">8.6</span> Tests</h2>
+<p>20 unit tests, including <code>credentials_never_reach_the_file</code>, <code>concurrent_writers_produce_one_header_and_whole_rows</code> (8 threads x 40 rows, exactly one header), and <code>the_log_handle_can_actually_be_locked</code>.</p>
+</section>
+</section>

@@ -1,0 +1,135 @@
+<section id="spoonstill-tts-turning-text-into-speech" class="level1">
+<h1><span class="header-section-number">7</span> spoonstill-tts: Turning Text Into Speech</h1>
+<section id="why-it-exists-2" class="level2">
+<h2><span class="header-section-number">7.1</span> Why it exists</h2>
+<p>When a scene has a written line instead of a recording, something must speak it. <code>spoonstill-tts</code> defines the contract for a speech <strong>provider</strong> and contains the one provider that exists today: <strong>Edge</strong>, which uses Microsoft Edge's "Read Aloud" neural voices through the open-source <code>edge-tts</code> Python command line tool.</p>
+<p><strong>It owns:</strong> the <code>Provider</code> trait, the Edge implementation, retries, error classification, long-text splitting, and a process-wide rate limiter. <strong>It does not own:</strong> caching (the app computes cache keys), the final audio format (media normalizes it), or the scene's duration (measured with ffprobe afterwards).</p>
+</section>
+<section id="the-provider-trait" class="level2">
+<h2><span class="header-section-number">7.2</span> The <code>Provider</code> trait</h2>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">// crates/spoonstill-tts/src/lib.rs:226-304 (abridged)</span></span>
+<span id="cb1-2"><span class="kw">pub</span> <span class="kw">trait</span> Provider<span class="op">:</span> <span class="bu">Send</span> <span class="op">+</span> <span class="bu">Sync</span> <span class="op">{</span></span>
+<span id="cb1-3">    <span class="kw">fn</span> id(<span class="op">&amp;</span><span class="kw">self</span>) <span class="op">-&gt;</span> <span class="op">&amp;</span><span class="dt">str</span><span class="op">;</span></span>
+<span id="cb1-4">    <span class="kw">fn</span> availability(<span class="op">&amp;</span><span class="kw">self</span>) <span class="op">-&gt;</span> Availability<span class="op">;</span>          <span class="co">// Ready | Missing(Remedy)</span></span>
+<span id="cb1-5">    <span class="kw">fn</span> voices(<span class="op">&amp;</span><span class="kw">self</span>) <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span><span class="dt">Vec</span><span class="op">&lt;</span>Voice<span class="op">&gt;,</span> TtsError<span class="op">&gt;;</span></span>
+<span id="cb1-6">    <span class="kw">fn</span> default_voice(<span class="op">&amp;</span><span class="kw">self</span>) <span class="op">-&gt;</span> <span class="op">&amp;</span><span class="dt">str</span> <span class="op">{</span> <span class="st">""</span> <span class="op">}</span></span>
+<span id="cb1-7">    <span class="kw">fn</span> install(<span class="op">&amp;</span><span class="kw">self</span>) <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span><span class="dt">String</span><span class="op">,</span> TtsError<span class="op">&gt;</span> <span class="op">{</span> <span class="co">/* "cannot install itself" */</span> <span class="op">}</span></span>
+<span id="cb1-8">    <span class="kw">fn</span> speak(<span class="op">&amp;</span><span class="kw">self</span><span class="op">,</span> request<span class="op">:</span> <span class="op">&amp;</span>Request<span class="op">&lt;</span><span class="ot">'_</span><span class="op">&gt;,</span> destination<span class="op">:</span> <span class="op">&amp;</span><span class="dt">Path</span><span class="op">,</span> cancel<span class="op">:</span> <span class="op">&amp;</span>Cancel)</span>
+<span id="cb1-9">        <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span>Spoken<span class="op">,</span> TtsError<span class="op">&gt;;</span></span>
+<span id="cb1-10"><span class="op">}</span></span></code></pre></div>
+<p><code>Send + Sync</code> means one provider value can be shared by many threads, because the audio pool speaks several lines at once. <code>Request&lt;'a&gt;</code> borrows its text, voice and settings, so it is <code>Copy</code> and asking for 500 lines clones nothing. <code>Spoken</code> reports the bytes written, the command line with the text <strong>removed</strong>, and the voice that actually spoke (if the request said <code>default</code>, this is the resolved name).</p>
+<p><code>providers()</code> returns <code>vec![Box::new(edge::Edge::from_env())]</code>, and <code>provider(id)</code> finds one by name, case-insensitively, or returns <code>TtsError::NoSuchProvider</code> listing what exists. There is no ElevenLabs provider (Verified from source; a test asserts <code>provider("elevenlabs")</code> is an error).</p>
+</section>
+<section id="how-edge-speaks-a-line" class="level2">
+<h2><span class="header-section-number">7.3</span> How Edge speaks a line</h2>
+<p>The exact command (Verified by runtime experiment, from the project log):</p>
+<pre class="text"><code>/opt/homebrew/bin/edge-tts --voice en-GB-RyanNeural --rate '+0%' --volume '+0%'
+    --pitch +0Hz
+    --file .../.spoonstill/cache/audio/.spoken-75a6acdb77d4f3b7.txt.partial-16618-1.txt
+    --write-media .../.spoonstill/cache/audio/.spoken-75a6acdb77d4f3b7.spoken.partial-16618-0.spoken</code></pre>
+<p><strong>The text goes in a file (<code>--file</code>), never on the command line</strong> (D-081). Three reasons, in rising importance: command lines have length limits; every process on the machine can read another's command line (<code>ps</code>); and spoonstill logs every command line, and the logs go into diagnostics bundles that people send to others. The operator's script does not belong there. The temporary script file is deleted after the attempt whether or not it worked.</p>
+<p>The <code>speak</code> flow (<code>edge.rs:1362-1487</code>):</p>
+<ol type="1">
+<li>Empty text is a <code>BadRequest</code>.</li>
+<li>Voice: empty or <code>default</code> means <code>default_voice_for(text)</code>, which looks at the script the line is written in. Latin text gives <code>en-US-AvaNeural</code>; Devanagari gives <code>hi-IN-MadhurNeural</code>; there are 21 such defaults (D-158). A named voice is always obeyed.</li>
+<li>Length: a line longer than one hour of speech at 17.3 characters per second (62 280 characters) is refused before any request is made.</li>
+<li>Rate, volume and pitch settings are validated (<code>+N%</code>, <code>+NHz</code>).</li>
+<li>The line is split into pieces of at most <code>CHUNK_CHARS = 9 000</code> characters, at paragraph, then sentence, then word boundaries, and packed so an hour is a handful of requests.</li>
+<li>Each piece is spoken with retries (below). Several pieces are joined by <strong>concatenating the MP3 bytes</strong>, which is valid because MP3 is a stream of self-contained frames.</li>
+<li>The result is checked: zero bytes is a failure (the tool sometimes exits 0 having written nothing), and the first bytes must look like audio (an HTML error page is rejected).</li>
+<li>The file is renamed into its final place.</li>
+</ol>
+<p>A <code>Scratch</code> drop guard holds every temporary path and deletes them however the function exits (D-123).</p>
+</section>
+<section id="retries-and-classification" class="level2">
+<h2><span class="header-section-number">7.4</span> Retries and classification</h2>
+<p>The network fails in many ways. <code>edge-tts</code> prints a Python exception on the <strong>last line of stderr</strong>, and <code>classify()</code> reads that line and matches <strong>exception class names</strong>, not prose:</p>
+<ul>
+<li><strong>Permanent</strong> (do not retry): <code>NoAudioReceived</code>, <code>ValueError</code>, <code>TypeError</code>, usage errors, <code>No such file or directory</code>, <code>Permission denied</code>, <code>ModuleNotFoundError</code>, and <strong>anything unrecognised</strong>. An unknown failure is more likely a wrong argument than a flaky network.</li>
+<li><strong>Transient</strong> (retry): <code>WebSocketError</code>, <code>aiohttp</code>, <code>ClientConnector...</code>, <code>ServerDisconnected</code>, <code>ConnectionResetError</code>, <code>ConnectionRefusedError</code>, <code>TimeoutError</code>, <code>socket.gaierror</code>, SSL errors, DNS failures, HTTP <code>429</code> and <code>503</code>.</li>
+</ul>
+<p><code>Retry::default()</code> makes 3 attempts with pauses of 0, 0.5 s and 1.5 s. The retry loop <code>persevere</code> takes both the attempt and the sleep as <strong>closures</strong>, so tests can run retries instantly without a network.</p>
+<p><code>NoAudioReceived</code> has a special rule since D-195: if the line is short (200 characters or fewer), contains real letters, and is in a script the voice can read, it is retried, because the author's logs showed twelve such lines that all spoke on the next try. A line of only punctuation, or a Hindi line sent to an English voice, is a permanent error with a sentence saying why and which voice to use instead (<code>wrong_script</code>).</p>
+<p>When retries run out, <code>network_hint</code> turns the technical reason into advice: "check your internet connection, then any VPN or firewall" for DNS failures, "wait a while" when the service stopped accepting connections, and so on, never inventing a cause it cannot see.</p>
+</section>
+<section id="the-pace-gate-a-rate-limiter-you-can-read" class="level2">
+<h2><span class="header-section-number">7.5</span> The pace gate: a rate limiter you can read</h2>
+<p>In a real 431-scene render, the service accepted 335 lines in three and a half minutes (eight at a time) and then <strong>refused every connection for about 54 minutes</strong>. <code>pace.rs</code> exists so that does not happen again (D-195). Three rules:</p>
+<ul>
+<li>at most <strong>2 requests in flight</strong>;</li>
+<li>starts at least <strong>1.2 s apart</strong> (at most 50 per minute);</li>
+<li>after a refused connection, <strong>everyone</strong> waits a cool-down of 15 s, doubling for each consecutive refusal up to 120 s, reset when a line is spoken.</li>
+</ul>
+<p>The arithmetic lives in a plain struct that takes "now" as a parameter, so it is tested without sleeping:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb3-1"><span class="co">// crates/spoonstill-tts/src/pace.rs:95-111</span></span>
+<span id="cb3-2"><span class="kw">pub</span> <span class="kw">fn</span> try_start(<span class="op">&amp;</span><span class="kw">mut</span> <span class="kw">self</span><span class="op">,</span> pace<span class="op">:</span> Pace<span class="op">,</span> now<span class="op">:</span> Instant) <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span>()<span class="op">,</span> Duration<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb3-3">    <span class="kw">let</span> earliest <span class="op">=</span> [<span class="kw">self</span><span class="op">.</span>next_start<span class="op">,</span> <span class="kw">self</span><span class="op">.</span>cool_until]<span class="op">.</span>into_iter()<span class="op">.</span>flatten()<span class="op">.</span>max()<span class="op">;</span></span>
+<span id="cb3-4">    <span class="cf">if</span> <span class="kw">let</span> <span class="cn">Some</span>(earliest) <span class="op">=</span> earliest</span>
+<span id="cb3-5">        <span class="op">&amp;&amp;</span> earliest <span class="op">&gt;</span> now</span>
+<span id="cb3-6">    <span class="op">{</span></span>
+<span id="cb3-7">        <span class="cf">return</span> <span class="cn">Err</span>(earliest <span class="op">-</span> now)<span class="op">;</span></span>
+<span id="cb3-8">    <span class="op">}</span></span>
+<span id="cb3-9">    <span class="cf">if</span> <span class="kw">self</span><span class="op">.</span>in_flight <span class="op">&gt;=</span> pace<span class="op">.</span>in_flight <span class="op">{</span></span>
+<span id="cb3-10">        <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">Duration::</span>from_millis(<span class="dv">100</span>))<span class="op">;</span></span>
+<span id="cb3-11">    <span class="op">}</span></span>
+<span id="cb3-12">    <span class="kw">self</span><span class="op">.</span>in_flight <span class="op">+=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb3-13">    <span class="kw">self</span><span class="op">.</span>next_start <span class="op">=</span> <span class="cn">Some</span>(now <span class="op">+</span> pace<span class="op">.</span>gap)<span class="op">;</span></span>
+<span id="cb3-14">    <span class="cn">Ok</span>(())</span>
+<span id="cb3-15"><span class="op">}</span></span></code></pre></div>
+<p>Around it, a <code>Gate</code> holds the schedule in a <code>Mutex</code> with a <code>Condvar</code>, created once per process with <code>OnceLock</code> so every render and every voice audition in the process shares it. <code>enter()</code> waits (in steps of at most 100 ms, so Stop is obeyed even during a two-minute cool-down) and returns a <code>Slot</code> guard whose <code>Drop</code> frees the place however the request ended. A DNS failure is deliberately <strong>not</strong> a refusal: an offline machine should be told so in seconds, not after cool-downs.</p>
+</section>
+<section id="whose-code-is-whose" class="level2">
+<h2><span class="header-section-number">7.6</span> Whose code is whose</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Owner</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>spoonstill_tts::edge</code>, <code>pace</code></td>
+<td>spoonstill (Rust)</td>
+<td>arguments, script file, pacing, retries, classification, validation, joining, rename</td>
+</tr>
+<tr>
+<td><code>spoonstill_media::command</code></td>
+<td>spoonstill (Rust)</td>
+<td>spawning, timeout, cancellation, stderr</td>
+</tr>
+<tr>
+<td><code>edge-tts</code></td>
+<td>third party (Python, installed with pipx, brew or pip)</td>
+<td>opens a websocket to Microsoft and writes MP3</td>
+</tr>
+<tr>
+<td><code>speech.platform.bing.com</code></td>
+<td>Microsoft</td>
+<td>the neural voice service; unofficial and reverse-engineered by <code>edge-tts</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>spoonstill's Rust code contains <strong>no network client</strong>. Every byte of speech traffic comes from the <code>edge-tts</code> child process. Speech therefore needs the internet; recordings and silent scenes do not, and a fully cached project renders offline because the pre-flight check only asks for providers whose lines are not cached.</p>
+</section>
+<section id="installing-edge-tts" class="level2">
+<h2><span class="header-section-number">7.7</span> Installing edge-tts</h2>
+<p><code>install()</code> tries, in order: <code>pipx install edge-tts</code>, <code>brew install edge-tts</code> (macOS), and <code>python -m pip install --user --upgrade edge-tts</code> (with <code>python3</code> and Windows' <code>py -3</code> variants). It locates each installer with <code>locate</code>, never a bare name, and only claims success after re-locating <code>edge-tts</code> and checking it runs. No version is pinned.</p>
+</section>
+<section id="tests-2" class="level2">
+<h2><span class="header-section-number">7.8</span> Tests</h2>
+<p>72 test functions. <code>tests/edge_retry.rs</code> (Unix only) replaces <code>edge-tts</code> with a small shell script that fails a chosen number of times and then writes fake MP3 bytes, proving retries, permanent failures, chunk joining, cancellation and the cool-down through the real process boundary, offline. <code>tests/edge_live.rs</code> talks to Microsoft for real and is <code>#[ignore]</code>d; <code>make tts-live</code> runs it, and it exists to notice when an <code>edge-tts</code> upgrade changes the error text the classifier depends on.</p>
+<div class="callout warning">
+<p><strong>Docs and code disagree.</strong> <code>crates/spoonstill-tts/src/lib.rs</code> (lines 7-11) says ElevenLabs is the default in a sold build and keys come from <code>keyring-rs</code>. Neither exists. The crate's <code>Cargo.toml</code> description is accurate ("ElevenLabs is not written yet").</p>
+</div>
+<div class="callout warning">
+<p><strong>A code-reading observation (not executed).</strong> If Stop is pressed while the <em>last</em> retry attempt is in flight, <code>interpret()</code> maps <code>MediaError::Cancelled</code> to a transient failure, so the user sees "the voice service could not be reached" instead of a clean cancellation (<code>edge.rs:956</code>, <code>1195</code>). The test <code>a_request_already_in_flight_is_stopped</code> uses one attempt and accepts either outcome, so it does not pin this.</p>
+</div>
+</section>
+</section>

@@ -1,0 +1,86 @@
+<section id="the-security-model" class="level1">
+<h1><span class="header-section-number">22</span> The Security Model</h1>
+<p>This chapter is an educational review, not an audit. Each item is labelled <strong>Verified protection</strong>, <strong>Likely protection</strong>, <strong>Design intention</strong> or <strong>Potential risk</strong>.</p>
+<section id="command-execution-and-shell-injection" class="level2">
+<h2><span class="header-section-number">22.1</span> Command execution and shell injection</h2>
+<ul>
+<li><strong>Verified protection.</strong> No shell is ever used. All programs start from an absolute path with an argument vector (<code>command.rs</code>); <code>no_shell_strings.rs</code> fails the build if any other file in the media crate constructs a process or contains shell fragments. Hostile filenames are exercised end to end in <code>segment_integrity.rs</code>.</li>
+<li><strong>Verified protection.</strong> A filename starting with <code>-</code> cannot become an option: inputs always follow <code>-i</code>.</li>
+<li><strong>Verified protection.</strong> No file path enters an FFmpeg filter graph string, where <code>:</code> and <code>\</code> are syntax.</li>
+<li><strong>Verified protection.</strong> The concat list refuses any segment name it did not generate rather than trying to escape it.</li>
+</ul>
+</section>
+<section id="which-binaries-run" class="level2">
+<h2><span class="header-section-number">22.2</span> Which binaries run</h2>
+<ul>
+<li><strong>Verified protection.</strong> Binaries are resolved to absolute paths from <code>PATH</code> and a fixed list of package-manager folders (D-103).</li>
+<li><strong>Potential risk.</strong> That search trusts whatever executable is first found. A malicious <code>ffmpeg</code> earlier on <code>PATH</code>, or planted in <code>~/.local/bin</code>, would be run. This is the normal trust model for command-line tools; <code>still doctor</code> and the diagnostics bundle print the exact paths used, which helps detection.</li>
+<li><strong>Design intention.</strong> spoonstill never downloads FFmpeg itself (D-012); installs go through Homebrew or winget, which verify their own packages.</li>
+</ul>
+</section>
+<section id="paths-and-directory-traversal" class="level2">
+<h2><span class="header-section-number">22.3</span> Paths and directory traversal</h2>
+<ul>
+<li><strong>Verified protection.</strong> Every path from a manifest or <code>project.yaml</code> is canonicalised (following symlinks) and checked to stay inside the project, component by component. Error messages do not reveal whether a file outside exists (<code>path_safety.rs</code>, tests <code>path_safety_rejects_dotdot_traversal</code>, <code>..._leaks_no_existence_through_a_symlink</code>).</li>
+<li><strong>Verified protection.</strong> The <code>output:</code> destination is contained the same way (D-112). <code>--out</code> on the command line goes wherever the operator says, by design.</li>
+<li><strong>Verified protection.</strong> <code>SceneId</code> refuses separators and <code>..</code>.</li>
+</ul>
+</section>
+<section id="overwriting-and-data-loss" class="level2">
+<h2><span class="header-section-number">22.4</span> Overwriting and data loss</h2>
+<ul>
+<li><strong>Verified protection.</strong> Originals are copied, never moved. Ingest never overwrites: it claims each name with <code>create_new</code>.</li>
+<li><strong>Verified protection.</strong> <code>still remove</code> and picture replacement move files to <code>removed/</code>; nothing is deleted. Renumbering parks files under journal names and recovers after a crash (D-121).</li>
+<li><strong>Verified protection.</strong> <code>project.yaml</code> is never written by the renderer (gate 7g checks its mtime and content after a render).</li>
+<li><strong>Verified protection.</strong> The film and every cache file are written beside and renamed, so a crash cannot leave a half-written file under the final name.</li>
+<li><strong>Likely protection.</strong> The cache sweep deletes only names matching spoonstill's own patterns; a stranger's file in <code>.spoonstill/segments</code> survives (tested).</li>
+</ul>
+</section>
+<section id="untrusted-media-and-text" class="level2">
+<h2><span class="header-section-number">22.5</span> Untrusted media and text</h2>
+<ul>
+<li><strong>Verified protection.</strong> A <code>.txt</code> is size-checked before reading (256 KiB); <code>project.yaml</code> is limited to 1 MiB; chapters to 4 MiB (D-126).</li>
+<li><strong>Verified protection.</strong> Caption bands are clamped to the frame so a huge caption cannot allocate gigabytes (D-139); output geometry has a ceiling so arithmetic cannot overflow (D-114).</li>
+<li><strong>Potential risk.</strong> Decoding a malicious image or audio file is FFmpeg's job; spoonstill inherits FFmpeg's parser security. Running FFmpeg as a separate process does isolate a crash from the spoonstill process, but not from the user's files.</li>
+</ul>
+</section>
+<section id="the-desktop-window" class="level2">
+<h2><span class="header-section-number">22.6</span> The desktop window</h2>
+<ul>
+<li><strong>Verified protection.</strong> A strict Content Security Policy (<code>script-src 'self'</code>, no remote content), and the asset protocol scope grants only the displayed stills, one file at a time (D-127).</li>
+<li><strong>Verified protection.</strong> Writing commands compare the page's <code>root</code> with the project the window has open; opening and revealing files take no path from the page.</li>
+<li><strong>Design intention.</strong> The webview is treated as less trusted than the Rust process.</li>
+</ul>
+</section>
+<section id="logs-and-secrets" class="level2">
+<h2><span class="header-section-number">22.7</span> Logs and secrets</h2>
+<ul>
+<li><strong>Verified protection.</strong> Credentials are redacted when an event is created, so no sink sees them; narration text is kept out of logged command lines by passing it in a file (<code>--file</code>).</li>
+<li><strong>Verified protection.</strong> CSV formula injection through folder names is defused (D-122).</li>
+<li><strong>Note.</strong> There are no API keys in the product today: the only TTS provider needs none. Planned <code>keyring</code> storage for a future paid provider (D-014) does not exist yet.</li>
+</ul>
+</section>
+<section id="network" class="level2">
+<h2><span class="header-section-number">22.8</span> Network</h2>
+<ul>
+<li><strong>Verified from source.</strong> spoonstill's own Rust code opens no network connections. Speech traffic is made by the <code>edge-tts</code> child process to Microsoft's service; the text of every spoken line leaves the machine. Installers (<code>install.sh</code>, <code>install.ps1</code>) and package managers also use the network.</li>
+</ul>
+</section>
+<section id="install-scripts-and-releases" class="level2">
+<h2><span class="header-section-number">22.9</span> Install scripts and releases</h2>
+<ul>
+<li><strong>Verified protection.</strong> Both installers download <code>SHA256SUMS.txt</code> from the release and refuse to install an asset whose checksum line is missing or wrong. The release workflow verifies every checksum before publishing, and pins all GitHub Actions to full commit SHAs (D-125).</li>
+<li><strong>Potential risk.</strong> The installer is fetched from the mutable <code>master</code> branch and piped into a shell; checksums come from the same release they verify, so they protect against corruption and partial downloads, not against a compromised release page.</li>
+<li><strong>Potential risk.</strong> Builds are <strong>not code-signed or notarized</strong>; <code>install.sh</code> removes macOS's quarantine attribute so the app opens (D-099). That is convenient but bypasses Gatekeeper's check for this app.</li>
+<li><strong>Verified protection.</strong> <code>cargo audit --deny warnings</code> runs in CI; 18 advisories are explicitly reviewed and recorded in <code>.cargo/audit.toml</code> with the platform each one reaches.</li>
+</ul>
+</section>
+<section id="unsafe_code-forbid" class="level2">
+<h2><span class="header-section-number">22.10</span> <code>unsafe_code = "forbid"</code></h2>
+<p><strong>What it protects against:</strong> writing <code>unsafe</code> blocks anywhere in spoonstill's own crates, which means no raw pointer dereferences, no FFI calls written by hand, and no manual memory management in this code. <code>forbid</code> (unlike <code>deny</code>) cannot be overridden by an inner <code>#[allow]</code>. This is why the CLI uses the <code>ctrlc</code> crate for signals and <code>sysinfo</code> for RAM: both would otherwise need <code>unsafe</code>.</p>
+<p><strong>What it does not protect against:</strong> <code>unsafe</code> code inside dependencies (Tauri, the webview bindings, <code>sysinfo</code>, the standard library); bugs in FFmpeg or <code>edge-tts</code>, which run as separate programs; logic errors, path mistakes, or resource exhaustion; and panics. It is a strong guarantee about this repository's own Rust, not about the whole program.</p>
+<div class="callout exercise">
+<p><strong>Exercise 22.1 (Intermediate).</strong> In <code>path_safety.rs</code>, why must a request for <code>project/link/nope</code> (where <code>link -&gt; /etc</code> and <code>nope</code> does not exist) return <code>Outside</code> and not <code>Missing</code>?</p>
+</div>
+</section>
+</section>

@@ -1,0 +1,73 @@
+<section id="limitations-technical-debt-and-future-areas" class="level1">
+<h1><span class="header-section-number">32</span> Limitations, Technical Debt and Future Areas</h1>
+<section id="current-limitations-true-of-the-code-at-this-commit" class="level2">
+<h2><span class="header-section-number">32.1</span> Current limitations (true of the code at this commit)</h2>
+<ul>
+<li>Hard cuts only; no fades or dissolves (D-057 accepted, not built).</li>
+<li>One TTS provider (Edge through <code>edge-tts</code>), an unofficial service with a 24 kHz mono quality ceiling and a throttle; no API-key provider, no key storage.</li>
+<li>No <code>state.db</code> or per-project reporting index; history is in the logs.</li>
+<li>FFmpeg is not bundled; the operator installs it.</li>
+<li>Builds are unsigned and not notarized; no auto-updater.</li>
+<li>The licence for spoonstill's own code has not been chosen ("all rights reserved").</li>
+<li>Captions draw Latin, Greek, Cyrillic and Devanagari; other scripts show boxes (validation names them).</li>
+<li>4K is the maximum output size.</li>
+<li>Hardware encoding is an explicit draft mode; VideoToolbox is unmeasured.</li>
+<li>Old projects (no <code>motion_seed</code>) re-encode every scene when reordered unless switched to <code>v2</code>.</li>
+<li>Two separate copies of one photo at different paths get the same V2 motion.</li>
+<li>No GUI automation; window behaviour is tested at its seams.</li>
+<li>The window has no single-scene motion preview (the CLI has <code>render-scene</code>).</li>
+<li>Linux is not a release target.</li>
+<li>Rust dependency licence notices are not generated.</li>
+</ul>
+</section>
+<section id="documentation-drift-found-while-preparing-this-book" class="level2">
+<h2><span class="header-section-number">32.2</span> Documentation drift found while preparing this book</h2>
+<p>These are places where documents disagree with the code at this commit (all verified by reading or grep). They are not bugs in behaviour, but they will mislead a reader:</p>
+<ul>
+<li><code>spoonstill-state/src/lib.rs</code> describes a SQLite state machine that does not exist; <code>spoonstill-tts/src/lib.rs</code> describes ElevenLabs and <code>keyring-rs</code>, which do not exist.</li>
+<li><code>film.rs</code>'s module comment describes separate audio and render phases (they overlap since D-146).</li>
+<li><code>pool::SEGMENT_MEMORY_BYTES</code> is unused.</li>
+<li><code>rows.rs</code> lists seven manifest columns; the code accepts eight.</li>
+<li><code>captions.rs</code> says the renderer uses <code>between()</code>; it uses <code>gte(t,S)*lt(t,E)</code>.</li>
+<li><code>ci.yml</code> still says <code>make gates</code> is "29 checks" (it is 39); <code>release.yml</code> says "three jobs" and "twelve assets" (four and ten).</li>
+<li><code>apps/desktop/Cargo.toml</code> says <code>architecture.rs</code> checks the desktop's dependencies; it does not.</li>
+<li><code>plan.md</code> still names FFmpeg 8.0.1 as installed and uses a <code>--verbose</code> flag that does not exist.</li>
+<li>The README's per-crate line table is stale (only <code>spoonstill-state</code> matches), though its total is checked by a test.</li>
+<li><code>.cargo/audit.toml</code> says three fonts are embedded (there are six).</li>
+<li>A string literal in the CLI's unknown-subtitle-theme message contains about 22 stray spaces.</li>
+<li>There are <strong>no</strong> <code>TODO</code>, <code>FIXME</code>, <code>todo!()</code> or <code>unimplemented!()</code> markers in tracked files; open work is tracked in <code>decisions.md</code> and <code>plan.md</code> instead.</li>
+</ul>
+</section>
+<section id="planned-in-plan.md-or-the-readme-roadmap" class="level2">
+<h2><span class="header-section-number">32.3</span> Planned (in plan.md or the README roadmap)</h2>
+<ol type="1">
+<li>Split one long recording on silence into one piece per photo (described as the biggest remaining saving).</li>
+<li>A higher-fidelity, bring-your-own-key TTS provider (ElevenLabs).</li>
+<li>Transitions, after <code>xfade</code> is measured at 500 scenes.</li>
+<li><code>state.db</code> as a reporting index (not for resume).</li>
+<li>M5 packaging: an LGPL FFmpeg build, bundled and checksum-verified; signing; notarization; an updater; a generated licence manifest.</li>
+<li>From D-193's list: a style note and "Copy for Google Flow"; a placeholder so a scene waiting for a picture can render; deciding whether to speak a whole chapter once and cut it at word boundaries.</li>
+</ol>
+</section>
+<section id="open-questions" class="level2">
+<h2><span class="header-section-number">32.4</span> Open questions</h2>
+<ul>
+<li><strong>D-072</strong>: word-level karaoke captions from provider word boundaries.</li>
+<li>The real throttle threshold of the Edge service (the pace gate is "a margin, not a measurement").</li>
+<li>Concatenating segments on a Windows network (UNC) share has not been tested.</li>
+</ul>
+</section>
+<section id="historical-ideas-recorded-not-committed-to" class="level2">
+<h2><span class="header-section-number">32.5</span> Historical ideas (recorded, not committed to)</h2>
+<p>A frame-server architecture if motion ever outgrows FFmpeg filters (D-060); <code>scale</code> plus <code>crop</code> as a fallback if <code>zoompan</code> regresses (D-031); an SRT sidecar file; an Azure voice provider (explicitly not built by the author's choice); a music bed and limiter; renaming the <code>vidio/</code> folder.</p>
+</section>
+<section id="possible-improvements-suggested-by-this-review-the-authors-call-not-project-commitments" class="level2">
+<h2><span class="header-section-number">32.6</span> Possible improvements suggested by this review (the author's call, not project commitments)</h2>
+<ul>
+<li>Extend <code>architecture.rs</code> to read <code>apps/*/Cargo.toml</code> so the desktop's dependency rule is enforced, as its manifest claims.</li>
+<li>Rename or document the <code>spoken</code> field in the <code>film complete</code> log row, which counts every non-reused narration, not only spoken ones.</li>
+<li>Make an in-flight cancellation on the final TTS retry surface as <code>Cancelled</code> rather than a network error.</li>
+<li>Bring the stale module comments listed above in line with the code.</li>
+</ul>
+</section>
+</section>

@@ -1,0 +1,98 @@
+<section id="a-first-render-from-the-outside" class="level1">
+<h1><span class="header-section-number">2</span> A First Render, From the Outside</h1>
+<p>Before reading any code, run the tool. Every command below was run for this book on the analysis machine (with the machine-wide state redirected to a scratch folder so the author's real logs were not touched).</p>
+<section id="installing-the-pieces" class="level2">
+<h2><span class="header-section-number">2.1</span> Installing the pieces</h2>
+<p>spoonstill needs FFmpeg (and <code>ffprobe</code>, which comes with it). For spoken lines it also needs the <code>edge-tts</code> Python tool. It does not bundle either. <code>still doctor</code> checks both:</p>
+<pre class="text"><code>$ still doctor
+  ok       ffmpeg - turning your photos into video
+           9.0.1
+  ok       edge - reading your written lines aloud
+
+  graphics - hardware encoders this machine can run
+    usable               Apple (VideoToolbox) (h264_videotoolbox)
+    Films render on the CPU with libx264 (D-036) - the better picture on slow
+    pans across smooth gradients. ...</code></pre>
+<p>(The real output uses long dashes; they are shown as hyphens here.) If something is missing, <code>still doctor --install</code> runs the platform's package manager for you: Homebrew on macOS, winget on Windows.</p>
+</section>
+<section id="making-a-project-the-easy-way" class="level2">
+<h2><span class="header-section-number">2.2</span> Making a project the easy way</h2>
+<pre class="text"><code>$ still new demo land.jpg port.jpg n.wav
+  001.jpg      land.jpg  +  n.wav
+  002.jpg      port.jpg  +  silent
+  2 photos, 1 narration paired, 1 silent</code></pre>
+<p><code>still new</code> created the folder, <strong>copied</strong> the files in under numbered names, paired the one recording with the first photo, and wrote a small starter <code>project.yaml</code>:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb3-1"><span class="co"># How each scene's Ken Burns move is chosen (D-153). ...</span></span>
+<span id="cb3-2"><span class="fu">motion_seed</span><span class="kw">:</span><span class="at"> v2</span></span></code></pre></div>
+<p>Your originals are never moved or modified.</p>
+</section>
+<section id="checking-it" class="level2">
+<h2><span class="header-section-number">2.3</span> Checking it</h2>
+<pre class="text"><code>$ still validate renderable
+.../renderable - manifest scenes.csv
+  6 scenes - 0 narrated, 2 supplied, 4 silent
+     0  001                file    img/001.jpg
+     1  002                file    img/002.jpg
+     2  003                silent  img/003.jpg
+     ...
+  no problems</code></pre>
+<p><code>validate</code> reports every problem at once, not just the first. It exits with status 1 if there is at least one error, so scripts can use it.</p>
+</section>
+<section id="rendering-it" class="level2">
+<h2><span class="header-section-number">2.4</span> Rendering it</h2>
+<pre class="text"><code>$ still render renderable --out film.mp4 --jobs 2
+  6 scenes, 2 at a time (8 for audio)
+  audio  003          silent    2.000s
+  audio  001          file      3.717s
+  ...
+  [  1/6 done] 003              60 frames    2.000s
+  [  2/6 done] unicode spaced   90 frames    3.000s
+  ...
+  [  6/6 done] 001             112 frames    3.733s
+  joining 6 segments (stream copy, D-040)
+.../film.mp4
+  6 scenes, 541 frames, 18.055s (expected 18.033s)
+  0 narrations from cache, 0 segments reused</code></pre>
+<p>Three details are worth noticing already:</p>
+<ol type="1">
+<li><strong>Lines finish out of order.</strong> Scene 003 finished first. Workers run in parallel, which is why the counter says <code>[1/6 done]</code> and not "scene 1": the word "done" is deliberate (D-091, D-140).</li>
+<li><strong>Scene 001 is 112 frames, 3.733 s, for 3.717 s of narration.</strong> The frame count is rounded <strong>up</strong> so the narration is never cut off; the audio is padded with silence to fill the last frame (Chapter 3 and Chapter 15).</li>
+<li><strong>The film is 18.055 s against an expected 18.033 s.</strong> The difference is exactly one AAC audio frame (1024 samples at 48 kHz = 21.3 ms), which the MP4 container adds once per film. spoonstill knows about this and allows it (D-078).</li>
+</ol>
+<p>Run it again:</p>
+<pre class="text"><code>$ still render renderable --out film.mp4 --jobs 2
+  ...
+  6 narrations from cache, 6 segments reused</code></pre>
+<p>The second run did no encoding at all. It reused every normalized audio file and every segment, re-checked them, and re-joined them.</p>
+</section>
+<section id="a-spoken-captioned-scene" class="level2">
+<h2><span class="header-section-number">2.5</span> A spoken, captioned scene</h2>
+<pre class="text"><code>$ echo "The harbour wakes slowly, one light at a time." &gt; line.txt
+$ still new spoken land.jpg line.txt
+  001.jpg      land.jpg  +  line.txt (spoken)
+$ still render spoken --out spoken.mp4 --subtitles boxed --voice en-GB-RyanNeural
+  audio  001          tts       2.836s
+  [  1/1 done] 001              86 frames    2.867s</code></pre>
+<p>Here spoonstill sent the text to <code>edge-tts</code>, received an MP3, normalized it, measured 2.836 s, computed 86 frames, drew the caption itself as an image, and asked FFmpeg to overlay it. Figure 2.1 shows three frames from that film: the picture slowly pans while the caption stays put.</p>
+<figure>
+<img src="/books/spoonstill/media/file0.webp" alt="Three frames (start, middle, end) from the captioned test render. The background is FFmpeg&#x27;s synthetic test pattern; the caption band is drawn by spoonstill&#x27;s own rasterizer with the boxed theme." width="1944" height="360" loading="lazy" decoding="async">
+<figcaption>Three frames (start, middle, end) from the captioned test render. The background is FFmpeg's synthetic test pattern; the caption band is drawn by spoonstill's own rasterizer with the <code>boxed</code> theme.</figcaption>
+</figure>
+</section>
+<section id="where-things-ended-up" class="level2">
+<h2><span class="header-section-number">2.6</span> Where things ended up</h2>
+<p>After those renders, the project folder looked like this (Verified by runtime experiment):</p>
+<pre class="text"><code>renderable/
+  project.yaml  scenes.csv  img/  audio/        &lt;- your inputs, untouched
+  .spoonstill/                                  &lt;- machine state, safe to delete
+    render.lock                                 &lt;- "pid 16501"
+    logs/spoonstill-20261007.jsonl              &lt;- every event of every run
+    segments/seg-21ecedf4779e604e.mp4 ...       &lt;- six cached segments
+    cache/audio/file-64bbaa4704c542e8.wav ...   &lt;- normalized narrations
+                silent-1ec4b61a28ece966.wav ...</code></pre>
+<p>And a machine-wide activity log appeared at <code>~/Library/Application Support/spoonstill/runs.csv</code>. Chapter 13 explains every one of these files.</p>
+<div class="callout exercise">
+<p><strong>Exercise 2.1 (Beginner).</strong> In the render output above, scene <code>002</code> has 159 frames for a 5.300 s recording at 30 fps. Compute <code>5.3 x 30</code>. Why is no padding needed here, unlike scene <code>001</code>?</p>
+</div>
+</section>
+</section>

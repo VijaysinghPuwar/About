@@ -1,0 +1,233 @@
+<section id="spoonstill-core-the-pure-domain-model" class="level1">
+<h1><span class="header-section-number">5</span> spoonstill-core: The Pure Domain Model</h1>
+<section id="why-it-exists" class="level2">
+<h2><span class="header-section-number">5.1</span> Why it exists</h2>
+<p><code>spoonstill-core</code> is the vocabulary every other crate speaks. It defines what a scene is, how big a frame is, how long a scene lasts, how a still moves, which problems a project can have, and the exact text of the FFmpeg filter graph. It does <strong>no I/O</strong>: no files, no processes, no clock, no network. Things that need the outside world are expressed as <strong>traits</strong> that a higher crate implements (for example <code>RealPath</code> for canonicalising paths and <code>Diagnostics</code> for recording events).</p>
+<p><strong>What it deliberately does not own:</strong> processes (media), fonts and pixel drawing (media), the H.264 level table (media), cache keys themselves (app), file formats like YAML and CSV (app).</p>
+<div class="callout warning">
+<p><strong>Docs and code disagree.</strong> <code>crates/spoonstill-core/Cargo.toml</code> and <code>src/lib.rs</code> describe the crate as holding "cache keys". The keys are actually assembled in <code>spoonstill-app</code> (<code>film.rs:1800-1857</code> for segments, <code>audio.rs</code> for narrations). Core holds the hash functions and <code>SubtitleSpec::key_fields</code>.</p>
+</div>
+</section>
+<section id="module-map" class="level2">
+<h2><span class="header-section-number">5.2</span> Module map</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Module</th>
+<th>Lines</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>motion.rs</code></td>
+<td>890</td>
+<td>Ken Burns motion types and <code>build_filter</code></td>
+</tr>
+<tr>
+<td><code>geometry.rs</code></td>
+<td>934</td>
+<td><code>Aspect</code>, <code>Resolution</code>, <code>OutputSpec</code>, <code>SourceGeometry</code>, ceilings</td>
+</tr>
+<tr>
+<td><code>timing.rs</code></td>
+<td>167</td>
+<td>duration to frames and samples</td>
+</tr>
+<tr>
+<td><code>project.rs</code></td>
+<td>1 475</td>
+<td>scene model, <code>Problem</code>/<code>ProblemKind</code>, validation</td>
+</tr>
+<tr>
+<td><code>captions.rs</code></td>
+<td>1 157</td>
+<td>six subtitle themes, cue splitting and timing</td>
+</tr>
+<tr>
+<td><code>chapter.rs</code></td>
+<td>1 224</td>
+<td>cutting a pasted chapter into scenes</td>
+</tr>
+<tr>
+<td><code>path_safety.rs</code></td>
+<td>595</td>
+<td>path containment</td>
+</tr>
+<tr>
+<td><code>hash.rs</code></td>
+<td>205</td>
+<td>stable FNV-1a hashing</td>
+</tr>
+<tr>
+<td><code>language.rs</code></td>
+<td>187</td>
+<td>which language a line is written in</td>
+</tr>
+<tr>
+<td><code>remedy.rs</code></td>
+<td>165</td>
+<td>"a missing tool" as data</td>
+</tr>
+<tr>
+<td><code>diagnostics.rs</code></td>
+<td>425</td>
+<td>events, severity, credential redaction</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="motion-how-a-still-is-told-to-move" class="level2">
+<h2><span class="header-section-number">5.3</span> <code>motion</code>: how a still is told to move</h2>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">// crates/spoonstill-core/src/motion.rs (types, abridged)</span></span>
+<span id="cb1-2"><span class="kw">pub</span> <span class="kw">enum</span> MotionKind <span class="op">{</span> ZoomIn<span class="op">,</span> ZoomOut<span class="op">,</span> PanLeft<span class="op">,</span> PanRight<span class="op">,</span> PanUp<span class="op">,</span> PanDown <span class="op">}</span></span>
+<span id="cb1-3"><span class="kw">pub</span> <span class="kw">enum</span> Anchor <span class="op">{</span> Center<span class="op">,</span> North<span class="op">,</span> NorthEast<span class="op">,</span> East<span class="op">,</span> SouthEast<span class="op">,</span> South<span class="op">,</span></span>
+<span id="cb1-4">                  SouthWest<span class="op">,</span> West<span class="op">,</span> NorthWest <span class="op">}</span></span>
+<span id="cb1-5"><span class="kw">pub</span> <span class="kw">struct</span> MotionSpec <span class="op">{</span> <span class="kw">pub</span> kind<span class="op">:</span> MotionKind<span class="op">,</span> <span class="kw">pub</span> amount<span class="op">:</span> <span class="dt">f64</span><span class="op">,</span></span>
+<span id="cb1-6">                        <span class="kw">pub</span> anchor<span class="op">:</span> Anchor<span class="op">,</span> <span class="kw">pub</span> seed<span class="op">:</span> <span class="dt">u64</span> <span class="op">}</span></span>
+<span id="cb1-7"><span class="kw">pub</span> <span class="kw">enum</span> MotionSeed <span class="op">{</span> <span class="at">#[</span><span class="kw">default</span><span class="at">]</span> V1<span class="op">,</span> V2 <span class="op">}</span></span></code></pre></div>
+<p><code>amount</code> is how far to zoom: clamped to 0.02 to 0.50, default 0.10. A <code>NaN</code> becomes the default.</p>
+<p><strong>Seeding.</strong> If the operator did not pick a move, one is chosen <strong>deterministically</strong> from a hash, so re-rendering produces the identical film (D-035):</p>
+<ul>
+<li><code>MotionSeed::V1</code> hashes (project folder name, <strong>scene index</strong>, image content hash). Moving a scene changes its index, so its move changes and its cached segment is no longer valid.</li>
+<li><code>MotionSeed::V2</code> hashes (<code>"motion-seed-v2"</code>, project folder name, <strong>occurrence</strong>, image content hash). "Occurrence" counts how many earlier scenes use the same photo, so one photo shown twice still gets two different moves, but reordering changes nothing (D-153).</li>
+</ul>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="co">// crates/spoonstill-core/src/motion.rs:376-379 (from_seed)</span></span>
+<span id="cb2-2"><span class="kw">let</span> kind <span class="op">=</span> <span class="pp">MotionKind::</span>ALL[(seed <span class="op">%</span> <span class="pp">MotionKind::</span>ALL<span class="op">.</span>len() <span class="kw">as</span> <span class="dt">u64</span>) <span class="kw">as</span> <span class="dt">usize</span>]<span class="op">;</span></span>
+<span id="cb2-3"><span class="kw">let</span> anchor <span class="op">=</span> <span class="pp">Anchor::</span>ALL[((seed <span class="op">&gt;&gt;</span> <span class="dv">20</span>) <span class="op">%</span> <span class="pp">Anchor::</span>ALL<span class="op">.</span>len() <span class="kw">as</span> <span class="dt">u64</span>) <span class="kw">as</span> <span class="dt">usize</span>]<span class="op">;</span></span>
+<span id="cb2-4"><span class="kw">let</span> amount <span class="op">=</span> <span class="dv">0.08</span> <span class="op">+</span> ((seed <span class="op">&gt;&gt;</span> <span class="dv">40</span>) <span class="op">%</span> <span class="dv">5</span>) <span class="kw">as</span> <span class="dt">f64</span> <span class="op">*</span> <span class="dv">0.01</span><span class="op">;</span></span></code></pre></div>
+<p>So a seeded move has one of 6 kinds, one of 9 anchors, and an amount between 0.08 and 0.12. Projects without a <code>motion_seed:</code> key use V1 forever, so films made before V2 existed do not change; <code>still new</code> writes <code>motion_seed: v2</code> into every new project.</p>
+<p><strong><code>build_filter(source, output, motion, frames) -&gt; String</code></strong> returns the filter chain. Chapter 15 dissects it completely.</p>
+</section>
+<section id="geometry-legal-frame-sizes" class="level2">
+<h2><span class="header-section-number">5.4</span> <code>geometry</code>: legal frame sizes</h2>
+<p><code>OutputSpec</code> has <strong>private fields</strong>, so the only way to get one is <code>OutputSpec::new(aspect, short_edge, fps)</code>, which validates:</p>
+<ol type="1">
+<li>short edge not zero and even (yuv420p needs even sizes);</li>
+<li>for 16:9 and 9:16, short edge divisible by 9, long edge = short / 9 x 16 computed with <code>checked_mul</code> so it cannot overflow;</li>
+<li>fps from 1 to 120;</li>
+<li>at most <strong>36 864 macroblocks</strong> (16x16 blocks) per frame.</li>
+</ol>
+<p>That last number is "derived, not chosen": it is MaxFS, the largest frame H.264 level 5.2 allows, the top row of the level table in <code>spoonstill-media</code>. 4K (3840x2160) is 32 400 macroblocks and passes; 8K is 129 600 and is refused. A test in media asserts that the core constant equals the table's last row, because the two crates cannot see each other's constants (D-114). Before this ceiling existed, a huge <code>short_edge</code> in <code>project.yaml</code> could overflow arithmetic and produce nonsense like a <code>3340530176x32</code> canvas.</p>
+<p><code>PRESCALE_FACTOR = 3</code>: the motion canvas is three times the output. <code>SourceGeometry</code> records a probed image's width, height and SAR; <code>native_short_edge</code> suggests the largest output a photo can fill without enlarging (a 1376x768 photo: 756 landscape, 432 portrait).</p>
+</section>
+<section id="timing-the-frame-arithmetic" class="level2">
+<h2><span class="header-section-number">5.5</span> <code>timing</code>: the frame arithmetic</h2>
+<div class="sourceCode" id="cb3"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb3-1"><span class="co">// crates/spoonstill-core/src/timing.rs:25-38</span></span>
+<span id="cb3-2"><span class="kw">pub</span> <span class="kw">fn</span> frames_for_duration(seconds<span class="op">:</span> <span class="dt">f64</span><span class="op">,</span> fps<span class="op">:</span> <span class="dt">u32</span>) <span class="op">-&gt;</span> <span class="dt">u32</span> <span class="op">{</span></span>
+<span id="cb3-3">    <span class="cf">if</span> <span class="op">!</span>seconds<span class="op">.</span>is_finite() <span class="op">||</span> seconds <span class="op">&lt;=</span> <span class="dv">0.0</span> <span class="op">||</span> fps <span class="op">==</span> <span class="dv">0</span> <span class="op">{</span></span>
+<span id="cb3-4">        <span class="cf">return</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb3-5">    <span class="op">}</span></span>
+<span id="cb3-6">    <span class="kw">let</span> exact <span class="op">=</span> seconds <span class="op">*</span> <span class="dt">f64</span><span class="pp">::</span>from(fps)<span class="op">;</span></span>
+<span id="cb3-7">    <span class="kw">let</span> frames <span class="op">=</span> (exact <span class="op">-</span> <span class="dv">1e-9</span>)<span class="op">.</span>ceil()<span class="op">;</span></span>
+<span id="cb3-8">    <span class="co">// Saturating rather than `as u32`, which would wrap a nonsense duration</span></span>
+<span id="cb3-9">    <span class="co">// into a small frame count and render a plausible-looking wrong segment.</span></span>
+<span id="cb3-10">    <span class="cf">if</span> frames <span class="op">&gt;=</span> <span class="dt">f64</span><span class="pp">::</span>from(<span class="dt">u32</span><span class="pp">::</span><span class="cn">MAX</span>) <span class="op">{</span></span>
+<span id="cb3-11">        <span class="dt">u32</span><span class="pp">::</span><span class="cn">MAX</span></span>
+<span id="cb3-12">    <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb3-13">        (frames <span class="kw">as</span> <span class="dt">u32</span>)<span class="op">.</span>max(<span class="dv">1</span>)</span>
+<span id="cb3-14">    <span class="op">}</span></span>
+<span id="cb3-15"><span class="op">}</span></span></code></pre></div>
+<p>In plain English: round up to whole frames, but first subtract a tiny epsilon so that a duration that is exactly on the frame grid (4.0 s at 30 fps is 120.0, which floating point might compute as 120.00000000000001) does not gain a 121st frame. <code>samples_for_frames(frames, fps)</code> returns <code>(frames x 48000 + fps/2) / fps</code> with integers, exact at 24, 25, 30, 50 and 60 fps.</p>
+</section>
+<section id="project-scenes-and-problems" class="level2">
+<h2><span class="header-section-number">5.6</span> <code>project</code>: scenes and problems</h2>
+<p>The central types:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb4-1"><span class="kw">pub</span> <span class="kw">enum</span> AudioSource <span class="op">{</span></span>
+<span id="cb4-2">    Tts <span class="op">{</span> text<span class="op">:</span> <span class="dt">String</span><span class="op">,</span> provider<span class="op">:</span> ProviderId<span class="op">,</span> voice<span class="op">:</span> VoiceId<span class="op">,</span> settings<span class="op">:</span> TtsSettings <span class="op">},</span></span>
+<span id="cb4-3">    File <span class="op">{</span> original_path<span class="op">:</span> <span class="dt">PathBuf</span> <span class="op">},</span></span>
+<span id="cb4-4">    Silent <span class="op">{</span> seconds<span class="op">:</span> <span class="dt">f64</span> <span class="op">},</span></span>
+<span id="cb4-5"><span class="op">}</span></span>
+<span id="cb4-6"><span class="kw">pub</span> <span class="kw">struct</span> SceneDraft <span class="op">{</span> <span class="co">/* every field Option: id, image, text, audio, duration,</span></span>
+<span id="cb4-7"><span class="co">                          voice, zoom_direction, zoom_anchor, caption */</span> <span class="op">}</span></span>
+<span id="cb4-8"><span class="kw">pub</span> <span class="kw">struct</span> SceneSpec <span class="op">{</span> <span class="kw">pub</span> id<span class="op">:</span> SceneId<span class="op">,</span> <span class="kw">pub</span> image<span class="op">:</span> <span class="dt">PathBuf</span><span class="op">,</span> <span class="kw">pub</span> source<span class="op">:</span> AudioSource<span class="op">,</span></span>
+<span id="cb4-9">                       <span class="kw">pub</span> motion<span class="op">:</span> MotionRequest<span class="op">,</span> <span class="kw">pub</span> caption<span class="op">:</span> <span class="dt">Option</span><span class="op">&lt;</span><span class="dt">String</span><span class="op">&gt;</span> <span class="op">}</span></span>
+<span id="cb4-10"><span class="kw">pub</span> <span class="kw">struct</span> Problem <span class="op">{</span> <span class="kw">pub</span> scene<span class="op">:</span> <span class="dt">Option</span><span class="op">&lt;</span>SceneId<span class="op">&gt;,</span> <span class="kw">pub</span> kind<span class="op">:</span> ProblemKind <span class="op">}</span></span></code></pre></div>
+<p>A <strong>draft</strong> is a raw row (from a CSV line or a group of files); a <strong>spec</strong> is a validated scene. <code>validate_drafts</code> turns all drafts into specs plus a list of every problem, not just the first. The key rule (D-020) is "exactly one of text, audio, duration":</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb5-1"><span class="co">// crates/spoonstill-core/src/project.rs:918-937</span></span>
+<span id="cb5-2"><span class="kw">let</span> declared<span class="op">:</span> <span class="dt">Vec</span><span class="op">&lt;&amp;</span><span class="ot">'static</span> <span class="dt">str</span><span class="op">&gt;</span> <span class="op">=</span> SOURCE_COLUMNS</span>
+<span id="cb5-3">    <span class="op">.</span>into_iter()</span>
+<span id="cb5-4">    <span class="op">.</span>zip([text<span class="op">.</span>is_some()<span class="op">,</span> audio<span class="op">.</span>is_some()<span class="op">,</span> duration<span class="op">.</span>is_some()])</span>
+<span id="cb5-5">    <span class="op">.</span>filter_map(<span class="op">|</span>(name<span class="op">,</span> present)<span class="op">|</span> present<span class="op">.</span>then_some(name))</span>
+<span id="cb5-6">    <span class="op">.</span>collect()<span class="op">;</span></span>
+<span id="cb5-7"></span>
+<span id="cb5-8"><span class="cf">match</span> declared<span class="op">.</span>len() <span class="op">{</span></span>
+<span id="cb5-9">    <span class="dv">0</span> <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb5-10">        problems<span class="op">.</span>push(<span class="pp">Problem::</span>in_scene(id<span class="op">.</span>clone()<span class="op">,</span> <span class="pp">ProblemKind::</span>NoAudioSource))<span class="op">;</span></span>
+<span id="cb5-11">        <span class="cf">return</span> <span class="cn">None</span><span class="op">;</span></span>
+<span id="cb5-12">    <span class="op">}</span></span>
+<span id="cb5-13">    <span class="dv">1</span> <span class="op">=&gt;</span> <span class="op">{}</span></span>
+<span id="cb5-14">    _ <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb5-15">        problems<span class="op">.</span>push(<span class="pp">Problem::</span>in_scene(</span>
+<span id="cb5-16">            id<span class="op">.</span>clone()<span class="op">,</span></span>
+<span id="cb5-17">            <span class="pp">ProblemKind::</span>ConflictingAudioSources <span class="op">{</span> declared <span class="op">},</span></span>
+<span id="cb5-18">        ))<span class="op">;</span></span>
+<span id="cb5-19">        <span class="cf">return</span> <span class="cn">None</span><span class="op">;</span></span>
+<span id="cb5-20">    <span class="op">}</span></span>
+<span id="cb5-21"><span class="op">}</span></span></code></pre></div>
+<p><code>ProblemKind</code> has 22 variants. <strong>Severity is a property of the kind</strong>, not of the caller. Five are warnings (<code>UnpairedFile</code>, <code>UnlistedImage</code>, <code>UndersizedSources</code>, <code>UndrawableCaption</code>, and <code>NeedsPicture</code> when at least one scene has a picture); the rest are errors, and any error stops a render. Examples of errors: <code>MissingImage</code>, <code>NoAudioSource</code>, <code>ConflictingAudioSources</code>, <code>DurationAbsurd</code> (over 3 600 s), <code>Path</code> (a path escaping the project), <code>NotUsableMedia</code>, <code>AmbiguousScene</code> (<code>001.jpg</code> beside <code>001.png</code>), <code>ToolingMissing</code>, <code>InterruptedRename</code>.</p>
+<p><code>SceneId</code> is a <strong>newtype</strong> around <code>String</code> with a validating constructor: it rejects blank ids, <code>/</code> or <code>\</code>, <code>.</code> and <code>..</code>, and control characters.</p>
+<p><code>MAX_SCRIPT_BYTES = 256 KiB</code> is derived: one hour of speech at the fastest measured rate of 17.3 characters per second, times 4 bytes per UTF-8 character, rounded up. A <code>.txt</code> larger than that is refused before it is read into memory (D-126).</p>
+</section>
+<section id="captions-subtitle-themes-and-timing" class="level2">
+<h2><span class="header-section-number">5.7</span> <code>captions</code>: subtitle themes and timing</h2>
+<p>Six themes: <code>classic</code> (default), <code>boxed</code>, <code>band</code>, <code>card</code>, <code>punch</code>, <code>minimal</code>. Every length is a <strong>fraction of the frame</strong>, so a theme looks the same at 720p and 4K. <code>cues(text, seconds, budget)</code> splits a line into on-screen pieces:</p>
+<ol type="1">
+<li>collapse whitespace; allow at most <code>floor(seconds / 0.9)</code> cues (and at most 60);</li>
+<li>greedily pack words up to the character budget, ending early at a sentence end;</li>
+<li><code>carry_weak_endings</code>: if a piece ends on a dangling word like "the" or "and", move that word to the next piece;</li>
+<li>merge any piece whose share of time would be under <code>MIN_CUE_SECONDS = 0.9</code> into a neighbour, so no caption flickers;</li>
+<li>assign times in proportion to character counts so the last cue ends exactly at the end of the narration.</li>
+</ol>
+<p>Timing is proportional to characters because true word timing would need word boundaries from the speech provider, which is the one decision still Open (D-072).</p>
+</section>
+<section id="chapter-cutting-a-chapter-into-scenes" class="level2">
+<h2><span class="header-section-number">5.8</span> <code>chapter</code>: cutting a chapter into scenes</h2>
+<p><code>still import-chapter</code> takes a pasted chapter and cuts it into pieces of roughly 3 to 5 seconds of speech "where the story allows". The cutter is a classic <strong>shortest-path dynamic program</strong> over word gaps: every possible cut point has a cost (0 after a sentence or paragraph end, 1 after a clause, 2 after a comma, 25 in the middle of a clause, plus 20 after a dangling word such as "the" or "his"), every piece has a length cost if it is shorter than 3 s or longer than 5 s at the measured <strong>16.3 characters per second</strong>, and pieces that cross a sentence boundary in the middle are effectively forbidden. <code>cut_words</code> finds the cheapest sequence of cuts in time proportional to the number of words times the longest allowed piece. A property test generates 1 500 random chapters on every <code>cargo test</code> and checks that no word is lost and every rule holds.</p>
+</section>
+<section id="path_safety-keeping-paths-inside-the-project" class="level2">
+<h2><span class="header-section-number">5.9</span> <code>path_safety</code>: keeping paths inside the project</h2>
+<p>A manifest cell is untrusted input. It might say <code>../../../etc/passwd</code>, or name a symlink that points out of the project. <code>resolve_within(root, requested, fs)</code> canonicalises both paths (following every symlink) and checks containment <strong>component by component</strong>, so <code>/proj-evil</code> is not mistaken for something inside <code>/proj</code>. Two subtle rules:</p>
+<ul>
+<li><strong>One answer for out of bounds.</strong> Whether or not the outside file exists, the answer is <code>Outside</code>, never <code>Missing</code>; otherwise the error messages could be used to probe the disk.</li>
+<li><strong>Missing paths are resolved from the deepest real ancestor</strong>, so a symlinked folder is resolved before deciding.</li>
+</ul>
+<p>The filesystem is reached through a trait, which keeps core pure and makes the tests easy:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb6-1"><span class="co">// crates/spoonstill-core/src/path_safety.rs:59-66</span></span>
+<span id="cb6-2"><span class="kw">pub</span> <span class="kw">trait</span> RealPath <span class="op">{</span></span>
+<span id="cb6-3">    <span class="kw">fn</span> real_path(<span class="op">&amp;</span><span class="kw">self</span><span class="op">,</span> path<span class="op">:</span> <span class="op">&amp;</span><span class="dt">Path</span>) <span class="op">-&gt;</span> <span class="dt">Option</span><span class="op">&lt;</span><span class="dt">PathBuf</span><span class="op">&gt;;</span></span>
+<span id="cb6-4"><span class="op">}</span></span></code></pre></div>
+<p><code>resolve_destination_within</code> uses the same core function for the film's output path, where "does not exist yet" is normal (D-112). <code>without_verbatim_prefix</code> strips Windows' <code>\\?\</code> prefix that <code>canonicalize</code> adds, because FFmpeg's concat demuxer mis-resolved relative entries against such paths (D-142).</p>
+</section>
+<section id="hash-stable-hashing" class="level2">
+<h2><span class="header-section-number">5.10</span> <code>hash</code>: stable hashing</h2>
+<p>Rust's built-in <code>DefaultHasher</code> is not guaranteed stable across releases, and its default <code>RandomState</code> reseeds every process. A cache key must be the same forever, so core implements 64-bit <strong>FNV-1a</strong>, a tiny well-known non-cryptographic hash, verified against published reference vectors in a test.</p>
+<p>There are two ways to hash several fields:</p>
+<ul>
+<li><code>fnv1a_fields</code> puts a separator byte <code>0x1f</code> between fields. This is only safe if no field can contain <code>0x1f</code>.</li>
+<li><code>fnv1a_prefixed</code> writes each field's <strong>length</strong> (8 bytes) before the field. No precondition.</li>
+</ul>
+<p>The difference matters. Subtitle text is operator text and can contain <code>0x1f</code>, so <code>["alpha beta", "gamma"]</code> and <code>["alpha beta\x1f...gamma"]</code> could join to the same bytes and the same segment key: one film would show another film's subtitles from cache. Decision D-118 moved the segment key to the length-prefixed form.</p>
+</section>
+<section id="language-remedy-diagnostics" class="level2">
+<h2><span class="header-section-number">5.11</span> <code>language</code>, <code>remedy</code>, <code>diagnostics</code></h2>
+<ul>
+<li><code>language::of(text)</code> counts characters per script (Devanagari, Bengali, Cyrillic, Arabic, Han, kana, and more) and returns a language code for the dominant non-Latin script, or <code>None</code> for Latin text. Han with any kana is Japanese, Han alone is Chinese. It is used only when no voice was chosen (D-158).</li>
+<li><code>Remedy { need, install, detail }</code> describes a missing tool as data: one plain sentence, an optional tool id the window turns into an <strong>Install</strong> button, and technical detail.</li>
+<li><code>diagnostics</code> defines <code>Event</code> (severity, scope, message, fields), the <code>Diagnostics</code> trait (<code>Send + Sync</code>, object-safe), and <strong>redaction</strong>: messages and field values are scrubbed when an event is built, so no sink ever sees a secret. A line containing <code>api_key=</code>, <code>token:</code>, <code>password=</code>, <code>Bearer</code> and similar loses everything after the marker, and any 32+ character token-like word is replaced with <code>[redacted]</code>.</li>
+</ul>
+</section>
+<section id="tests" class="level2">
+<h2><span class="header-section-number">5.12</span> Tests</h2>
+<p>163 test functions: 157 unit tests inside the modules plus 6 in <code>tests/reorder_cost.rs</code>. The most important pin the exact filter string (<code>the_emitted_chain_is_exactly_the_documented_recipe</code>), prove a one-frame segment never divides by zero, prove every axis expression stays inside the legal travel, refuse oversized geometry, and run the 1 500 random chapters.</p>
+<div class="callout exercise">
+<p><strong>Exercise 5.1 (Beginner).</strong> Find <code>MotionKind::ALL</code> in <code>motion.rs</code>. The comment says "Append, never reorder." Explain in one sentence what would happen to existing films if someone reordered it.</p>
+<p><strong>Exercise 5.2 (Advanced).</strong> Why does <code>fnv1a_fields(&amp;[b"a\x1fb"])</code> equal <code>fnv1a_fields(&amp;[b"a", b"b"])</code>? Write out the bytes each one feeds to the hash.</p>
+</div>
+</section>
+</section>

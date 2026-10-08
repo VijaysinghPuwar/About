@@ -1,0 +1,144 @@
+<section id="ui-architecture" class="level1">
+<h1><span class="header-section-number">5</span> UI Architecture</h1>
+<section id="window-layout" class="level2">
+<h2><span class="header-section-number">5.1</span> Window layout</h2>
+<p>The main window’s docstring (<code>main_window.py:4-19</code>) carries its own diagram; this version is adapted from it, with the Active Jobs card added:</p>
+<pre class="text"><code>+- header bar ---------------------------------------------------+
+| [icon] SetupTTS                                      [Settings]|
++------------------------------------+---------------------------+
+|                                    |  VOICE                    |
+|  TEXT INPUT  (flexible width)      |  SPEED                    |
+|  large text editor                 |  EXPORT                   |
+|  drag and drop                     |  ACTIVE JOBS (when busy)  |
+|                                    |  [Generate &amp; Export MP3]  |
++------------------------------------+---------------------------+
+|  RECENT CONVERSIONS  (about 20 % of window height)             |
++----------------------------------------------------------------+
+|  status bar                                                    |
++----------------------------------------------------------------+</code></pre>
+<p>The two splits are <code>QSplitter</code>s: a horizontal one between editor and sidebar, and a vertical one between that row and the history strip. Menus provide File (Open, Generate, Settings, Quit), Edit (Clear Text), View (Show Recent Conversions) and Help (Open Logs Folder, About). Shortcuts use <code>Ctrl</code>, which Qt maps to Cmd on macOS.</p>
+</section>
+<section id="the-panels" class="level2">
+<h2><span class="header-section-number">5.2</span> The panels</h2>
+<section id="inputpanel-the-editor" class="level3">
+<h3><span class="header-section-number">5.2.1</span> InputPanel: the editor</h3>
+<p><code>app/ui/panels/input_panel.py</code> is a <code>QTextEdit</code> with plain-text paste, a word and character counter, and drag-and-drop for <code>.txt</code> and <code>.md</code> files. It emits two signals deliberately:</p>
+<ul>
+<li><code>has_text_changed(bool)</code> fires <strong>immediately</strong> on every edit, but only when emptiness changes. It is cheap and drives the Generate button.</li>
+<li><code>text_changed(str)</code> fires after a <strong>250 ms settle timer</strong>. It drives the word count and the voice-compatibility check, both of which scan the whole document. Before this split, typing in a 150,000-character book lagged on every keystroke.</li>
+</ul>
+<p><code>flush()</code> delivers a pending change at once, and <code>MainWindow.get_input_text()</code> calls it before Generate reads the text, so nothing typed in the last quarter second is lost.</p>
+<p>File import is more careful than it looks. <code>decode_text_file</code> (<code>input_panel.py:46-93</code>) treats a byte-order mark as authoritative; uses NUL-byte positions to recognise UTF-16 without a BOM; tries strict UTF-8; then tries legacy code pages in a deliberate order (the system’s own code page, then cp932 Shift-JIS and EUC-KR, BOM-less UTF-16 Chinese or Japanese, cp1252, cp1251 Cyrillic, GB18030, Big5 and finally cp1250), accepting each only if the result is plausible for its script. Files over 50 MB are refused as “almost certainly not prose”. <strong>Clear Text</strong> deletes through a text cursor instead of calling <code>clear()</code>, so Undo still works.</p>
+</section>
+<section id="outputpanel-the-controller" class="level3">
+<h3><span class="header-section-number">5.2.2</span> OutputPanel: the controller</h3>
+<p><code>app/ui/panels/output_panel.py</code> is the largest UI file because it is the controller as well as the sidebar. Its sections:</p>
+<ul>
+<li><strong>Voice.</strong> Search (debounced 150 ms), language and gender filters, the voice combo box, and <strong>Preview Voice</strong>. Recently used voices appear first under a disabled “Recently Used” header. Voices are labelled by persona, keeping the multilingual variant visible: <code>en-US-AndrewMultilingualNeural</code> becomes “Andrew (Multilingual)” (<code>app/models/voice.py:6-24</code>). Before v1.6.0 both variants read “Andrew”.</li>
+<li><strong>Voice guidance.</strong> A warning card, with a <strong>Use [recommended voice]</strong> button, appears when the text’s script or language does not match the voice, or when a multilingual voice is chosen for an English text over 45,000 characters.</li>
+<li><strong>Speed.</strong> A slider from -50 to +100, stored as an integer and converted to edge-tts’s <code>"+5%"</code> format by <code>AppSettings.rate_string()</code>.</li>
+<li><strong>Export.</strong> File name and folder with <strong>Browse</strong>.</li>
+<li><strong>Resume Unfinished Job.</strong> Visible only when resumable staging folders exist; opens a menu to resume or discard each one.</li>
+<li><strong>Active Jobs.</strong> One <code>_JobRowWidget</code> per queued or running job.</li>
+<li><strong>Generate &amp; Export MP3.</strong> Pinned below the scroll area so it is reachable at every window height.</li>
+</ul>
+</section>
+<section id="historypanel-recent-conversions" class="level3">
+<h3><span class="header-section-number">5.2.3</span> HistoryPanel: recent conversions</h3>
+<p>A six-column table (When, Text Preview, Voice, Took, Length, File) showing the 50 most recent rows from <code>history.db</code>. Double-click plays the file with the system’s default app; the context menu offers Show in Folder, Copy File Path and Remove from History. Clear All removes rows, never audio files.</p>
+</section>
+<section id="dialogs" class="level3">
+<h3><span class="header-section-number">5.2.4</span> Dialogs</h3>
+<p><strong>Settings</strong> (Ctrl/Cmd+,) has four sections: General (default save folder), Voice (the “Auto-match voice to text” option), Logs &amp; Troubleshooting (Open Logs Folder, Open Current Log, Copy Log Path, Copy Diagnostic Info), and About. <strong>About</strong> shows the version and description.</p>
+</section>
+</section>
+<section id="how-a-click-reaches-the-backend" class="level2">
+<h2><span class="header-section-number">5.3</span> How a click reaches the backend</h2>
+<p>Figure 5.1 shows everything <code>OutputPanel._on_generate</code> (<code>output_panel.py:1145-1277</code>) checks before a job exists. Each failed check stops with a message and queues nothing.</p>
+<figure id="fig-generate-flow">
+<img src="/books/setuptts/media/file2.webp" alt="The checks between a click and a running job. Every one of them used to be a failure discovered later, sometimes hours later." width="1680" height="1536" loading="lazy" decoding="async">
+<figcaption><strong>Figure 5.1.</strong> The checks between a click and a running job. Every one of them used to be a failure discovered later, sometimes hours later.</figcaption>
+</figure>
+<p>Several of these checks exist because a real problem happened:</p>
+<ul>
+<li><strong>“A visible voice is selected?”</strong> <code>get_selected_voice()</code> falls back to the saved voice when the combo box has no real selection. Before v1.6.2, generating while the voice list was loading, failed or filtered to nothing silently used a voice the user could not see.</li>
+<li><strong>“Destination is valid?”</strong> <code>check_output_path</code> (<code>app/utils/output_paths.py:51-112</code>) refuses characters Windows forbids on every platform (a file named <code>Part 1: Intro.mp3</code> made on a Mac cannot be copied to a FAT-formatted player), reserved device names such as <code>CON</code>, a missing or unwritable folder (tested by actually creating a temp file, because <code>os.access</code> ignores Windows ACLs), and Windows paths over 240 characters.</li>
+<li><strong>“File already exists?”</strong> The default name is <code>output.mp3</code> in the last-used folder, so without this question each new job silently replaced the previous audiobook. <strong>Keep Both</strong> picks <code>name (2).mp3</code>; <code>next_free_path</code> keeps numbers that are part of a real name, so <code>Annual Report (2024).mp3</code> becomes <code>Annual Report (2024) (2).mp3</code>.</li>
+</ul>
+</section>
+<section id="how-the-backend-reaches-the-ui" class="level2">
+<h2><span class="header-section-number">5.4</span> How the backend reaches the UI</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr>
+<th>Worker signal</th>
+<th>JobQueue signal</th>
+<th>OutputPanel handler</th>
+<th>Visible effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>progress(int)</code></td>
+<td><code>job_progress(id, pct)</code></td>
+<td><code>_on_job_progress</code></td>
+<td>progress bar</td>
+</tr>
+<tr>
+<td><code>stage_changed(kind, text)</code></td>
+<td><code>job_stage_changed</code></td>
+<td><code>_on_job_stage_changed</code></td>
+<td>badge and plain stage text</td>
+</tr>
+<tr>
+<td><code>telemetry_updated(JobTelemetry)</code></td>
+<td><code>job_telemetry_updated</code></td>
+<td><code>_on_job_telemetry_updated</code></td>
+<td>“Chunk 82 of ~194 · 74 chars/s · about 21 min left”</td>
+</tr>
+<tr>
+<td><code>job_resumable(...)</code></td>
+<td><code>job_resumable(item)</code></td>
+<td><code>_on_job_resumable</code></td>
+<td>status message, Resume button refresh</td>
+</tr>
+<tr>
+<td><code>completed(path, s)</code></td>
+<td><code>job_completed(item)</code></td>
+<td><code>_on_job_completed</code></td>
+<td>row removed, history row written</td>
+</tr>
+<tr>
+<td><code>failed(msg)</code></td>
+<td><code>job_failed(item)</code></td>
+<td><code>_on_job_failed</code></td>
+<td>queued error dialog with Resume / Open Logs</td>
+</tr>
+</tbody>
+</table></div>
+<p>Three presentation choices are worth noticing.</p>
+<p><strong>Progress is real.</strong> The worker maps characters processed to 3-95 % (<code>_emit_progress_from_chars</code>, <code>tts_worker.py:2597-2602</code>), driven by the sentence-boundary events as audio streams in and corrected to the committed range after each chunk is saved. It only emits when the integer changes, which cut cross-thread signal traffic noticeably on Windows (commit <code>7bd5fb1</code>). The jump to 100 happens when the file is saved.</p>
+<p><strong>Stage text is translated.</strong> The worker’s stage strings are technical (“Sending chunk 12/214 to Microsoft (3,412 chars / 3,588 bytes)”). <code>_friendly_stage</code> maps them by prefix to plain phrases such as “Generating audio” or “Finalizing the MP3 file”, and keeps the raw text as a tooltip. The badge colour is neutral grey for LOCAL and REMOTE; amber is reserved for RETRY.</p>
+<p><strong>ETA is withheld until it means something.</strong> <code>_JobRowWidget._eta_is_reliable</code> hides the time-left estimate until at least chunk 3 and 45 seconds into the job, and <code>_format_eta_words</code> rounds to minutes because second precision “would be false precision”. The speed behind it is an exponential moving average (<code>0.65 * old + 0.35 * new</code>, <code>tts_worker.py:2604-2623</code>).</p>
+<p><strong>Error dialogs never stack.</strong> Two jobs can fail within a second of each other, and <code>QMessageBox.exec()</code> re-enters the event loop, so a second failure could open a second dialog on top of the first. <code>_failure_dialog_queue</code> shows them one at a time (commit <code>b1dc80f</code>).</p>
+</section>
+<section id="responsive-layout" class="level2">
+<h2><span class="header-section-number">5.5</span> Responsive layout</h2>
+<p><code>MainWindow._apply_responsive_layout</code> runs on every resize. It caps the sidebar at 40 % of the window width, sizes the history strip at 20 % of the height (clamped between 88 and 240 px), and keeps the editor row at no less than 55 % of the split. The sidebar has three density levels chosen by window height: <strong>comfortable</strong>, <strong>compact</strong> below 760 px (tighter padding), and <strong>minimal</strong> below 640 px (explanatory hints hidden, still reachable as tooltips).</p>
+<p>Every minimum size is derived from the widgets’ own <code>minimumSizeHint()</code> instead of a fixed pixel number, because the default UI font is materially wider on Windows than on macOS. The August 2026 commits (<code>a81a1f5</code> through <code>66b0438</code>) were a sequence of fixes for exactly this: controls clipped under larger system fonts.</p>
+</section>
+<section id="styling" class="level2">
+<h2><span class="header-section-number">5.6</span> Styling</h2>
+<p>The look comes from one Qt stylesheet, <code>app/assets/styles/app.qss</code>: a neutral dark palette (<code>#0D0D0F</code> window, <code>#161618</code> cards, <code>#0A84FF</code> accent) documented in its header. Two rules keep it working:</p>
+<ul>
+<li><strong>No inline stylesheets on containers.</strong> A widget-level stylesheet overrides the application stylesheet for that widget and all of its children, which “silently strips the background from all the cards”. The rule is stated in the <code>output_panel.py</code> docstring and enforced by <code>test_sidebar_containers_carry_no_inline_stylesheet</code>.</li>
+<li><strong>Absolute asset URLs.</strong> Qt resolves <code>url()</code> in a stylesheet against the working directory, not the <code>.qss</code> file. <code>app/ui/style.py</code> replaces an <code>@ASSETS@</code> placeholder with the real assets path at load time, so the dropdown chevrons appear both in development and inside a bundle.</li>
+</ul>
+</section>
+</section>

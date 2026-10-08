@@ -1,0 +1,157 @@
+<section id="packaging-and-distribution" class="level1">
+<h1><span class="header-section-number">15</span> Packaging and Distribution</h1>
+<section id="the-problem-packaging-solves" class="level2">
+<h2><span class="header-section-number">15.1</span> The problem packaging solves</h2>
+<p>On the developer’s machine SetupTTS runs as <code>python main.py</code> inside a virtual environment containing PySide6, edge-tts, aiohttp and their native libraries. The end user has none of that, often not even Python. Packaging turns the project into something that starts with a double-click.</p>
+<figure id="fig-packaging">
+<img src="/books/setuptts/media/file14.webp" alt="From source to the four files a user can download." width="1680" height="1248" loading="lazy" decoding="async">
+<figcaption><strong>Figure 15.1.</strong> From source to the four files a user can download.</figcaption>
+</figure>
+</section>
+<section id="what-pyinstaller-does" class="level2">
+<h2><span class="header-section-number">15.2</span> What PyInstaller does</h2>
+<p>PyInstaller starts at <code>main.py</code>, follows every import it can see, and collects:</p>
+<ul>
+<li>the <strong>Python interpreter</strong> as a shared library, and a small native <strong>bootloader</strong> executable that starts it;</li>
+<li>the standard library modules and every third-party package that was imported, compiled to bytecode;</li>
+<li><strong>native libraries</strong>: Qt’s frameworks, Qt plugins (platform, image formats, styles), aiohttp’s C accelerators, OpenSSL;</li>
+<li><strong>data files</strong> declared in the spec: the app’s stylesheet and icons, certifi’s CA bundle, edge-tts’s data.</li>
+</ul>
+<p>At run time the bootloader sets up the embedded interpreter and runs <code>main.py</code>. Two attributes tell the app it is frozen: <code>sys.frozen</code>, used by <code>diagnostics.build_kind</code>, and <code>sys._MEIPASS</code>, the folder holding the bundled files, used by <code>resource_path</code>:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><span class="kw">def</span> resource_path(relative: <span class="bu">str</span>) <span class="op">-&gt;</span> Path:</span>
+<span id="cb1-2">    <span class="cf">if</span> <span class="bu">hasattr</span>(sys, <span class="st">"_MEIPASS"</span>):</span>
+<span id="cb1-3">        <span class="cf">return</span> Path(sys._MEIPASS) <span class="op">/</span> relative</span>
+<span id="cb1-4">    <span class="cf">return</span> Path(<span class="va">__file__</span>).parent.parent.parent <span class="op">/</span> relative</span></code></pre></div>
+<p>That is why the end user needs no Python: the interpreter and every dependency are inside the app.</p>
+</section>
+<section id="the-spec-file" class="level2">
+<h2><span class="header-section-number">15.3</span> The spec file</h2>
+<p><code>setuptts.spec</code> is Python executed by PyInstaller. The important parts:</p>
+<ul>
+<li><strong>Version.</strong> Read from <code>app/__init__.py</code> with a regular expression, so “nothing here needs editing on a bump”.</li>
+<li><strong>Data.</strong> <code>app/assets</code> as <code>app/assets</code>; <code>collect_data_files("edge_tts")</code> and <code>collect_data_files("certifi")</code>.</li>
+<li><strong>aiohttp and friends.</strong> <code>collect_all</code> for <code>aiohttp</code>, <code>aiosignal</code>, <code>frozenlist</code>, <code>multidict</code> and <code>yarl</code>. Several of these have optional C accelerators that static analysis can miss, which used to produce “ModuleNotFoundError: No module named ‘aiosignal’” only in the packaged build.</li>
+<li><strong>Hidden imports.</strong> All edge-tts submodules, the Qt modules used, <code>certifi</code>, <code>platformdirs</code>, and on Windows <code>asyncio.proactor_events</code> and <code>asyncio.windows_events</code>.</li>
+<li><strong>Excludes.</strong> Qt modules the app never uses (WebEngine, 3D, Charts, Multimedia, Bluetooth and others) and large scientific packages, to keep the bundle small.</li>
+<li><strong>No UPX, no console.</strong> UPX compression is off so CI does not need it installed; <code>console=False</code> makes a windowed app with no terminal.</li>
+</ul>
+<section id="macos-an-.app-bundle" class="level3">
+<h3><span class="header-section-number">15.3.1</span> macOS: an .app bundle</h3>
+<p>On macOS the spec’s <code>BUNDLE</code> step produces <code>dist/SetupTTS.app</code> with bundle id <code>com.setuptts.setuptts</code> and an <code>Info.plist</code> whose key line is:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><span class="co">"LSMinimumSystemVersion"</span>: <span class="st">"15.0"</span>,   <span class="co"># PySide6 6.10+ (shiboken) needs macOS 15</span></span></code></pre></div>
+<p>v1.5.8 declared macOS 12, but its bundled Qt libraries already required 15, so it failed on older systems with no useful message. The release notes now state the real requirement, and CI checks it against every binary (Chapter 16).</p>
+<p>The bundle is shipped two ways. <code>create-dmg</code> builds a disk image with the drag-to-Applications layout. <code>ditto -c -k --keepParent</code> builds a zip; <code>build_macos.sh</code> explains why not plain <code>zip</code>: <code>ditto</code> “preserves symlinks, resource forks, and extended attributes”, and plain <code>zip</code> “can corrupt the bundle”.</p>
+</section>
+<section id="windows-two-builds-for-two-situations" class="level3">
+<h3><span class="header-section-number">15.3.2</span> Windows: two builds for two situations</h3>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr>
+<th>Build</th>
+<th>Spec</th>
+<th>Shape</th>
+<th>Shipped as</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Installer</td>
+<td><code>setuptts.spec</code></td>
+<td>onedir: <code>SetupTTS.exe</code> + <code>_internal\</code> folder</td>
+<td><code>SetupTTS-Windows-Installer.exe</code></td>
+<td>starts instantly; the installer keeps the folder together</td>
+</tr>
+<tr>
+<td>Portable</td>
+<td><code>setuptts_portable.spec</code></td>
+<td>onefile: a single <code>SetupTTS.exe</code></td>
+<td><code>SetupTTS-Windows-Portable.zip</code></td>
+<td>runs from anywhere, even directly from the zip</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Historical.</strong> Both shapes were learned from user-visible failures in March 2026:</p>
+<ul>
+<li>Commit <code>7bd5fb1</code> moved the main Windows build from onefile to onedir. A onefile EXE extracts its roughly 100 MB runtime to <code>%TEMP%</code> on <strong>every</strong> launch, and Windows Defender scans those files, which produced “a 5-30 s cold-start delay”.</li>
+<li>Commit <code>c50a0df</code> reintroduced onefile for the portable download only. A onedir build in a zip fails when the user double-clicks the EXE inside the zip without extracting: the <code>_internal</code> folder stays in the archive and Windows reports “Failed to load Python DLL … python312.dll”.</li>
+</ul>
+<p>The Windows EXE also gets a VERSIONINFO resource generated by the spec, so Explorer’s Properties ▸ Details shows the version: “otherwise every SetupTTS.exe looks identical, and an old copy launched from a stale shortcut can’t be told apart”. The window title shows the version for the same reason.</p>
+</section>
+<section id="the-inno-setup-installer" class="level3">
+<h3><span class="header-section-number">15.3.3</span> The Inno Setup installer</h3>
+<p><code>installers/windows.iss</code> installs the onedir folder:</p>
+<ul>
+<li><code>PrivilegesRequired=lowest</code>: installs per user without administrator rights; <code>{autopf}</code> then resolves to <code>%LOCALAPPDATA%\Programs</code>, which is exactly where CI looks for the installed EXE.</li>
+<li><code>[InstallDelete]</code> removes the previous <code>_internal</code> folder on upgrade, so a stale <code>python3xx.dll</code> or Qt plugin from an older build can never be loaded by the new one.</li>
+<li>A fixed <code>AppId</code> GUID makes upgrades replace the existing installation.</li>
+<li>User data (settings, history, unfinished jobs) is left in place on uninstall; the line to remove it is present but commented out.</li>
+</ul>
+</section>
+</section>
+<section id="making-the-frozen-app-work-like-the-source-app" class="level2">
+<h2><span class="header-section-number">15.4</span> Making the frozen app work like the source app</h2>
+<p>Three problems appear only after freezing, and each has a fix in the code:</p>
+<ol type="1">
+<li><strong>Certificates.</strong> A frozen Python cannot locate a CA bundle, so <code>app/main.py</code> sets <code>SSL_CERT_FILE</code> to certifi’s bundled file before anything else.</li>
+<li><strong>Stylesheet assets.</strong> Qt resolves stylesheet <code>url()</code>s against the working directory, so <code>style.py</code> rewrites them to absolute paths inside the bundle.</li>
+<li><strong>SVG support.</strong> The dropdown chevrons are SVG and need Qt’s SVG image-format plugin. Without it they “silently vanish”. The self-test checks for exactly this.</li>
+</ol>
+</section>
+<section id="the-packaged-self-test" class="level2">
+<h2><span class="header-section-number">15.5</span> The packaged self-test</h2>
+<p><code>app/selftest.py</code> is a mode of the real app: <code>SetupTTS --selftest result.json [--network]</code>. Because a windowed Windows build has no console, it writes its results to a JSON file. Its checks:</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Check</th>
+<th>Verifies</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>assets</code></td>
+<td>the stylesheet, icon and chevron SVG are present in the bundle</td>
+</tr>
+<tr>
+<td><code>imports</code></td>
+<td>aiohttp, edge-tts, sqlite3 and QtNetwork import</td>
+</tr>
+<tr>
+<td><code>tls</code></td>
+<td>edge-tts’s voice and synthesis code share SetupTTS’s TLS context, and it trusts at least as many CAs as certifi alone</td>
+</tr>
+<tr>
+<td><code>qt_gui</code></td>
+<td>a <code>QApplication</code> starts, the stylesheet loads, the SVG chevron and PNG icon render, and the whole UI module imports</td>
+</tr>
+<tr>
+<td><code>voices</code> (network)</td>
+<td>the live voice list contains <code>en-US-AndrewNeural</code> and <code>en-US-AvaNeural</code></td>
+</tr>
+<tr>
+<td><code>synthesis</code> (network)</td>
+<td>a test sentence streams completely by the same <code>_stream_incomplete_reason</code> check, with a plausible duration</td>
+</tr>
+</tbody>
+</table></div>
+<div class="callout experiment">
+<p><strong>Verified by runtime experiment.</strong> Run from source on the analysis machine, the self-test passed every check: 137 CA certificates via certifi and 137 with the system store, Qt 6.11.0, 322 voices, and a synthesis of 33,264 bytes (5.5 s).</p>
+</div>
+</section>
+<section id="local-builds" class="level2">
+<h2><span class="header-section-number">15.6</span> Local builds</h2>
+<p><code>build_macos.sh</code> cleans, runs PyInstaller, verifies that the stylesheet, icon and edge-tts are inside the bundle, zips with <code>ditto</code>, then extracts the zip again and checks that the binary is executable. <code>build_windows.ps1</code> and <code>build_windows.bat</code> build the portable EXE. The installer is built only in CI, where Inno Setup is installed.</p>
+</section>
+</section>
