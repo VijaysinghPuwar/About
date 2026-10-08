@@ -52,6 +52,8 @@ interface State {
   books: Record<string, BookProgress>;
   /** True once local storage has been read for the current user. */
   ready: boolean;
+  /** True once the server copy has been fetched, or has failed to be. */
+  synced: boolean;
   remote: RemoteState;
 }
 
@@ -62,7 +64,7 @@ const LOCAL_SAVE_MS = 400;
 const REMOTE_SAVE_MS = 4000;
 const REMOTE_MAX_WAIT_MS = 15000;
 
-let state: State = { userId: null, books: {}, ready: false, remote: 'idle' };
+let state: State = { userId: null, books: {}, ready: false, synced: false, remote: 'idle' };
 const listeners = new Set<() => void>();
 const dirty = new Set<string>();
 let localTimer: ReturnType<typeof setTimeout> | null = null;
@@ -173,15 +175,22 @@ function merge(local: BookProgress | undefined, remote: BookProgress | undefined
 
 /* ---------- remote ---------- */
 
+function fetchRows(userId: string) {
+  return supabase.from('reading_progress').select('*').eq('user_id', userId);
+}
+
 async function pullRemote(userId: string) {
-  const { data, error } = await supabase
-    .from('reading_progress')
-    .select('*')
-    .eq('user_id', userId);
+  let data: Awaited<ReturnType<typeof fetchRows>>['data'] = null;
+  let error: { code?: string; message?: string } | null = null;
+  try {
+    ({ data, error } = await fetchRows(userId));
+  } catch (e) {
+    error = { message: e instanceof Error ? e.message : String(e) };
+  }
 
   if (state.userId !== userId) return; // signed out or switched while waiting
   if (error) {
-    emit({ remote: isMissingTable(error) ? 'unavailable' : 'idle' });
+    emit({ remote: isMissingTable(error) ? 'unavailable' : 'idle', synced: true });
     return;
   }
 
@@ -213,7 +222,7 @@ async function pullRemote(userId: string) {
   for (const slug of Object.keys(books)) {
     if (!(data ?? []).some(r => r.book_slug === slug)) dirty.add(slug);
   }
-  emit({ books, remote: 'ok' });
+  emit({ books, remote: 'ok', synced: true });
   writeLocal();
   if (dirty.size) scheduleRemote();
 }
@@ -296,10 +305,10 @@ export function bindReadingUser(userId: string | null) {
   flushReadingProgress();
   dirty.clear();
   if (!userId) {
-    emit({ userId: null, books: {}, ready: true, remote: 'idle' });
+    emit({ userId: null, books: {}, ready: true, synced: true, remote: 'idle' });
     return;
   }
-  emit({ userId, books: readLocal(userId), ready: true, remote: 'idle' });
+  emit({ userId, books: readLocal(userId), ready: true, synced: false, remote: 'idle' });
   void pullRemote(userId);
 }
 
@@ -366,7 +375,8 @@ export function useReadingProgress() {
   // Until the store is bound to this user, show nothing rather than a
   // previous reader's shelf.
   const books = snap.userId === userId ? snap.books : {};
-  return { books, ready: snap.ready && snap.userId === userId, remote: snap.remote };
+  const mine = snap.userId === userId;
+  return { books, ready: snap.ready && mine, synced: snap.synced && mine, remote: snap.remote };
 }
 
 if (typeof window !== 'undefined') {

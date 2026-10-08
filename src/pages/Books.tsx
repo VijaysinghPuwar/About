@@ -17,7 +17,6 @@ import {
   type Book,
   chapterLabel,
   chapterUrl,
-  formatDuration,
   formatPercent,
   getBook,
   timeAgo,
@@ -80,7 +79,7 @@ export default function Books() {
         {user && ready && resume && <ContinuePanel book={resume.book} progress={resume.progress} />}
 
         <section aria-label="All books" className="mt-14 sm:mt-16">
-          <ul className="grid grid-cols-2 items-end gap-x-5 gap-y-12 sm:grid-cols-3 sm:gap-x-8 lg:grid-cols-4 lg:gap-x-10">
+          <ul className="grid grid-cols-2 gap-x-5 gap-y-12 sm:grid-cols-3 sm:gap-x-8 lg:grid-cols-4 lg:gap-x-10">
             {shelf.map((book, i) => (
               <li key={book.slug}>
                 <ShelfItem book={book} progress={progress[book.slug]} signedIn={!!user} eager={i < 4} />
@@ -139,13 +138,10 @@ function ShelfItem({
   const navigate = useNavigate();
   const readHref = progress ? chapterUrl(book.slug, progress.chapterId) : chapterUrl(book.slug, book.chapters[0].id);
 
-  const status = !signedIn
-    ? `${formatDuration(book.minutes)} read`
-    : progress?.finishedAt
-      ? 'Finished'
-      : progress
-        ? `${formatPercent(progress.percent)} read`
-        : 'New';
+  // A percentage in every state, as Apple Books shows it: 0% before the book
+  // is opened (and for a visitor who is not signed in), 100% once finished.
+  const percent = progress?.finishedAt ? 100 : progress?.percent ?? 0;
+  const status = `${formatPercent(percent)} read`;
 
   return (
     <div>
@@ -154,18 +150,12 @@ function ShelfItem({
       </Link>
 
       <div className="mt-3 flex h-8 items-center justify-between gap-2">
-        {!signedIn ? (
-          <span className="font-mono text-[12px] text-muted-dim">{formatDuration(book.minutes)}</span>
-        ) : progress?.finishedAt ? (
-          <span className="inline-flex items-center gap-1.5 font-mono text-[12px] text-primary">
-            <Check className="h-3.5 w-3.5" aria-hidden="true" /> Finished
+        {progress?.finishedAt ? (
+          <span className="inline-flex items-center gap-1.5 font-mono text-[13px] tabular-nums text-primary">
+            100% <Check className="h-3.5 w-3.5" aria-hidden="true" />
           </span>
-        ) : progress ? (
-          <span className="font-mono text-[13px] tabular-nums text-muted-foreground">{formatPercent(progress.percent)}</span>
         ) : (
-          <span className="rounded-full border border-primary/40 bg-primary-bg px-2.5 py-[3px] font-mono text-[10.5px] font-semibold uppercase tracking-[0.12em] text-primary">
-            New
-          </span>
+          <span className="font-mono text-[13px] tabular-nums text-muted-foreground">{formatPercent(percent)}</span>
         )}
 
         <DropdownMenu>

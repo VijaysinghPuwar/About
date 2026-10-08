@@ -35,7 +35,7 @@ setsar=1,format=yuv420p</code></pre>
 <section id="the-motion-maths" class="level3">
 <h3><span class="header-section-number">15.2.2</span> The motion maths</h3>
 <p>Progress is linear: <code>p = min(on/(N-1), 1)</code>, from 0 on the first frame to exactly 1 on the last. There is <strong>no easing curve</strong>. <code>N-1</code> is computed in Rust and written as a number, and a one-frame scene writes <code>0</code> instead, so FFmpeg never evaluates <code>on/0</code> (which gives NaN and would break the crop silently).</p>
-<div class="table-scroll" tabindex="0"><table>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>Kind</th>
@@ -112,7 +112,7 @@ setsar=1,format=yuv420p</code></pre>
   -video_track_timescale 90000
   &lt;run&gt;/renderable/.spoonstill/segments/.seg-b1e892e91177a56c.mp4.partial-16446-11.mp4</code></pre>
 <p>The <code>'\''</code> sequences are only how a POSIX shell would spell an embedded single quote; the real argument contains plain <code>'</code> characters, which are FFmpeg's own expression quoting. No shell ever sees this line.</p>
-<div class="table-scroll" tabindex="0"><table>
+<div class="table-scroll"><table>
 <colgroup>
 <col style="width: 50%">
 <col style="width: 50%">

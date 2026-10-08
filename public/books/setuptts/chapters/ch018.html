@@ -3,7 +3,7 @@
 <section id="where-everything-lives" class="level2">
 <h2><span class="header-section-number">13.1</span> Where everything lives</h2>
 <p><code>AppPaths</code> (<code>app/utils/paths.py</code>) asks <code>platformdirs</code> for per-user folders, creating them and falling back to a folder under the data directory or the system temp folder if creation fails. Setting the environment variable <code>SETUPTTS_DATA_DIR</code> puts everything under one folder instead; the tests and the stress script use it so they never touch real user data.</p>
-<div class="table-scroll" tabindex="0"><table>
+<div class="table-scroll"><table>
 <colgroup>
 <col style="width: 33%">
 <col style="width: 33%">
@@ -37,7 +37,7 @@
 <div class="callout experiment">
 <p><strong>Verified by runtime experiment.</strong> <code>platformdirs</code> 4.9.4 on the analysis Mac returned exactly the three macOS folders above for <code>("SetupTTS", "SetupTTSApp")</code>. The Windows column follows platformdirs’ documented layout and matches the paths in the README and the <code>AppPaths</code> docstring.</p>
 </div>
-<div class="table-scroll" tabindex="0"><table>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>File</th>
@@ -87,7 +87,7 @@
 <section id="settings" class="level2">
 <h2><span class="header-section-number">13.2</span> Settings</h2>
 <p><code>AppSettings</code> (<code>app/config/settings.py</code>) is a thin wrapper around a dictionary that starts from <code>_DEFAULTS</code>:</p>
-<div class="table-scroll" tabindex="0"><table>
+<div class="table-scroll"><table>
 <colgroup>
 <col style="width: 33%">
 <col style="width: 33%">

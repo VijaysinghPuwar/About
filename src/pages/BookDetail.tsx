@@ -8,7 +8,6 @@ import { loginHref } from '@/lib/auth-redirect';
 import {
   chapterLabel,
   chapterUrl,
-  formatDuration,
   formatPercent,
   getBook,
   timeAgo,
@@ -45,7 +44,7 @@ export default function BookDetail() {
 
   const facts = [
     { label: 'Chapters', value: String(book.chapters.length) },
-    { label: 'Reading time', value: `~${formatDuration(book.minutes)}` },
+    { label: 'Parts', value: String(new Set(book.chapters.map(c => c.part).filter(p => p && p !== 'Appendices')).size) },
     { label: 'Words', value: book.words.toLocaleString('en-US') },
     ...(published ? [{ label: 'Published', value: published }] : []),
   ];
