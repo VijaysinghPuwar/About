@@ -143,7 +143,7 @@ export const TOOLSETS = {
 const FILES: Record<string, (ctx: CommandContext) => OutputLine[]> = {
   'role.txt': () => [
     plain('Cybersecurity Engineer, New York, NY'),
-    muted('IT Emerging Talent Intern, MTA (Staten Island Railway)'),
+    muted('Emerging Talent Intern, MTA (Staten Island Railway)'),
   ],
   'mission.txt': () =>
     wrap('I secure enterprise infrastructure, automate security operations, and build detection pipelines that catch threats before they escalate.'),
@@ -193,7 +193,7 @@ export const COMMANDS: CommandSpec[] = [
     summary: 'Who I am and what I do.',
     run: () => [
       plain('Vijaysingh Puwar, Cybersecurity Engineer, New York'),
-      muted('IT Emerging Talent Intern at the MTA.'),
+      muted('Emerging Talent Intern at the MTA.'),
       muted('M.S. Cybersecurity at Pace (GPA 3.92).'),
       muted('Security+, CySA+, CCNA.'),
     ],
