@@ -48,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(session?.user ?? null);
 
         if (session?.user) {
+          setAdminLoading(true);
           setTimeout(() => {
             fetchProfile(session.user.id);
             checkAdminRole(session.user.id);
@@ -57,6 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setProfile(null);
           setProfileError(null);
           setIsAdmin(false);
+          setAdminLoading(false);
           setLoading(false);
         }
       }
@@ -66,10 +68,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
+        setAdminLoading(true);
         fetchProfile(session.user.id);
         checkAdminRole(session.user.id);
         updateLastLogin(session.user.id, session.user.email || '');
       } else {
+        setAdminLoading(false);
         setLoading(false);
       }
     });
