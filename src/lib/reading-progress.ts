@@ -246,6 +246,11 @@ async function pushRemote(): Promise<void> {
       percent: b.percent,
       chapters: b.chapters as unknown as Json,
       finished_at: b.finishedAt,
+      started_at: b.startedAt,
+      // The table has no update trigger, so its default only stamps inserts.
+      // Sent explicitly, so the per-book merge on another device can tell
+      // which copy is newer.
+      updated_at: b.updatedAt,
     }));
   if (!rows.length) return;
 
