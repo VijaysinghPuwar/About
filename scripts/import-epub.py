@@ -233,8 +233,9 @@ class Book:
             return f"<{tag}{attr_str}>"
         out = f"<{tag}{attr_str}>{inner}</{tag}>"
         if tag == "table":
-            # Wide tables scroll inside their own box instead of the page.
-            out = f'<div class="table-scroll" tabindex="0">{out}</div>'
+            # The reader lays tables out to the page width; the wrapper carries
+            # the border and spacing.
+            out = f'<div class="table-scroll">{out}</div>'
         return out
 
     def build(self):

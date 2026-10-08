@@ -27,7 +27,7 @@
 </section>
 <section id="running-watching-stopping" class="level2">
 <h2><span class="header-section-number">16.4</span> Running, watching, stopping</h2>
-<div class="table-scroll" tabindex="0"><table>
+<div class="table-scroll"><table>
 <colgroup>
 <col style="width: 50%">
 <col style="width: 50%">
@@ -109,7 +109,7 @@
 <h2><span class="header-section-number">16.7</span> Software and hardware encoders</h2>
 <p>The default is <strong>libx264</strong> in software (D-036). Measurements on three machines agree that the filter graph, not the encoder, is most of the cost at normal speeds: on macOS the encoder was about 14% of a 4K render (§12c); on a Windows desktop with an RTX 3060, NVENC made a render about <strong>1.2x</strong> faster (§13c, D-162); on a slow Linux laptop CPU, Intel Quick Sync was <strong>1.67x</strong> faster (D-198). Hardware encoders also saved <strong>no memory</strong>, because the memory is the CPU's prescale canvas.</p>
 <p><code>--encoder auto</code> picks the first <strong>usable</strong> hardware encoder found by actually encoding a test clip; <code>--encoder off</code> (the default) uses libx264; <code>--encoder NAME</code> must be in the usable list. Each encoder gets its own quality flags:</p>
-<div class="table-scroll" tabindex="0"><table>
+<div class="table-scroll"><table>
 <colgroup>
 <col style="width: 50%">
 <col style="width: 50%">
@@ -151,7 +151,7 @@
 </section>
 <section id="macos-and-windows-differences-at-this-boundary" class="level2">
 <h2><span class="header-section-number">16.8</span> macOS and Windows differences at this boundary</h2>
-<div class="table-scroll" tabindex="0"><table>
+<div class="table-scroll"><table>
 <colgroup>
 <col style="width: 33%">
 <col style="width: 33%">

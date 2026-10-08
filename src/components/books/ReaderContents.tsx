@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BookCover } from '@/components/books/BookCover';
 import { ChapterList } from '@/components/books/ChapterList';
-import { type Book, formatDuration, formatPercent } from '@/lib/books';
+import { type Book, formatPercent } from '@/lib/books';
 import type { BookProgress } from '@/lib/reading-progress';
 import type { ReaderPage } from '@/lib/reader-settings';
 
@@ -37,9 +37,7 @@ export function ReaderContents({
     return () => cancelAnimationFrame(id);
   }, [open]);
 
-  const remaining = progress
-    ? Math.max(0, Math.round(book.minutes * (1 - progress.percent / 100)))
-    : book.minutes;
+  const index = book.chapters.findIndex(c => c.id === currentId);
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
@@ -65,8 +63,7 @@ export function ReaderContents({
                 {book.title}
               </Dialog.Title>
               <Dialog.Description className="mt-1 font-mono text-[11.5px] tabular-nums text-[hsl(var(--r-dim))]">
-                {progress ? `${formatPercent(progress.percent)} · ` : ''}
-                {formatDuration(remaining)} left
+                {formatPercent(progress?.percent ?? 0)} read · chapter {index + 1} of {book.chapters.length}
               </Dialog.Description>
             </div>
             <Dialog.Close aria-label="Close contents" className="reader-btn -mr-2 -mt-1 flex h-10 w-10 shrink-0 items-center justify-center">
