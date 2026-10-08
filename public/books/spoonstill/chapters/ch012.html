@@ -1,0 +1,230 @@
+<section id="spoonstill-app-the-orchestration-layer" class="level1">
+<h1><span class="header-section-number">9</span> spoonstill-app: The Orchestration Layer</h1>
+<section id="why-it-exists-4" class="level2">
+<h2><span class="header-section-number">9.1</span> Why it exists</h2>
+<p>This is where the product lives. Everything either control surface can do is a public function here: make a project, add media, import a chapter, place pictures, validate, render, list voices, check tools. The CLI and the window are forbidden from reaching past it, which is why <code>lib.rs</code> re-exports the few lower-level types they need (<code>Cancel</code>, <code>VideoEncoder</code>, <code>Journal</code>, the TTS facade).</p>
+</section>
+<section id="module-map-2" class="level2">
+<h2><span class="header-section-number">9.2</span> Module map</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Module</th>
+<th>Lines</th>
+<th>Owns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>film.rs</code></td>
+<td>3 438</td>
+<td><code>render_project</code>: the whole render path</td>
+</tr>
+<tr>
+<td><code>import/</code></td>
+<td>3 537</td>
+<td>folder or manifest to <code>Project</code>; settings, rows, probing</td>
+</tr>
+<tr>
+<td><code>ingest.rs</code></td>
+<td>1 705</td>
+<td><code>still new</code> and <code>still add</code>: copy in, number, pair</td>
+</tr>
+<tr>
+<td><code>audio.rs</code></td>
+<td>1 564</td>
+<td><code>AudioCache</code>, resolving a narration, single-flight, preview</td>
+</tr>
+<tr>
+<td><code>arrange.rs</code></td>
+<td>1 600</td>
+<td><code>still remove</code> and <code>still move</code>: renumbering safely</td>
+</tr>
+<tr>
+<td><code>picture.rs</code></td>
+<td>908</td>
+<td>put, replace, move, swap, remove, undo a picture</td>
+</tr>
+<tr>
+<td><code>pool.rs</code></td>
+<td>804</td>
+<td>bounded worker pools: <code>run</code> and <code>pipeline</code></td>
+</tr>
+<tr>
+<td><code>chapter.rs</code></td>
+<td>519</td>
+<td>reading and importing a chapter</td>
+</tr>
+<tr>
+<td><code>capacity.rs</code></td>
+<td>420</td>
+<td>memory model and automatic job count</td>
+</tr>
+<tr>
+<td><code>machine.rs</code></td>
+<td>417</td>
+<td>machine <code>settings.yaml</code>, atomic <code>replace_file</code></td>
+</tr>
+<tr>
+<td><code>voice.rs</code></td>
+<td>391</td>
+<td>who chose the voice: <code>VoiceOrigin</code></td>
+</tr>
+<tr>
+<td>others</td>
+<td></td>
+<td><code>tooling</code>, <code>formats</code>, <code>subtitles</code>, <code>render</code> (one scene), <code>diagnostics</code></td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="the-render-path-in-one-page" class="level2">
+<h2><span class="header-section-number">9.3</span> The render path in one page</h2>
+<p><code>render_project(options, cancel, on_event)</code> is traced step by step in Chapter 14 and told as a story in Chapter 19. Its shape:</p>
+<figure>
+<img src="/books/spoonstill/media/file3.svg" alt="The render pipeline inside spoonstill_app::film::render_project." width="386" height="826" loading="lazy" decoding="async">
+<figcaption>The render pipeline inside <code>spoonstill_app::film::render_project</code>.</figcaption>
+</figure>
+</section>
+<section id="import-folder-to-project" class="level2">
+<h2><span class="header-section-number">9.4</span> Import: folder to project</h2>
+<p><code>import::load(root, media, cancel)</code> turns a folder into a <code>Project</code> and <strong>one list of problems</strong>:</p>
+<ol type="1">
+<li>canonicalise the root; it must be a directory;</li>
+<li><code>settings::load</code>: read <code>project.yaml</code> (at most 1 MiB) into a raw struct with <code>#[serde(deny_unknown_fields)]</code>, so a typo like <code>apsect:</code> is a parse error, then validate each value;</li>
+<li><code>rows::collect</code>: an explicit <code>manifest:</code>, else <code>scenes.csv</code> if present, else <strong>convention mode</strong> (numbered files in the folder);</li>
+<li>ask the probe tool once whether it can run at all (<code>MediaCheck::ready</code>); if FFmpeg is missing, record one <code>ToolingMissing</code> problem instead of one error per photo;</li>
+<li><code>validate_drafts</code> in core;</li>
+<li>resolve and probe every file <strong>in parallel</strong> with <code>pool::run</code>, each path checked for containment first;</li>
+<li>warnings: images not listed in a manifest, undersized stills, characters no bundled font can draw, scenes waiting for a picture;</li>
+<li>sort problems: project-level first, then by scene.</li>
+</ol>
+<p><code>MediaCheck</code> is a trait so tests and <code>--no-probe</code> can skip FFmpeg:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">// crates/spoonstill-app/src/import/mod.rs:90-121 (abridged)</span></span>
+<span id="cb1-2"><span class="kw">pub</span> <span class="kw">trait</span> MediaCheck<span class="op">:</span> <span class="bu">Sync</span> <span class="op">{</span></span>
+<span id="cb1-3">    <span class="kw">fn</span> check(<span class="op">&amp;</span><span class="kw">self</span><span class="op">,</span> path<span class="op">:</span> <span class="op">&amp;</span><span class="dt">Path</span><span class="op">,</span> role<span class="op">:</span> Role) <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span><span class="dt">Option</span><span class="op">&lt;</span>SourceGeometry<span class="op">&gt;,</span> <span class="dt">String</span><span class="op">&gt;;</span></span>
+<span id="cb1-4">    <span class="kw">fn</span> ready(<span class="op">&amp;</span><span class="kw">self</span>) <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span>()<span class="op">,</span> Remedy<span class="op">&gt;</span> <span class="op">{</span> <span class="cn">Ok</span>(()) <span class="op">}</span></span>
+<span id="cb1-5"><span class="op">}</span></span></code></pre></div>
+<p><strong>Convention mode</strong> groups files by <strong>natural</strong> sort of their stem (<code>scene2</code> before <code>scene10</code>), folding case so <code>Shot.jpg</code> pairs with <code>shot.wav</code>. The folder is sorted before pairing because <code>read_dir</code> order differs between filesystems. Two stills for one slot (<code>001.jpg</code> and <code>001.png</code>) is an <code>AmbiguousScene</code> error naming both, rather than a silent guess (D-111).</p>
+</section>
+<section id="ingest-getting-files-in" class="level2">
+<h2><span class="header-section-number">9.5</span> Ingest: getting files in</h2>
+<p><code>still new</code> and <code>still add</code> copy photos in as <code>001</code>, <code>002</code>, ... in natural order and pair recordings and scripts <strong>by stem first, then by position</strong>. Three rules: copy, never move; never overwrite (numbering continues past the highest existing number); unusable files are skipped and reported. A <code>.md</code> file is paired only if its stem matches a photo, never by position, after a <code>README.md</code> was once read aloud (D-152).</p>
+<p>Copying is crash-safe (D-120): copy to a hidden partial file beside the destination, <strong>claim</strong> the final name with <code>create_new</code> (which fails if it exists), then rename over the claim. On a FAT32 volume an interrupted copy used to leave 232 MB of a 400 MB photo at <code>001.jpg</code>.</p>
+<p><code>create_project</code> also writes a starter <code>project.yaml</code> containing <code>motion_seed: v2</code> and, if the machine has a fallback voice, a <code>tts: voice:</code> line. This is the one time spoonstill writes <code>project.yaml</code>, and only if the file does not exist.</p>
+</section>
+<section id="the-audio-cache" class="level2">
+<h2><span class="header-section-number">9.6</span> The audio cache</h2>
+<p>Narrations live in <code>.spoonstill/cache/audio/</code> in two layers:</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>What</th>
+<th>Key includes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>spoken-&lt;key&gt;.spoken</code></td>
+<td>raw MP3 from the provider</td>
+<td>text, provider, voice, settings</td>
+</tr>
+<tr>
+<td><code>tts-&lt;key&gt;.wav</code></td>
+<td>normalized speech</td>
+<td>the speech key, trim settings, the normalized profile</td>
+</tr>
+<tr>
+<td><code>file-&lt;key&gt;.wav</code></td>
+<td>normalized recording</td>
+<td>the recording's bytes, the profile</td>
+</tr>
+<tr>
+<td><code>silent-&lt;key&gt;.wav</code></td>
+<td>generated silence</td>
+<td>sample count, the profile</td>
+</tr>
+</tbody>
+</table></div>
+<p>Two layers mean that changing the loudness target or trim re-normalizes every line but <strong>re-speaks none</strong>. The post-render sweep removes old derived WAVs and never touches <code>spoken-</code> files (D-147), because speech cost a network call.</p>
+<p><strong>Single-flight.</strong> If eight workers need the same narration (common: one recording reused, many silent stills of the same length), only one does the work: <code>resolve</code> first looks without a lock, then takes a per-key mutex from a global map and looks again before working (D-108). The same pattern memoizes image hashes and audio measurements, so a fully cached 500-scene render no longer probes one silence file 500 times (D-184).</p>
+</section>
+<section id="pools-bounded-parallelism" class="level2">
+<h2><span class="header-section-number">9.7</span> Pools: bounded parallelism</h2>
+<p><code>pool::run(items, jobs, cancel, work)</code> runs <code>work</code> on every item with at most <code>jobs</code> threads and returns results <strong>in input order</strong>. <code>pool::pipeline</code> runs two dependent stages that overlap: as soon as a scene's narration is ready, its segment can start, while other narrations are still being fetched. Before this (D-146), the CPU sat idle while waiting for the network and the network sat idle while encoding; overlapping them made a cold render about 35% faster in a measurement with simulated network delay.</p>
+<figure>
+<img src="/books/spoonstill/media/file4.svg" alt="How pool::pipeline hands stage-one results to stage-two workers." width="495" height="407" loading="lazy" decoding="async">
+<figcaption>How <code>pool::pipeline</code> hands stage-one results to stage-two workers.</figcaption>
+</figure>
+<p>Two details matter for correctness:</p>
+<ul>
+<li>results are stored at their index, so the order of finishing never affects the film (D-077: <code>--jobs 1</code> and <code>--jobs 4</code> produce byte-identical films, asserted by gate 3);</li>
+<li>a stage-one failure stops admitting new work, and the report says "N more scenes were not started, because a narration failed before them", not "cancelled" (D-174).</li>
+</ul>
+</section>
+<section id="capacity-how-many-at-once" class="level2">
+<h2><span class="header-section-number">9.8</span> Capacity: how many at once</h2>
+<p>The default worker count is half the CPU cores, at most 4 (<code>pool::default_jobs</code>): the measured speed-up curve flattens after 3 to 4 workers. Since D-144 it is also capped by memory. Each worker is modelled as <code>192 MiB + 36 bytes per prescale pixel</code> (about 0.8 GB at 1080p, 2.7 GB at 4K), against a budget of 70% of total RAM. On an 8 GB machine at 4K that allows 2 workers; on 24 GB the core count decides. An explicit <code>--jobs</code> is always obeyed, with a warning if it does not fit. This was added after a 4K render with four workers froze a Windows machine hard enough to need the power button.</p>
+</section>
+<section id="arrange-and-picture-moving-files-safely" class="level2">
+<h2><span class="header-section-number">9.9</span> Arrange and picture: moving files safely</h2>
+<p>Under the folder convention, <strong>the order is the numbers</strong>, so moving scene 5 to position 1 means renaming files. <code>arrange::renumber</code> does it in two passes (park every file under a temporary name, then rename to its final name), because renaming <code>002</code> onto a live <code>001</code> would destroy a file. The temporary name <strong>is</strong> the journal: <code>.arranging-&lt;from&gt;-to-&lt;wanted&gt;.&lt;ext&gt;</code>. If the process is killed midway, <code>recover</code> runs before the next read and finishes or rolls back each file from its name alone (D-121). Removed scenes go to <code>removed/</code>; nothing is deleted. <code>picture.rs</code> builds put, replace, move, swap and undo on the same machinery.</p>
+</section>
+<section id="voice-who-chose-it" class="level2">
+<h2><span class="header-section-number">9.10</span> Voice: who chose it</h2>
+<p><code>voice::resolve(chosen, project_voice, fallback, provider_default)</code> applies one precedence rule and returns both what to show and what to send:</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Origin</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Run</code></td>
+<td>chosen for this render (<code>--voice</code>, or picked in the window)</td>
+</tr>
+<tr>
+<td><code>Project</code></td>
+<td><code>tts.voice</code> in <code>project.yaml</code></td>
+</tr>
+<tr>
+<td><code>Fallback</code></td>
+<td>the machine's fallback voice (<code>still voices --use NAME</code>)</td>
+</tr>
+<tr>
+<td><code>Unchosen</code></td>
+<td>none of the above: each line is read by the script-based default</td>
+</tr>
+</tbody>
+</table></div>
+<p>The window and the CLI both call this function, so "what is shown is what is sent" (D-166). An unchosen voice is a one-line warning in the CLI and a blocked Render button in the window until a voice is chosen once (D-167).</p>
+</section>
+<section id="machine-settings" class="level2">
+<h2><span class="header-section-number">9.11</span> Machine settings</h2>
+<p><code>&lt;config dir&gt;/spoonstill/settings.yaml</code> holds the fallback voice and the chapter-cut preference. <code>machine::read</code> distinguishes "no file" (silent defaults) from "damaged file" (defaults <strong>plus</strong> a visible problem). Saving uses <code>replace_file</code>: write beside, then rename, so a crash cannot leave a half-written settings file (D-171).</p>
+</section>
+<section id="tests-4" class="level2">
+<h2><span class="header-section-number">9.12</span> Tests</h2>
+<p>265 unit tests, the most of any crate. Examples: <code>eight_workers_wanting_one_photograph_read_it_once</code> (proves single-flight with a barrier), pool ordering and stop-reason tests, renumber crash-recovery tests, and the capacity model's headroom test (the model must stay above every measurement).</p>
+<div class="callout warning">
+<p><strong>Docs and code disagree</strong> (all verified by reading): <code>film.rs</code>'s module comment says the two pools "run as separate phases" (they overlap since D-146) and that moves are seeded "before the pool starts" (they are seeded inside stage two); <code>pool::SEGMENT_MEMORY_BYTES</code> is public but used nowhere; <code>import/rows.rs</code> lists seven manifest columns but the code accepts eight (<code>caption</code> was added); the default TTS trims are defined twice, in <code>import/settings.rs</code> and <code>audio.rs</code>, with equal values that could drift.</p>
+</div>
+</section>
+</section>

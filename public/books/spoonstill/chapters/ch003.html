@@ -1,0 +1,136 @@
+<section id="what-spoonstill-is-and-why-it-exists" class="level1">
+<h1><span class="header-section-number">1</span> What spoonstill Is, and Why It Exists</h1>
+<section id="the-problem-in-one-paragraph" class="level2">
+<h2><span class="header-section-number">1.1</span> The problem in one paragraph</h2>
+<p>Imagine you have forty photographs and something to say about each one. Maybe it is a narrated photo essay, a chapter of a novel illustrated with AI-made pictures, a lecture with slides, or a vertical Short. You want one finished video file where each photo is on screen for exactly as long as you talk about it, and where the photo slowly drifts or zooms so the video feels alive. Doing this by hand in a timeline editor means dragging forty clips, trimming forty audio files, and nudging forty keyframe animations. Change one recording and you nudge everything again. spoonstill does that whole job as a <strong>batch</strong>: you give it a folder, it gives you an MP4.</p>
+<p>The README states the scope in one sentence: <em>"Turn a folder of photos and narration into one finished MP4"</em>, with Ken Burns motion on every still, cut on the narration's own boundaries.</p>
+</section>
+<section id="who-uses-it" class="level2">
+<h2><span class="header-section-number">1.2</span> Who uses it</h2>
+<p>From the documents and the code, the main user is a single operator (the author) producing long narrated films: novel chapters with generated pictures, photo essays, product walkthroughs. Evidence in <code>decisions.md</code> shows real production runs of 431 scenes (D-195) and a 741-scene log analysed in <code>findings.md</code>. The design point is stated as <strong>500 scenes, not 5</strong> (D-002 and the project's <code>CLAUDE.md</code>), and that number drives many choices you will meet later: parallel pools, content-addressed caches, one-line warnings instead of one line per scene.</p>
+</section>
+<section id="what-goes-in-and-what-comes-out" class="level2">
+<h2><span class="header-section-number">1.3</span> What goes in and what comes out</h2>
+<p><strong>Input</strong> is a project folder. Each <strong>scene</strong> is one still image plus at most one audio source:</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>The scene has</th>
+<th>spoonstill does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>a photo and a recording (<code>.mp3 .m4a .wav .aac .flac .ogg .opus .wma</code>)</td>
+<td>uses the recording as narration</td>
+</tr>
+<tr>
+<td>a photo and a <code>.txt</code> script</td>
+<td>speaks the text with a neural voice (Edge TTS)</td>
+</tr>
+<tr>
+<td>a photo, a recording and a <code>.txt</code></td>
+<td>the recording is the narration; the text becomes the <strong>caption</strong></td>
+</tr>
+<tr>
+<td>a photo only</td>
+<td>holds it in silence for <code>defaults.duration</code> (4.0 s by default)</td>
+</tr>
+<tr>
+<td>a numbered <code>.txt</code> with no photo</td>
+<td>a scene <strong>waiting for its picture</strong> (warned, not rendered)</td>
+</tr>
+</tbody>
+</table></div>
+<p>Photos may be <code>jpg jpeg png webp tif tiff bmp heic</code>. Extensions are only a hint: every file is checked with <code>ffprobe</code> before anything renders (Verified from source: <code>crates/spoonstill-app/src/import/rows.rs:47-54</code> and <code>import/mod.rs</code>).</p>
+<p><strong>Output</strong> is one MP4 file: H.264 video (libx264, <code>-preset medium -crf 18</code> by default), <code>yuv420p</code>, limited ("tv") colour range, BT.709 colour, square pixels, AAC-LC audio at 192 kb/s, 48 kHz stereo, with a 90 kHz video timescale.</p>
+<div class="callout verified">
+<p><strong>Verified by runtime experiment.</strong> The fixture project <code>fixtures/projects/renderable</code> (six scenes, two supplied recordings, four silent) rendered on the analysis machine to a film that <code>ffprobe</code> reports as <code>h264 High level 40, 960x540, SAR 1:1, yuv420p, tv, bt709, 30/1, time_base 1/90000, 541 frames</code> plus <code>aac LC 48000 Hz 2 channels</code>.</p>
+</div>
+</section>
+<section id="a-concrete-example" class="level2">
+<h2><span class="header-section-number">1.4</span> A concrete example</h2>
+<p>Here is the flow for ten photos and ten narrations, corrected to match the real implementation:</p>
+<pre class="text"><code>10 photos + 10 recordings (+ optional project.yaml)
+        |
+        v
+still new  -&gt; copies them in as 001.jpg ... 010.jpg and 001.m4a ... 010.m4a,
+              pairing by matching name first, then by position
+        |
+        v
+still render
+   1. read project.yaml (or defaults) and list scenes from the folder
+   2. validate every scene and ffprobe every file; report ALL problems at once
+   3. for each scene, in parallel:
+        audio  -&gt; normalize to 48 kHz stereo WAV at -16 LUFS, measure duration
+        video  -&gt; frames = ceil(duration x fps); choose a deterministic
+                  Ken Burns move; run one ffmpeg that turns the still plus the
+                  audio into a checked segment file seg-&lt;key&gt;.mp4
+   4. join all segments with ffmpeg's concat demuxer (no re-encode)
+   5. check the joined film against the expected profile and frame count
+   6. rename it into place as the finished MP4
+        |
+        v
+film.mp4</code></pre>
+<p>Notice what is <strong>not</strong> there: no timeline, no per-frame image work in Rust, no editing of your originals. The heavy lifting happens inside FFmpeg; spoonstill decides exactly what to ask FFmpeg for, checks what comes back, and caches it so the next render is fast.</p>
+</section>
+<section id="why-a-batch-renderer-and-not-a-timeline-editor" class="level2">
+<h2><span class="header-section-number">1.5</span> Why a batch renderer and not a timeline editor</h2>
+<p>The README is blunt: "A batch renderer, not a video editor": no timeline, no scrubber, by design (decision D-001, non-goals in D-003). The reasoning, collected from the documents:</p>
+<ol type="1">
+<li><strong>The narration already defines the timing.</strong> If each photo lasts exactly as long as its narration, there is nothing to drag. A timeline would let you make a mistake the program could have avoided.</li>
+<li><strong>It scales.</strong> At 500 scenes, a folder and a command are reproducible and scriptable; 500 hand-placed clips are not.</li>
+<li><strong>It is testable.</strong> A command-line program over a folder can be tested in CI. A drag-and-drop GUI mostly cannot (D-010).</li>
+<li><strong>Re-renders are cheap.</strong> Because every intermediate file is named by a hash of its inputs, changing one narration re-renders one scene (Chapter 13).</li>
+</ol>
+<p>The cost is flexibility: no transitions (only hard cuts today), no moving video sources, no per-frame creative control. Chapter 29 weighs this.</p>
+</section>
+<section id="who-does-what" class="level2">
+<h2><span class="header-section-number">1.6</span> Who does what</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Part</th>
+<th>Its job in spoonstill</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>FFmpeg / ffprobe</strong></td>
+<td>Decode images and audio, run the filter graph that makes motion, encode H.264 and AAC, write MP4, join segments, and report facts about files. spoonstill never links FFmpeg as a library; it runs the programs.</td>
+</tr>
+<tr>
+<td><strong>Rust code</strong></td>
+<td>Decide everything: which files form which scene, how long each scene is, which motion it gets, the exact FFmpeg arguments, the caching, the parallelism, the validation, the error messages, the logs.</td>
+</tr>
+<tr>
+<td><strong>edge-tts + Microsoft's service</strong></td>
+<td>Turn a written line into speech (an MP3).</td>
+</tr>
+<tr>
+<td><strong>The CLI (<code>still</code>)</strong></td>
+<td>The permanent, complete control surface: "if the CLI cannot do it, it does not exist."</td>
+</tr>
+<tr>
+<td><strong>The desktop window</strong></td>
+<td>A Tauri 2 app over the same Rust library, for people who prefer clicking. It "owns no business logic."</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="the-name" class="level2">
+<h2><span class="header-section-number">1.7</span> The name</h2>
+<p>The product is <strong>spoonstill</strong>; the command is <strong><code>still</code></strong> (decision D-073). The local folder on the author's machine is still called <code>vidio</code>, which is cosmetic.</p>
+<div class="callout exercise">
+<p><strong>Exercise 1.1 (Beginner).</strong> Open <code>README.md</code> and find the table of what a scene can contain. Then open <code>crates/spoonstill-app/src/import/rows.rs</code> and find the three extension lists. Do they agree with the README?</p>
+</div>
+</section>
+</section>

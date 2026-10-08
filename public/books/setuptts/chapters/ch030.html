@@ -1,0 +1,105 @@
+<section id="appendix-b-where-do-i-look" class="level1 unnumbered appendix">
+<h1 class="unnumbered appendix">Appendix B: Where Do I Look?</h1>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>If you want to change or understand…</th>
+<th>Start here</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>start-up order, TLS environment, single instance</td>
+<td><code>app/main.py</code></td>
+</tr>
+<tr>
+<td>what the user can configure</td>
+<td><code>app/config/settings.py</code></td>
+</tr>
+<tr>
+<td>where files live on each OS</td>
+<td><code>app/utils/paths.py</code></td>
+</tr>
+<tr>
+<td>text cleanup, language and script detection, voice matching</td>
+<td><code>app/services/tts_quality.py</code></td>
+</tr>
+<tr>
+<td>the only code that talks to edge-tts</td>
+<td><code>app/services/tts_service.py</code></td>
+</tr>
+<tr>
+<td>chunk sizes and boundaries</td>
+<td><code>tts_worker.py</code>: <code>_chunk_plan_for</code>, <code>_take_chunk_at</code>, <code>_ChunkCursor</code></td>
+</tr>
+<tr>
+<td>timeouts</td>
+<td><code>tts_worker.py</code>: <code>_chunk_timeout_for</code>, <code>_first_audio_timeout_for</code>, <code>_stream_idle_timeout_for</code></td>
+</tr>
+<tr>
+<td>retries, recovery splitting</td>
+<td><code>tts_worker.py</code>: <code>_process_chunk</code>, <code>_subdivide_for_recovery</code></td>
+</tr>
+<tr>
+<td>completeness of one stream</td>
+<td><code>tts_worker.py</code>: <code>_stream_incomplete_reason</code></td>
+</tr>
+<tr>
+<td>failure kinds and user messages</td>
+<td><code>tts_worker.py</code>: <code>_classify_attempt_failure</code>, <code>_user_message</code>; <code>app/utils/errors.py</code></td>
+</tr>
+<tr>
+<td>the manifest, coverage, resume, assembly</td>
+<td><code>app/workers/chunk_store.py</code></td>
+</tr>
+<tr>
+<td>MP3 duration</td>
+<td><code>app/utils/mp3_duration.py</code></td>
+</tr>
+<tr>
+<td>concurrency, cancellation, duplicate paths</td>
+<td><code>app/workers/job_queue.py</code></td>
+</tr>
+<tr>
+<td>the Generate checks, resume menu, job rows</td>
+<td><code>app/ui/panels/output_panel.py</code></td>
+</tr>
+<tr>
+<td>file import and encodings</td>
+<td><code>app/ui/panels/input_panel.py</code></td>
+</tr>
+<tr>
+<td>window layout and shutdown</td>
+<td><code>app/ui/main_window.py</code></td>
+</tr>
+<tr>
+<td>history database</td>
+<td><code>app/services/history_service.py</code></td>
+</tr>
+<tr>
+<td>logging and crash capture</td>
+<td><code>app/utils/app_logging.py</code>, <code>app/utils/diagnostics.py</code></td>
+</tr>
+<tr>
+<td>packaging</td>
+<td><code>setuptts.spec</code>, <code>setuptts_portable.spec</code>, <code>installers/windows.iss</code></td>
+</tr>
+<tr>
+<td>release pipeline</td>
+<td><code>.github/workflows/build.yml</code>, <code>release_notes/</code></td>
+</tr>
+<tr>
+<td>packaged-build checks</td>
+<td><code>app/selftest.py</code></td>
+</tr>
+<tr>
+<td>live long-form test</td>
+<td><code>scripts/stress_longform.py</code></td>
+</tr>
+</tbody>
+</table></div>
+</section>

@@ -1,0 +1,177 @@
+<section id="dependencies" class="level1">
+<h1><span class="header-section-number">27</span> Dependencies</h1>
+<section id="rust-crates-used-directly" class="level2">
+<h2><span class="header-section-number">27.1</span> Rust crates used directly</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr>
+<th>Crate</th>
+<th>Version (Cargo.lock)</th>
+<th>Used in</th>
+<th>Why it is needed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>clap</code></td>
+<td>4.6.6</td>
+<td>cli</td>
+<td>argument parsing, help text, conflicts between flags, from derive macros</td>
+</tr>
+<tr>
+<td><code>ctrlc</code></td>
+<td>3.5.2</td>
+<td>cli</td>
+<td>Ctrl-C on Unix and Windows console events without writing <code>unsafe</code></td>
+</tr>
+<tr>
+<td><code>serde</code></td>
+<td>1.0.229</td>
+<td>app, media, desktop</td>
+<td>derive (de)serialization for YAML, CSV, JSON, IPC</td>
+</tr>
+<tr>
+<td><code>serde_json</code></td>
+<td>1.0.151</td>
+<td>media, desktop</td>
+<td>parse <code>ffprobe -print_format json</code>; window IPC</td>
+</tr>
+<tr>
+<td><code>serde_yaml_ng</code></td>
+<td>0.10.0</td>
+<td>app</td>
+<td><code>project.yaml</code> and <code>settings.yaml</code>; the maintained fork of the archived <code>serde_yaml</code> (D-056)</td>
+</tr>
+<tr>
+<td><code>csv</code></td>
+<td>1.4.0</td>
+<td>app</td>
+<td><code>scenes.csv</code> with RFC 4180 quoting</td>
+</tr>
+<tr>
+<td><code>sysinfo</code></td>
+<td>0.38.4</td>
+<td>app</td>
+<td>total RAM for pool sizing, without hand-written OS calls</td>
+</tr>
+<tr>
+<td><code>fontdue</code></td>
+<td>0.9.4</td>
+<td>media</td>
+<td>rasterising glyphs for captions (FFmpeg's text filters are missing from Homebrew's build)</td>
+</tr>
+<tr>
+<td><code>harfrust</code></td>
+<td>0.13.3</td>
+<td>media</td>
+<td>shaping Devanagari; chosen over <code>rustybuzz</code>, which became unmaintained (D-157)</td>
+</tr>
+<tr>
+<td><code>tauri</code></td>
+<td>2.11.5</td>
+<td>desktop</td>
+<td>window, webview, IPC, asset protocol</td>
+</tr>
+<tr>
+<td><code>tauri-plugin-dialog</code></td>
+<td>2.7.2</td>
+<td>desktop</td>
+<td>native open-file and folder pickers</td>
+</tr>
+<tr>
+<td><code>tauri-plugin-opener</code></td>
+<td>2.5.4</td>
+<td>desktop</td>
+<td>revealing and opening files</td>
+</tr>
+<tr>
+<td><code>tauri-build</code> (build)</td>
+<td>2.6.3</td>
+<td>desktop</td>
+<td>code generation and Windows resources</td>
+</tr>
+<tr>
+<td><code>toml</code> (dev)</td>
+<td>1.1.4</td>
+<td>cli tests</td>
+<td>reading manifests in <code>architecture.rs</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>Twelve runtime crates in total; the lock file holds 528 packages, most of them Tauri's. <code>spoonstill-core</code> has none.</p>
+</section>
+<section id="not-rust-but-required-or-used" class="level2">
+<h2><span class="header-section-number">27.2</span> Not Rust, but required or used</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Needed for</th>
+<th>Obtained by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FFmpeg and ffprobe</td>
+<td>every render and probe</td>
+<td>the operator (<code>brew</code>, <code>winget</code>, or <code>still doctor --install</code>); never bundled</td>
+</tr>
+<tr>
+<td><code>edge-tts</code> (Python)</td>
+<td>speaking text</td>
+<td><code>pipx install edge-tts</code> or <code>still voices --install</code></td>
+</tr>
+<tr>
+<td>Microsoft's Edge speech service</td>
+<td>speech audio</td>
+<td>network, through <code>edge-tts</code></td>
+</tr>
+<tr>
+<td>Node.js</td>
+<td><code>make ui</code> checks of <code>app.js</code></td>
+<td>developers and CI</td>
+</tr>
+<tr>
+<td><code>actionlint</code>, <code>shellcheck</code></td>
+<td><code>make lint</code></td>
+<td>developers (Homebrew)</td>
+</tr>
+<tr>
+<td><code>cargo-audit</code></td>
+<td>the CI audit job</td>
+<td><code>cargo install</code> in CI</td>
+</tr>
+<tr>
+<td><code>tauri-cli</code></td>
+<td>building the desktop bundles</td>
+<td><code>cargo binstall</code> in the release workflow</td>
+</tr>
+<tr>
+<td>Python 3 (+ Pillow for the demo)</td>
+<td><code>make brand</code>, <code>make demo</code>, a release version check</td>
+<td>system</td>
+</tr>
+<tr>
+<td><code>gh</code></td>
+<td>release and installer CI jobs</td>
+<td>runner image</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="what-these-dependencies-save" class="level2">
+<h2><span class="header-section-number">27.3</span> What these dependencies save</h2>
+<p>Without <code>clap</code>, every one of fifteen subcommands would need hand-written parsing and help. Without <code>serde</code>, three file formats and one IPC protocol would need hand-written readers. Without <code>fontdue</code> and <code>harfrust</code>, captions would need FFmpeg builds the operator does not have. Without Tauri, the window would need a native UI toolkit per platform. Equally telling are the dependencies <strong>not</strong> taken: no FFmpeg bindings, no async runtime in the core, no HTTP client, no SQLite, no date or directory-finding crate (a 20-line <code>config_dir</code> and a hand-written UTC formatter replace them).</p>
+</section>
+</section>

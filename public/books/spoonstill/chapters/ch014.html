@@ -1,0 +1,111 @@
+<section id="the-desktop-application" class="level1">
+<h1><span class="header-section-number">11</span> The Desktop Application</h1>
+<section id="what-it-is" class="level2">
+<h2><span class="header-section-number">11.1</span> What it is</h2>
+<p><code>apps/desktop</code> is a <strong>Tauri 2</strong> application. Tauri runs a native Rust process that hosts the operating system's own web view (WKWebView on macOS, WebView2 on Windows). The user interface is plain HTML, CSS and JavaScript in <code>apps/desktop/ui/</code> (<code>index.html</code>, <code>styles.css</code>, <code>app.js</code>): <strong>no bundler and no npm</strong>. JavaScript reaches Rust only through <code>window.__TAURI__.core.invoke("command_name", args)</code>. The Rust side is <code>apps/desktop/src/main.rs</code>, and its header repeats the rule: <em>"This window owns no business logic. Every command below is a translation: arguments in, a call into <code>spoonstill-app</code>, a serializable view out."</em></p>
+</section>
+<section id="configuration-and-permissions" class="level2">
+<h2><span class="header-section-number">11.2</span> Configuration and permissions</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Setting (<code>tauri.conf.json</code>)</th>
+<th>Value</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>window</td>
+<td>1180x820, minimum 900x600</td>
+<td></td>
+</tr>
+<tr>
+<td><code>titleBarStyle</code></td>
+<td><code>Overlay</code></td>
+<td>macOS draws the page's own header under the title bar; ignored on Windows</td>
+</tr>
+<tr>
+<td><code>title</code></td>
+<td>empty, set to <code>spoonstill</code> at runtime on Windows only</td>
+<td>otherwise Windows shows a blank title bar (D-160)</td>
+</tr>
+<tr>
+<td>CSP</td>
+<td><code>default-src 'self'; script-src 'self'; img-src 'self' asset: ...</code></td>
+<td>no inline scripts, no remote content</td>
+</tr>
+<tr>
+<td><code>assetProtocol.scope</code></td>
+<td>empty at start</td>
+<td>each displayed still is allowed individually when a project opens</td>
+</tr>
+<tr>
+<td>bundle targets</td>
+<td><code>dmg</code>, <code>app</code>, <code>nsis</code></td>
+<td>no <code>.msi</code> (D-133)</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>capabilities/default.json</code> grants only <code>core:default</code>, window dragging (needed for the custom title strip, D-088), and the open-file dialog. There is no general filesystem permission: opening the film or revealing the folder is done by Rust commands that take <strong>no path from the page</strong>, so the web page cannot name a file to open.</p>
+</section>
+<section id="state-held-in-rust" class="level2">
+<h2><span class="header-section-number">11.3</span> State held in Rust</h2>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">// apps/desktop/src/main.rs:716, 800-811 (abridged)</span></span>
+<span id="cb1-2"><span class="kw">struct</span> Active(Mutex<span class="op">&lt;</span><span class="dt">Option</span><span class="op">&lt;</span>Cancel<span class="op">&gt;&gt;</span>)<span class="op">;</span>          <span class="co">// the running render, if any</span></span>
+<span id="cb1-3"><span class="kw">struct</span> Session <span class="op">{</span></span>
+<span id="cb1-4">    root<span class="op">:</span> Mutex<span class="op">&lt;</span><span class="dt">Option</span><span class="op">&lt;</span><span class="dt">PathBuf</span><span class="op">&gt;&gt;,</span>              <span class="co">// the project this window has open</span></span>
+<span id="cb1-5">    film<span class="op">:</span> Mutex<span class="op">&lt;</span><span class="dt">Option</span><span class="op">&lt;</span><span class="dt">PathBuf</span><span class="op">&gt;&gt;,</span>              <span class="co">// the last film it rendered</span></span>
+<span id="cb1-6">    probes<span class="op">:</span> Mutex<span class="op">&lt;</span>ProbeMemo<span class="op">&gt;,</span>                  <span class="co">// remembered probe results</span></span>
+<span id="cb1-7">    undo<span class="op">:</span> Mutex<span class="op">&lt;</span>(<span class="dt">Option</span><span class="op">&lt;</span><span class="dt">PathBuf</span><span class="op">&gt;,</span> <span class="dt">Vec</span><span class="op">&lt;</span>Change<span class="op">&gt;</span>)<span class="op">&gt;,</span> <span class="co">// picture undo, 50 deep</span></span>
+<span id="cb1-8"><span class="op">}</span></span></code></pre></div>
+<p>Every command that writes checks the page's <code>root</code> against <code>Session.root</code> (<code>project_root</code>), so a page cannot ask Rust to change a project other than the one open (D-127).</p>
+</section>
+<section id="the-commands" class="level2">
+<h2><span class="header-section-number">11.4</span> The commands</h2>
+<p>There are 38 <code>#[tauri::command]</code> functions. The main ones: <code>validate_project</code> (open a project and build its view), <code>create_project</code>, <code>add_media</code>, <code>set_narration</code>, <code>remove_scene</code>, <code>move_scene</code>, <code>set_picture</code>, <code>fill_pictures</code>, <code>move_picture</code>, <code>remove_picture</code>, <code>undo_picture</code>, <code>import_chapter</code>, <code>chapter_cut</code>, <code>voices</code>, <code>preview_voice</code>, <code>voice_choice</code>, <code>subtitle_themes</code>, <code>subtitle_preview</code>, <code>output_formats</code>, <code>resolve_output</code>, <code>render_project</code>, <code>cancel_render</code>, <code>open_film</code>, <code>reveal_project</code>, <code>app_settings</code>, <code>set_default_voice</code>, <code>install_tool</code>, <code>ffmpeg_status</code>, <code>provider_status</code>, <code>recent_projects</code>.</p>
+<p>Asynchronous commands follow one pattern: an outer function calls an <code>_inner</code> function that does blocking work inside <code>tauri::async_runtime::spawn_blocking</code>, and passes the outcome to <code>journalled(scope, root, outcome)</code>, which writes a row to the logs. A test (<code>every_fallible_window_command_is_written_down</code>) fails if any command returning <code>Result</code> neither journals nor appears on a four-item exempt list.</p>
+</section>
+<section id="the-screens" class="level2">
+<h2><span class="header-section-number">11.5</span> The screens</h2>
+<p><code>app.js</code> toggles four screens: <strong>start</strong> (Home: recent projects, New, Open, Settings), <strong>settings</strong> (voice service, FFmpeg, fallback voice, chapter-cut default, activity log, theme), <strong>fill</strong> ("Choose photos..." for an empty project), and <strong>app</strong> (the project). Inside a project, a left rail switches panes: <strong>Scenes</strong>, <strong>Voice</strong>, <strong>Subtitles</strong>, <strong>Output</strong>, <strong>Render</strong>, plus an <strong>Import chapter</strong> pane.</p>
+<p>Notable pieces:</p>
+<ul>
+<li><code>drawFix</code> is the one component that draws a missing-tool report from a <code>Remedy</code>, with an <strong>Install it for me</strong> button that calls <code>install_tool</code>.</li>
+<li><code>renderBlocker()</code> returns the reason Render is disabled (no project, FFmpeg missing, errors in the project, a bad output path, or an unchosen voice), and the reason is written next to the button (D-089).</li>
+<li>Picture drag and drop: OS file drops arrive as Tauri events with a position; on macOS that position is in window points but on Windows it is in physical pixels, so only Windows divides by the device pixel ratio (D-194).</li>
+<li><code>onFrame</code> coalesces bursts of keystrokes into at most one redraw per animation frame, and tokens stop a slow earlier answer painting over a later one (D-185).</li>
+</ul>
+</section>
+<section id="a-render-click-end-to-end" class="level2">
+<h2><span class="header-section-number">11.6</span> A Render click, end to end</h2>
+<figure>
+<img src="/books/spoonstill/media/file5.svg" alt="The desktop render flow. The webview and the Rust process talk only through invoke and a progress Channel." width="411" height="475" loading="lazy" decoding="async">
+<figcaption>The desktop render flow. The webview and the Rust process talk only through <code>invoke</code> and a progress <code>Channel</code>.</figcaption>
+</figure>
+<ol type="1">
+<li>The <strong>Render</strong> button's click handler calls <code>render()</code> in <code>app.js</code> (only enabled when <code>renderBlocker()</code> is empty).</li>
+<li><code>render()</code> re-asks Rust which voice will be used (<code>voice_choice</code>) and resolves the output path (<code>resolve_output</code>), then draws one live row per scene <strong>in film order</strong>.</li>
+<li>It creates a <code>Channel</code> for progress and calls <code>invoke("render_project", { request, onProgress })</code>.</li>
+<li>Rust's <code>render_project</code> command receives the JSON as a typed <code>RenderRequest</code> (serde, camelCase), parses the overrides, and claims the window's render slot with an <code>ActiveRender</code> guard (a second Render is refused).</li>
+<li>Inside <code>spawn_blocking</code>, it builds <code>RenderProjectOptions</code> and calls <strong>the same <code>spoonstill_app::render_project</code> the CLI calls</strong>.</li>
+<li>Each <code>FilmEvent</code> is converted to a <code>ProgressView</code> and sent through the Channel as JSON tagged by <code>kind</code> (<code>planned</code>, <code>audio</code>, <code>segment</code>, <code>failed</code>, <code>joining</code>). The page updates its rows and progress bar.</li>
+<li>When the render returns, the result becomes a <code>FilmView</code>, the film path is remembered for <strong>Play</strong>, the guard drops (freeing the slot even if the render panicked), and one journal row is written.</li>
+<li><strong>Stop</strong> calls <code>cancel_render</code>, which sets the same <code>Cancel</code> flag; closing the window also requests cancellation.</li>
+</ol>
+<p>Things the window does <strong>not</strong> send that the CLI can: <code>--encoder</code>, <code>--keep-cache</code>, <code>--fps</code>. Jobs are left to Rust's automatic sizing.</p>
+</section>
+<section id="tests-5" class="level2">
+<h2><span class="header-section-number">11.7</span> Tests</h2>
+<p>37 test functions: 13 unit tests and 24 in <code>tests/ui_contract.rs</code>, which reads <code>app.js</code>, <code>index.html</code>, <code>styles.css</code> and <code>main.rs</code> as text and enforces contracts that a browser would otherwise fail silently: every <code>el("id")</code> exists in the markup, every <code>invoke("name")</code> is a registered command, every writing command sends <code>root</code>, the voice shown is the voice sent, every colour combination meets a WCAG contrast ratio, and no input handler calls Rust on every keystroke. <code>scripts/ui-smoke.mjs</code> loads <code>app.js</code> in Node with a fake DOM and fails if its top level throws.</p>
+<p>There is <strong>no GUI automation</strong>: the window's behaviour is tested at its seams, not by clicking (D-131).</p>
+<div class="callout exercise">
+<p><strong>Exercise 11.1 (Intermediate).</strong> In <code>app.js</code>, find where <code>progress.onmessage</code> handles <code>event.kind === "segment"</code>. Then find <code>view_of</code> in <code>main.rs</code>. Which Rust enum variant produces that message?</p>
+</div>
+</section>
+</section>

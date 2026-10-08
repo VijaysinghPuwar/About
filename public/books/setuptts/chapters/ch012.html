@@ -1,0 +1,188 @@
+<section id="failure-and-recovery-architecture" class="level1">
+<h1><span class="header-section-number">8</span> Failure and Recovery Architecture</h1>
+<section id="fail-closed" class="level2">
+<h2><span class="header-section-number">8.1</span> Fail closed</h2>
+<p>A system <strong>fails open</strong> when, on error, it carries on and produces something. It <strong>fails closed</strong> when it stops and produces nothing it cannot vouch for. For an audiobook, failing open is the worst outcome: a file that plays, looks right, and is missing twenty minutes from the middle. The user discovers it, if at all, while listening, long after the source text has been closed.</p>
+<p>SetupTTS fails closed at every level:</p>
+<ul>
+<li>A chunk whose stream ended early is <strong>retried</strong>, never saved.</li>
+<li>A chunk that cannot be produced after retries and splitting <strong>fails the job</strong>; it is never skipped.</li>
+<li>A job whose saved chunks do not tile the text is <strong>not assembled</strong>.</li>
+<li>An assembled file that is implausibly short <strong>does not replace</strong> the destination.</li>
+</ul>
+<p>In every case, the work already done is kept and the job can be resumed.</p>
+</section>
+<section id="how-the-project-learned-this" class="level2">
+<h2><span class="header-section-number">8.2</span> How the project learned this</h2>
+<p>The commit history shows the principle being learned the hard way. <strong>Historical</strong>, from commit messages:</p>
+<ol type="1">
+<li><strong>April 2026, <code>a53f1f5</code>, shipped in v1.5.4: “skip irrecoverable no-audio sub-chunks instead of failing the whole job”.</strong> When a tiny recovery fragment kept returning no audio, the job had been aborting. The fix returned empty bytes for that fragment so the job could finish: “A few missing chars in the output is far better than aborting a multi-hour generation run.”</li>
+<li><strong>May 2026, <code>cfcc615</code>, shipped in v1.5.5: “prevent truncated long-form exports and verify full text coverage”.</strong> That empty-bytes path turned out to be “the root cause of long-form audiobook exports landing at 2-3 hours when the source text should produce 7-12 hours”. The fix reversed the policy and built the coverage system: per-chunk source ranges and hashes in the manifest, coverage verification before assembly, recovery sub-ranges, the MP3 duration check, and “Irrecoverable sub-chunks raise instead of contributing b"" bytes.” The comment at <code>tts_worker.py:2234-2243</code> still records it: “Long-form correctness wins over partial output.”</li>
+<li><strong>September 2026, <code>c1de6d7</code> (v1.6.0): silent stream truncation.</strong> Coverage proved every <em>range</em> had a chunk, but not that each chunk’s audio was <em>complete</em>. edge-tts “ends its stream quietly when the socket closes before turn.end”, so a dropped connection produced a short chunk that was recorded as whole. The per-chunk completeness check was added and validated “against 36 live voices”.</li>
+<li><strong>October 2026, v1.6.2: slow voices.</strong> Healthy slow streams were being killed by a fixed 65-second deadline, retried, and eventually failed. Deadlines became proportional to expected audio.</li>
+</ol>
+<div class="callout lesson">
+<p><strong>Engineering lesson.</strong> Step 1 was a reasonable local decision (“finishing is better than crashing”) that was globally wrong, because it converted a visible failure into an invisible one. A visible, resumable failure costs the user a click. An invisible one costs them the product’s whole promise.</p>
+</div>
+</section>
+<section id="detecting-a-stream-that-ended-early" class="level2">
+<h2><span class="header-section-number">8.3</span> Detecting a stream that ended early</h2>
+<p>Here is the edge-tts receive loop that makes silent truncation possible (<code>edge_tts/communicate.py</code>, simplified):</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><span class="cf">async</span> <span class="cf">for</span> received <span class="kw">in</span> websocket:</span>
+<span id="cb1-2">    <span class="cf">if</span> received.<span class="bu">type</span> <span class="op">==</span> aiohttp.WSMsgType.TEXT:</span>
+<span id="cb1-3">        ...</span>
+<span id="cb1-4">        <span class="cf">elif</span> path <span class="op">==</span> <span class="st">b"turn.end"</span>:</span>
+<span id="cb1-5">            <span class="va">self</span>.__compensate_offset()</span>
+<span id="cb1-6">            <span class="cf">break</span></span>
+<span id="cb1-7">    <span class="cf">elif</span> received.<span class="bu">type</span> <span class="op">==</span> aiohttp.WSMsgType.BINARY:</span>
+<span id="cb1-8">        ...</span>
+<span id="cb1-9">        <span class="cf">yield</span> {<span class="st">"type"</span>: <span class="st">"audio"</span>, <span class="st">"data"</span>: data}</span>
+<span id="cb1-10"><span class="cf">if</span> <span class="kw">not</span> audio_was_received:</span>
+<span id="cb1-11">    <span class="cf">raise</span> NoAudioReceived(...)</span></code></pre></div>
+<p>If the socket closes before <code>turn.end</code>, the <code>async for</code> loop simply ends. If some audio had arrived, nothing is raised. The caller sees a normal end of stream.</p>
+<p><code>_stream_incomplete_reason</code> (<code>tts_worker.py:796-873</code>) closes that gap with two independent checks, “each tolerant of the other’s blind spot”:</p>
+<ul>
+<li><strong>Audio length.</strong> The service streams constant-bitrate 48 kbit/s MP3, so bytes convert exactly to seconds: 6,000 bytes per second. Each <code>SentenceBoundary</code> event carries an offset and a duration in 100-nanosecond ticks. The received audio must reach the end of the last announced sentence, with 0.35 s of tolerance for frame rounding. This catches a cut <strong>inside</strong> a sentence.</li>
+<li><strong>Text reach.</strong> The announced sentences, reduced to letters and digits and matched in order against the chunk’s text, must reach within 4 letters of the end. This catches a cut <strong>between</strong> sentences, before the next one was announced. If a sentence was rewritten by the service (numbers, symbols), the match anchors on its last 12 characters.</li>
+</ul>
+<p>A stream with audio but no sentence events at all is also incomplete, because the service announces each sentence a few seconds before its audio finishes.</p>
+<figure id="fig-truncation">
+<img src="/books/setuptts/media/file6.webp" alt="A real three-sentence stream, and the two kinds of cut the checks detect. All numbers in the top two rows were measured for this book." width="1680" height="792" loading="lazy" decoding="async">
+<figcaption><strong>Figure 8.1.</strong> A real three-sentence stream, and the two kinds of cut the checks detect. All numbers in the top two rows were measured for this book.</figcaption>
+</figure>
+<div class="callout experiment">
+<p><strong>Verified by runtime experiment.</strong> A three-sentence text was streamed with <code>en-US-AndrewNeural</code>. The service returned 52,416 bytes (8.74 s of audio) and three sentence events ending at 8.71 s; <code>_stream_incomplete_reason</code> returned <code>None</code>. The same events with the audio cut to 60 % returned “received 5.2 s of audio but the speech runs to 8.7 s”. Dropping the last sentence event and cutting the audio just after the second sentence returned “the audio stopped with about 49 letters of this section unspoken”.</p>
+</div>
+</section>
+<section id="the-failure-catalogue" class="level2">
+<h2><span class="header-section-number">8.4</span> The failure catalogue</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>What goes wrong</th>
+<th>Where it is handled</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No route, DNS failure</td>
+<td><code>_classify_attempt_failure</code> → <code>dns</code></td>
+<td>back-off and retry; the voice check makes 3 attempts; plain “check your connection” message</td>
+</tr>
+<tr>
+<td>Connect timeout</td>
+<td>aiohttp, 20 s</td>
+<td>classified as a timeout; retried</td>
+</tr>
+<tr>
+<td>HTTP 503 / 429 on handshake</td>
+<td>classified as <code>network</code></td>
+<td>retried with back-off</td>
+</tr>
+<tr>
+<td>HTTP 403 (token clock skew)</td>
+<td>inside edge-tts</td>
+<td>clock skew adjusted, retried once</td>
+</tr>
+<tr>
+<td>TLS interception (antivirus, proxy)</td>
+<td><code>build_ssl_context</code> trusts the system store</td>
+<td>works; otherwise a message about date, time and HTTPS scanning</td>
+</tr>
+<tr>
+<td>Service accepts but sends nothing</td>
+<td>first-audio timeout</td>
+<td>2 attempts, then recovery split</td>
+</tr>
+<tr>
+<td>Metadata but no audio</td>
+<td><code>metadata_without_audio</code></td>
+<td>2 attempts, then split; conservative window for the next 4 chunks</td>
+</tr>
+<tr>
+<td>Stream stalls mid-way</td>
+<td>idle timeout → <code>timeout_after_audio</code></td>
+<td>retry with a longer deadline</td>
+</tr>
+<tr>
+<td>Stream ends early, no error</td>
+<td><code>_stream_incomplete_reason</code></td>
+<td>attempt discarded, retried</td>
+</tr>
+<tr>
+<td>Provider unstable for a while</td>
+<td><code>_RollingHealthState</code></td>
+<td>conservative 74 % chunk cap for 3 to 4 chunks</td>
+</tr>
+<tr>
+<td>One chunk keeps failing</td>
+<td><code>_subdivide_for_recovery</code></td>
+<td>split into exactly covering sub-ranges, recursively, depth up to 3</td>
+</tr>
+<tr>
+<td>Sub-chunk cannot be produced</td>
+<td><code>_process_chunk</code></td>
+<td><code>_ChunkError</code>: job fails closed, finished chunks kept</td>
+</tr>
+<tr>
+<td>User cancels</td>
+<td><code>cancel()</code></td>
+<td>manifest <code>cancelled</code>, progress kept if any chunk saved</td>
+</tr>
+<tr>
+<td>App quit or crash</td>
+<td>manifest left <code>running</code></td>
+<td>listing relabels it <code>interrupted</code>; Resume offered</td>
+</tr>
+<tr>
+<td>Disk full or file locked while staging</td>
+<td><code>staging_io</code></td>
+<td>job fails, resumable, plain explanation</td>
+</tr>
+<tr>
+<td>Chunk file damaged or wrong size</td>
+<td><code>_validate_chunk_records</code></td>
+<td>resume trusts only the valid prefix</td>
+</tr>
+<tr>
+<td>Coverage incomplete at the end</td>
+<td><code>incomplete_coverage</code></td>
+<td>not assembled; resumable</td>
+</tr>
+<tr>
+<td>Output folder unwritable at the end</td>
+<td><code>assembly_failed</code></td>
+<td>not assembled; resumable; “try saving again”</td>
+</tr>
+<tr>
+<td>Final audio implausibly short</td>
+<td><code>_DurationShortfall</code></td>
+<td>existing file untouched; result kept as “(incomplete).mp3”</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="recovery-splitting" class="level2">
+<h2><span class="header-section-number">8.5</span> Recovery splitting</h2>
+<p>When retries run out, <code>_subdivide_for_recovery</code> (<code>tts_worker.py:2271-2331</code>) asks whether the chunk can be split: recursion depth below 3, more than 180 characters, more than 320 payload bytes. If so, <code>_subdivide_range_for_recovery</code> cuts the chunk’s <strong>source range</strong> into sub-ranges using the same boundary rules at half the limits, and guarantees the last sub-range ends exactly at the parent’s end. Each sub-chunk goes through the full retry machine, recursively.</p>
+<figure id="fig-chunk-lifecycle">
+<img src="/books/setuptts/media/file7.webp" alt="The life of one chunk: attempts, classification, back-off, recovery splitting and, as the last resort, failing the job." width="1752" height="1344" loading="lazy" decoding="async">
+<figcaption><strong>Figure 8.2.</strong> The life of one chunk: attempts, classification, back-off, recovery splitting and, as the last resort, failing the job.</figcaption>
+</figure>
+<p>The recovered audio is the concatenation of the sub-chunks’ audio, and the parent’s manifest entry records their ranges in <code>sub_ranges</code>. <code>record_chunk</code> refuses to save the entry unless those sub-ranges cover the parent range exactly (<code>_ranges_exactly_cover</code>, <code>chunk_store.py:1022-1048</code>).</p>
+</section>
+<section id="health-tracking-across-chunks" class="level2">
+<h2><span class="header-section-number">8.6</span> Health tracking across chunks</h2>
+<p><code>_record_failure_pattern</code> (<code>tts_worker.py:2554-2583</code>) remembers trouble across chunks. Any no-audio failure opens a conservative window of 4 chunks; a second timeout opens one of 3. While the window is open, chunk sizes are capped at 74 % of the plan’s ceiling. The idea is that provider-side trouble tends to persist for a while, so the next few requests should be smaller and cheaper to retry.</p>
+</section>
+<section id="telling-the-user" class="level2">
+<h2><span class="header-section-number">8.7</span> Telling the user</h2>
+<p>Failures end in <code>_user_message</code> (<code>tts_worker.py:2819-2998</code>), which writes a specific explanation for each failure kind: the chunk it happened on, whether finished audio was kept (“Completed audio up to chunk 81 has been preserved”), and a recommended voice where that helps. Raw exception text is appended after a <code>Technical details:</code> marker. In the UI, <code>split_error</code> (<code>app/utils/errors.py</code>) moves everything after that marker into the dialog’s <strong>Show Details…</strong> area, so a non-technical user reads a sentence they can act on, while the cause is one click away and always in the log.</p>
+</section>
+</section>

@@ -1,0 +1,75 @@
+<section id="github-actions-and-cicd" class="level1">
+<h1><span class="header-section-number">16</span> GitHub Actions and CI/CD</h1>
+<section id="when-it-runs" class="level2">
+<h2><span class="header-section-number">16.1</span> When it runs</h2>
+<p><code>.github/workflows/build.yml</code> has two triggers:</p>
+<ul>
+<li><strong>Pushing a tag</strong> that matches <code>v*</code>, such as <code>git push origin v1.6.2</code>. This builds, tests and publishes a release.</li>
+<li><strong><code>workflow_dispatch</code></strong>, a manual run from the Actions tab with an optional version label. It builds and tests every artifact but does not publish.</li>
+</ul>
+<p>A <code>concurrency</code> group keyed on the ref, with <code>cancel-in-progress: true</code>, stops a re-pushed tag from racing an earlier run of the same tag.</p>
+<div class="callout drift">
+<p><strong>Observation.</strong> The workflow has no <code>push</code> or <code>pull_request</code> trigger for ordinary commits, so the tests run in CI only when a release is tagged or a run is started by hand. The project’s run history shows the habit that compensates: both pull-request branches (<code>fix/windows-voice-loading-1.6.1</code> and <code>release/1.6.2</code>) were validated with manual <code>workflow_dispatch</code> runs before they were merged. Nothing enforces that habit; it is a convention.</p>
+</div>
+</section>
+<section id="the-pipeline" class="level2">
+<h2><span class="header-section-number">16.2</span> The pipeline</h2>
+<figure id="fig-ci">
+<img src="/books/setuptts/media/file15.webp" alt="The release workflow. Self-test steps launch the packaged app itself, and four of them contact the live speech service." width="1680" height="1536" loading="lazy" decoding="async">
+<figcaption><strong>Figure 16.1.</strong> The release workflow. Self-test steps launch the packaged app itself, and four of them contact the live speech service.</figcaption>
+</figure>
+<section id="build-macos-macos-latest-apple-silicon" class="level3">
+<h3><span class="header-section-number">16.2.1</span> build-macos (macos-latest, Apple Silicon)</h3>
+<ol type="1">
+<li>Check out, set up Python 3.12.</li>
+<li><strong>Resolve the version</strong> from the tag (<code>v1.6.2</code> becomes <code>1.6.2</code>).</li>
+<li><strong>Check the tag matches <code>APP_VERSION</code></strong> and that <code>release_notes/v1.6.2.md</code> exists. A release can never be published with the wrong version inside it or without notes.</li>
+<li>Install <code>requirements.txt</code>, PyInstaller and the test tools; <strong>run <code>pytest -q</code></strong> with <code>QT_QPA_PLATFORM=offscreen</code>.</li>
+<li>Install <code>create-dmg</code>; run PyInstaller.</li>
+<li><strong>Verify bundle assets</strong> are in <code>Contents/Resources</code>.</li>
+<li><strong>Verify the declared minimum macOS.</strong> A Python snippet walks every Mach-O file in the bundle, runs <code>otool -l</code>, finds the highest <code>minos</code> any binary requires, and fails if <code>LSMinimumSystemVersion</code> is lower. This is the guard against repeating the v1.5.8 mistake.</li>
+<li><strong>Self-test the <code>.app</code> with <code>--network</code></strong>, and check the reported version.</li>
+<li>Create the DMG and <code>hdiutil verify</code> it. (<code>create-dmg</code> exits non-zero for unsigned apps even on success, so its exit code is ignored and the file is verified instead.)</li>
+<li><strong>Mount the DMG read-only and self-test the app inside it</strong>; check the Applications link exists.</li>
+<li>Zip with <code>ditto</code>, <strong>extract and self-test</strong> that copy.</li>
+<li>Upload the DMG and zip as workflow artifacts.</li>
+</ol>
+</section>
+<section id="build-windows-windows-latest" class="level3">
+<h3><span class="header-section-number">16.2.2</span> build-windows (windows-latest)</h3>
+<ol type="1">
+<li>Check out, Python 3.12, version and tag checks, install, <strong><code>pytest -q</code></strong>.</li>
+<li><strong>PyInstaller onedir</strong>; verify the EXE and assets exist.</li>
+<li><strong>Self-test the onedir build with <code>--network</code>.</strong> A small PowerShell helper launches the windowed EXE, waits, reads the JSON, and fails the step if <code>ok</code> is false or the version differs.</li>
+<li><strong>Build the installer</strong> with <code>ISCC.exe</code>, passing the version and source folder.</li>
+<li><strong>Install it silently</strong> (<code>/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER</code>), check the installed EXE exists at <code>%LOCALAPPDATA%\Programs\SetupTTS\SetupTTS.exe</code>, check its <strong>ProductVersion</strong> equals <code>APP_VERSION</code>, and <strong>self-test the installed app with <code>--network</code></strong>.</li>
+<li><strong>PyInstaller onefile</strong> for the portable build; zip it.</li>
+<li><strong>Extract the zip and self-test the extracted EXE</strong> with <code>--network</code>.</li>
+<li>Upload the installer and the portable zip.</li>
+</ol>
+</section>
+<section id="create-release-ubuntu-latest" class="level3">
+<h3><span class="header-section-number">16.2.3</span> create-release (ubuntu-latest)</h3>
+<p>Runs only for tag pushes and only after <strong>both</strong> build jobs succeed (<code>needs: [build-macos, build-windows]</code>). It has <code>contents: write</code> permission, downloads the four artifacts, and calls <code>softprops/action-gh-release@v2</code> with:</p>
+<ul>
+<li>name <code>SetupTTS v1.6.2</code>;</li>
+<li>body from <code>release_notes/v1.6.2.md</code>;</li>
+<li>the four files, with <code>fail_on_unmatched_files: true</code>;</li>
+<li><code>make_latest: true</code>, so the README’s “Latest release” link points to it.</li>
+</ul>
+<div class="callout experiment">
+<p><strong>Verified from the project’s GitHub Actions history.</strong> The v1.6.2 tag run succeeded in 12 minutes 28 seconds and published the release at 05:42 UTC on 5 October 2026. The history also shows the gate working: on 27 August 2026 the <code>v1.5.8</code> tag was pushed five times, and four of those runs failed (in the runs inspected, <code>test_ui_layout.py</code> assertions on the Windows runner, where the default font is wider) before the fifth succeeded and published. v1.6.1 was never published; its fixes shipped inside v1.6.2.</p>
+</div>
+</section>
+</section>
+<section id="versioning" class="level2">
+<h2><span class="header-section-number">16.3</span> Versioning</h2>
+<p>The version lives in <code>app/__init__.py</code> as <code>APP_VERSION</code>, and everything reads it from there: the spec (bundle version, Windows VERSIONINFO), the build scripts (file names), the window title, Settings, the self-test JSON and the CI checks. <code>pyproject.toml</code> repeats it and must be bumped by hand; the README’s release steps say to change both. The release ritual is:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><span class="co"># 1. set APP_VERSION in app/__init__.py and version in pyproject.toml</span></span>
+<span id="cb1-2"><span class="co"># 2. add release_notes/vX.Y.Z.md</span></span>
+<span id="cb1-3"><span class="fu">git</span> tag vX.Y.Z <span class="kw">&amp;&amp;</span> <span class="fu">git</span> push origin vX.Y.Z</span></code></pre></div>
+<div class="callout lesson">
+<p><strong>Engineering lesson.</strong> “Tested as shipped” is the idea behind this workflow. Unit tests run against source code, but users run a frozen bundle, a mounted disk image, an installed copy and an unzipped EXE. Each of those has failed differently in this project’s history. The workflow tests each one, and the network self-test catches TLS and proxy problems that only appear outside a developer’s environment.</p>
+</div>
+</section>
+</section>

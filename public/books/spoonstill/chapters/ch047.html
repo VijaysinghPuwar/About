@@ -1,0 +1,66 @@
+<section id="appendix-b-answers" class="level1 unnumbered">
+<h1 class="unnumbered">Appendix B: Answers</h1>
+<section id="exercise-answers" class="level2 unnumbered">
+<h2 class="unnumbered">Exercise answers</h2>
+<p><strong>1.1.</strong> Yes. <code>rows.rs</code> lists images <code>jpg jpeg png webp tif tiff bmp heic</code>, audio <code>mp3 m4a wav aac flac ogg opus wma</code>, text <code>txt md</code>, matching the README; <code>.md</code> is only paired by matching stem (D-152).</p>
+<p><strong>2.1.</strong> 5.3 x 30 = 159.0 exactly, already on the frame grid, so <code>ceil(159 - 1e-9) = 159</code> and there is no padding. 3.717 x 30 = 111.51 is not.</p>
+<p><strong>3.1.</strong> 4.0 x 25 = 100 frames; samples = (100 x 48000 + 12) / 25 = 192 000.</p>
+<p><strong>3.2.</strong> In yuv420p the colour planes are half width and half height, so each 2x2 block of pixels shares one colour sample; an odd dimension has no whole block at the edge. <code>OutputSpec::new</code> refuses an odd short edge at <code>geometry.rs:317</code> ("even, H.264 4:2:0 cannot represent odd dimensions") and checks the derived long edge the same way at line 346.</p>
+<p><strong>4.1.</strong> <code>cli_does_not_reach_past_the_application_layer</code> fails, naming <code>spoonstill-media</code> as a crate the CLI may not depend on directly.</p>
+<p><strong>5.1.</strong> Seeds index into <code>ALL</code>; reordering would map the same seed to a different motion, silently changing the move of every seeded scene in every existing project and invalidating every cached segment.</p>
+<p><strong>5.2.</strong> <code>fnv1a_fields</code> writes the separator byte <code>0x1f</code> between fields, so <code>["a","b"]</code> feeds <code>a, 0x1f, b</code>, and <code>["a\x1fb"]</code> feeds <code>a, 0x1f, b</code> too: identical bytes, identical hash.</p>
+<p><strong>6.1.</strong> The cause of a failure is printed last; the beginning is banner and stream information. When it drops data it prepends <code>[earlier stderr dropped - retained the last 256 KiB]</code>.</p>
+<p><strong>10.1.</strong> <code>--keep-cache</code>, which sets <code>keep_cache: true</code> in <code>RenderProjectOptions</code> and skips <code>prune_segments</code> and <code>prune_audio</code>.</p>
+<p><strong>11.1.</strong> <code>FilmEvent::Segment</code>, converted by <code>view_of</code> into <code>ProgressView::Segment</code>, serialized with <code>kind: "segment"</code>.</p>
+<p><strong>12.1.</strong> By stem first: <code>b.m4a</code> pairs with <code>b.jpg</code>. Then by position: the leftover <code>x.m4a</code> goes to the first photo still without a recording, <code>a.jpg</code>.</p>
+<p><strong>13.1.</strong> Renaming the project folder changes <code>project_id</code>, which seeds the motion: re-encodes every seeded scene. Renaming <code>003.jpg</code> to <code>003.jpeg</code> changes no key (keys use the image's content, not its name): reused. Changing CRF changes the encoder field: every segment re-encodes. Moving the project to another disk keeps the same folder name and contents: reused.</p>
+<p><strong>14.1.</strong> Because a fully cached project should render on a machine that has since lost <code>edge-tts</code>, or that is offline. Checking all lines would refuse a project that needs no speech at all.</p>
+<p><strong>15.1.</strong> 3240x5760 (3 x 1080 by 3 x 1920). <code>scale=3240:5760:force_original_aspect_ratio=increase</code> makes 4000x3000 into 7680x5760 (scale factor 1.92), and <code>crop=3240:5760</code> keeps a centred vertical strip, discarding about 58% of the width.</p>
+<p><strong>15.2.</strong> The WAV is 3.717 s but the video is 112 frames (3.7333 s). <code>atrim=end_sample=179200</code> cannot extend audio, only cut it. <code>apad</code> first appends endless silence, so the trim can produce exactly 179 200 samples. Without it, the audio would be 16 ms short of the video.</p>
+<p><strong>16.1.</strong> <code>seg-0123abcd.mp4</code> yes; <code>my film.mp4</code> no (space); <code>.hidden.mp4</code> no (leading dot).</p>
+<p><strong>16.2.</strong> Other errors are answers: "not media" or a non-zero exit will not change on retry. Only a timeout may be a temporary stall (such as a network share), and retrying everything would double the cost of genuine failures.</p>
+<p><strong>17.1.</strong> Wanted +6 dB (-16 - (-22)); allowed -1.5 - (-3) = +1.5 dB; so the gain is +1.5 dB. With a -6 dBTP peak, allowed is +4.5 dB, so the gain is +4.5 dB. Either way the result stays below -16 LUFS rather than clipping.</p>
+<p><strong>20.1.</strong> Rust will not let several threads hold <code>&amp;mut</code> to the same <code>Vec</code> at once, even at different indices, because it cannot prove they are different. A <code>Mutex</code> gives exclusive access; without it the closure would not compile (the vector is not <code>Sync</code> for mutation through a shared reference).</p>
+<p><strong>20.2.</strong> A binding named <code>_lock</code> keeps the value alive until the end of the scope. The special pattern <code>_</code> does not bind at all, so the value is dropped immediately and its <code>Drop</code> releases the lock.</p>
+<p><strong>21.1.</strong> The row declares two audio sources, so validation reports <code>ConflictingAudioSources</code> listing <code>text</code> and <code>audio_file</code>, and the render is refused.</p>
+<p><strong>22.1.</strong> <code>project/link</code> resolves to <code>/etc</code>; reporting <code>Missing</code> for <code>nope</code> would reveal that <code>/etc/nope</code> does not exist while <code>/etc/passwd</code> would report differently. Returning <code>Outside</code> for both leaks nothing.</p>
+<p><strong>23.1.</strong> 1440p prescale is 7680 x 4320 = 33 177 600 pixels; 33 177 600 x 36 = 1.19 GB, plus 192 MiB, about 1.39 GB per worker. A 16 GB machine's budget is about 11.2 GB, room for 8 workers; 8 cores give 4 by cores, so 4 workers.</p>
+<p><strong>25.1.</strong> 21 tests run (on the analysis machine: <code>running 21 tests</code>), because the filter matches every test whose path contains <code>motion</code>. Example: <code>a_single_frame_segment_emits_no_division</code> protects against <code>on/0</code> producing NaN inside FFmpeg.</p>
+<p><strong>30.1.</strong> The event has fields <code>motion</code> (for example <code>zoom-in@center:0.1000</code>) and <code>filter</code>. <code>still render-scene --image X --audio Y --out s.mp4 --motion zoom-in --anchor center --amount 0.1</code> reproduces it at the default size.</p>
+</section>
+<section id="knowledge-check-answers" class="level2 unnumbered">
+<h2 class="unnumbered">Knowledge check answers</h2>
+<ol type="1">
+<li>Text spoken by a voice (<code>Tts</code>), a supplied recording (<code>File</code>), or silence (<code>Silent</code>); each becomes a normalized 48 kHz stereo WAV plus its measured duration.</li>
+<li><code>spoonstill-media</code> (<code>command.rs</code>); <code>crates/spoonstill-media/tests/no_shell_strings.rs</code>.</li>
+<li>2.001 x 30 = 60.03, rounded up to 61 frames; 61 / 30 = 2.0333 s.</li>
+<li>At 2x, motion visibly stepped (280 of 300 unique frames); at 3x all frames were unique; 4x and 6x were slower and no better (<code>ffmpeg-findings.md</code> §1).</li>
+<li>It scales until the image covers the box in both directions (cropping the overhang). The window's position is always a fraction in [0, 1] of the legal travel <code>iw - iw/zoom</code>, so it never leaves the canvas.</li>
+<li><code>setsar=1</code> then <code>format=yuv420p</code>; <code>setsar=1</code> must be last before the format (with <code>setparams</code> just before it).</li>
+<li>JPEGs are full range, which leaks through as <code>yuvj420p</code>; spoonstill adds <code>out_range=tv</code> to the first scale and pins <code>setparams=range=tv:...bt709</code>.</li>
+<li>FFmpeg's concat accepts mismatched segments with exit 0 and no warning (§5); exit status is not validation.</li>
+<li>Any four of: image content hash, narration key, frame count, motion descriptor and seed, geometry, encoder settings, pixel format, colour space, timescale, subtitle fields. D-107 added the narration key: a different take of the same length used to reuse the old segment.</li>
+<li>V1 seeds from the scene index (reordering changes moves); V2 from occurrence (reordering changes nothing). New projects get <code>motion_seed: v2</code>; projects without the key stay V1.</li>
+<li><code>.spoonstill/render.lock</code>, held with the OS lock <code>File::try_lock</code>; the OS releases it when the process dies; the file is never deleted.</li>
+<li>Finished segments are on disk under content-derived names; the next run computes the same keys and reuses them.</li>
+<li>Command lines have length limits, are visible to other processes, and are logged into diagnostics; the script is the operator's content.</li>
+<li>At most 2 in flight; starts at least 1.2 s apart; after a refused connection, a cool-down of 15 s doubling to 120 s for everyone.</li>
+<li>The last non-empty line of stderr (the Python exception's class name); unknown errors are permanent.</li>
+<li>-16 LUFS integrated with a -1.5 dBTP peak ceiling; a constant gain is deterministic and does not compress, so caches stay byte-identical.</li>
+<li>An operator's pauses are deliberate; only a provider's padding is an artifact.</li>
+<li>Resolving narrations (network bound) and rendering segments (CPU bound); before, each waited for the other, leaving a resource idle for about a quarter of a cold render.</li>
+<li>Half the available cores, at most 4, then capped by 70% of RAM divided by the modelled memory per worker; never less than 1.</li>
+<li>An <code>Arc&lt;AtomicBool&gt;</code>; FFmpeg is sent <code>q</code> on stdin, given 2 s, then killed and reaped.</li>
+<li>Escaping is error-prone; refusing anything but simple ASCII names it generated itself removes the whole class of parsing problems.</li>
+<li>It finds the first segment whose running frame total passes the film's actual frame count, then the damaged segment is deleted and named; a segment damaged on a network volume had made FFmpeg stop the join with exit 0.</li>
+<li>A parse error: <code>deny_unknown_fields</code> rejects the unknown key, so a typo is never silently ignored.</li>
+<li>An <code>AmbiguousScene</code> error naming both files; spoonstill refuses to guess which still you meant.</li>
+<li><code>Drop</code> (RAII): the guard's destructor runs on every exit path, including <code>?</code> returns and panics.</li>
+<li>Paths may contain bytes that are not valid UTF-8; <code>OsString</code> carries them to FFmpeg unchanged.</li>
+<li>Through a Tauri <code>Channel&lt;ProgressView&gt;</code> passed with <code>invoke</code>; each event is JSON tagged with <code>kind</code>.</li>
+<li><code>runs.csv</code> (find it with <code>still diagnostics where</code>): an <code>invoked</code> row without a <code>finished</code> or <code>failed</code> row means the process died; then the project's <code>.jsonl</code> log.</li>
+<li><code>edge-tts</code>, so M2 gate 7 checks that a render with a written line fails and names the missing tool instead of substituting silence.</li>
+<li><code>RawSettings</code>/<code>Settings</code> and validation in <code>import/settings.rs</code>; the code that uses it (media or app); and <code>segment_key</code> in <code>film.rs</code> so the cache misses when it changes.</li>
+</ol>
+</section>
+</section>

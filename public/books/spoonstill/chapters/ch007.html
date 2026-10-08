@@ -1,0 +1,200 @@
+<section id="the-big-picture" class="level1">
+<h1><span class="header-section-number">4</span> The Big Picture</h1>
+<section id="the-simple-version" class="level2">
+<h2><span class="header-section-number">4.1</span> The simple version</h2>
+<p>spoonstill is one Rust <strong>workspace</strong> (a group of packages built together) containing six library or binary crates under <code>crates/</code> plus the desktop app under <code>apps/desktop/</code>. They are stacked in layers. Each layer may use the layers below it and never the ones above.</p>
+<figure>
+<img src="/books/spoonstill/media/file1.svg" alt="Whole-system architecture. The two control surfaces call one application layer; only spoonstill-media ever starts another program." width="509" height="500" loading="lazy" decoding="async">
+<figcaption>Whole-system architecture. The two control surfaces call one application layer; only <code>spoonstill-media</code> ever starts another program.</figcaption>
+</figure>
+</section>
+<section id="the-real-dependency-graph" class="level2">
+<h2><span class="header-section-number">4.2</span> The real dependency graph</h2>
+<p>This graph is read directly from each crate's <code>Cargo.toml</code> (Verified from source). A solid arrow means "depends on"; the dashed arrows to <code>spoonstill-core</code> are there too, drawn lighter because every crate uses core.</p>
+<figure>
+<img src="/books/spoonstill/media/file2.svg" alt="Crate dependency graph, from the [dependencies] tables at commit 7948f24." width="609" height="430" loading="lazy" decoding="async">
+<figcaption>Crate dependency graph, from the <code>[dependencies]</code> tables at commit 7948f24.</figcaption>
+</figure>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr>
+<th>Crate</th>
+<th>Kind</th>
+<th>Depends on (internal)</th>
+<th>Third-party crates</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>spoonstill-core</code></td>
+<td>library</td>
+<td>none</td>
+<td><strong>none at all</strong></td>
+</tr>
+<tr>
+<td><code>spoonstill-media</code></td>
+<td>library</td>
+<td>core</td>
+<td>serde, serde_json, fontdue, harfrust</td>
+</tr>
+<tr>
+<td><code>spoonstill-state</code></td>
+<td>library</td>
+<td>core</td>
+<td>none</td>
+</tr>
+<tr>
+<td><code>spoonstill-tts</code></td>
+<td>library</td>
+<td>core, media</td>
+<td>none</td>
+</tr>
+<tr>
+<td><code>spoonstill-app</code></td>
+<td>library</td>
+<td>core, media, tts, state</td>
+<td>serde, serde_yaml_ng, csv, sysinfo</td>
+</tr>
+<tr>
+<td><code>spoonstill-cli</code></td>
+<td>binary <code>still</code></td>
+<td>app, core</td>
+<td>clap, ctrlc (dev: toml)</td>
+</tr>
+<tr>
+<td><code>spoonstill-desktop</code> (<code>apps/desktop</code>)</td>
+<td>binary</td>
+<td>app, core</td>
+<td>tauri, tauri-plugin-dialog, tauri-plugin-opener, serde, serde_json (build: tauri-build)</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="why-these-boundaries" class="level2">
+<h2><span class="header-section-number">4.3</span> Why these boundaries</h2>
+<p>Each boundary answers a question the design documents asked (decision D-010, "CLI-first Rust workspace; Tauri is a late thin shell"):</p>
+<ul>
+<li><strong><code>spoonstill-core</code> depends on nothing</strong> so that the most important logic (the exact FFmpeg filter string, the frame arithmetic, the validation rules, path containment) is pure, fast to test, and cannot accidentally start a process or open a network connection. Its own <code>lib.rs</code> says: <em>"if a type here needs to do I/O, it is the wrong type. Model the result of the I/O, and put the doing behind a trait."</em></li>
+<li><strong><code>spoonstill-media</code> is the only crate that spawns processes.</strong> One place for argument vectors, timeouts, cancellation and retained stderr means one place to get them right.</li>
+<li><strong><code>spoonstill-tts</code> sits above media</strong> (decision D-081) because the Edge provider is itself a child process (<code>edge-tts</code>) and should use the same process boundary rather than growing a second one.</li>
+<li><strong><code>spoonstill-state</code> is small and below the app</strong> because logging must never depend on the business logic it records.</li>
+<li><strong><code>spoonstill-app</code> holds all business logic</strong> so both control surfaces share it. This is why the CLI and the window behave identically.</li>
+<li><strong>The CLI and the window are thin adapters.</strong> They translate arguments or clicks into calls on <code>spoonstill-app</code> and translate results back into text or JSON.</li>
+</ul>
+</section>
+<section id="how-the-rules-are-enforced" class="level2">
+<h2><span class="header-section-number">4.4</span> How the rules are enforced</h2>
+<p>Rules written only in documents decay, so this project enforces the important ones with tests and CI:</p>
+<ol type="1">
+<li><strong><code>crates/spoonstill-cli/tests/architecture.rs</code></strong> reads every <code>crates/*/Cargo.toml</code> with the <code>toml</code> crate and assigns layers:</li>
+</ol>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">// crates/spoonstill-cli/tests/architecture.rs:25-38</span></span>
+<span id="cb1-2"><span class="kw">fn</span> layer(crate_name<span class="op">:</span> <span class="op">&amp;</span><span class="dt">str</span>) <span class="op">-&gt;</span> <span class="dt">Option</span><span class="op">&lt;</span><span class="dt">u8</span><span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb1-3">    <span class="cn">Some</span>(<span class="cf">match</span> crate_name <span class="op">{</span></span>
+<span id="cb1-4">        <span class="st">"spoonstill-core"</span> <span class="op">=&gt;</span> <span class="dv">0</span><span class="op">,</span></span>
+<span id="cb1-5">        <span class="st">"spoonstill-media"</span> <span class="op">|</span> <span class="st">"spoonstill-state"</span> <span class="op">=&gt;</span> <span class="dv">1</span><span class="op">,</span></span>
+<span id="cb1-6">        <span class="co">// D-081: TTS sits above the process boundary ...</span></span>
+<span id="cb1-7">        <span class="st">"spoonstill-tts"</span> <span class="op">=&gt;</span> <span class="dv">2</span><span class="op">,</span></span>
+<span id="cb1-8">        <span class="st">"spoonstill-app"</span> <span class="op">=&gt;</span> <span class="dv">3</span><span class="op">,</span></span>
+<span id="cb1-9">        <span class="st">"spoonstill-cli"</span> <span class="op">=&gt;</span> <span class="dv">4</span><span class="op">,</span></span>
+<span id="cb1-10">        _ <span class="op">=&gt;</span> <span class="cf">return</span> <span class="cn">None</span><span class="op">,</span></span>
+<span id="cb1-11">    <span class="op">}</span>)</span>
+<span id="cb1-12"><span class="op">}</span></span></code></pre></div>
+<p>Its five tests check that core has no dependencies; that core reaches nothing from a denylist (<code>tauri, wry, reqwest, hyper, ureq, elevenlabs, azure, rusqlite, sqlx, keyring, ffmpeg, duct, subprocess</code>); that every internal dependency points strictly downward; that the CLI does not depend on media, tts or state directly; and that every member's name starts with <code>spoonstill-</code>. A new crate that forgets to declare a layer makes the test panic.</p>
+<ol start="2" type="1">
+<li><p><strong>CI repeats the core check</strong> with <code>cargo tree -p spoonstill-core -e normal | grep -iE 'tauri|reqwest|elevenlabs|rusqlite|keyring'</code>, failing if anything is found (<code>.github/workflows/ci.yml</code>).</p></li>
+<li><p><strong><code>crates/spoonstill-media/tests/no_shell_strings.rs</code></strong> reads the media crate's source and fails if any file other than <code>command.rs</code> constructs a process, or if shell fragments like <code>sh -c</code> or <code>cmd /c</code> appear anywhere.</p></li>
+<li><p><strong><code>unsafe_code = "forbid"</code></strong> in the workspace <code>Cargo.toml</code> applies to every crate (Chapter 22).</p></li>
+</ol>
+<div class="callout warning">
+<p><strong>Docs and code disagree.</strong> <code>apps/desktop/Cargo.toml</code> says the desktop app's rule ("may not depend on spoonstill-media or spoonstill-state") is "enforced by <code>crates/spoonstill-cli/tests/architecture.rs</code>". It is not: that test only reads <code>workspace_root().join("crates")</code> (line 71), so <code>apps/desktop/Cargo.toml</code> is never inspected. Today the desktop manifest obeys the rule anyway (it depends only on <code>spoonstill-app</code> and <code>spoonstill-core</code> internally), but nothing mechanical holds it.</p>
+</div>
+</section>
+<section id="where-each-kind-of-logic-lives" class="level2">
+<h2><span class="header-section-number">4.5</span> Where each kind of logic lives</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Concern</th>
+<th>Lives in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Business rules (what a scene is, validation)</td>
+<td><code>spoonstill-core::project</code>, <code>spoonstill-app::import</code></td>
+</tr>
+<tr>
+<td>The exact FFmpeg filter string</td>
+<td><code>spoonstill-core::motion::build_filter</code></td>
+</tr>
+<tr>
+<td>Frame and sample arithmetic</td>
+<td><code>spoonstill-core::timing</code></td>
+</tr>
+<tr>
+<td>Path safety</td>
+<td><code>spoonstill-core::path_safety</code></td>
+</tr>
+<tr>
+<td>Starting any program (FFmpeg, ffprobe, edge-tts, brew, winget)</td>
+<td><code>spoonstill-media::command</code></td>
+</tr>
+<tr>
+<td>Finding programs on disk</td>
+<td><code>spoonstill-media::tools::locate</code></td>
+</tr>
+<tr>
+<td>FFmpeg arguments for a segment, audio, concat</td>
+<td><code>spoonstill-media::{scene, audio, concat}</code></td>
+</tr>
+<tr>
+<td>Caption drawing</td>
+<td><code>spoonstill-media::caption</code></td>
+</tr>
+<tr>
+<td>Speech</td>
+<td><code>spoonstill-tts::edge</code>, <code>spoonstill-tts::pace</code></td>
+</tr>
+<tr>
+<td>Logs, <code>runs.csv</code>, diagnostics bundle</td>
+<td><code>spoonstill-state::{logs, runs}</code></td>
+</tr>
+<tr>
+<td>Orchestration, pools, caches, project files</td>
+<td><code>spoonstill-app</code></td>
+</tr>
+<tr>
+<td>Argument parsing, terminal output, Ctrl-C</td>
+<td><code>spoonstill-cli/src/main.rs</code></td>
+</tr>
+<tr>
+<td>Windows, buttons, drag and drop, progress bars</td>
+<td><code>apps/desktop/ui/app.js</code> and <code>apps/desktop/src/main.rs</code></td>
+</tr>
+<tr>
+<td>Persistent machine state</td>
+<td><code>runs.csv</code> and <code>settings.yaml</code> in the OS config folder; project state in <code>.spoonstill/</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>There is <strong>no database</strong>. The planning documents describe a SQLite <code>state.db</code> for milestone M3; it has not been built, and decision D-154 records that resume already works without it (Chapter 13).</p>
+</section>
+<section id="size-of-the-codebase" class="level2">
+<h2><span class="header-section-number">4.6</span> Size of the codebase</h2>
+<p>Counted at this commit (<code>wc -l</code>): about 54 600 lines of Rust, TOML, JSON, HTML, CSS and JavaScript under <code>crates/</code> and <code>apps/</code>, of which the largest files are <code>spoonstill-app/src/film.rs</code> (3 438 lines, the render path), <code>apps/desktop/src/main.rs</code> (2 921), <code>apps/desktop/ui/app.js</code> (2 823) and <code>spoonstill-tts/src/edge.rs</code> (2 732). A large share of every file is tests: there are <strong>776 <code>#[test]</code> functions</strong> in the tree.</p>
+<div class="callout exercise">
+<p><strong>Exercise 4.1 (Intermediate).</strong> Temporarily add <code>spoonstill-media = { workspace = true }</code> to <code>crates/spoonstill-cli/Cargo.toml</code> in a scratch copy and run <code>cargo test -p spoonstill-cli --test architecture</code>. Which test fails, and what message does it print? (Revert afterwards.)</p>
+</div>
+</section>
+</section>

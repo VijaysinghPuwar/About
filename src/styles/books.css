@@ -1,0 +1,509 @@
+/*
+  /books: the shelf, the book page and the reader.
+
+  Loaded only by the lazily imported book routes, so none of this ships with
+  the home page.
+
+  The shelf and book page use the site tokens untouched. The reader has three
+  page themes, after Apple Books: Site (the portfolio's own near-black with its
+  accent), Plain (white) and Paper (warm off-white). Each defines the same small
+  set of --r-* variables and nothing below reads a raw colour, so the prose,
+  the code, the tables and the reader chrome all follow the page.
+
+  On the light pages the accent drops to --primary-dim: the full-strength green
+  and red are tuned for a near-black ground and fall under 4.5:1 on white.
+*/
+
+/* `.book-tokens` gives the site-page variables without painting a
+   background, for the contents list on the book page. */
+.reader,
+.book-tokens {
+  --r-bg: hsl(var(--background));
+  --r-fg: 240 8% 88%;
+  --r-strong: 240 8% 96%;
+  --r-muted: var(--muted-foreground);
+  --r-dim: var(--muted-foreground-dim);
+  --r-border: var(--border);
+  --r-border-strong: var(--border-strong);
+  --r-surface: var(--card);
+  --r-accent: var(--primary);
+  --r-accent-ink: var(--primary-foreground);
+  --r-warning: var(--warning);
+  --r-scrim: 0 0% 0% / 0.6;
+}
+
+.reader {
+  background: var(--r-bg);
+  color: hsl(var(--r-fg));
+  color-scheme: dark;
+}
+
+.reader[data-page='plain'] {
+  --r-bg: #ffffff;
+  --r-fg: 240 6% 16%;
+  --r-strong: 240 8% 6%;
+  --r-muted: 240 4% 38%;
+  --r-dim: 240 3% 46%;
+  --r-border: 240 6% 89%;
+  --r-border-strong: 240 5% 80%;
+  --r-surface: 240 12% 97%;
+  --r-accent: var(--primary-dim);
+  --r-accent-ink: 0 0% 100%;
+  --r-warning: 32 85% 36%;
+  --r-scrim: 240 10% 10% / 0.35;
+  color-scheme: light;
+}
+
+.reader[data-page='paper'] {
+  --r-bg: #f6f0e3;
+  --r-fg: 30 14% 17%;
+  --r-strong: 30 20% 8%;
+  --r-muted: 30 8% 36%;
+  --r-dim: 30 6% 44%;
+  --r-border: 36 24% 84%;
+  --r-border-strong: 36 18% 74%;
+  --r-surface: 40 32% 91%;
+  --r-accent: var(--primary-dim);
+  --r-accent-ink: 0 0% 100%;
+  --r-warning: 30 80% 34%;
+  --r-scrim: 30 20% 10% / 0.35;
+  color-scheme: light;
+}
+
+.reader ::selection {
+  background: hsl(var(--r-accent));
+  color: hsl(var(--r-accent-ink));
+}
+
+/* Reader chrome: the bars and panels take the page colours too. */
+.reader-bar {
+  background: var(--r-bg);
+  border-color: hsl(var(--r-border));
+}
+
+.reader-panel {
+  background: var(--r-bg);
+  color: hsl(var(--r-fg));
+  border-color: hsl(var(--r-border));
+}
+
+.reader-btn {
+  color: hsl(var(--r-muted));
+  border-radius: 8px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.reader-btn:hover,
+.reader-btn[data-state='open'] {
+  color: hsl(var(--r-strong));
+  background: hsl(var(--r-surface));
+}
+
+/* ------------------------------------------------------------------ */
+/* Book prose                                                          */
+/* ------------------------------------------------------------------ */
+
+.book-prose {
+  --prose-size: 17.5px;
+  font-size: var(--prose-size);
+  line-height: 1.72;
+  font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  overflow-wrap: break-word;
+  /* No automatic hyphenation: on ragged-right text it buys little, and it
+     split identifiers like _largest_fit-ting_boundary into something that
+     reads as a different name. */
+  hyphens: manual;
+  -webkit-hyphens: manual;
+}
+
+.book-prose[data-font='serif'] {
+  font-family: 'Iowan Old Style', 'Charter', 'Bitstream Charter', 'Sitka Text', Cambria, Georgia, serif;
+  line-height: 1.68;
+}
+
+.book-prose > * + * {
+  margin-top: 0;
+}
+
+.book-prose p,
+.book-prose ul,
+.book-prose ol,
+.book-prose dl,
+.book-prose blockquote,
+.book-prose .table-scroll,
+.book-prose figure,
+.book-prose div.sourceCode,
+.book-prose pre {
+  margin: 0 0 1.05em;
+}
+
+.book-prose strong {
+  color: hsl(var(--r-strong));
+  font-weight: 600;
+}
+
+.book-prose a {
+  color: hsl(var(--r-accent));
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  text-decoration-color: hsl(var(--r-accent) / 0.45);
+}
+
+.book-prose a:hover {
+  text-decoration-color: currentColor;
+}
+
+/* Long bare URLs are the main cause of sideways scroll on a phone. */
+.book-prose a.uri {
+  word-break: break-all;
+}
+
+/* Headings. Sans in both font settings: they are signposts, not prose. */
+.book-prose h1,
+.book-prose h2,
+.book-prose h3,
+.book-prose h4 {
+  font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color: hsl(var(--r-strong));
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  scroll-margin-top: 84px;
+  text-wrap: balance;
+}
+
+.book-prose h1 {
+  font-size: clamp(1.75em, 1.3em + 2vw, 2.35em);
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  margin: 0 0 1.1em;
+}
+
+.book-prose h2 {
+  font-size: 1.32em;
+  line-height: 1.25;
+  margin: 2.3em 0 0.7em;
+}
+
+.book-prose h3 {
+  font-size: 1.08em;
+  line-height: 1.3;
+  margin: 1.9em 0 0.55em;
+}
+
+.book-prose h4 {
+  font-size: 1em;
+  margin: 1.6em 0 0.5em;
+}
+
+/* "5.2" before a heading: mono, dim, a coordinate rather than a word. */
+.book-prose .header-section-number {
+  font-family: 'IBM Plex Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-weight: 500;
+  font-size: 0.7em;
+  letter-spacing: 0;
+  color: hsl(var(--r-dim));
+  margin-right: 0.6em;
+  vertical-align: 0.12em;
+}
+
+/* The chapter number sits on its own line above the title. */
+.book-prose h1 .header-section-number {
+  display: block;
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  margin: 0 0 14px;
+  color: hsl(var(--r-accent));
+  vertical-align: baseline;
+}
+
+.book-prose h1 .header-section-number::before {
+  content: 'CHAPTER ';
+}
+
+.book-prose ul,
+.book-prose ol {
+  padding-left: 1.35em;
+}
+
+.book-prose ul { list-style: disc; }
+.book-prose ol { list-style: decimal; }
+
+.book-prose li {
+  margin: 0.32em 0;
+  padding-left: 0.2em;
+}
+
+.book-prose li::marker {
+  color: hsl(var(--r-dim));
+}
+
+.book-prose li > p {
+  margin-bottom: 0.4em;
+}
+
+.book-prose blockquote {
+  border-left: 2px solid hsl(var(--r-border-strong));
+  padding-left: 1em;
+  color: hsl(var(--r-muted));
+}
+
+.book-prose hr {
+  border: 0;
+  border-top: 1px solid hsl(var(--r-border));
+  margin: 2.4em 0;
+}
+
+/* Code. One accent for keywords, everything else is weight and tone. */
+.book-prose code {
+  font-family: 'IBM Plex Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.84em;
+  word-break: break-word;
+}
+
+.book-prose :not(pre) > code {
+  background: hsl(var(--r-surface));
+  border: 1px solid hsl(var(--r-border));
+  border-radius: 4px;
+  padding: 0.08em 0.32em;
+  color: hsl(var(--r-strong));
+}
+
+.book-prose pre {
+  background: hsl(var(--r-surface));
+  border: 1px solid hsl(var(--r-border));
+  border-radius: 8px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font-size: 13.5px;
+  line-height: 1.6;
+  tab-size: 4;
+  -webkit-overflow-scrolling: touch;
+}
+
+.book-prose div.sourceCode > pre {
+  margin: 0;
+}
+
+.book-prose pre code {
+  font-size: inherit;
+  white-space: pre;
+  word-break: normal;
+  color: hsl(var(--r-fg));
+}
+
+.book-prose pre > code.sourceCode > span {
+  display: inline;
+}
+
+.book-prose code span.kw,
+.book-prose code span.cf,
+.book-prose code span.im { color: hsl(var(--r-accent)); }
+.book-prose code span.co,
+.book-prose code span.do,
+.book-prose code span.cv,
+.book-prose code span.an { color: hsl(var(--r-dim)); font-style: italic; }
+.book-prose code span.st,
+.book-prose code span.ch,
+.book-prose code span.ss,
+.book-prose code span.vs { color: hsl(var(--r-muted)); }
+.book-prose code span.dt,
+.book-prose code span.fu,
+.book-prose code span.bu { color: hsl(var(--r-strong)); font-weight: 500; }
+.book-prose code span.al,
+.book-prose code span.er { color: hsl(var(--r-warning)); }
+
+/* Tables scroll inside their own box; the page never scrolls sideways. */
+.book-prose .table-scroll {
+  overflow-x: auto;
+  border: 1px solid hsl(var(--r-border));
+  border-radius: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.book-prose .table-scroll:focus-visible {
+  outline: 2px solid hsl(var(--r-accent));
+  outline-offset: 2px;
+}
+
+.book-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86em;
+  line-height: 1.5;
+  font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+.book-prose th {
+  text-align: left;
+  font-family: 'IBM Plex Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--r-dim));
+  background: hsl(var(--r-surface));
+  border-bottom: 1px solid hsl(var(--r-border));
+  padding: 10px 14px;
+  white-space: nowrap;
+}
+
+.book-prose td {
+  padding: 10px 14px;
+  border-bottom: 1px solid hsl(var(--r-border));
+  vertical-align: top;
+  min-width: 8em;
+}
+
+.book-prose tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Figures */
+.book-prose figure {
+  margin: 1.8em 0;
+}
+
+.book-prose figure img,
+.book-prose img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border-radius: 8px;
+  border: 1px solid hsl(var(--r-border));
+  background: #fff;
+}
+
+.book-prose figcaption {
+  margin-top: 10px;
+  font-size: 0.8em;
+  line-height: 1.5;
+  color: hsl(var(--r-dim));
+  text-align: center;
+}
+
+/* Callouts. The label is the bold run the author put first. */
+.book-prose .callout {
+  border: 1px solid hsl(var(--r-border));
+  border-left: 2px solid hsl(var(--r-accent));
+  border-radius: 0 8px 8px 0;
+  background: hsl(var(--r-surface));
+  padding: 14px 18px;
+  margin: 1.5em 0;
+  font-size: 0.94em;
+}
+
+.book-prose .callout.warning,
+.book-prose .callout.drift {
+  border-left-color: hsl(var(--r-warning));
+}
+
+.book-prose .callout > :last-child {
+  margin-bottom: 0;
+}
+
+.book-prose .callout > p:first-child > strong:first-child {
+  display: block;
+  font-family: 'IBM Plex Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: hsl(var(--r-accent));
+  margin-bottom: 4px;
+}
+
+.book-prose .callout.warning > p:first-child > strong:first-child,
+.book-prose .callout.drift > p:first-child > strong:first-child {
+  color: hsl(var(--r-warning));
+}
+
+/* Arriving at a section from the contents: a brief mark, then gone. */
+@keyframes book-target {
+  from { background: hsl(var(--r-accent) / 0.14); }
+  to { background: transparent; }
+}
+
+.book-prose :target > h2,
+.book-prose h2:target,
+.book-prose h3:target {
+  animation: book-target 1.6s ease-out;
+  border-radius: 4px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Covers                                                               */
+/* ------------------------------------------------------------------ */
+
+/*
+  A cover is an object, so it gets an object's cues: a hinge shadow down the
+  left edge where the spine would fold, a hairline highlight just inside it,
+  and a neutral drop shadow beneath. All three are black or white at low
+  alpha. Nothing is tinted, so the one-accent rule holds.
+*/
+.book-cover {
+  position: relative;
+  display: block;
+  border-radius: 2px 5px 5px 2px;
+  overflow: hidden;
+  background: hsl(var(--card));
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 10px 24px -8px rgba(0, 0, 0, 0.55);
+  transform: translateZ(0);
+}
+
+.book-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.book-cover::before,
+.book-cover::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.book-cover::before {
+  left: 0;
+  width: 3.5%;
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.book-cover::after {
+  left: 3.5%;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.book-cover-link {
+  display: block;
+  border-radius: 5px;
+  transition: transform 0.35s cubic-bezier(0.22, 0.8, 0.28, 1);
+}
+
+.book-cover-link:hover,
+.book-cover-link:focus-visible {
+  transform: translateY(-4px);
+}
+
+/* Progress hairline for the reader's chapter and the continue card. */
+.reading-meter {
+  height: 2px;
+  background: hsl(var(--border));
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.reading-meter > span {
+  display: block;
+  height: 100%;
+  background: hsl(var(--primary));
+  transform-origin: left center;
+}

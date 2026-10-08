@@ -1,0 +1,36 @@
+<section id="knowledge-check" class="level1">
+<h1><span class="header-section-number">37</span> Knowledge Check</h1>
+<p>Thirty questions. Answers are in Appendix B.</p>
+<ol type="1">
+<li>What are the three kinds of audio source a scene can have, and what single thing does each resolve to?</li>
+<li>Which crate is the only one allowed to start external programs, and which test enforces it?</li>
+<li>A narration is 2.001 s at 30 fps. How many frames does its scene get, and how long is the segment?</li>
+<li>Why is the prescale canvas three times the output size rather than two or six?</li>
+<li>What does <code>force_original_aspect_ratio=increase</code> do, and why can the Ken Burns window never show black edges?</li>
+<li>Name the two filters at the end of every motion chain and the rule about their order.</li>
+<li>What colour-range problem do JPEG photos cause, and how does spoonstill fix it?</li>
+<li>Why does spoonstill check segments with ffprobe even when FFmpeg exits 0?</li>
+<li>List four inputs to <code>segment_key</code>. Which input was added by D-107, and what bug did it fix?</li>
+<li>What is the difference between <code>MotionSeed::V1</code> and <code>V2</code>, and which one does a new project use?</li>
+<li>Where is the render lock, how is it held, and what happens to it if the process crashes?</li>
+<li>How does a render resume after being killed, without a database?</li>
+<li>Why is the text sent to <code>edge-tts</code> in a file rather than as an argument?</li>
+<li>What are the three rules of the TTS pace gate?</li>
+<li>What does <code>classify</code> read to decide whether a TTS failure is worth retrying, and what is the default for an unknown error?</li>
+<li>What loudness target does spoonstill normalize to, and why use one linear gain instead of <code>loudnorm</code>'s correction?</li>
+<li>Why are a supplied recording's silences never trimmed?</li>
+<li>What does <code>pool::pipeline</code> overlap, and why did that help?</li>
+<li>How does spoonstill decide the default number of segment workers?</li>
+<li>What does <code>Cancel</code> contain, and what happens to a running FFmpeg when it is requested?</li>
+<li>Why does the concat list refuse names it did not generate instead of escaping them?</li>
+<li>What does <code>stopped_at</code> do, and what problem in a real log led to it?</li>
+<li>What happens if <code>project.yaml</code> contains the key <code>apsect: 16:9</code>?</li>
+<li>In convention mode, what happens with <code>001.jpg</code> and <code>001.png</code> in the same folder?</li>
+<li>Which Rust feature lets <code>Partial</code> delete its temporary file even when a function returns early with <code>?</code>?</li>
+<li>Why does <code>FfmpegCommand</code> store <code>Vec&lt;OsString&gt;</code> rather than <code>Vec&lt;String&gt;</code>?</li>
+<li>In the desktop app, how does the page receive progress events during a render?</li>
+<li>Which file would you read first to find out why a render that "just stopped" died?</li>
+<li>What does the <code>gates</code> CI job deliberately leave uninstalled, and why?</li>
+<li>You want a new <code>project.yaml</code> setting that changes pixel output. Which three places must you change, at minimum?</li>
+</ol>
+</section>

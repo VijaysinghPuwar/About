@@ -1,0 +1,143 @@
+<section id="file-map-where-do-i-look" class="level1">
+<h1><span class="header-section-number">33</span> File Map: Where Do I Look?</h1>
+<pre class="text"><code>spoonstill/
+|-- Cargo.toml              workspace: members, version 0.1.19, edition 2024, lints, release profile
+|-- Cargo.lock              528 locked packages
+|-- rust-toolchain.toml     pins Rust 1.94.0 (+ clippy, rustfmt)
+|-- Makefile                test, lint, gates, fixtures, brand, demo, tts-live, ui, shell, workflows
+|-- README.md               the front door for users
+|-- decisions.md            D-001..D-198: every design decision (single source of truth)
+|-- plan.md                 milestones M0-M5 with exit gates
+|-- ffmpeg-findings.md      measurements with reproduction commands
+|-- findings.md             a ranked backlog from a 2026-09-02 scan
+|-- PROCESS.md              how work is done: reproduce, fix, prove the test fails without the fix
+|-- refergit.md             index of reference checkouts (not in the repo)
+|-- CLAUDE.md               session-by-session handoff log
+|-- THIRD-PARTY-NOTICES.md  font licences shipped with every binary
+|-- .cargo/audit.toml       reviewed RustSec advisories
+|-- .github/workflows/
+|   |-- ci.yml              six jobs per push
+|   `-- release.yml         tag -&gt; draft -&gt; builds -&gt; publish
+|-- assets/                 logo (generated), demo GIF
+|-- scripts/
+|   |-- m0/m1/m2-gates.sh   39 end-to-end exit gates
+|   |-- gen-fixtures.sh     synthetic test media and projects
+|   |-- install.sh/.ps1     one-line installers with checksum verification
+|   |-- gen-brand.py        the logo, from one geometry
+|   |-- gen-demo.py         stills for the README demo
+|   |-- stress.sh           the 431-scene stress fixture
+|   `-- ui-smoke.mjs        runs app.js under a fake DOM
+|-- crates/
+|   |-- spoonstill-core/    pure model: motion, geometry, timing, project, captions,
+|   |                       chapter, path_safety, hash, language, remedy, diagnostics
+|   |-- spoonstill-media/   command, tools, probe, profile, scene, audio, concat,
+|   |                       caption (+ assets/fonts), atomic, hardware, error
+|   |-- spoonstill-tts/     lib (Provider), edge, pace (+ fixtures/)
+|   |-- spoonstill-state/   logs, runs (Journal, runs.csv)
+|   |-- spoonstill-app/     film, import/, ingest, audio, pool, capacity, arrange,
+|   |                       picture, chapter, voice, machine, tooling, formats,
+|   |                       subtitles, render, diagnostics
+|   `-- spoonstill-cli/     main.rs (binary `still`) + repository-wide tests
+`-- apps/desktop/
+    |-- tauri.conf.json, capabilities/default.json, build.rs
+    |-- src/main.rs         38 Tauri commands
+    |-- ui/                 index.html, app.js, styles.css
+    `-- tests/ui_contract.rs</code></pre>
+<section id="where-do-i-look-if..." class="level2">
+<h2><span class="header-section-number">33.1</span> Where do I look if...</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>I want to understand...</th>
+<th>Look at</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>rendering, start to finish</td>
+<td><code>crates/spoonstill-app/src/film.rs</code> (<code>render_project</code>)</td>
+</tr>
+<tr>
+<td>one segment and its FFmpeg command</td>
+<td><code>crates/spoonstill-media/src/scene.rs</code> (<code>run_ffmpeg</code>)</td>
+</tr>
+<tr>
+<td>the Ken Burns motion</td>
+<td><code>crates/spoonstill-core/src/motion.rs</code> (<code>build_filter</code>)</td>
+</tr>
+<tr>
+<td>project files and settings</td>
+<td><code>crates/spoonstill-app/src/import/</code> and <code>ingest.rs</code></td>
+</tr>
+<tr>
+<td>how FFmpeg is started and stopped</td>
+<td><code>crates/spoonstill-media/src/command.rs</code></td>
+</tr>
+<tr>
+<td>how FFmpeg is found</td>
+<td><code>crates/spoonstill-media/src/tools.rs</code> (<code>locate</code>)</td>
+</tr>
+<tr>
+<td>what a valid segment is</td>
+<td><code>crates/spoonstill-media/src/profile.rs</code></td>
+</tr>
+<tr>
+<td>joining</td>
+<td><code>crates/spoonstill-media/src/concat.rs</code></td>
+</tr>
+<tr>
+<td>audio normalization</td>
+<td><code>crates/spoonstill-media/src/audio.rs</code>, <code>crates/spoonstill-app/src/audio.rs</code></td>
+</tr>
+<tr>
+<td>TTS</td>
+<td><code>crates/spoonstill-tts/src/edge.rs</code>, <code>pace.rs</code></td>
+</tr>
+<tr>
+<td>captions</td>
+<td><code>crates/spoonstill-core/src/captions.rs</code>, <code>crates/spoonstill-media/src/caption.rs</code></td>
+</tr>
+<tr>
+<td>caching</td>
+<td><code>segment_key</code> and <code>prune</code> in <code>film.rs</code>; <code>AudioCache</code> in <code>app/src/audio.rs</code></td>
+</tr>
+<tr>
+<td>parallelism</td>
+<td><code>crates/spoonstill-app/src/pool.rs</code>, <code>capacity.rs</code></td>
+</tr>
+<tr>
+<td>the CLI</td>
+<td><code>crates/spoonstill-cli/src/main.rs</code></td>
+</tr>
+<tr>
+<td>the desktop UI</td>
+<td><code>apps/desktop/ui/app.js</code>, <code>apps/desktop/src/main.rs</code></td>
+</tr>
+<tr>
+<td>logs</td>
+<td><code>crates/spoonstill-state/src/</code></td>
+</tr>
+<tr>
+<td>CI and releases</td>
+<td><code>.github/workflows/</code>, <code>scripts/install.*</code></td>
+</tr>
+<tr>
+<td>why something is the way it is</td>
+<td><code>decisions.md</code> (search the D-number cited in a comment)</td>
+</tr>
+<tr>
+<td><strong>I want to change output encoding</strong></td>
+<td><code>scene.rs</code> arguments, <code>hardware.rs</code> <code>quality_args</code>, <code>profile.rs</code>, <code>segment_key</code></td>
+</tr>
+<tr>
+<td><strong>I want to add a CLI command</strong></td>
+<td>a variant in <code>enum Command</code>, an <code>Args</code> struct, a handler, a <code>dispatch</code> arm, <code>scope()</code> and <code>project()</code> in <code>main.rs</code>; logic in <code>spoonstill-app</code></td>
+</tr>
+</tbody>
+</table></div>
+</section>
+</section>

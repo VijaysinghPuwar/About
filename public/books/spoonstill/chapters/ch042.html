@@ -1,0 +1,56 @@
+<section id="glossary" class="level1">
+<h1><span class="header-section-number">35</span> Glossary</h1>
+<p><strong>AAC.</strong> Advanced Audio Coding, the compressed audio format in the final MP4 (AAC-LC, 192 kb/s).</p>
+<p><strong>Anchor.</strong> In spoonstill, the fixed point of a zoom or the cross-axis position of a pan (Center, North, SouthEast, ...).</p>
+<p><strong>Artifact (CI).</strong> A file produced by a build, such as <code>still-Windows.zip</code>.</p>
+<p><strong>Aspect ratio.</strong> The frame's shape: 16:9, 9:16 or 1:1.</p>
+<p><strong>Atomic rename.</strong> Replacing a file in one filesystem operation so readers see the old or the new file, never a partial one.</p>
+<p><strong>Bitrate.</strong> Bits per second of a compressed stream.</p>
+<p><strong>Cache key.</strong> A hash of everything that affects an artifact's bytes; the artifact's file name.</p>
+<p><strong>Checksum (SHA-256).</strong> A fingerprint of a file; if one byte changes, the checksum changes. Used to verify downloads.</p>
+<p><strong>Child process.</strong> A program started by another program. spoonstill runs FFmpeg, ffprobe and edge-tts as child processes.</p>
+<p><strong>CI.</strong> Continuous integration: automated checks on every push (GitHub Actions here).</p>
+<p><strong>Codec.</strong> A method of compressing audio or video (H.264, AAC).</p>
+<p><strong>Concat demuxer.</strong> FFmpeg's way of reading a list of files as one input; with <code>-c copy</code> it joins without re-encoding.</p>
+<p><strong>Condition variable (<code>Condvar</code>).</strong> Lets a thread sleep until another thread signals that something changed.</p>
+<p><strong>Container.</strong> A file format holding streams and timing (MP4).</p>
+<p><strong>Cover-fit.</strong> Scaling an image so it covers a box completely, cropping the overhang (as opposed to fitting inside with borders).</p>
+<p><strong>Crate.</strong> A Rust compilation unit (library or binary).</p>
+<p><strong>CRF.</strong> x264's constant rate factor: lower is higher quality.</p>
+<p><strong>Cue.</strong> One caption shown for a time range.</p>
+<p><strong>Demux / mux.</strong> Taking streams out of a container / putting them in.</p>
+<p><strong>Edge TTS.</strong> Microsoft Edge's "Read Aloud" neural voices, used through the <code>edge-tts</code> tool.</p>
+<p><strong><code>enum</code>.</strong> A Rust type with several variants, each optionally carrying data.</p>
+<p><strong>Exit code.</strong> A number a process returns when it ends; 0 usually means success.</p>
+<p><strong>ffprobe.</strong> FFmpeg's companion program that reports facts about a media file.</p>
+<p><strong>Filter graph.</strong> A network of FFmpeg filters connected by labelled pads.</p>
+<p><strong>FNV-1a.</strong> A small, fast, stable non-cryptographic hash used for cache keys.</p>
+<p><strong>Frame / frame rate.</strong> One picture of a video / pictures per second.</p>
+<p><strong>H.264.</strong> The video codec used (also called AVC); profile High, level derived.</p>
+<p><strong>Ken Burns effect.</strong> Slow pan and zoom over a still image.</p>
+<p><strong>Key frame.</strong> A frame stored completely, not as a difference from others.</p>
+<p><strong>Level (H.264).</strong> A label for the decoder workload a stream needs, derived from frame size and rate.</p>
+<p><strong>LUFS.</strong> Loudness Units relative to Full Scale, a measure of perceived loudness.</p>
+<p><strong>Manifest.</strong> <code>scenes.csv</code>, an explicit list of scenes.</p>
+<p><strong>Mutex.</strong> A lock that lets one thread at a time access shared data.</p>
+<p><strong>Newtype.</strong> A struct wrapping one value to give it a distinct type and rules (<code>SceneId(String)</code>).</p>
+<p><strong>Option / Result.</strong> Rust types for "maybe a value" and "a value or an error".</p>
+<p><strong>PCM.</strong> Uncompressed audio samples; the cache's WAVs are 16-bit PCM.</p>
+<p><strong>Pixel format.</strong> How pixels are stored; spoonstill outputs <code>yuv420p</code>.</p>
+<p><strong>Prescale canvas.</strong> The 3x-sized image the window moves over.</p>
+<p><strong>Profile (segment).</strong> The full set of properties every segment must have; checked with ffprobe.</p>
+<p><strong>RAII / Drop.</strong> Cleanup tied to a value's lifetime, run automatically when it goes out of scope.</p>
+<p><strong>Remedy.</strong> spoonstill's data shape for "a tool is missing, here is the fix".</p>
+<p><strong>Sample rate.</strong> Audio samples per second (48 000 here).</p>
+<p><strong>SAR.</strong> Sample aspect ratio: the shape of one pixel. Must be 1:1.</p>
+<p><strong>Scene.</strong> One still plus its narration (or silence), rendered as one segment.</p>
+<p><strong>Segment.</strong> One scene rendered to an MP4 file in the cache.</p>
+<p><strong>Shell injection.</strong> When text meant as data is interpreted as commands by a shell.</p>
+<p><strong>Single-flight.</strong> Ensuring concurrent requests for the same work do it once.</p>
+<p><strong>Stream copy.</strong> Copying compressed packets without decoding (<code>-c copy</code>).</p>
+<p><strong>Time base.</strong> The unit timestamps are counted in (1/90000 for video here).</p>
+<p><strong>Trait / trait object.</strong> A set of methods a type promises / a pointer to "some type implementing this trait".</p>
+<p><strong>TTS.</strong> Text-to-speech.</p>
+<p><strong>Workspace.</strong> Several Rust crates built together.</p>
+<p><strong>yuv420p / tv range / BT.709.</strong> The pixel format, colour range and colour standard spoonstill pins for every segment.</p>
+</section>

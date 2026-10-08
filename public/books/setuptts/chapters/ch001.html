@@ -1,0 +1,88 @@
+<section id="about-this-book" class="level1 unnumbered front">
+<h1 class="unnumbered front">About This Book</h1>
+<p>This book teaches one codebase: SetupTTS, the desktop text-to-speech application in the repository <a href="https://github.com/VijaysinghPuwar/setuptts" class="uri" target="_blank" rel="noopener noreferrer">https://github.com/VijaysinghPuwar/setuptts</a>. It is written for someone who can program and wants to understand this project from the inside: why a “call a speech API and save the result” program grew a manifest, a coverage checker, an MP3 frame parser and a release pipeline that launches its own installers. Each topic starts with the idea, then the mechanism, then the exact file where the behaviour lives.</p>
+<section id="what-this-book-documents" class="level2 unnumbered">
+<h2 class="unnumbered">What this book documents</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Repository</td>
+<td><a href="https://github.com/VijaysinghPuwar/setuptts" class="uri" target="_blank" rel="noopener noreferrer">https://github.com/VijaysinghPuwar/setuptts</a></td>
+</tr>
+<tr>
+<td>Branch</td>
+<td><code>main</code> (fast-forwarded to <code>origin/main</code> before analysis)</td>
+</tr>
+<tr>
+<td>Commit analysed</td>
+<td><code>c6c43fe5a96322892644fa763e6edcfd43a115b1</code></td>
+</tr>
+<tr>
+<td>Tag at that commit</td>
+<td><code>v1.6.2</code> (merge of pull request #2, 5 October 2026)</td>
+</tr>
+<tr>
+<td>Application version</td>
+<td><code>APP_VERSION = "1.6.2"</code> in <code>app/__init__.py</code>, matching <code>pyproject.toml</code></td>
+</tr>
+<tr>
+<td>Date of analysis</td>
+<td>7 October 2026</td>
+</tr>
+<tr>
+<td>Machine</td>
+<td>macOS on Apple Silicon; Python 3.14.7 in the project <code>.venv</code>; edge-tts 7.2.8, aiohttp 3.13.3, PySide6 6.11.0</td>
+</tr>
+</tbody>
+</table></div>
+<p>Every line number in this book refers to that commit. Against a later commit the ideas will mostly hold, but line numbers will drift.</p>
+<section id="how-the-repository-was-synchronised" class="level3 unnumbered">
+<h3 class="unnumbered">How the repository was synchronised</h3>
+<p>The local clone was on branch <code>fix/windows-voice-loading-1.6.1</code> at <code>4759c26</code>, with a clean working tree and no stashes. That branch had already been merged into <code>origin/main</code> by pull request #1; <code>origin/main</code> was six commits ahead, ending at the v1.6.2 merge. Because there was no uncommitted work to protect, the clone was switched to <code>main</code> and fast-forwarded (<code>git pull --ff-only origin main</code>). Nothing was rebased, reset or discarded. Appendix A has the full record.</p>
+</section>
+</section>
+<section id="how-to-read-the-evidence-labels" class="level2 unnumbered">
+<h2 class="unnumbered">How to read the evidence labels</h2>
+<p>Project documents drift. This book treats the current source code and observed runtime behaviour as the final authority, and marks important claims with one of these labels:</p>
+<ul>
+<li><strong>Verified from source:</strong> read in the code at the commit above, usually with a <code>file:line</code> reference.</li>
+<li><strong>Verified by test:</strong> a named test asserts it, and the full suite (383 tests) passed on the analysis machine.</li>
+<li><strong>Verified by runtime experiment:</strong> a command was run for this book and its output inspected.</li>
+<li><strong>Historical:</strong> taken from a commit message or release note; explains why, not what.</li>
+<li><strong>Inference:</strong> reasoning from the evidence, not directly shown.</li>
+</ul>
+<p>Callout boxes look like this:</p>
+<div class="callout experiment">
+<p><strong>Verified by runtime experiment.</strong> The app’s own packaged-build self-test was run from source against the live Microsoft service while preparing this book. It loaded 322 voices and synthesised a 5.5-second sample whose completeness check passed.</p>
+</div>
+<div class="callout drift">
+<p><strong>Docs and code disagree.</strong> Boxes like this mark a place where a comment, docstring or README says one thing and the code does another. The code wins.</p>
+</div>
+<div class="callout lesson">
+<p><strong>Engineering lesson.</strong> Boxes like this pull out the general idea a piece of SetupTTS demonstrates, so you can recognise it in other projects.</p>
+</div>
+</section>
+<section id="how-the-book-is-organised" class="level2 unnumbered">
+<h2 class="unnumbered">How the book is organised</h2>
+<ul>
+<li><strong>Part I, The Product</strong> explains what SetupTTS is, the technologies it uses and how the repository is laid out.</li>
+<li><strong>Part II, Architecture</strong> covers the threads, the objects and the UI, and how a click becomes background work.</li>
+<li><strong>Part III, The Audio Pipeline</strong> is the core: how text becomes audio, how a 12-hour book differs from a sentence, how failures are survived, how coverage is proved and how the final MP3 is assembled.</li>
+<li><strong>Part IV, Running It</strong> covers performance, concurrency, settings, logs, history, security and privacy.</li>
+<li><strong>Part V, Shipping It</strong> covers packaging, the release workflow and the test suite.</li>
+<li><strong>Part VI, Working With It</strong> is practical: debugging, the engineering lessons, what to learn next and fifteen videos to learn it from.</li>
+<li><strong>Appendices</strong> record how this book was verified, give a file map and glossary, and contain a short knowledge check.</li>
+</ul>
+<p>A note on style: this book uses no em dashes anywhere. Where the repository’s own comments use long dashes inside quoted code, they have been replaced with a comma or a hyphen. Code excerpts are otherwise quoted as they appear, sometimes shortened with <code># ...</code>.</p>
+</section>
+</section>

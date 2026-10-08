@@ -1,0 +1,172 @@
+<section id="spoonstill-media-the-process-boundary" class="level1">
+<h1><span class="header-section-number">6</span> spoonstill-media: The Process Boundary</h1>
+<section id="why-it-exists-1" class="level2">
+<h2><span class="header-section-number">6.1</span> Why it exists</h2>
+<p><code>spoonstill-media</code> is the only place where spoonstill touches the outside world through other programs. Its module comment states two rules:</p>
+<ol type="1">
+<li><strong>Argument vectors, never shell strings.</strong> Every invocation is a list of separate arguments, so a filename containing a space, a quote, <code>$(...)</code>, an emoji or a newline is just data.</li>
+<li><strong>Exit status is not validation.</strong> FFmpeg can return 0 for a broken join, so the crate checks outputs with <code>ffprobe</code> itself.</li>
+</ol>
+</section>
+<section id="module-map-1" class="level2">
+<h2><span class="header-section-number">6.2</span> Module map</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Module</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>command.rs</code></td>
+<td><code>FfmpegCommand</code> builder, spawning, pipes, progress, timeouts, <code>Cancel</code></td>
+</tr>
+<tr>
+<td><code>tools.rs</code></td>
+<td>finding binaries (<code>locate</code>), installing FFmpeg, version lines</td>
+</tr>
+<tr>
+<td><code>probe.rs</code></td>
+<td>running <code>ffprobe</code> and parsing its JSON</td>
+</tr>
+<tr>
+<td><code>profile.rs</code></td>
+<td><code>SegmentProfile</code>, <code>assert_matches_profile</code>, H.264 level table</td>
+</tr>
+<tr>
+<td><code>scene.rs</code></td>
+<td>rendering one segment, validating it, moving it into place</td>
+</tr>
+<tr>
+<td><code>audio.rs</code></td>
+<td>normalize, silence, measure</td>
+</tr>
+<tr>
+<td><code>concat.rs</code></td>
+<td>joining segments and checking the film</td>
+</tr>
+<tr>
+<td><code>caption.rs</code></td>
+<td>drawing subtitles into pixels</td>
+</tr>
+<tr>
+<td><code>atomic.rs</code></td>
+<td>write beside, then rename</td>
+</tr>
+<tr>
+<td><code>hardware.rs</code></td>
+<td>detecting usable hardware encoders, <code>VideoEncoder</code></td>
+</tr>
+<tr>
+<td><code>error.rs</code></td>
+<td><code>MediaError</code></td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="command.rs-one-way-to-start-a-program" class="level2">
+<h2><span class="header-section-number">6.3</span> <code>command.rs</code>: one way to start a program</h2>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">// crates/spoonstill-media/src/command.rs:116-160 (abridged)</span></span>
+<span id="cb1-2"><span class="kw">pub</span> <span class="kw">struct</span> FfmpegCommand <span class="op">{</span></span>
+<span id="cb1-3">    program<span class="op">:</span> <span class="dt">PathBuf</span><span class="op">,</span></span>
+<span id="cb1-4">    args<span class="op">:</span> <span class="dt">Vec</span><span class="op">&lt;</span>OsString<span class="op">&gt;,</span></span>
+<span id="cb1-5">    progress<span class="op">:</span> <span class="dt">bool</span><span class="op">,</span></span>
+<span id="cb1-6"><span class="op">}</span></span>
+<span id="cb1-7"><span class="kw">impl</span> FfmpegCommand <span class="op">{</span></span>
+<span id="cb1-8">    <span class="kw">pub</span> <span class="kw">fn</span> arg(<span class="op">&amp;</span><span class="kw">mut</span> <span class="kw">self</span><span class="op">,</span> arg<span class="op">:</span> <span class="kw">impl</span> <span class="bu">AsRef</span><span class="op">&lt;</span>OsStr<span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="op">&amp;</span><span class="kw">mut</span> <span class="dt">Self</span> <span class="op">{</span></span>
+<span id="cb1-9">        <span class="kw">self</span><span class="op">.</span>args<span class="op">.</span>push(arg<span class="op">.</span>as_ref()<span class="op">.</span>to_os_string())<span class="op">;</span></span>
+<span id="cb1-10">        <span class="kw">self</span></span>
+<span id="cb1-11">    <span class="op">}</span></span>
+<span id="cb1-12">    <span class="co">/// Append an input file. Exists so `-i` and its path cannot drift apart.</span></span>
+<span id="cb1-13">    <span class="kw">pub</span> <span class="kw">fn</span> input(<span class="op">&amp;</span><span class="kw">mut</span> <span class="kw">self</span><span class="op">,</span> path<span class="op">:</span> <span class="op">&amp;</span><span class="dt">Path</span>) <span class="op">-&gt;</span> <span class="op">&amp;</span><span class="kw">mut</span> <span class="dt">Self</span> <span class="op">{</span></span>
+<span id="cb1-14">        <span class="kw">self</span><span class="op">.</span>arg(<span class="st">"-i"</span>)<span class="op">.</span>arg(path)</span>
+<span id="cb1-15">    <span class="op">}</span></span>
+<span id="cb1-16"><span class="op">}</span></span></code></pre></div>
+<p>Despite the name, <code>FfmpegCommand</code> starts any program: FFmpeg, ffprobe, edge-tts, brew, winget. Arguments are <code>OsString</code>, not <code>String</code>, because file paths on Unix may contain bytes that are not valid UTF-8.</p>
+<p><code>spawn()</code> (lines 207-262) does four things:</p>
+<ul>
+<li>builds a <code>std::process::Command</code> from the absolute program path, putting <code>-progress pipe:1</code> first when progress was requested;</li>
+<li>pipes <strong>all three</strong> standard streams (stdin is kept so the program can be asked to quit by writing <code>q</code>);</li>
+<li>on Windows sets <code>CREATE_NO_WINDOW</code> so no console flashes up behind the window;</li>
+<li>maps a "not found" spawn error to <code>MediaError::BinaryMissing</code> naming the exact path tried.</li>
+</ul>
+<p>Two <strong>reader threads</strong> drain stdout and stderr immediately. Reading them one after another after the program exits can deadlock, because a child blocks when its output pipe's OS buffer fills. The stderr reader keeps only the <strong>last 256 KiB</strong>, because the cause of an FFmpeg failure is at the end and the head is banner text. The stdout reader either parses FFmpeg's <code>key=value</code> progress blocks and sends <code>Progress</code> values through a channel, or collects bytes (for ffprobe's JSON).</p>
+<section id="waiting-polling-with-a-backoff" class="level3">
+<h3><span class="header-section-number">6.3.1</span> Waiting: polling with a backoff</h3>
+<p><code>std::process::Child</code> has no portable "wait with a timeout", so waiting is a loop of <code>try_wait</code> and short sleeps. The sleep is <code>clamp(waited / 8, 1 ms, 20 ms)</code>, where <code>waited</code> is the total time already slept. A short-lived <code>ffprobe</code> is noticed within a millisecond or two; a long encode is checked every 20 ms. This one change took <code>still validate</code> on 200 scenes from 11.82 s to 1.31 s when combined with parallel probing (D-149).</p>
+<p><code>wait_until(limit)</code> kills the child if the limit passes and returns <code>MediaError::Timeout</code>. The child is killed rather than abandoned because an orphaned FFmpeg writing a half-finished file is exactly the "valid-looking stub" the project forbids.</p>
+</section>
+<section id="cancellation" class="level3">
+<h3><span class="header-section-number">6.3.2</span> Cancellation</h3>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="co">// crates/spoonstill-media/src/command.rs:339-370 (abridged)</span></span>
+<span id="cb2-2"><span class="at">#[</span>derive<span class="at">(</span><span class="bu">Debug</span><span class="op">,</span> <span class="bu">Clone</span><span class="op">,</span> <span class="bu">Default</span><span class="at">)]</span></span>
+<span id="cb2-3"><span class="kw">pub</span> <span class="kw">struct</span> Cancel(Arc<span class="op">&lt;</span>AtomicBool<span class="op">&gt;</span>)<span class="op">;</span></span>
+<span id="cb2-4"><span class="kw">impl</span> Cancel <span class="op">{</span></span>
+<span id="cb2-5">    <span class="kw">pub</span> <span class="kw">fn</span> request(<span class="op">&amp;</span><span class="kw">self</span>) <span class="op">{</span> <span class="kw">self</span><span class="op">.</span><span class="dv">0</span><span class="op">.</span>store(<span class="cn">true</span><span class="op">,</span> <span class="pp">Ordering::</span>SeqCst)<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb2-6">    <span class="kw">pub</span> <span class="kw">fn</span> is_requested(<span class="op">&amp;</span><span class="kw">self</span>) <span class="op">-&gt;</span> <span class="dt">bool</span> <span class="op">{</span> <span class="kw">self</span><span class="op">.</span><span class="dv">0</span><span class="op">.</span>load(<span class="pp">Ordering::</span>SeqCst) <span class="op">}</span></span>
+<span id="cb2-7">    <span class="kw">pub</span> <span class="kw">fn</span> sleep(<span class="op">&amp;</span><span class="kw">self</span><span class="op">,</span> total<span class="op">:</span> Duration) <span class="op">{</span> <span class="co">/* sleeps in 20 ms steps,</span></span>
+<span id="cb2-8"><span class="co">                                              returns early if cancelled */</span> <span class="op">}</span></span>
+<span id="cb2-9"><span class="op">}</span></span></code></pre></div>
+<p><code>Cancel</code> is a shared flag. The CLI's Ctrl-C handler and the window's Stop button each hold a clone and call <code>request()</code>. Workers check it. When a running FFmpeg must stop, <code>cancel(grace)</code> follows a ladder (D-045): write <code>q</code> to its stdin (FFmpeg's polite stop), poll for up to <code>CANCEL_GRACE = 2 s</code>, then <code>kill()</code>, then reap. Writing <code>q</code> was chosen over sending a signal because there is no portable way to signal a child on Windows.</p>
+</section>
+<section id="display-quoting-for-humans-only" class="level3">
+<h3><span class="header-section-number">6.3.3</span> Display quoting (for humans only)</h3>
+<p><code>display()</code> produces a copy-pasteable command line for logs, quoted for POSIX shells on macOS and for PowerShell on Windows. It is <strong>never executed</strong>; a test asserts that the only process construction is <code>Command::new(&amp;self.program)</code>.</p>
+</section>
+</section>
+<section id="tools.rs-finding-programs" class="level2">
+<h2><span class="header-section-number">6.4</span> <code>tools.rs</code>: finding programs</h2>
+<p>A macOS app started from Finder gets a minimal <code>PATH</code> (<code>/usr/bin:/bin:/usr/sbin:/sbin</code>) that does not include Homebrew, so a bare <code>ffprobe</code> was not found and a folder of photos opened as zero scenes (D-103). <code>locate(program)</code> therefore searches <code>PATH</code> first and then a list of package-manager folders:</p>
+<ul>
+<li><strong>macOS:</strong> <code>/opt/homebrew/bin</code>, <code>/usr/local/bin</code>, <code>/opt/local/bin</code> (MacPorts), <code>~/.local/bin</code> (pipx), every <code>~/Library/Python/*/bin</code> (pip <code>--user</code>).</li>
+<li><strong>Windows:</strong> <code>%LOCALAPPDATA%\Microsoft\WinGet\Links</code>, the <code>Gyan.FFmpeg</code> winget package folders (which publish no shim, D-142), python.org's default install folders and their <code>Scripts</code>, Store Python, Program Files Python, Chocolatey, Scoop, pipx, Conda, and <code>%APPDATA%\Python\*\Scripts</code> (D-191).</li>
+</ul>
+<p>If nothing matches, it returns the bare name so the spawn fails with a clear <code>BinaryMissing</code>. <code>SPOONSTILL_FFMPEG</code>, <code>SPOONSTILL_FFPROBE</code> and <code>SPOONSTILL_EDGE_TTS</code> override the search.</p>
+<p><code>install()</code> runs the platform's package manager (<code>brew install ffmpeg</code>, <code>winget install --id Gyan.FFmpeg ...</code>), with a 15-minute ceiling, and then re-locates and runs <code>-version</code> to confirm. It never downloads a binary from a URL (D-012). <code>describe_failure</code> turns the error into an honest sentence: a timeout says the install ran too long, not "not on this machine" (D-123).</p>
+</section>
+<section id="probe.rs" class="level2">
+<h2><span class="header-section-number">6.5</span> <code>probe.rs</code></h2>
+<pre class="text"><code>ffprobe -hide_banner -v error -print_format json -show_format -show_streams
+        [-count_frames] -i &lt;path&gt;</code></pre>
+<p>The JSON is parsed with <code>serde_json</code> into typed structs. A header probe has a 30 s ceiling; a probe that decodes every frame (<code>-count_frames</code>) gets <code>30 s + 5 ms per frame</code>, capped at 20 minutes, because a fixed 30 s ceiling failed every scene of an hour-long test film (D-096). A <strong>timeout is retried once</strong> (D-179): nine of ten timeouts in a real log were a read-after-write stall on a network share.</p>
+</section>
+<section id="profile.rs-the-segment-profile" class="level2">
+<h2><span class="header-section-number">6.6</span> <code>profile.rs</code>: the segment profile</h2>
+<p><code>SegmentProfile</code> is the full description of a valid segment: container <code>mov,mp4,...</code>, codec <code>h264</code>, profile <code>High</code>, the derived level, <code>yuv420p</code>, <code>tv</code>, <code>bt709</code>, SAR <code>1:1</code>, frame rate, time base <code>1/90000</code>, AAC LC <code>fltp</code> 48 kHz stereo, stream order video then audio. <code>assert_matches_profile</code> compares every field against <code>ffprobe</code>'s answer and returns <strong>all</strong> mismatches at once. An absent field counts as a mismatch, never a pass.</p>
+<p>Why this matters is proven in <code>ffmpeg-findings.md</code> §5: concatenating a segment with SAR 30007:30000 between two segments with SAR 1:1 exits 0 with no warning, and the output claims SAR 1:1 for every frame. "FFmpeg is not a validator."</p>
+</section>
+<section id="scene.rs-one-segment" class="level2">
+<h2><span class="header-section-number">6.7</span> <code>scene.rs</code>: one segment</h2>
+<p><code>render_scene</code> follows a strict sequence: probe the still and the narration, compute frames, choose the motion, build the filter, write any caption bands, run FFmpeg to a <strong>temporary</strong> file, validate it (decode every frame and check the exact count, plus the profile), and only then rename it into place. Chapter 15 shows the complete argument vector.</p>
+</section>
+<section id="audio.rs-concat.rs-caption.rs-atomic.rs" class="level2">
+<h2><span class="header-section-number">6.8</span> <code>audio.rs</code>, <code>concat.rs</code>, <code>caption.rs</code>, <code>atomic.rs</code></h2>
+<p>These are covered in depth in Chapters 15 to 17. In brief:</p>
+<ul>
+<li><code>audio.rs</code> normalizes any audio to a 48 kHz stereo 16-bit WAV at -16 LUFS in two FFmpeg passes (measure, then write), generates exact-length silence, and <strong>measures</strong> files after checking that a WAV's header-declared size matches its length (D-190, which caught a truncated cache file that would have shortened a film silently).</li>
+<li><code>concat.rs</code> writes the concat list, runs <code>ffmpeg -f concat -safe 0 -i list -c copy</code>, and checks the film's profile, frame count and duration; if the film is short, it names and deletes the damaged segment so the next render rebuilds just that scene (D-178).</li>
+<li><code>caption.rs</code> rasterises subtitles with bundled fonts because the Homebrew FFmpeg has no <code>drawtext</code> or <code>subtitles</code> filter.</li>
+<li><code>atomic.rs</code> writes every artifact to a hidden <code>.name.partial-&lt;pid&gt;-&lt;n&gt;.ext</code> beside the destination and renames it at the end. Rust's <code>rename</code> replaces an existing file on both macOS and Windows, so readers always see the old file or the new one, never nothing (D-119). The <code>Partial</code> guard deletes its temporary on drop unless the rename succeeded.</li>
+</ul>
+</section>
+<section id="hardware.rs" class="level2">
+<h2><span class="header-section-number">6.9</span> <code>hardware.rs</code></h2>
+<p>Listing <code>ffmpeg -encoders</code> tells you what FFmpeg was compiled with, not what works: one Windows machine listed seven H.264 encoders, of which four worked (D-159). <code>detect</code> actually encodes a tiny black clip with each candidate (<code>h264_videotoolbox</code> on macOS; <code>h264_nvenc</code>, <code>h264_amf</code>, <code>h264_qsv</code>, <code>h264_mf</code> on Windows). <code>VideoEncoder</code> is <code>Software</code> (libx264, the default) or <code>Hardware(name)</code>, and <code>quality_args</code> maps CRF to each encoder's own quality flag, because <code>-crf</code> means nothing to them and VideoToolbox even counts quality the other way.</p>
+</section>
+<section id="error.rs" class="level2">
+<h2><span class="header-section-number">6.10</span> <code>error.rs</code></h2>
+<p><code>MediaError</code> has eleven variants, each naming the path, program or field involved: <code>BinaryMissing</code>, <code>Spawn</code>, <code>Exit</code> (with the retained stderr, indented with <code>|</code>), <code>Timeout</code>, <code>Cancelled</code>, <code>UnreadableProbe</code>, <code>UnusableInput</code>, <code>ProfileMismatch</code> (all mismatches listed), <code>JoinStopped</code> (which scene the film stopped at), <code>Io</code>, and <code>Geometry</code>. A <code>From&lt;GeometryError&gt;</code> implementation lets <code>?</code> convert core's geometry errors automatically.</p>
+</section>
+<section id="tests-1" class="level2">
+<h2><span class="header-section-number">6.11</span> Tests</h2>
+<p>185 test functions. The integration tests render <strong>real media with the real FFmpeg</strong>: <code>segment_integrity.rs</code> (odd dimensions, hostile filenames like <code>it's a $(pwd) name</code>, cancellation leaves no stub, determinism), <code>motion_matrix.rs</code> (54 renders across durations, rates, aspects and source shapes, checking exact frame counts and no black edges), <code>subtitles.rs</code>, <code>cut_short_audio.rs</code>, <code>probe_retry.rs</code>, <code>caption_hostile_text.rs</code>, <code>hardware_report.rs</code>, and the structural <code>no_shell_strings.rs</code>.</p>
+<div class="callout exercise">
+<p><strong>Exercise 6.1 (Intermediate).</strong> In <code>command.rs</code>, find <code>spawn_stderr_reader</code>. Why does it keep the <em>last</em> 256 KiB rather than the first? What does it prepend when it drops data?</p>
+</div>
+</section>
+</section>

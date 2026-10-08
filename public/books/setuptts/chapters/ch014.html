@@ -1,0 +1,69 @@
+<section id="audio-assembly" class="level1">
+<h1><span class="header-section-number">10</span> Audio Assembly</h1>
+<section id="why-concatenation-is-enough" class="level2">
+<h2><span class="header-section-number">10.1</span> Why concatenation is enough</h2>
+<p>An MP3 file is a sequence of independent frames, each with its own small header. The service streams constant-bitrate MP3 frames with no file-level header, so audio for chunk 1 followed by audio for chunk 2 is a valid MP3 of both. SetupTTS never decodes or re-encodes audio; assembly is a byte copy.</p>
+<div class="callout experiment">
+<p><strong>Historical.</strong> Commit <code>cdd68a9</code> reports a live check of this assumption: “a real 3-chunk job assembles to a clean 24 kHz mono MP3 whose duration (1493.28 s) matches both CoreAudio and ffprobe, confirming multi-chunk assembly is frame-correct.”</p>
+</div>
+</section>
+<section id="order-and-completeness" class="level2">
+<h2><span class="header-section-number">10.2</span> Order and completeness</h2>
+<p><code>ChunkStore.finalize</code> (<code>chunk_store.py:694-791</code>) sorts records by <code>(start_char, index)</code>, so the audio order follows the text order even if indexes were ever out of step. It then passes a series of gates; any failure leaves the destination untouched.</p>
+<figure id="fig-finalize">
+<img src="/books/setuptts/media/file11.webp" alt="The gates before an MP3 is published. The duration check runs on the temporary file, before it can replace anything." width="1680" height="1344" loading="lazy" decoding="async">
+<figcaption><strong>Figure 10.1.</strong> The gates before an MP3 is published. The duration check runs on the temporary file, before it can replace anything.</figcaption>
+</figure>
+<ol type="1">
+<li><strong>Coverage</strong> must be complete (previous chapter). Otherwise <code>CoverageError</code>.</li>
+<li><strong>Write <code>book.mp3.part</code></strong> by copying each chunk file in order, re-checking that it exists, is non-empty and has its recorded size.</li>
+<li><strong>Byte total.</strong> The <code>.part</code> file’s size must equal the sum of the recorded <code>audio_bytes</code>.</li>
+<li><strong><code>verify</code> callback.</strong> The worker passes <code>_verify_duration</code>, which measures the <code>.part</code> file. If it raises, the <code>.part</code> file is moved to <code>name (incomplete).mp3</code> for inspection.</li>
+<li><strong>Replace.</strong> <code>_replace_with_retry(part, book.mp3)</code>.</li>
+<li>The worker then marks the manifest completed and deletes the staging folder.</li>
+</ol>
+<p>The order of steps 4 and 5 was a v1.6.0 fix. Previously the length check ran after the file had replaced the destination, so a suspect result could overwrite an existing good file. <code>test_duration_sanity_failure_never_replaces_the_existing_output</code> holds that line.</p>
+</section>
+<section id="measuring-duration-without-ffmpeg" class="level2">
+<h2><span class="header-section-number">10.3</span> Measuring duration without FFmpeg</h2>
+<p><code>app/utils/mp3_duration.py</code> walks MPEG frame headers. For each 4-byte header it reads the MPEG version, layer, bitrate index and sample-rate index, computes the frame size, adds the frame’s samples to a total, and jumps to the next frame. Unknown bytes are skipped one at a time, and an ID3v2 tag at the start is skipped by its declared size, even when it is larger than the first read block.</p>
+<p>For SetupTTS’s format the arithmetic is simple. The service sends MPEG-2 Layer III at 24 kHz, which has 576 samples per frame, at 48 kbit/s:</p>
+<pre class="text"><code>frame size     = 576 x 48,000 / (8 x 24,000) = 144 bytes
+frame duration = 576 / 24,000               = 0.024 s
+bytes per second = 144 / 0.024              = 6,000</code></pre>
+<p>That 6,000 bytes per second is the same constant the per-chunk completeness check uses. The parser reads in 1 MiB blocks, because “a 12-hour audiobook is ~260 MB, and reading it whole doubled the app’s memory footprint at the very end of a long job”.</p>
+</section>
+<section id="the-duration-window" class="level2">
+<h2><span class="header-section-number">10.4</span> The duration window</h2>
+<p><code>_estimate_duration_range_seconds</code> (<code>tts_worker.py:668-700</code>) converts the character count into a plausible range using wide characters-per-second bands per script (Latin 12 to 22 characters per second, Han 4 to 12, Devanagari 6.5 to 16) scaled by the speaking rate. <code>_verify_duration</code> fails only if the measured duration is below <strong>55 %</strong> of the minimum.</p>
+<div class="callout experiment">
+<p><strong>Verified by runtime experiment.</strong> For 700,000 Latin characters at normal speed the window is 8.84 to 16.2 hours, so the check fails anything under about 4.9 hours.</p>
+</div>
+<p>The band is deliberately crude. Its stated job is to “catch <em>catastrophic</em> truncation (e.g. a 12-hour run ending up at 3 hours)”, exactly the failure the old empty-bytes bug produced. Small losses are caught earlier and more precisely, by the per-chunk completeness check. The two checks work at different scales: one per sentence, one per book.</p>
+</section>
+<section id="why-the-file-exists-proves-nothing" class="level2">
+<h2><span class="header-section-number">10.5</span> Why “the file exists” proves nothing</h2>
+<p>Each of these produced a file that existed, had a plausible size and played without error:</p>
+<ul>
+<li>a chunk whose stream was cut mid-sentence (per-chunk check);</li>
+<li>a recovery fragment that contributed zero bytes (sub-range coverage);</li>
+<li>a one-character gap between ranges (coverage report);</li>
+<li>a chunk file replaced or zeroed on disk (size and hash checks);</li>
+<li>an assembly that wrote fewer bytes than recorded (byte total);</li>
+<li>a result hours shorter than the text (duration window).</li>
+</ul>
+</section>
+<section id="when-a-job-counts-as-successful" class="level2">
+<h2><span class="header-section-number">10.6</span> When a job counts as successful</h2>
+<p>A job is complete only when <strong>all</strong> of the following hold:</p>
+<ol type="1">
+<li>every chunk passed the stream-completeness check when it was synthesised;</li>
+<li>the recorded ranges tile the cleaned text exactly, with matching hashes;</li>
+<li>every chunk file exists with its recorded size;</li>
+<li>the assembled byte count equals the sum of chunk sizes;</li>
+<li>the measured duration is at least 55 % of the minimum estimate (or could not be measured, which is logged);</li>
+<li>the temporary file replaced the destination.</li>
+</ol>
+<p>Only then does the worker emit <code>completed</code>, the UI write a history row, and the staging folder disappear.</p>
+</section>
+</section>

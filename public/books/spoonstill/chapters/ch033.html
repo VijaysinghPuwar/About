@@ -1,0 +1,239 @@
+<section id="important-engineering-decisions" class="level1">
+<h1><span class="header-section-number">28</span> Important Engineering Decisions</h1>
+<p><code>decisions.md</code> holds 165 numbered decisions (D-001 to D-198, with gaps from renumbering). Only <strong>D-072</strong> (word-level karaoke captions) is still Open. A historical decision is not proof of current behaviour, so each entry below says where it shows up in code today.</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+</colgroup>
+<thead>
+<tr>
+<th>Decision</th>
+<th>Problem</th>
+<th>Chosen approach</th>
+<th>Tradeoff</th>
+<th>In code today</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>D-010</strong> layered workspace, CLI first</td>
+<td>where logic lives; what can be tested</td>
+<td>six crates plus a thin window</td>
+<td>the window must go through <code>spoonstill-app</code></td>
+<td><code>architecture.rs</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-011/D-012</strong> FFmpeg as a child process, argument vectors</td>
+<td>safety, portability</td>
+<td>spawn programs; reimplement a small boundary</td>
+<td>one process per job; FFmpeg must be installed</td>
+<td><code>command.rs</code>, <code>no_shell_strings.rs</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-013</strong> inputs versus machine state</td>
+<td>the renderer must not edit what you wrote</td>
+<td><code>project.yaml</code> read-only; state in <code>.spoonstill/</code></td>
+<td>settings change by hand-editing or per-run flags</td>
+<td>gate 7g</td>
+<td>holds; <code>still new</code> writes a starter once (D-153)</td>
+</tr>
+<tr>
+<td><strong>D-016</strong> write failures as they happen</td>
+<td>evidence is gone by the time it is reported</td>
+<td>JSON Lines per project, <code>runs.csv</code>, bundle export</td>
+<td>disk use, care with secrets</td>
+<td><code>spoonstill-state</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-020/D-021/D-022</strong> one audio source; measure duration; pad, never trim</td>
+<td>timing must follow the narration</td>
+<td><code>AudioSource</code> enum; ffprobe on the normalized WAV; frames rounded up</td>
+<td>up to one frame of silence per scene</td>
+<td><code>timing.rs</code>, <code>audio.rs</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-030 to D-034, D-037</strong> the filter recipe</td>
+<td>motion quality, speed, black edges, SAR, colour</td>
+<td>single still + <code>zoompan d=N</code>, 3x prescale, cover-fit, <code>setparams</code>, <code>setsar=1</code> last</td>
+<td>fixed recipe, no easing</td>
+<td><code>build_filter</code>, pinned test</td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-035, D-153</strong> deterministic, versioned motion seed</td>
+<td>reproducible films; cheap reorders</td>
+<td>V1 (index) frozen; V2 (occurrence) for new projects</td>
+<td>old projects re-encode on reorder unless switched</td>
+<td><code>MotionSeed</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-036, D-159, D-162, D-198</strong> encoder</td>
+<td>speed versus quality</td>
+<td>libx264 default; hardware as an opt-in draft mode, detected by encoding</td>
+<td>hardware 1.2x to 1.7x faster, slightly lower quality</td>
+<td><code>hardware.rs</code>, <code>--encoder</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-041, D-078, D-178</strong> assert the profile</td>
+<td>FFmpeg's concat accepts mismatches with exit 0</td>
+<td>probe every segment and the film; name and evict a bad segment</td>
+<td>extra probes</td>
+<td><code>profile.rs</code>, <code>concat.rs</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-043, D-107 to D-110, D-147</strong> content-addressed cache</td>
+<td>fast re-renders, resume</td>
+<td>keys from content and every setting; checked reuse; bounded sweep</td>
+<td>disk space for three generations</td>
+<td><code>segment_key</code>, <code>prune</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-044, D-076, D-077, D-144, D-146</strong> pools</td>
+<td>throughput without freezing machines; determinism</td>
+<td>bounded pools, cores/2 capped at 4, memory model, overlapping stages</td>
+<td>conservative on big machines</td>
+<td><code>pool.rs</code>, <code>capacity.rs</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-045, D-181, D-186</strong> cancellation</td>
+<td>stop cleanly, never publish a stopped film</td>
+<td>shared flag; <code>q</code>, 2 s, kill; check before publishing</td>
+<td>complexity in every wait</td>
+<td><code>Cancel</code>, <code>concat::publish</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-050, D-111</strong> folder convention</td>
+<td>no manual bookkeeping</td>
+<td>stem pairing, natural sort, case folding, refuse ambiguity</td>
+<td>numbered names required for arranging</td>
+<td><code>import/rows.rs</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-054, D-112</strong> path containment</td>
+<td>untrusted manifest paths</td>
+<td>canonicalise and compare components; no existence oracle</td>
+<td>symlinks inside the project still allowed</td>
+<td><code>path_safety.rs</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-057</strong> transitions</td>
+<td>crossfades</td>
+<td>a cut, fade or dissolve setting</td>
+<td>needs <code>xfade</code> measured at n=500</td>
+<td><strong>not built</strong></td>
+<td>accepted, deferred</td>
+</tr>
+<tr>
+<td><strong>D-062</strong> licensing</td>
+<td>Homebrew FFmpeg is GPL</td>
+<td>do not ship FFmpeg; LGPL build later</td>
+<td>operator installs FFmpeg</td>
+<td><code>tools::locate</code></td>
+<td>holds; spoonstill's own licence undecided</td>
+</tr>
+<tr>
+<td><strong>D-080</strong> ingest</td>
+<td>hand-renaming took 20 to 40 minutes per film</td>
+<td>copy, number and pair automatically</td>
+<td>positional pairing can mis-pair if counts differ (reported)</td>
+<td><code>ingest.rs</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-081, D-094, D-095, D-195</strong> speech</td>
+<td>free neural voices, reliably</td>
+<td>spawn <code>edge-tts</code>; text in a file; classify, retry, chunk, pace</td>
+<td>depends on an unofficial service</td>
+<td><code>edge.rs</code>, <code>pace.rs</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-084</strong> loudness</td>
+<td>recordings at different levels</td>
+<td>measure, one linear gain to -16 LUFS, peak ceiling</td>
+<td>peaky files land quieter</td>
+<td><code>media/audio.rs</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-106</strong> burned-in captions</td>
+<td>FFmpeg text filters missing</td>
+<td>draw text in Rust, overlay per cue</td>
+<td>maintaining a rasterizer; some scripts unsupported</td>
+<td><code>caption.rs</code></td>
+<td>holds; supersedes D-072's default</td>
+</tr>
+<tr>
+<td><strong>D-113</strong> OS file lock</td>
+<td>a lock file that could go stale or be deleted</td>
+<td><code>File::try_lock</code></td>
+<td>requires Rust 1.89+</td>
+<td><code>film.rs</code> <code>Lock</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-143, D-114</strong> sizes as names; 4K ceiling</td>
+<td>asking for 4K and Shorts easily; overflow</td>
+<td><code>Resolution</code>, destinations parse as aspects; level 5.2 MaxFS ceiling</td>
+<td>no 8K</td>
+<td><code>geometry.rs</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-154</strong> resume without a database</td>
+<td>M3 planned SQLite</td>
+<td>the content cache already resumes; a database would be an index only</td>
+<td>no reporting index</td>
+<td>no <code>state.db</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-166 to D-169</strong> whose voice</td>
+<td>ten parts of one film in ten voices</td>
+<td><code>VoiceOrigin</code>, machine fallback, asked once</td>
+<td>one more setting</td>
+<td><code>voice.rs</code>, <code>machine.rs</code></td>
+<td>holds</td>
+</tr>
+<tr>
+<td><strong>D-193, D-194, D-196</strong> chapters and pictures</td>
+<td>a chapter needs pictures per few seconds</td>
+<td>cost-based cutter; scenes waiting for pictures; picture placement with undo</td>
+<td>heuristic cuts</td>
+<td><code>chapter.rs</code>, <code>picture.rs</code></td>
+<td>holds</td>
+</tr>
+</tbody>
+</table></div>
+<section id="a-short-timeline" class="level2">
+<h2><span class="header-section-number">28.1</span> A short timeline</h2>
+<ul>
+<li><strong>2026-08-24</strong>: FFmpeg measurements taken (<code>ffmpeg-findings.md</code> §1 to §9) before any code.</li>
+<li><strong>2026-08-26</strong>: planning documents committed first; M0 (workspace and boundary test), M1 (one scene, frame-exact), and M2 (projects, audio sources, cache, pools, Edge TTS, ingest, the first window) all land.</li>
+<li><strong>2026-08-29</strong>: binaries located instead of named (D-103); burned-in captions (D-106).</li>
+<li><strong>2026-08-30</strong>: an external audit worked through as D-107 to D-134; Windows lock and installer defects found (D-135, D-136).</li>
+<li><strong>2026-09-02 to 09-04</strong>: sizes and Shorts (D-143); the memory-aware pool after a 4K freeze (D-144); pipelined stages, faster validation, versioned motion seed, "M3 goal met without a database" (D-145 to D-154).</li>
+<li><strong>2026-09-05 to 09-07</strong>: first Windows session; GPU detection and the <code>--encoder</code> draft mode (D-159, D-162).</li>
+<li><strong>2026-09-10 to 09-20</strong>: voice origin and fallback (D-166 to D-169); rename safety, atomic machine state, test isolation, stoppable joins (D-170 to D-189).</li>
+<li><strong>2026-09-24 to 10-04</strong>: truncated WAV detection (D-190); chapter import and pictures (D-193, D-194); the TTS pace gate after a real throttle (D-195); release tool locking (D-197); a Linux run (D-198); v0.1.19.</li>
+</ul>
+</section>
+</section>

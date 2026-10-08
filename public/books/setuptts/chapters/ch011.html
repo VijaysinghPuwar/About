@@ -1,0 +1,136 @@
+<section id="long-form-audiobook-architecture" class="level1">
+<h1><span class="header-section-number">7</span> Long-Form Audiobook Architecture</h1>
+<section id="why-a-10-hour-book-is-a-different-problem" class="level2">
+<h2><span class="header-section-number">7.1</span> Why a 10-hour book is a different problem</h2>
+<p>A two-minute request and a ten-hour book use the same service and the same code path, but they live in different regimes:</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th></th>
+<th>2-minute clip</th>
+<th>12-hour book</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Characters</td>
+<td>about 2,000</td>
+<td>about 700,000</td>
+</tr>
+<tr>
+<td>Requests</td>
+<td>1 or 2</td>
+<td>about 214</td>
+</tr>
+<tr>
+<td>Output size</td>
+<td>about 0.7 MB</td>
+<td>about 260 MB at 6,000 bytes per second</td>
+</tr>
+<tr>
+<td>Peak disk use</td>
+<td>negligible</td>
+<td>about 560 MB (staged chunks plus assembled file)</td>
+</tr>
+<tr>
+<td>Wall-clock time</td>
+<td>seconds</td>
+<td>hours</td>
+</tr>
+<tr>
+<td>Chance that every request succeeds first time, if each fails 1 % of the time</td>
+<td>99 %</td>
+<td><strong>12 %</strong> (0.99^214)</td>
+</tr>
+<tr>
+<td>Things that will probably happen</td>
+<td>nothing</td>
+<td>Wi-Fi changes, laptop sleeps, app is closed, voice streams slowly for an hour</td>
+</tr>
+</tbody>
+</table></div>
+<p>That probability row is the whole argument. At book length, failures are not exceptions; they are expected several times per job. A long-form design therefore needs four properties that a short-request design can ignore:</p>
+<ol type="1">
+<li><strong>Every failure is local</strong>: one chunk is retried, not the job.</li>
+<li><strong>Progress is durable</strong>: finished work survives a crash or a quit.</li>
+<li><strong>Completeness is provable</strong>: the final file can be shown to cover the whole text.</li>
+<li><strong>Memory is bounded</strong>: audio goes to disk as it arrives, not into a growing buffer.</li>
+</ol>
+</section>
+<section id="the-long-form-pipeline" class="level2">
+<h2><span class="header-section-number">7.2</span> The long-form pipeline</h2>
+<pre class="text"><code>Large text (cleaned, ~700,000 chars)
+   |
+   v
+Chunk planner: _chunk_plan_for + _retune_after_chunk
+   |   warm-up 1,200 -&gt; ramp 3,200 -&gt; up to 3,600 payload bytes
+   v
+Chunk 0 [0, 1141)   Chunk 1 [1141, 4671)   Chunk 2 [4671, 7882)  ...  Chunk 213
+   |
+   v   (one at a time, per job)
+Individual synthesis: fresh WebSocket, layered timeouts, retries, recovery split
+   |
+   v
+Validation: audio reaches the last sentence; sentences reach the end of the text
+   |
+   v
+Persistent chunk storage: chunk_NNNNNN.mp3 + manifest entry (fsync, atomic rename)
+   |
+   v
+Coverage verification: ranges tile [0, 700,000) exactly; files and hashes match
+   |
+   v
+Assembly: concatenate in source order -&gt; .part -&gt; duration check -&gt; replace
+   |
+   v
+12-hour audiobook</code></pre>
+<p>Within one job, chunks are synthesised <strong>sequentially</strong>, not in parallel. The cursor position for chunk <em>n+1</em> depends on where chunk <em>n</em> ended, and the adaptive size for chunk <em>n+1</em> depends on how chunk <em>n</em> went. Parallelism in SetupTTS exists only between jobs (Chapter 12).</p>
+</section>
+<section id="progress-for-a-job-you-will-not-watch" class="level2">
+<h2><span class="header-section-number">7.3</span> Progress for a job you will not watch</h2>
+<p>For a job measured in hours, progress information has to stay truthful:</p>
+<ul>
+<li><strong>Chunk count.</strong> “Chunk 82 of ~194” uses <code>_estimate_total_chunks</code> (<code>tts_worker.py:1034-1049</code>): the chunks done plus the remaining characters divided by the size of the chunk being cut right now. That estimate reflects the payload limit and the adaptive ramp. The previous version clamped the remaining count to the current index, so the label read “11/11”, “16/16” for most of a job, and “a failure on chunk 150 of 210 was reported as chunk 150/150”.</li>
+<li><strong>Percentage.</strong> From characters, corrected to the committed range after each saved chunk.</li>
+<li><strong>Time left.</strong> Shown only after chunk 3 and 45 seconds, rounded to minutes.</li>
+<li><strong>Per-chunk timing</strong> in the stage line: wait for first audio, streaming time, write time.</li>
+</ul>
+</section>
+<section id="checkpoints" class="level2">
+<h2><span class="header-section-number">7.4</span> Checkpoints</h2>
+<p>The checkpoint unit is <strong>one chunk</strong>. Immediately after a chunk passes validation, the main loop calls <code>chunk_store.record_chunk(...)</code> (<code>tts_worker.py:1568-1598</code>), which writes <code>chunk_NNNNNN.mp3</code> and rewrites <code>manifest.json</code>, both atomically. For English prose that is about 3,300 characters, or roughly three and a half minutes of audio. The most a crash can cost is the chunk in flight.</p>
+<p>Each chunk’s audio is held in memory only for its own attempt, then written and released. <code>test_twelve_hour_job_does_not_accumulate_audio_in_memory</code> checks with <code>tracemalloc</code> that peak memory stays bounded over a 12-hour simulated job.</p>
+<p>If writing the chunk fails (disk full, a file locked by antivirus or a sync client), the <code>OSError</code> is converted into a <code>_ChunkError</code> of kind <code>staging_io</code>, which keeps every previous chunk and offers Resume with a plain explanation. Before this, a bare <code>OSError</code> escaped, left the manifest marked “running”, offered no Resume, and showed raw errno text.</p>
+</section>
+<section id="resume" class="level2">
+<h2><span class="header-section-number">7.5</span> Resume</h2>
+<p>When the app starts, and after every job ends, <code>OutputPanel._refresh_resume_jobs</code> asks <code>ChunkStore.list_resume_candidates</code> for staging folders that hold at least one valid chunk and are not complete. If any exist, <strong>Resume Unfinished Job</strong> appears. Choosing one resubmits the job with its saved text, voice, rate, volume and staging folder.</p>
+<p>Inside the worker, a resume differs from a fresh run in four ways:</p>
+<ol type="1">
+<li><strong>The text comes from <code>source.txt</code>, verbatim.</strong> <code>_build_profile</code> (<code>tts_worker.py:1143-1158</code>) replaces the cleaned text with the staged one. Because cleanup is not idempotent, re-cleaning the already-clean text could change it, change its hash, fail the “same text?” check, and silently restart from chunk 1. That was a real bug fixed in v1.6.0 (<code>test_resume_reuses_saved_chunks_even_when_cleanup_is_not_idempotent</code>).</li>
+<li><strong><code>ChunkStore.try_resume</code> validates everything</strong> (Chapter 9) and returns the store positioned after the last trusted chunk.</li>
+<li><strong>The cursor starts at <code>resume_position</code></strong>, the end of the trusted prefix, with full-size chunks instead of the warm-up size: “the voice is already warmed up”.</li>
+<li><strong>If validation fails, the old folder is left untouched</strong> and the job starts over under a new job id. Reusing the id used to overwrite the old manifest and destroy whatever progress it still held.</li>
+</ol>
+<p>A resume also tolerates a destination that disappeared: if the original folder is gone or unwritable, the user is asked for a new location instead of the saved progress becoming unfinishable.</p>
+</section>
+<section id="multilingual-voices-on-long-jobs" class="level2">
+<h2><span class="header-section-number">7.6</span> Multilingual voices on long jobs</h2>
+<p>The code treats multilingual voices as riskier for long English books, based on observed no-audio failures. It reduces their chunk ceiling, warns in the sidebar for English texts over 45,000 characters, logs a note in the stage line, and suggests a same-locale standard voice when a no-audio failure finally ends a job. <code>test_multilingual_voice_uses_smaller_chunks_for_long_jobs</code> pins the behaviour.</p>
+</section>
+<section id="how-long-form-behaviour-is-tested" class="level2">
+<h2><span class="header-section-number">7.7</span> How long-form behaviour is tested</h2>
+<p>The network is the one thing a test cannot use, so <code>tests/test_long_form_scale.py</code> replaces <code>Communicate</code> with a stub that <strong>echoes each chunk’s text back as its “audio”</strong>. The assembled output is then a byte-exact transcript of what was sent, which makes truncation, duplication, gaps and ordering directly checkable:</p>
+<ul>
+<li><code>test_book_length_job_reproduces_the_source_text_exactly</code> runs 6- and 12-hour fixtures through the real chunker and real assembly.</li>
+<li><code>test_failure_deep_into_a_long_job_preserves_prior_chunks</code> simulates an outage 25 chunks in.</li>
+<li><code>test_resume_does_not_duplicate_already_rendered_audio</code> checks the seam between saved and new chunks.</li>
+</ul>
+<p>For the real service there is <code>scripts/stress_longform.py</code>, which synthesises a multi-hour excerpt of <em>Moby-Dick</em> from Project Gutenberg with the exact worker the app uses, in an isolated data folder, and exits 0 only if the app’s own coverage and duration checks pass.</p>
+</section>
+</section>

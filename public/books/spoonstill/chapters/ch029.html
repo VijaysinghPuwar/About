@@ -1,0 +1,137 @@
+<section id="cross-platform-design-macos-and-windows" class="level1">
+<h1><span class="header-section-number">24</span> Cross-Platform Design: macOS and Windows</h1>
+<p>Decision D-071 put both macOS and Windows in scope from the first milestone. Linux is not a release target, though the code compiles there and one session ran the gates on it (D-198).</p>
+<section id="the-approach" class="level2">
+<h2><span class="header-section-number">24.1</span> The approach</h2>
+<p>The code is cross-platform by construction: paths are <code>Path</code>/<code>OsStr</code>, not strings; processes are stopped by writing <code>q</code> to stdin, not by signals; Ctrl-C uses the <code>ctrlc</code> crate, which also covers Windows console events; platform differences are isolated behind <code>#[cfg]</code>. Where a Windows-only function exists, it usually compiles on every platform so its tests run on the Mac too (D-128).</p>
+</section>
+<section id="differences-that-matter" class="level2">
+<h2><span class="header-section-number">24.2</span> Differences that matter</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr>
+<th>Area</th>
+<th>macOS</th>
+<th>Windows</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Finding FFmpeg</td>
+<td>Homebrew prefixes; Finder apps get a minimal <code>PATH</code></td>
+<td>winget's <code>Gyan.FFmpeg</code> folder, which has no shim on <code>PATH</code></td>
+<td><code>tools::package_manager_dirs</code></td>
+</tr>
+<tr>
+<td>Finding Python tools</td>
+<td><code>~/Library/Python/*/bin</code>, pipx</td>
+<td>python.org folders, Store Python, <code>py -3</code></td>
+<td>same, D-191</td>
+</tr>
+<tr>
+<td>Executable name</td>
+<td><code>ffmpeg</code></td>
+<td><code>ffmpeg.exe</code></td>
+<td><code>executable_name</code></td>
+</tr>
+<tr>
+<td>Canonical paths</td>
+<td>plain</td>
+<td><code>\\?\C:\...</code> stripped before FFmpeg sees it</td>
+<td><code>without_verbatim_prefix</code>, D-142</td>
+</tr>
+<tr>
+<td>Console window</td>
+<td>none</td>
+<td><code>CREATE_NO_WINDOW</code> on every child</td>
+<td><code>hide_console_window</code></td>
+</tr>
+<tr>
+<td>Display quoting</td>
+<td>POSIX <code>'\''</code></td>
+<td>PowerShell <code>''</code></td>
+<td><code>posix_quote</code>, <code>windows_quote</code></td>
+</tr>
+<tr>
+<td>Legal file names</td>
+<td>almost anything, including a trailing space</td>
+<td>no pipe character, no trailing space</td>
+<td>hostile-name fixtures split by platform, D-090</td>
+</tr>
+<tr>
+<td>Machine state</td>
+<td><code>~/Library/Application Support/spoonstill</code></td>
+<td><code>%APPDATA%\spoonstill</code></td>
+<td><code>runs::config_dir</code></td>
+</tr>
+<tr>
+<td>File lock on <code>runs.csv</code></td>
+<td>worked</td>
+<td>failed silently until <code>.read(true)</code> was added</td>
+<td>D-135</td>
+</tr>
+<tr>
+<td>Path separators in logged cache paths</td>
+<td><code>/</code></td>
+<td>were mixed <code>/</code> and <code>\</code> until the path was joined component by component</td>
+<td>D-188</td>
+</tr>
+<tr>
+<td>Window title bar</td>
+<td><code>Overlay</code>, page draws its own header</td>
+<td>native title bar; title set at runtime</td>
+<td>D-132, D-160</td>
+</tr>
+<tr>
+<td>Drag position in the window</td>
+<td>window points</td>
+<td>physical pixels</td>
+<td><code>dragScale</code> in <code>app.js</code>, D-194</td>
+</tr>
+<tr>
+<td>Hardware encoders</td>
+<td>VideoToolbox</td>
+<td>NVENC, AMF, Quick Sync, Media Foundation</td>
+<td><code>hardware::CANDIDATES</code></td>
+</tr>
+<tr>
+<td>Installer</td>
+<td><code>install.sh</code>: CLI and the <code>.app</code>, clears quarantine</td>
+<td><code>install.ps1</code>: CLI only, <code>Unblock-File</code>, user <code>PATH</code></td>
+<td><code>scripts/</code></td>
+</tr>
+<tr>
+<td>Gatekeeper / SmartScreen</td>
+<td>unsigned; the installer removes the quarantine attribute</td>
+<td>unsigned; SmartScreen may warn</td>
+<td>README</td>
+</tr>
+<tr>
+<td>Release targets</td>
+<td>arm64 and x86_64 CLI archives; a universal <code>.dmg</code></td>
+<td>x86_64 CLI zip; NSIS installer <code>.exe</code></td>
+<td><code>release.yml</code></td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-windows-is-checked" class="level2">
+<h2><span class="header-section-number">24.3</span> How Windows is checked</h2>
+<ul>
+<li><strong>CI</strong> runs fmt, clippy (<code>-D warnings</code>) and the full <code>cargo test --workspace</code> on <code>windows-2022</code> with FFmpeg from Chocolatey.</li>
+<li>A <strong>cross-compile check</strong> from the Mac (<code>cargo check --target x86_64-pc-windows-msvc</code>) catches Windows-only warnings before pushing (D-132).</li>
+<li>Windows sessions ran the shell gates (23/23 for M2, D-176) and took the measurements in <code>ffmpeg-findings.md</code> §13.</li>
+<li>Several tests are Unix-only (FIFO-based tests, the fake <code>edge-tts</code> shell script). Each has a <code>cfg(not(unix))</code> twin that prints what is not checked, so the gap is visible rather than silent.</li>
+</ul>
+<div class="callout warning">
+<p><strong>Not run for this book.</strong> All runtime evidence in this book comes from macOS. Windows behaviour is described from source code, CI configuration and the project's own recorded Windows measurements.</p>
+</div>
+</section>
+</section>

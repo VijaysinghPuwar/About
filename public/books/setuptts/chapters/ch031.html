@@ -1,0 +1,24 @@
+<section id="appendix-c-glossary" class="level1 unnumbered appendix">
+<h1 class="unnumbered appendix">Appendix C: Glossary</h1>
+<p><strong>Atomic replace.</strong> Writing a new file under a temporary name and renaming it over the target, so readers see the old or the new file and never a mixture.</p>
+<p><strong>Back-off.</strong> Waiting before retrying; exponential back-off doubles the wait each time (2, 4, 8, 16 s here).</p>
+<p><strong>CBR.</strong> Constant bit rate. Every second of audio is the same number of bytes (6,000 for 48 kbit/s), which lets SetupTTS convert bytes to seconds exactly.</p>
+<p><strong>Chunk.</strong> One unit of synthesis: a range of the cleaned text sent as one provider request and saved as one <code>chunk_NNNNNN.mp3</code>.</p>
+<p><strong>Coverage.</strong> Whether the saved chunk ranges tile the whole text with no gaps or overlaps.</p>
+<p><strong>edge-tts.</strong> The open-source Python client for the speech service used by the Edge browser’s Read Aloud.</p>
+<p><strong>Fail closed.</strong> On an unrecoverable error, stop without producing output that cannot be vouched for.</p>
+<p><strong>fsync.</strong> A system call asking the operating system to flush a file’s data to the storage device.</p>
+<p><strong>Job.</strong> One export: a text, a voice, a rate and an output path, with its own worker and staging folder.</p>
+<p><strong>Manifest.</strong> <code>manifest.json</code> in a job’s staging folder: job metadata plus one record per saved chunk.</p>
+<p><strong>Multilingual voice.</strong> A voice whose ShortName contains “Multilingual”; it can read mixed-language text but is treated as riskier for long English jobs.</p>
+<p><strong>onedir / onefile.</strong> PyInstaller output shapes: a folder of files, or a single executable that unpacks itself at launch.</p>
+<p><strong>Payload size.</strong> The UTF-8 byte length of a chunk after edge-tts’s own character filtering and XML escaping; the limit that usually decides chunk size.</p>
+<p><strong>Preflight.</strong> Checks before the first chunk: voice catalogue, compatibility, a startup synthesis, disk space.</p>
+<p><strong>Queued connection.</strong> A Qt signal-slot connection where the slot runs later on the receiver’s thread; used automatically across threads.</p>
+<p><strong>Recovery split.</strong> Dividing a repeatedly failing chunk’s range into smaller sub-ranges that exactly cover it.</p>
+<p><strong>Self-test.</strong> <code>--selftest</code> mode of the packaged app, used by CI to check assets, TLS, the UI and, with <code>--network</code>, live synthesis.</p>
+<p><strong>SentenceBoundary.</strong> edge-tts metadata event giving a sentence’s text, start offset and duration in 100-nanosecond ticks.</p>
+<p><strong>Staging folder.</strong> <code>staging/&lt;job_id&gt;/</code>: the job’s source text, manifest and chunk files until completion.</p>
+<p><strong>Trusted prefix.</strong> On resume, the chunks from index 0 up to the first invalid record; everything after it is regenerated.</p>
+<p><strong>WAL.</strong> SQLite’s write-ahead log mode, which lets readers and a writer work concurrently.</p>
+</section>

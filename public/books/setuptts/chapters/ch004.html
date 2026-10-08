@@ -1,0 +1,149 @@
+<section id="technology-stack" class="level1">
+<h1><span class="header-section-number">2</span> Technology Stack</h1>
+<p>SetupTTS is a pure-Python desktop application. Every dependency below was found in <code>requirements.txt</code>, <code>pyproject.toml</code>, an <code>import</code> statement or a build file. Anything not in this chapter is not used. In particular there is <strong>no FFmpeg</strong>, no audio library and no web framework.</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr>
+<th>Technology</th>
+<th>Version pinned</th>
+<th>Role in SetupTTS</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Python</td>
+<td>3.12 in CI; <code>&gt;=3.11</code> declared</td>
+<td>The whole application</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>PySide6 (Qt 6)</td>
+<td><code>PySide6==6.11.0</code></td>
+<td>Windows, widgets, threads, signals, local socket, lock file</td>
+<td><code>app/ui/</code>, <code>app/workers/</code>, <code>app/utils/single_instance.py</code></td>
+</tr>
+<tr>
+<td>edge-tts</td>
+<td><code>edge-tts==7.2.8</code></td>
+<td>Client for Microsoft’s speech service: voice list and streaming synthesis</td>
+<td><code>app/services/tts_service.py</code> (only importer)</td>
+</tr>
+<tr>
+<td>asyncio</td>
+<td>standard library</td>
+<td>Drives each streaming request inside a worker thread</td>
+<td><code>app/workers/tts_worker.py</code>, <code>preview_worker.py</code>, <code>voice_loader.py</code></td>
+</tr>
+<tr>
+<td>aiohttp</td>
+<td><code>aiohttp==3.13.3</code></td>
+<td>HTTP and WebSocket transport under edge-tts; its exception types are used to classify failures</td>
+<td><code>tts_worker.py:2718-2817</code></td>
+</tr>
+<tr>
+<td>ssl + certifi</td>
+<td><code>certifi==2026.2.25</code></td>
+<td>TLS trust: certifi’s bundle plus the operating system store</td>
+<td><code>tts_service.py:26-81</code>, <code>app/main.py</code></td>
+</tr>
+<tr>
+<td>platformdirs</td>
+<td><code>platformdirs==4.9.4</code></td>
+<td>Per-user data, log and cache folders on each OS</td>
+<td><code>app/utils/paths.py</code></td>
+</tr>
+<tr>
+<td>sqlite3</td>
+<td>standard library</td>
+<td>Job history database</td>
+<td><code>app/services/history_service.py</code></td>
+</tr>
+<tr>
+<td>json, hashlib, os</td>
+<td>standard library</td>
+<td>Settings file, staging manifest, SHA-256 text hashes, atomic file replacement</td>
+<td><code>app/config/settings.py</code>, <code>app/workers/chunk_store.py</code></td>
+</tr>
+<tr>
+<td>faulthandler, logging</td>
+<td>standard library</td>
+<td>Rotating log, native crash dumps</td>
+<td><code>app/utils/app_logging.py</code></td>
+</tr>
+<tr>
+<td>PyInstaller</td>
+<td><code>pyinstaller&gt;=6.0</code> (6.19 locally)</td>
+<td>Freezes Python and all dependencies into an app</td>
+<td><code>setuptts.spec</code>, <code>setuptts_portable.spec</code></td>
+</tr>
+<tr>
+<td>create-dmg, ditto, hdiutil</td>
+<td>Homebrew / macOS built-ins</td>
+<td>macOS disk image and zip</td>
+<td><code>.github/workflows/build.yml</code>, <code>build_macos.sh</code></td>
+</tr>
+<tr>
+<td>Inno Setup 6</td>
+<td>preinstalled on the Windows runner</td>
+<td>Windows installer</td>
+<td><code>installers/windows.iss</code></td>
+</tr>
+<tr>
+<td>GitHub Actions</td>
+<td><code>actions/checkout@v4</code>, <code>setup-python@v5</code>, <code>upload-artifact@v4</code>, <code>softprops/action-gh-release@v2</code></td>
+<td>Test, build, self-test, publish</td>
+<td><code>.github/workflows/build.yml</code></td>
+</tr>
+<tr>
+<td>pytest, pytest-qt</td>
+<td>dev extras</td>
+<td>383 tests, including widget tests offscreen</td>
+<td><code>tests/</code></td>
+</tr>
+</tbody>
+</table></div>
+<section id="python" class="level2">
+<h2><span class="header-section-number">2.1</span> Python</h2>
+<p><strong>What it is.</strong> A general-purpose interpreted language. <strong>Why here.</strong> The best available client for the Edge voices, <code>edge-tts</code>, is a Python library, and Python with Qt bindings gives a native-looking desktop UI on both target platforms from one codebase. <strong>What it costs.</strong> End users do not have Python, so the app must ship its own interpreter (Chapter 15), and Python’s single interpreter lock means “background work” must be either I/O-bound or in native code. SetupTTS’s background work is almost entirely waiting on the network, which suits Python well.</p>
+</section>
+<section id="pyside6-and-qt" class="level2">
+<h2><span class="header-section-number">2.2</span> PySide6 and Qt</h2>
+<p><strong>What it is.</strong> PySide6 is the official Python binding for Qt 6, a C++ application framework. <strong>Why here.</strong> Qt supplies the widgets, the event loop, a thread class with safe cross-thread messaging (signals and slots), a stylesheet system, a lock file and a local socket server. SetupTTS uses all of these. The pinned version matters: PySide6 6.10 and later ship binaries that need macOS 15, which is why the app’s minimum macOS version is 15.0 and why CI checks every bundled binary against it (Chapter 16).</p>
+<p><strong>Where.</strong> <code>app/main.py</code> creates the <code>QApplication</code>; <code>app/ui/</code> holds the widgets; <code>app/workers/</code> subclasses <code>QThread</code>; <code>app/utils/single_instance.py</code> uses <code>QLockFile</code> and <code>QLocalServer</code>; <code>app/assets/styles/app.qss</code> is a 1,078-line dark theme.</p>
+</section>
+<section id="edge-tts" class="level2">
+<h2><span class="header-section-number">2.3</span> edge-tts</h2>
+<p><strong>What it is.</strong> An open-source Python library that talks to the speech endpoint the Edge browser uses. It fetches the voice list over HTTPS and synthesises speech over a WebSocket, yielding a stream of events: binary audio frames and <code>SentenceBoundary</code> metadata with timing. <strong>Why here.</strong> It is the provider. <strong>Where.</strong> Only <code>app/services/tts_service.py</code> imports it by design (“This module is the only place that imports edge_tts directly”), with two narrow exceptions in <code>tts_worker.py</code>: its exception classes and two text helpers (<code>escape</code>, <code>remove_incompatible_characters</code>) used to measure the exact payload size edge-tts will send.</p>
+<p>The version pin is deliberate. The comment in <code>requirements.txt</code> says edge-tts 7.x compensates <code>SentenceBoundary</code> offsets for CBR audio, “which the per-chunk completeness check relies on”. Chapter 8 explains why that matters.</p>
+</section>
+<section id="asyncio-and-aiohttp" class="level2">
+<h2><span class="header-section-number">2.4</span> asyncio and aiohttp</h2>
+<p><strong>What they are.</strong> <code>asyncio</code> is Python’s event loop for cooperative concurrency: code that waits on the network yields control instead of blocking. <code>aiohttp</code> is an asyncio HTTP and WebSocket client. <strong>Why here.</strong> edge-tts is an async library; its <code>stream()</code> is an async generator. SetupTTS never runs asyncio on the UI thread. Instead each worker thread creates its own event loop (Chapter 4). aiohttp matters to SetupTTS in two ways: its exception types (<code>ClientConnectorDNSError</code>, <code>ServerTimeoutError</code> and others) are how failures are classified, and it only reads proxy settings from environment variables, which is why SetupTTS reads the Windows proxy itself (Chapter 14).</p>
+</section>
+<section id="tls-ssl-and-certifi" class="level2">
+<h2><span class="header-section-number">2.5</span> TLS: ssl and certifi</h2>
+<p><strong>Why here.</strong> In a frozen app Python cannot find a certificate bundle on its own, so <code>app/main.py</code> points <code>SSL_CERT_FILE</code> at certifi’s bundle before anything else runs. In v1.6.1 the app also learned to trust the operating system’s certificate store, because antivirus “HTTPS scanning” and corporate proxies re-sign traffic with a root that exists only in the Windows store (<code>build_ssl_context</code>, <code>tts_service.py:26-44</code>).</p>
+</section>
+<section id="platformdirs-json-and-sqlite" class="level2">
+<h2><span class="header-section-number">2.6</span> platformdirs, JSON and SQLite</h2>
+<p><code>platformdirs</code> answers “where do per-user files go on this OS?” (Chapter 13). Settings live in a JSON file written atomically. Resumable job state lives in a JSON manifest per job, also written atomically. Completed jobs are recorded in a small SQLite database in WAL mode. None of these need a server, which is the point: everything stays on the user’s machine.</p>
+</section>
+<section id="pyinstaller-inno-setup-and-the-macos-tools" class="level2">
+<h2><span class="header-section-number">2.7</span> PyInstaller, Inno Setup and the macOS tools</h2>
+<p>PyInstaller analyses <code>main.py</code>, follows the imports, and copies the interpreter, the libraries, Qt’s plugins and the app’s data files into a bundle. On macOS the result is <code>SetupTTS.app</code>, wrapped in a DMG by <code>create-dmg</code> and in a zip by <code>ditto</code>. On Windows there are two builds: a folder build packaged by Inno Setup into an installer, and a single-file portable EXE. Chapter 15 explains why both exist.</p>
+</section>
+<section id="github-actions" class="level2">
+<h2><span class="header-section-number">2.8</span> GitHub Actions</h2>
+<p>A single workflow, <code>.github/workflows/build.yml</code>, runs on every pushed tag that starts with <code>v</code>. It tests on macOS and Windows, builds every artifact, launches each packaged app in a self-test mode (four of those runs contact the live speech service), and only then publishes a GitHub Release. Chapter 16 walks through it.</p>
+<div class="callout lesson">
+<p><strong>Engineering lesson.</strong> Notice how little the stack contains. Audio is never decoded or re-encoded: the service already streams MP3, and MP3 frames can be concatenated byte for byte. The only “audio processing” in the project is a 171-line frame-header parser used to measure duration (<code>app/utils/mp3_duration.py</code>), which exists precisely so the app does not need to ship FFmpeg.</p>
+</div>
+</section>
+</section>

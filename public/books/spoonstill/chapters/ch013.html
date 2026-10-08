@@ -1,0 +1,154 @@
+<section id="spoonstill-cli-the-still-command" class="level1">
+<h1><span class="header-section-number">10</span> spoonstill-cli: The <code>still</code> Command</h1>
+<section id="the-design-rule" class="level2">
+<h2><span class="header-section-number">10.1</span> The design rule</h2>
+<p>The file header says it directly:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">// crates/spoonstill-cli/src/main.rs:1-7</span></span>
+<span id="cb1-2"><span class="co">//! `still`, the spoonstill command line.</span></span>
+<span id="cb1-3"><span class="co">//!</span></span>
+<span id="cb1-4"><span class="co">//! D-010: this is the permanent, complete control surface, not a stepping stone</span></span>
+<span id="cb1-5"><span class="co">//! to the GUI. **If the CLI cannot do it, it does not exist.** ...</span></span></code></pre></div>
+</section>
+<section id="parsing-with-clap" class="level2">
+<h2><span class="header-section-number">10.2</span> Parsing with clap</h2>
+<p><code>clap</code>'s derive macros build the parser from Rust types: <code>#[derive(Parser)]</code> on <code>Cli</code>, <code>#[derive(Subcommand)]</code> on <code>enum Command</code> (each variant becomes a subcommand, its doc comment becomes help text), and <code>#[derive(Args)]</code> on each argument struct. Constraints like <code>conflicts_with = "short_edge"</code> are declared on fields, so <code>--resolution 4k --short-edge 1080</code> is rejected by clap before any spoonstill code runs.</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Command</th>
+<th>Handler</th>
+<th>Main <code>spoonstill_app</code> call</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>new DIR [FILE...]</code></td>
+<td><code>new_project</code></td>
+<td><code>create_project</code>, then <code>add_media</code></td>
+</tr>
+<tr>
+<td><code>add DIR FILE...</code></td>
+<td><code>add_media</code></td>
+<td><code>add_media</code></td>
+</tr>
+<tr>
+<td><code>import-chapter DIR FILE [--apply] [--by]</code></td>
+<td><code>import_chapter</code></td>
+<td><code>chapter::plan_by</code>, <code>chapter::import</code></td>
+</tr>
+<tr>
+<td><code>picture DIR SCENE [FILE] [--remove] [--to]</code></td>
+<td><code>picture</code></td>
+<td><code>picture::set</code>, <code>remove</code>, <code>move_to</code></td>
+</tr>
+<tr>
+<td><code>remove DIR SCENE...</code></td>
+<td><code>remove_scenes</code></td>
+<td><code>arrange::remove</code> (highest number first)</td>
+</tr>
+<tr>
+<td><code>move DIR SCENE POSITION</code></td>
+<td><code>move_scene</code></td>
+<td><code>arrange::move_to</code></td>
+</tr>
+<tr>
+<td><code>validate [DIR] [--list] [--no-probe]</code></td>
+<td><code>validate</code></td>
+<td><code>import::load</code></td>
+</tr>
+<tr>
+<td><code>render [DIR] ...</code></td>
+<td><code>render_project</code></td>
+<td><code>render_project</code></td>
+</tr>
+<tr>
+<td><code>render-scene --image --audio --out ...</code></td>
+<td><code>render_scene</code></td>
+<td><code>render_scene</code></td>
+</tr>
+<tr>
+<td><code>voices [FILTER] [--install] [--use] [--forget]</code></td>
+<td><code>list_voices</code></td>
+<td><code>tts::provider</code>, <code>machine</code></td>
+</tr>
+<tr>
+<td><code>subtitles</code></td>
+<td><code>list_subtitle_themes</code></td>
+<td>theme list</td>
+</tr>
+<tr>
+<td><code>resolutions</code> (alias <code>formats</code>)</td>
+<td><code>list_resolutions</code></td>
+<td><code>formats::aspects</code>, <code>sizes</code></td>
+</tr>
+<tr>
+<td><code>doctor [--install]</code></td>
+<td><code>doctor</code></td>
+<td><code>tooling::check_all</code>, <code>install</code>, <code>hardware</code></td>
+</tr>
+<tr>
+<td><code>licences</code> (alias <code>licenses</code>)</td>
+<td><code>show_licences</code></td>
+<td><code>include_str!</code> of the notices file</td>
+</tr>
+<tr>
+<td><code>diagnostics export</code> / <code>where</code></td>
+<td><code>export_diagnostics</code>, <code>show_log_location</code></td>
+<td><code>diagnostics::export</code>, <code>runs_index_path</code></td>
+</tr>
+</tbody>
+</table></div>
+<p><code>still render</code>'s options are all <strong>one-run overrides</strong>: <code>--out</code>, <code>-j/--jobs</code>, <code>--audio-jobs</code>, <code>--voice</code>, <code>--provider</code>, <code>--subtitles [THEME]</code>, <code>--no-subtitles</code>, <code>--subtitle-position</code>, <code>--aspect</code>, <code>--resolution</code>, <code>--short-edge</code>, <code>--fps</code>, <code>--encoder auto|off|NAME</code>, <code>--keep-cache</code>, <code>--force</code>. None of them writes <code>project.yaml</code>.</p>
+</section>
+<section id="main-run-dispatch" class="level2">
+<h2><span class="header-section-number">10.3</span> main, run, dispatch</h2>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="co">// crates/spoonstill-cli/src/main.rs:480-489</span></span>
+<span id="cb2-2"><span class="kw">fn</span> main() <span class="op">-&gt;</span> ExitCode <span class="op">{</span></span>
+<span id="cb2-3">    <span class="kw">let</span> cli <span class="op">=</span> <span class="pp">Cli::</span>parse()<span class="op">;</span></span>
+<span id="cb2-4">    <span class="cf">match</span> run(cli) <span class="op">{</span></span>
+<span id="cb2-5">        <span class="cn">Ok</span>(()) <span class="op">=&gt;</span> <span class="pp">ExitCode::</span>SUCCESS<span class="op">,</span></span>
+<span id="cb2-6">        <span class="cn">Err</span>(message) <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb2-7">            <span class="pp">eprintln!</span>(<span class="st">"still: {message}"</span>)<span class="op">;</span></span>
+<span id="cb2-8">            <span class="pp">ExitCode::</span>FAILURE</span>
+<span id="cb2-9">        <span class="op">}</span></span>
+<span id="cb2-10">    <span class="op">}</span></span>
+<span id="cb2-11"><span class="op">}</span></span></code></pre></div>
+<ul>
+<li><strong>Exit codes:</strong> 0 on success, 1 on any handler error. A parsing error is handled by clap itself, which prints usage and exits with its own code (2 by clap's default; not set in this file).</li>
+<li><strong><code>run</code></strong> wraps every command with two journal rows: <code>command invoked</code> before, <code>command finished</code> or <code>command failed</code> (with the error as <code>detail</code>) after. The "invoked" row is what proves a command started and never came back, which is how a frozen machine was diagnosed (D-144, D-148).</li>
+<li><strong><code>dispatch</code></strong> is one exhaustive <code>match</code>; adding a subcommand without a handler is a compile error.</li>
+</ul>
+<p>Every handler returns <code>Result&lt;(), String&gt;</code>, converting typed errors with <code>.map_err(|e| e.to_string())</code>, so the typed error's <code>Display</code> text is exactly what the operator reads.</p>
+</section>
+<section id="progress-and-ctrl-c" class="level2">
+<h2><span class="header-section-number">10.4</span> Progress and Ctrl-C</h2>
+<p>The render handler passes a closure to <code>render_project</code> that prints each <code>FilmEvent</code>. Because worker threads call it, it is wrapped in <code>SerialEvents</code>, which is just a <code>Mutex</code> around a closure:</p>
+<pre class="text"><code>  [  3/6 done] 004              75 frames    2.500s  (reused)</code></pre>
+<p>Ctrl-C only sets the shared <code>Cancel</code> flag:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb4-1"><span class="co">// crates/spoonstill-cli/src/main.rs:1476-1480</span></span>
+<span id="cb4-2"><span class="kw">let</span> cancel <span class="op">=</span> <span class="pp">Cancel::</span>new()<span class="op">;</span></span>
+<span id="cb4-3"><span class="kw">let</span> handler <span class="op">=</span> cancel<span class="op">.</span>clone()<span class="op">;</span></span>
+<span id="cb4-4"><span class="cf">if</span> <span class="kw">let</span> <span class="cn">Err</span>(error) <span class="op">=</span> <span class="pp">ctrlc::</span>set_handler(<span class="kw">move</span> <span class="op">||</span> handler<span class="op">.</span>request()) <span class="op">{</span></span>
+<span id="cb4-5">    <span class="pp">eprintln!</span>(<span class="st">"still: warning: Ctrl-C will not be graceful ({error})"</span>)<span class="op">;</span></span>
+<span id="cb4-6"><span class="op">}</span></span></code></pre></div>
+<p>The <code>ctrlc</code> crate is used because a hand-written signal handler would need <code>unsafe</code>, which the workspace forbids, and it also covers Windows console events. The graceful-then-forced escalation (<code>q</code>, 2 s, kill) lives in the media crate, not here; a second Ctrl-C does not escalate faster. <code>still validate</code> installs no handler on purpose, so Ctrl-C ends it immediately.</p>
+</section>
+<section id="the-clis-tests" class="level2">
+<h2><span class="header-section-number">10.5</span> The CLI's tests</h2>
+<p>Besides 11 unit tests (<code>Cli::command().debug_assert()</code> checks clap's own consistency), the CLI crate hosts four repository-wide integration tests:</p>
+<ul>
+<li><code>architecture.rs</code>: the layering rules (Chapter 4).</li>
+<li><code>cited_decisions.rs</code>: every <code>D-nnn</code> mentioned anywhere in <code>crates/</code>, <code>apps/</code> or <code>scripts/</code> must exist as a heading in <code>decisions.md</code>.</li>
+<li><code>readme_claims.rs</code>: README's numbers (gate count, <code>#[test]</code> count, decision count, integration suites, line counts within 3%) must match the tree.</li>
+<li><code>release_assets.rs</code>: the release workflow, its publish gate and both installers must agree on the five asset names and on <code>SHA256SUMS.txt</code>.</li>
+</ul>
+<div class="callout exercise">
+<p><strong>Exercise 10.1 (Beginner).</strong> Run <code>still render --help</code>. Find the flag that keeps old cache generations. Then find the field it sets in <code>RenderProjectOptions</code>.</p>
+</div>
+</section>
+</section>

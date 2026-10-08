@@ -1,0 +1,320 @@
+<section id="the-project-format-and-its-state" class="level1">
+<h1><span class="header-section-number">13</span> The Project Format and Its State</h1>
+<section id="two-kinds-of-files" class="level2">
+<h2><span class="header-section-number">13.1</span> Two kinds of files</h2>
+<p>Decision D-013 splits a project into two artifacts:</p>
+<ul>
+<li><strong>Human-owned inputs</strong>: your photos, recordings, scripts, and an optional <code>project.yaml</code> and <code>scenes.csv</code>. The renderer <strong>never writes</strong> these.</li>
+<li><strong>Machine-owned state</strong>: everything under <code>.spoonstill/</code>. Disposable: delete it and the next render rebuilds it.</li>
+</ul>
+<figure>
+<img src="/books/spoonstill/media/file7.svg" alt="The project and state lifecycle: which commands read, write or never touch which files." width="579" height="375" loading="lazy" decoding="async">
+<figcaption>The project and state lifecycle: which commands read, write or never touch which files.</figcaption>
+</figure>
+</section>
+<section id="a-realistic-project-tree" class="level2">
+<h2><span class="header-section-number">13.2</span> A realistic project tree</h2>
+<pre class="text"><code>holiday/
+|-- project.yaml               optional settings (written once by `still new`)
+|-- 001.jpg   001.txt          spoken scene (text read by a voice)
+|-- 002.JPG   002.m4a          supplied recording (case is folded when pairing)
+|-- 003.png   003.mp3  003.txt recording is the narration; 003.txt is its caption
+|-- 004.png                    silent scene, held for defaults.duration (4.0 s)
+|-- 005.txt                    a scene waiting for its picture (warning)
+|-- notes.md                   not numbered, no picture: "unpaired" warning
+|-- removed/                   where `still remove` and picture changes put files
+|-- out.mp4                    the finished film (default output name)
+`-- .spoonstill/
+    |-- render.lock            "pid 12345"; locked by the OS during a render
+    |-- logs/
+    |   `-- spoonstill-20261007.jsonl
+    |-- segments/
+    |   |-- seg-21ecedf4779e604e.mp4      one per distinct segment key
+    |   `-- ...
+    `-- cache/
+        `-- audio/
+            |-- spoken-75a6acdb77d4f3b7.spoken   raw speech (never swept)
+            |-- tts-0399c12597b06f43.wav         normalized speech
+            |-- file-6595651cd59129ac.wav        normalized recording
+            `-- silent-1ec4b61a28ece966.wav      generated silence</code></pre>
+<p>(The names in <code>.spoonstill/</code> are real ones from the analysis run.) There is <strong>no <code>state.db</code></strong>: the planned SQLite database does not exist.</p>
+</section>
+<section id="convention-mode-and-manifest-mode" class="level2">
+<h2><span class="header-section-number">13.3</span> Convention mode and manifest mode</h2>
+<p><strong>Convention mode</strong> (no <code>scenes.csv</code>): every file in the folder is grouped by its stem. The rules (Verified from source, <code>import/rows.rs:295-509</code>):</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Files sharing a stem</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>image + recording</td>
+<td>narrated by the recording</td>
+</tr>
+<tr>
+<td>image + text</td>
+<td>text is spoken</td>
+</tr>
+<tr>
+<td>image + recording + text</td>
+<td>recording narrates, text is the caption</td>
+</tr>
+<tr>
+<td>image only</td>
+<td>silent for <code>defaults.duration</code></td>
+</tr>
+<tr>
+<td>two images (<code>001.jpg</code>, <code>001.png</code>)</td>
+<td><strong>error</strong>: <code>AmbiguousScene</code>, naming both</td>
+</tr>
+<tr>
+<td>numbered text or recording, no image</td>
+<td>waiting for a picture (warning, not rendered)</td>
+</tr>
+<tr>
+<td>non-numbered text or recording, no image</td>
+<td><code>UnpairedFile</code> warning</td>
+</tr>
+</tbody>
+</table></div>
+<p>Order is the <strong>natural</strong> order of stems: <code>scene2</code> before <code>scene10</code>. Hidden files are skipped, except that leftover <code>.arranging-</code> or <code>.removing-</code> files are reported as an interrupted rename.</p>
+<p><strong>Manifest mode</strong> (<code>scenes.csv</code>, or the file named by <code>manifest:</code>): one row per scene, and the manifest is the complete list. Columns: <code>image</code> (required), <code>text</code>, <code>audio_file</code>, <code>voice</code>, <code>duration</code>, <code>zoom_direction</code>, <code>zoom_anchor</code>, <code>caption</code>. Unknown columns are an error. A scene's id is its image's stem, so moving between modes keeps identity.</p>
+<pre class="text"><code>image,text,audio_file,voice,duration,zoom_direction,zoom_anchor,caption
+img/001.jpg,The harbour at dawn.,,en-GB-RyanNeural,,in,center,
+img/002.jpg,,audio/take2.m4a,,,,,The tide came in.
+img/003.jpg,,,,4.5,,,</code></pre>
+</section>
+<section id="project.yaml-every-key" class="level2">
+<h2><span class="header-section-number">13.4</span> <code>project.yaml</code>: every key</h2>
+<p>Unknown keys are rejected (a typo is an error, not a silently ignored setting, D-055). Every key is optional:</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>output</code></td>
+<td>path</td>
+<td><code>out.mp4</code></td>
+<td>must stay inside the project (symlinks resolved, D-112)</td>
+</tr>
+<tr>
+<td><code>aspect</code></td>
+<td>text</td>
+<td><code>16:9</code></td>
+<td>also <code>landscape</code>, <code>9:16</code>, <code>portrait</code>, <code>shorts</code>, <code>reel</code>, <code>tiktok</code>, <code>story</code>, <code>1:1</code>, <code>square</code></td>
+</tr>
+<tr>
+<td><code>resolution</code></td>
+<td>text</td>
+<td>none</td>
+<td><code>720p</code>, <code>1080p</code>, <code>1440p</code>/<code>2k</code>, <code>2160p</code>/<code>4k</code>; error if <code>short_edge</code> is also set</td>
+</tr>
+<tr>
+<td><code>short_edge</code></td>
+<td>number</td>
+<td>1080</td>
+<td>even; divisible by 9 for 16:9 and 9:16; at most level 5.2</td>
+</tr>
+<tr>
+<td><code>fps</code></td>
+<td>number</td>
+<td>30</td>
+<td>1 to 120</td>
+</tr>
+<tr>
+<td><code>manifest</code></td>
+<td>path</td>
+<td>none</td>
+<td>then <code>scenes.csv</code> if present, else convention mode</td>
+</tr>
+<tr>
+<td><code>motion_seed</code></td>
+<td>text</td>
+<td><code>v1</code> when absent</td>
+<td><code>v1</code> or <code>v2</code></td>
+</tr>
+<tr>
+<td><code>tts.provider</code></td>
+<td>text</td>
+<td><code>edge</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>tts.voice</code></td>
+<td>text</td>
+<td><code>default</code></td>
+<td><code>default</code> means "chosen from the script's language"</td>
+</tr>
+<tr>
+<td><code>tts.trim_head</code>, <code>tts.trim_tail</code></td>
+<td>seconds</td>
+<td>0.10, 0.25</td>
+<td>how much provider silence to keep</td>
+</tr>
+<tr>
+<td><code>encode.preset</code></td>
+<td>text</td>
+<td><code>medium</code></td>
+<td>libx264 preset</td>
+</tr>
+<tr>
+<td><code>encode.crf</code></td>
+<td>number</td>
+<td>18</td>
+<td>0 to 51</td>
+</tr>
+<tr>
+<td><code>defaults.duration</code></td>
+<td>seconds</td>
+<td>4.0</td>
+<td>length of a silent scene</td>
+</tr>
+<tr>
+<td><code>defaults.zoom_amount</code></td>
+<td>number</td>
+<td>0.10</td>
+<td>0.02 to 0.50</td>
+</tr>
+<tr>
+<td><code>subtitles.enabled</code></td>
+<td>bool</td>
+<td>false</td>
+<td>captions are off by default (burning in is irreversible)</td>
+</tr>
+<tr>
+<td><code>subtitles.theme</code></td>
+<td>text</td>
+<td><code>classic</code></td>
+<td><code>classic boxed band card punch minimal</code></td>
+</tr>
+<tr>
+<td><code>subtitles.position</code></td>
+<td>text</td>
+<td><code>bottom</code></td>
+<td><code>bottom</code> or <code>top</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>A complete example:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb3-1"><span class="fu">motion_seed</span><span class="kw">:</span><span class="at"> v2</span></span>
+<span id="cb3-2"><span class="fu">output</span><span class="kw">:</span><span class="at"> renders/chapter-3.mp4</span></span>
+<span id="cb3-3"><span class="fu">aspect</span><span class="kw">:</span><span class="at"> </span><span class="st">"16:9"</span></span>
+<span id="cb3-4"><span class="fu">resolution</span><span class="kw">:</span><span class="at"> 4k</span></span>
+<span id="cb3-5"><span class="fu">fps</span><span class="kw">:</span><span class="at"> </span><span class="dv">30</span></span>
+<span id="cb3-6"><span class="fu">tts</span><span class="kw">:</span></span>
+<span id="cb3-7"><span class="at">  </span><span class="fu">provider</span><span class="kw">:</span><span class="at"> edge</span></span>
+<span id="cb3-8"><span class="at">  </span><span class="fu">voice</span><span class="kw">:</span><span class="at"> en-GB-RyanNeural</span></span>
+<span id="cb3-9"><span class="at">  </span><span class="fu">trim_head</span><span class="kw">:</span><span class="at"> </span><span class="fl">0.10</span></span>
+<span id="cb3-10"><span class="at">  </span><span class="fu">trim_tail</span><span class="kw">:</span><span class="at"> </span><span class="fl">0.25</span></span>
+<span id="cb3-11"><span class="fu">encode</span><span class="kw">:</span></span>
+<span id="cb3-12"><span class="at">  </span><span class="fu">preset</span><span class="kw">:</span><span class="at"> medium</span></span>
+<span id="cb3-13"><span class="at">  </span><span class="fu">crf</span><span class="kw">:</span><span class="at"> </span><span class="dv">18</span></span>
+<span id="cb3-14"><span class="fu">defaults</span><span class="kw">:</span></span>
+<span id="cb3-15"><span class="at">  </span><span class="fu">duration</span><span class="kw">:</span><span class="at"> </span><span class="fl">5.0</span></span>
+<span id="cb3-16"><span class="at">  </span><span class="fu">zoom_amount</span><span class="kw">:</span><span class="at"> </span><span class="fl">0.12</span></span>
+<span id="cb3-17"><span class="fu">subtitles</span><span class="kw">:</span></span>
+<span id="cb3-18"><span class="at">  </span><span class="fu">enabled</span><span class="kw">:</span><span class="at"> </span><span class="ch">true</span></span>
+<span id="cb3-19"><span class="at">  </span><span class="fu">theme</span><span class="kw">:</span><span class="at"> boxed</span></span>
+<span id="cb3-20"><span class="at">  </span><span class="fu">position</span><span class="kw">:</span><span class="at"> bottom</span></span></code></pre></div>
+<p>(Quoting <code>"16:9"</code> is the safe spelling in YAML. Whether the unquoted form parses as text with <code>serde_yaml_ng</code> was not independently verified.)</p>
+</section>
+<section id="content-addressed-caches" class="level2">
+<h2><span class="header-section-number">13.5</span> Content-addressed caches</h2>
+<p>The key idea that makes re-renders cheap and resume possible: <strong>every intermediate file is named by a hash of everything that affects its bytes</strong>, never by its position or path (D-043).</p>
+<p>A <strong>segment</strong> file is <code>seg-&lt;16 hex digits&gt;.mp4</code>, where the hex is <code>segment_key</code>, a length-prefixed FNV-1a hash (<code>film.rs:1800-1857</code>) of:</p>
+<ol type="1">
+<li>the image's content hash (its bytes, not its path);</li>
+<li>the narration's cache key (so two different takes of the same length are different segments, D-107);</li>
+<li>the frame count;</li>
+<li>the motion descriptor and seed (for example <code>zoom-in@center:0.1000:86ff68c605f4705e</code>);</li>
+<li>the geometry, <code>WIDTHxHEIGHT@FPS</code>;</li>
+<li>the encoder settings (<code>medium:18</code>, or <code>h264_nvenc:medium:18</code> for hardware);</li>
+<li>the pixel format, colour space and video timescale constants;</li>
+<li>the subtitle theme, placement and every cue's timing and text.</li>
+</ol>
+<p>Not in the key: the scene's file path, its scene id, its position (except through a V1 motion seed), or the machine.</p>
+<p>Consequences:</p>
+<ul>
+<li><strong>Second render</strong>: every key matches an existing file, the file is re-checked, and nothing is encoded.</li>
+<li><strong>Edit one narration</strong>: one audio key changes, so one segment key changes; 499 of 500 segments are reused (measured, D-154).</li>
+<li><strong>Crash or kill midway</strong>: finished segments are already on disk under their keys, so the next run reuses them. This is how resume works without a database: in a measured run killed at 60 s with 167 of 500 scenes done, the next run reused exactly 167 (D-154).</li>
+<li><strong>Reorder under <code>motion_seed: v2</code></strong>: nothing changes in any key, so nothing re-encodes. Under <code>v1</code> every scene's index changes, so every segment misses (D-140, D-153).</li>
+</ul>
+<section id="reuse-is-checked-not-trusted" class="level3">
+<h3><span class="header-section-number">13.5.1</span> Reuse is checked, not trusted</h3>
+<p>A cached segment is reused only if <code>ffprobe</code> says it matches the full segment profile <strong>and</strong> its frame count equals the plan (D-110). A cached WAV is reused only if its RIFF header size matches its file length (D-190). A bad entry is deleted and rebuilt.</p>
+</section>
+<section id="the-cache-does-not-grow-forever" class="level3">
+<h3><span class="header-section-number">13.5.2</span> The cache does not grow forever</h3>
+<p>After a successful join (and unless <code>--keep-cache</code> is given), <code>prune</code> keeps the files the film used plus <strong>two spare generations</strong> of older files, newest first, and deletes the rest. Two spares make flipping back and forth between two subtitle themes free. It touches only names spoonstill writes, never <code>spoken-</code> speech, and never fails the render (D-109, D-147).</p>
+</section>
+</section>
+<section id="the-render-lock" class="level2">
+<h2><span class="header-section-number">13.6</span> The render lock</h2>
+<p><code>.spoonstill/render.lock</code> is opened and locked with <code>File::try_lock</code> (an OS-level lock). A second render of the same project is refused; renders of different projects run freely. The file's existence means nothing: it is never deleted, and if a render crashes, the OS releases the lock automatically. <code>--force</code> is kept for scripts but cannot break a live lock (D-113).</p>
+</section>
+<section id="machine-wide-state" class="level2">
+<h2><span class="header-section-number">13.7</span> Machine-wide state</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Location (macOS / Windows)</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>runs.csv</code></td>
+<td><code>~/Library/Application Support/spoonstill/</code> / <code>%APPDATA%\spoonstill\</code></td>
+<td>every event of every command, all projects</td>
+</tr>
+<tr>
+<td><code>settings.yaml</code></td>
+<td>same folder</td>
+<td>fallback voice, chapter-cut preference</td>
+</tr>
+<tr>
+<td><code>recent-projects.json</code></td>
+<td>the window's own config folder (Tauri <code>app_config_dir</code>)</td>
+<td>Home screen list</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="temporary-files" class="level2">
+<h2><span class="header-section-number">13.8</span> Temporary files</h2>
+<p>Every writer uses <code>atomic::partial_path</code>: a hidden name beside the destination, such as <code>.seg-&lt;key&gt;.mp4.partial-&lt;pid&gt;-&lt;n&gt;.mp4</code> or <code>.film.mp4.partial-&lt;pid&gt;-&lt;n&gt;.mp4</code>. The process id and a counter make each name unique. Writing <strong>beside</strong> the destination (not in <code>/tmp</code>) keeps the final rename on the same filesystem, where it is atomic. Abandoned partials from dead runs are swept later: in <code>.spoonstill/</code> after the join, and beside the film only if older than 60 seconds (another run might still be writing, D-178).</p>
+</section>
+<section id="versioning-and-migration" class="level2">
+<h2><span class="header-section-number">13.9</span> Versioning and migration</h2>
+<p>There is no schema version number. Compatibility is handled case by case: <code>motion_seed</code> absent means V1 forever; old segment names (<code>seg-NNNN-&lt;key&gt;.mp4</code>) are still recognised as spoonstill's so the sweep can remove them; a cache key change (D-107, D-118, D-153) simply misses old files once, re-encodes, and produces a byte-identical film.</p>
+<div class="callout exercise">
+<p><strong>Exercise 13.1 (Beginner).</strong> Which of these changes re-encode a segment: renaming the project folder; renaming <code>003.jpg</code> to <code>003.jpeg</code>; changing <code>encode.crf</code> from 18 to 20; moving the project to another disk? Use the key list above. (Hint: <code>project_id</code> is the folder's basename and seeds the motion.)</p>
+</div>
+</section>
+</section>

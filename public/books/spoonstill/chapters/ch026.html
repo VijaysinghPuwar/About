@@ -1,0 +1,208 @@
+<section id="error-handling" class="level1">
+<h1><span class="header-section-number">21</span> Error Handling</h1>
+<section id="the-philosophy" class="level2">
+<h2><span class="header-section-number">21.1</span> The philosophy</h2>
+<p>The project's documents repeat two rules. First, <strong>an error is a sentence the operator can act on</strong>: it names the scene, the file, the program, and what to do (D-089, D-105). Second, <strong>report everything at once</strong>: an operator with 500 scenes should not fix one problem, re-render, and discover the next (D-020 and validation's design).</p>
+</section>
+<section id="the-layers-of-error-types" class="level2">
+<h2><span class="header-section-number">21.2</span> The layers of error types</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Crate</th>
+<th>Type</th>
+<th>Example variants</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>core</td>
+<td><code>GeometryError</code>, <code>PathError</code>, <code>SceneIdError</code>, <code>ProblemKind</code></td>
+<td><code>UnusableShortEdge</code>, <code>Outside</code>, <code>NoAudioSource</code></td>
+</tr>
+<tr>
+<td>media</td>
+<td><code>MediaError</code></td>
+<td><code>BinaryMissing</code>, <code>Exit</code>, <code>Timeout</code>, <code>Cancelled</code>, <code>ProfileMismatch</code>, <code>JoinStopped</code></td>
+</tr>
+<tr>
+<td>tts</td>
+<td><code>TtsError</code></td>
+<td><code>Unavailable</code>, <code>BadRequest</code>, <code>NoAudio</code>, <code>Cancelled</code>, <code>Process(Box&lt;MediaError&gt;)</code></td>
+</tr>
+<tr>
+<td>app</td>
+<td><code>ImportError</code>, <code>AudioError</code>, <code>FilmError</code>, <code>IngestError</code>, <code>ArrangeError</code></td>
+<td><code>Import</code>, <code>HasProblems</code>, <code>Locked</code>, <code>VoiceService</code>, <code>Render { failures, not_started }</code></td>
+</tr>
+<tr>
+<td>surfaces</td>
+<td><code>String</code></td>
+<td>printed after <code>still:</code> or shown in the window</td>
+</tr>
+</tbody>
+</table></div>
+<p>Errors are converted upward with <code>From</code> implementations and <code>?</code>, and only at the surface are they flattened to text with <code>Display</code>.</p>
+</section>
+<section id="problems-versus-errors" class="level2">
+<h2><span class="header-section-number">21.3</span> Problems versus errors</h2>
+<p>Validation does not use <code>Err</code> for project problems. It collects a list of <code>Problem</code> values with a <strong>severity</strong>. Errors stop a render; warnings are shown and the render continues. <code>ImportError</code> is reserved for "cannot even read the project" (unparseable YAML, missing folder, cancellation).</p>
+</section>
+<section id="realistic-failures-traced" class="level2">
+<h2><span class="header-section-number">21.4</span> Realistic failures, traced</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr>
+<th>Failure</th>
+<th>Detected where</th>
+<th>Representation</th>
+<th>What you see</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FFmpeg missing</td>
+<td><code>Tools::ready()</code> during validation</td>
+<td>one <code>ProblemKind::ToolingMissing { remedy }</code></td>
+<td>one line with "Install it for me" (window) or <code>still doctor --install</code> hint</td>
+</tr>
+<tr>
+<td>corrupt image</td>
+<td>ffprobe in <code>ProbeCheck::check</code></td>
+<td><code>ProblemKind::NotUsableMedia { field, value, detail }</code></td>
+<td>a sentence, then ffprobe's evidence indented</td>
+</tr>
+<tr>
+<td>truncated JPEG (0x0)</td>
+<td><code>SourceGeometry::new</code></td>
+<td><code>DegenerateSource</code></td>
+<td>"probes as 0x0" style message for that scene</td>
+</tr>
+<tr>
+<td>unsupported or silent audio</td>
+<td>ffprobe: no stream or no duration</td>
+<td><code>NotUsableMedia</code></td>
+<td>per scene</td>
+</tr>
+<tr>
+<td>invalid project</td>
+<td><code>validate_drafts</code></td>
+<td>e.g. <code>ConflictingAudioSources { declared }</code></td>
+<td>every problem for every scene at once; render refused</td>
+</tr>
+<tr>
+<td>missing narration file</td>
+<td><code>resolve_file</code></td>
+<td><code>ProblemKind::Path</code> with <code>PathError::Missing</code></td>
+<td>names the cell value</td>
+</tr>
+<tr>
+<td>malformed <code>project.yaml</code></td>
+<td><code>settings::load</code></td>
+<td><code>ImportError::Settings</code> (parse) or <code>UnusableSetting</code> (bad value)</td>
+<td>the YAML error, or <code>`field`: "value" is not ...</code></td>
+</tr>
+<tr>
+<td>output already exists</td>
+<td>nothing to detect</td>
+<td>the atomic rename replaces it</td>
+<td>the old film is replaced only after the new one passed every check</td>
+</tr>
+<tr>
+<td>no write permission</td>
+<td><code>create_dir_all</code>, <code>copy_in</code>, rename</td>
+<td><code>MediaError::Io { doing, path, source }</code> or <code>IngestError::Copy { step, ... }</code></td>
+<td>names the step: reading the source, writing the temporary, claiming, renaming (D-188)</td>
+</tr>
+<tr>
+<td>FFmpeg exits non-zero</td>
+<td><code>Finished::ok()</code></td>
+<td><code>MediaError::Exit { program, code, stderr }</code></td>
+<td>the program name, exit code and the tail of stderr</td>
+</tr>
+<tr>
+<td>FFmpeg hangs</td>
+<td><code>wait_until</code> deadline</td>
+<td><code>MediaError::Timeout</code></td>
+<td>killed and reported with the command</td>
+</tr>
+<tr>
+<td>segment wrong shape</td>
+<td><code>assert_matches_profile</code></td>
+<td><code>ProfileMismatch { mismatches }</code></td>
+<td>every differing field listed</td>
+</tr>
+<tr>
+<td>film shorter than planned</td>
+<td><code>concat::validate</code></td>
+<td><code>JoinStopped { segment, ordinal, of }</code></td>
+<td>names the scene; deletes the damaged segment</td>
+</tr>
+<tr>
+<td>TTS tool missing</td>
+<td><code>check_voice_service</code> before work</td>
+<td><code>FilmError::VoiceService { provider, detail, scenes }</code></td>
+<td>stops before any render work</td>
+</tr>
+<tr>
+<td>network failure during TTS</td>
+<td><code>classify</code></td>
+<td>retried; then <code>TtsError::NoAudio</code> with <code>network_hint</code></td>
+<td>"check your internet connection, then any VPN or firewall"</td>
+</tr>
+<tr>
+<td>render interrupted</td>
+<td><code>Cancel</code> flag</td>
+<td><code>FilmError::Cancelled</code></td>
+<td>"stopped", finished segments kept, nothing published</td>
+</tr>
+<tr>
+<td>second render of same project</td>
+<td><code>Lock::take</code></td>
+<td><code>FilmError::Locked { held_by }</code></td>
+<td>names the process holding the lock</td>
+</tr>
+<tr>
+<td>Windows <code>\\?\</code> path breaks concat</td>
+<td>before it happens</td>
+<td><code>without_verbatim_prefix</code></td>
+<td>nothing: prevented (D-142)</td>
+</tr>
+<tr>
+<td>Finder-launched app cannot see Homebrew</td>
+<td><code>tools::locate</code></td>
+<td>nothing: prevented (D-103)</td>
+<td></td>
+</tr>
+<tr>
+<td>damaged <code>settings.yaml</code></td>
+<td><code>machine::read</code></td>
+<td>defaults plus a <code>Remedy</code></td>
+<td>a visible warning; the file is kept as <code>.broken</code></td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="logging-every-failure" class="level2">
+<h2><span class="header-section-number">21.5</span> Logging every failure</h2>
+<p>Every scene failure is recorded as an event at the boundary where it happens (<code>render_scene</code> records "scene failed" itself, so no caller can forget), with the full stderr, into both the project log and <code>runs.csv</code>. <code>still diagnostics export</code> packages the logs with an environment description (D-016).</p>
+</section>
+<section id="rendering-is-never-failed-by-bookkeeping" class="level2">
+<h2><span class="header-section-number">21.6</span> Rendering is never failed by bookkeeping</h2>
+<p>A full disk while writing the log, a locked <code>runs.csv</code>, an unwritable recent-projects list: all are swallowed silently by design. A render must not fail because a spreadsheet could not be updated.</p>
+<div class="callout exercise">
+<p><strong>Exercise 21.1 (Beginner).</strong> In a scratch project, write a <code>scenes.csv</code> row that fills in both <code>text</code> and <code>audio_file</code> for one image. Which <code>ProblemKind</code> does <code>still validate</code> report, and does the render proceed?</p>
+</div>
+</section>
+</section>

@@ -1,0 +1,139 @@
+<section id="learning-rust-through-spoonstill" class="level1">
+<h1><span class="header-section-number">20</span> Learning Rust Through spoonstill</h1>
+<p>Every concept below is tied to real code in this repository. The project uses Rust <strong>edition 2024</strong> with toolchain <strong>1.94.0</strong>, pinned in <code>rust-toolchain.toml</code>.</p>
+<section id="crates-modules-and-the-workspace" class="level2">
+<h2><span class="header-section-number">20.1</span> Crates, modules and the workspace</h2>
+<p><strong>Meaning.</strong> A <em>crate</em> is one compilation unit: a library or a binary. A <em>module</em> is a namespace inside a crate (one <code>.rs</code> file, or a folder with <code>mod.rs</code>). A <em>workspace</em> builds several crates together with one <code>Cargo.lock</code>.</p>
+<p><strong>Where.</strong> The root <code>Cargo.toml</code> declares <code>members = ["crates/*", "apps/desktop"]</code>, shared metadata (<code>version = "0.1.19"</code>, <code>edition = "2024"</code>), shared lints, and the internal crates as <code>[workspace.dependencies]</code>. Each crate opts in with <code>version.workspace = true</code> and <code>[lints] workspace = true</code>. <code>crates/spoonstill-app/src/import/</code> is a module folder with <code>mod.rs</code>, <code>rows.rs</code> and <code>settings.rs</code>.</p>
+<p><strong>Why here.</strong> Crates give <strong>compiler-enforced boundaries</strong>: <code>spoonstill-core</code> literally cannot call process code because it has no dependency that provides it.</p>
+</section>
+<section id="ownership-borrowing-and-references" class="level2">
+<h2><span class="header-section-number">20.2</span> Ownership, borrowing and references</h2>
+<p><strong>Meaning.</strong> Every value has one owner; when the owner goes out of scope, the value is dropped. You can lend a value as a shared reference <code>&amp;T</code> (many readers) or a mutable reference <code>&amp;mut T</code> (one writer), and the compiler checks lends never outlive the owner.</p>
+<p><strong>Where.</strong> <code>Request&lt;'a&gt;</code> in <code>spoonstill-tts</code> holds <code>text: &amp;'a str</code> and <code>voice: &amp;'a str</code>: it <strong>borrows</strong> the narration instead of copying it, so asking for 500 lines allocates nothing. Builder methods like <code>FfmpegCommand::arg(&amp;mut self, ...) -&gt; &amp;mut Self</code> borrow the builder mutably and hand the borrow back, which is what makes <code>.arg(a).arg(b)</code> chains work.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">// crates/spoonstill-tts/src/lib.rs:48-53</span></span>
+<span id="cb1-2"><span class="at">#[</span>derive<span class="at">(</span><span class="bu">Debug</span><span class="op">,</span> <span class="bu">Clone</span><span class="op">,</span> <span class="bu">Copy</span><span class="at">)]</span></span>
+<span id="cb1-3"><span class="kw">pub</span> <span class="kw">struct</span> Request<span class="op">&lt;</span><span class="ot">'a</span><span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb1-4">    <span class="kw">pub</span> text<span class="op">:</span> <span class="op">&amp;</span><span class="ot">'a</span> <span class="dt">str</span><span class="op">,</span></span>
+<span id="cb1-5">    <span class="kw">pub</span> voice<span class="op">:</span> <span class="op">&amp;</span><span class="ot">'a</span> <span class="dt">str</span><span class="op">,</span></span>
+<span id="cb1-6">    <span class="kw">pub</span> settings<span class="op">:</span> <span class="op">&amp;</span><span class="ot">'a</span> [(<span class="dt">String</span><span class="op">,</span> <span class="dt">String</span>)]<span class="op">,</span></span>
+<span id="cb1-7"><span class="op">}</span></span></code></pre></div>
+<p><strong>Moving ownership.</strong> <code>Partial::move_into_place(mut self, to)</code> takes <code>self</code> <strong>by value</strong>: after calling it, the caller no longer has the guard, so it cannot be used twice.</p>
+</section>
+<section id="string-versus-str-pathbuf-versus-path-osstring" class="level2">
+<h2><span class="header-section-number">20.3</span> <code>String</code> versus <code>&amp;str</code>, <code>PathBuf</code> versus <code>&amp;Path</code>, <code>OsString</code></h2>
+<p><strong>Meaning.</strong> <code>String</code> and <code>PathBuf</code> own their data and can grow; <code>&amp;str</code> and <code>&amp;Path</code> are borrowed views. <code>OsString</code> and <code>&amp;OsStr</code> hold whatever bytes the operating system allows, which may not be valid UTF-8.</p>
+<p><strong>Where.</strong> Functions take <code>&amp;Path</code> and store <code>PathBuf</code> (<code>RealPath::real_path(&amp;self, path: &amp;Path) -&gt; Option&lt;PathBuf&gt;</code>). <code>FfmpegCommand</code> stores <code>Vec&lt;OsString&gt;</code> and accepts <code>impl AsRef&lt;OsStr&gt;</code>, so a file name that is not valid UTF-8 still reaches FFmpeg intact; a test pins this signature.</p>
+</section>
+<section id="option-and-result" class="level2">
+<h2><span class="header-section-number">20.4</span> <code>Option</code> and <code>Result</code></h2>
+<p><strong>Meaning.</strong> <code>Option&lt;T&gt;</code> is <code>Some(value)</code> or <code>None</code>. <code>Result&lt;T, E&gt;</code> is <code>Ok(value)</code> or <code>Err(error)</code>. Rust has no exceptions and no null; these types force you to handle absence and failure.</p>
+<p><strong>Where.</strong> <code>parse_f64</code> in <code>probe.rs</code> returns <code>None</code> for <code>N/A</code> or non-finite values, so a missing duration is <code>None</code>, never 0 ("A zero here would become a one-frame segment"). Nearly every operation returns <code>Result</code>.</p>
+<p><strong>Combinators</strong> chain these without nesting:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="co">// crates/spoonstill-core/src/project.rs:946-951 (shape)</span></span>
+<span id="cb2-2">draft<span class="op">.</span>voice<span class="op">.</span>as_deref()<span class="op">.</span>map(<span class="dt">str</span><span class="pp">::</span>trim)<span class="op">.</span>filter(<span class="op">|</span>v<span class="op">|</span> <span class="op">!</span>v<span class="op">.</span>is_empty())</span>
+<span id="cb2-3">    <span class="op">.</span>map_or_else(<span class="op">||</span> default_voice<span class="op">.</span>clone()<span class="op">,</span> <span class="op">|</span>v<span class="op">|</span> VoiceId(v<span class="op">.</span>to_owned()))</span></code></pre></div>
+<p>Read it as: take the cell if present, trim it, ignore it if empty, otherwise use the project default.</p>
+</section>
+<section id="error-propagation-with" class="level2">
+<h2><span class="header-section-number">20.5</span> Error propagation with <code>?</code></h2>
+<p><strong>Meaning.</strong> <code>expr?</code> returns the error early if <code>expr</code> is <code>Err</code>, otherwise unwraps the <code>Ok</code>. If the error types differ, <code>?</code> calls <code>From::from</code> to convert.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb3-1"><span class="co">// crates/spoonstill-media/src/probe.rs:329</span></span>
+<span id="cb3-2"><span class="kw">let</span> finished <span class="op">=</span> command<span class="op">.</span>spawn()<span class="op">?.</span>wait_until(timeout)<span class="op">?.</span>ok()<span class="op">?;</span></span></code></pre></div>
+<p>Three fallible steps in one line. <code>impl From&lt;GeometryError&gt; for MediaError</code> and <code>impl From&lt;MediaError&gt; for TtsError</code> let <code>?</code> cross crate error types automatically.</p>
+</section>
+<section id="enums-with-data-and-pattern-matching" class="level2">
+<h2><span class="header-section-number">20.6</span> Enums with data, and pattern matching</h2>
+<p><strong>Meaning.</strong> A Rust <code>enum</code> can carry different data in each variant. <code>match</code> must handle every variant, so adding one forces every <code>match</code> to be updated.</p>
+<p><strong>Where.</strong> <code>AudioSource { Tts {..}, File {..}, Silent {..} }</code>, <code>ProblemKind</code> (22 variants), <code>FilmEvent</code>, <code>MediaError</code>, the CLI's <code>Command</code>. Match guards appear in the probe retry:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb4-1"><span class="co">// crates/spoonstill-media/src/probe.rs:296-304</span></span>
+<span id="cb4-2"><span class="kw">fn</span> with_retries<span class="op">&lt;</span>T<span class="op">&gt;</span>(<span class="kw">mut</span> attempt<span class="op">:</span> <span class="kw">impl</span> <span class="bu">FnMut</span>() <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span>T<span class="op">,</span> MediaError<span class="op">&gt;</span>)</span>
+<span id="cb4-3">    <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span>T<span class="op">,</span> MediaError<span class="op">&gt;</span></span>
+<span id="cb4-4"><span class="op">{</span></span>
+<span id="cb4-5">    <span class="kw">let</span> <span class="kw">mut</span> tries <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb4-6">    <span class="cf">loop</span> <span class="op">{</span></span>
+<span id="cb4-7">        <span class="cf">match</span> attempt() <span class="op">{</span></span>
+<span id="cb4-8">            <span class="cn">Err</span>(<span class="pp">MediaError::</span>Timeout <span class="op">{</span> <span class="op">..</span> <span class="op">}</span>) <span class="cf">if</span> tries <span class="op">&lt;</span> PROBE_RETRIES <span class="op">=&gt;</span> tries <span class="op">+=</span> <span class="dv">1</span><span class="op">,</span></span>
+<span id="cb4-9">            outcome <span class="op">=&gt;</span> <span class="cf">return</span> outcome<span class="op">,</span></span>
+<span id="cb4-10">        <span class="op">}</span></span>
+<span id="cb4-11">    <span class="op">}</span></span>
+<span id="cb4-12"><span class="op">}</span></span></code></pre></div>
+<p>Edition 2024 adds <strong>let chains</strong>, used throughout: <code>if let Some(x) = earliest &amp;&amp; x &gt; now { ... }</code> (<code>pace.rs</code>). And <strong>let-else</strong>: <code>let Some(item) = items.get(index) else { return };</code> (<code>pool.rs</code>).</p>
+</section>
+<section id="structs-newtypes-and-encapsulation" class="level2">
+<h2><span class="header-section-number">20.7</span> Structs, newtypes and encapsulation</h2>
+<p><code>SceneId(String)</code> wraps a <code>String</code> with a private field and a validating constructor, so an invalid id cannot exist. <code>OutputSpec</code> has private fields and only <code>OutputSpec::new</code>, so every <code>OutputSpec</code> in the program is a legal frame size. <code>Cancel(Arc&lt;AtomicBool&gt;)</code> gives a shared flag a name and a small API.</p>
+</section>
+<section id="traits-and-trait-objects" class="level2">
+<h2><span class="header-section-number">20.8</span> Traits and trait objects</h2>
+<p><strong>Meaning.</strong> A <em>trait</em> is a set of methods a type promises. <code>dyn Trait</code> is a <em>trait object</em>: a pointer to some value of an unknown concrete type that implements the trait, called through a table of function pointers.</p>
+<p><strong>Where.</strong></p>
+<ul>
+<li><code>Provider</code> (TTS): <code>providers()</code> returns <code>Vec&lt;Box&lt;dyn Provider&gt;&gt;</code>.</li>
+<li><code>MediaCheck</code> (probing): <code>&amp;dyn MediaCheck</code> lets validation run with real ffprobe, with <code>SkipProbe</code>, or with the window's memoizing <code>RememberedProbe</code>.</li>
+<li><code>RealPath</code> (core): keeps filesystem access out of core and lets tests use a fake disk.</li>
+<li><code>Diagnostics</code> (logging): <code>Journal</code>, <code>FileLog</code> and <code>ActivityLog</code> all implement it; the media crate records events without knowing where they go.</li>
+<li>Standard traits: <code>impl fmt::Display for MediaError</code>, <code>impl std::error::Error</code>, <code>impl Drop for Partial</code>, <code>impl Default</code>.</li>
+</ul>
+<p><strong>Supertraits and default methods.</strong> <code>pub trait Provider: Send + Sync</code> requires every provider to be thread-safe. <code>default_voice</code> and <code>install</code> have default bodies.</p>
+</section>
+<section id="generics-and-closures" class="level2">
+<h2><span class="header-section-number">20.9</span> Generics and closures</h2>
+<p><strong>Meaning.</strong> Generics write one function for many types; trait bounds say what those types must support. Closures are anonymous functions that can capture variables.</p>
+<p><strong>Where.</strong> The worker pool is generic over the item, result and work:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb5-1"><span class="co">// crates/spoonstill-app/src/pool.rs:134 (signature, abridged)</span></span>
+<span id="cb5-2"><span class="kw">pub</span> <span class="kw">fn</span> run<span class="op">&lt;</span>T<span class="op">:</span> <span class="bu">Sync</span><span class="op">,</span> R<span class="op">:</span> <span class="bu">Send</span><span class="op">,</span> F<span class="op">:</span> <span class="bu">Fn</span>(<span class="dt">usize</span><span class="op">,</span> <span class="op">&amp;</span>T) <span class="op">-&gt;</span> R <span class="op">+</span> <span class="bu">Sync</span><span class="op">&gt;</span>(</span>
+<span id="cb5-3">    items<span class="op">:</span> <span class="op">&amp;</span>[T]<span class="op">,</span> jobs<span class="op">:</span> <span class="dt">usize</span><span class="op">,</span> cancel<span class="op">:</span> <span class="op">&amp;</span>Cancel<span class="op">,</span> work<span class="op">:</span> F<span class="op">,</span></span>
+<span id="cb5-4">) <span class="op">-&gt;</span> <span class="dt">Vec</span><span class="op">&lt;</span>Outcome<span class="op">&lt;</span>R<span class="op">&gt;&gt;</span></span></code></pre></div>
+<p><code>T: Sync</code> because many threads read the items; <code>R: Send</code> because results move between threads; <code>F: Fn + Sync</code> because many threads call the same closure. <code>impl FnOnce(&amp;Path) -&gt; Result&lt;String, MediaError&gt;</code> lets <code>ImageHashes::of</code> accept "how to read a file" from its caller, so tests can count reads. <code>fn(&amp;str) -&gt; bool</code> (a plain function pointer) passes "is this file ours?" into the shared cache sweep.</p>
+</section>
+<section id="iterators" class="level2">
+<h2><span class="header-section-number">20.10</span> Iterators</h2>
+<p>Chains like <code>zip</code>, <code>filter_map</code>, <code>partition</code>, <code>max_by_key</code>, <code>find</code> and <code>collect</code> replace manual loops. In <code>ingest::assign</code>, files are split into those that may be paired by position and those that may not with <code>.partition(|path| may_guess(path))</code>.</p>
+</section>
+<section id="concurrency-threads-atomics-mutexes-condition-variables-channels" class="level2">
+<h2><span class="header-section-number">20.11</span> Concurrency: threads, atomics, mutexes, condition variables, channels</h2>
+<p>The project uses <strong>no async runtime</strong> in its core (the desktop app uses Tauri's runtime only at the edge). The unit of work is a child process that runs for seconds, so plain threads are simpler.</p>
+<ul>
+<li><strong>Scoped threads.</strong> <code>std::thread::scope</code> (in <code>pool.rs</code>) lets worker threads borrow the caller's data; the scope joins every thread before it returns, so no <code>Arc</code> or <code>'static</code> bound is needed.</li>
+<li><strong>Atomics.</strong> <code>AtomicUsize::fetch_add</code> hands out work indices without a lock; <code>AtomicBool</code> is the cancel flag and the "stage one failed" flag; <code>static WRITER: AtomicU64</code> makes temporary file names unique.</li>
+<li><strong><code>Mutex</code> and <code>Condvar</code>.</strong> <code>pipeline</code> hands stage-one results to stage-two workers through a <code>Mutex&lt;Handoff&gt;</code> and a <code>Condvar</code>; a waiting worker sleeps until notified. The TTS <code>Gate</code> uses the same pair.</li>
+<li><strong>Channels.</strong> <code>std::sync::mpsc</code> carries FFmpeg progress from a reader thread to the waiting loop.</li>
+<li><strong>Lazy globals.</strong> <code>OnceLock</code> creates the process-wide TTS gate and the per-key lock map on first use, without <code>unsafe</code>.</li>
+<li><strong>Poison recovery.</strong> <code>.lock().unwrap_or_else(PoisonError::into_inner)</code> keeps working after another thread panicked while holding a lock.</li>
+</ul>
+</section>
+<section id="raii-and-drop" class="level2">
+<h2><span class="header-section-number">20.12</span> RAII and <code>Drop</code></h2>
+<p><strong>Meaning.</strong> A value can run code when it is dropped. That makes cleanup automatic and impossible to forget, even on an early <code>?</code> return or a panic.</p>
+<p><strong>Where.</strong> <code>Partial</code> deletes a temporary unless the rename succeeded; <code>Captions</code> deletes caption band files; <code>Scratch</code> deletes TTS pieces; <code>Slot</code> frees a TTS pace slot; <code>Lock</code> releases the render lock; <code>ActiveRender</code> (desktop) frees the window's render slot. D-115 and D-178 are both bugs where cleanup written as "a statement after the work" was skipped by <code>?</code>.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb6-1"><span class="co">// crates/spoonstill-media/src/atomic.rs:220-226</span></span>
+<span id="cb6-2"><span class="kw">impl</span> <span class="bu">Drop</span> <span class="cf">for</span> Partial <span class="op">{</span></span>
+<span id="cb6-3">    <span class="kw">fn</span> drop(<span class="op">&amp;</span><span class="kw">mut</span> <span class="kw">self</span>) <span class="op">{</span></span>
+<span id="cb6-4">        <span class="cf">if</span> <span class="op">!</span><span class="kw">self</span><span class="op">.</span>keep <span class="op">{</span></span>
+<span id="cb6-5">            <span class="kw">let</span> _ <span class="op">=</span> <span class="pp">std::fs::</span>remove_file(<span class="op">&amp;</span><span class="kw">self</span><span class="op">.</span>path)<span class="op">;</span></span>
+<span id="cb6-6">        <span class="op">}</span></span>
+<span id="cb6-7">    <span class="op">}</span></span>
+<span id="cb6-8"><span class="op">}</span></span></code></pre></div>
+</section>
+<section id="serialization-with-serde" class="level2">
+<h2><span class="header-section-number">20.13</span> Serialization with serde</h2>
+<p><code>#[derive(Deserialize)]</code> with <code>#[serde(deny_unknown_fields)]</code> turns <code>project.yaml</code> (via <code>serde_yaml_ng</code>) and <code>scenes.csv</code> (via <code>csv</code>) into structs and rejects typos. <code>serde_json</code> parses ffprobe's output. In the desktop app, <code>#[derive(Serialize)]</code> turns Rust views into JSON for the page, and <code>#[serde(tag = "kind", rename_all = "camelCase")]</code> produces <code>{"kind":"segment", ...}</code> progress messages.</p>
+</section>
+<section id="process-spawning-and-the-filesystem" class="level2">
+<h2><span class="header-section-number">20.14</span> Process spawning and the filesystem</h2>
+<p><code>std::process::Command</code> with piped stdio (Chapter 16); <code>std::fs::rename</code> (atomic replace on macOS and Windows); <code>OpenOptions::new().create_new(true)</code> to claim a name only if it does not exist; <code>File::try_lock</code> and <code>File::lock</code> (stable since Rust 1.89) for the render lock and <code>runs.csv</code>; <code>std::fs::canonicalize</code> for path containment.</p>
+</section>
+<section id="conditional-compilation" class="level2">
+<h2><span class="header-section-number">20.15</span> Conditional compilation</h2>
+<p><code>#[cfg(windows)]</code>, <code>#[cfg(target_os = "macos")]</code>, <code>cfg!(windows)</code> as an expression, <code>#[cfg(test)] mod tests</code> in every file, <code>#![cfg(unix)]</code> for a whole test file, and <code>#[cfg_attr(not(windows), allow(dead_code))]</code> so a Windows-only helper does not trigger a warning-as-error on macOS. The project's rule: compile both platform variants on every platform where possible, so tests for Windows quoting run on a Mac.</p>
+</section>
+<section id="lints-and-attributes" class="level2">
+<h2><span class="header-section-number">20.16</span> Lints and attributes</h2>
+<p><code>#[must_use]</code> on pure functions, <code>#![warn(missing_docs)]</code> in the libraries, targeted <code>#[allow(clippy::cast_precision_loss)]</code>, and at workspace level <code>unsafe_code = "forbid"</code> and <code>clippy::all = "deny"</code>.</p>
+<div class="callout exercise">
+<p><strong>Exercise 20.1 (Intermediate).</strong> In <code>pool.rs</code>, <code>run</code> stores results in a <code>Mutex&lt;Vec&lt;Option&lt;R&gt;&gt;&gt;</code>. Why is a <code>Mutex</code> needed if each worker writes a different index? What would the compiler say without it?</p>
+<p><strong>Exercise 20.2 (Advanced).</strong> Explain why <code>let _lock = Lock::take(...)?;</code> holds the lock until the end of the function, but <code>let _ = Lock::take(...)?;</code> would release it immediately.</p>
+</div>
+</section>
+</section>

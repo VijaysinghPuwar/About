@@ -1,0 +1,157 @@
+<section id="manifest-and-coverage-system" class="level1">
+<h1><span class="header-section-number">9</span> Manifest and Coverage System</h1>
+<section id="the-staging-folder" class="level2">
+<h2><span class="header-section-number">9.1</span> The staging folder</h2>
+<p>Every job gets a folder <code>staging/&lt;job_id&gt;/</code> inside the app’s data folder (Chapter 13):</p>
+<pre class="text"><code>staging/4f1c9e.../
+|-- source.txt           the cleaned text, exactly as chunked
+|-- manifest.json        job metadata and one record per saved chunk
+|-- chunk_000000.mp3
+|-- chunk_000001.mp3
+`-- ...</code></pre>
+<p><code>source.txt</code> is the reference against which everything is checked. Storing the cleaned text, instead of the user’s original, is what makes the ranges meaningful: a range <code>[4671, 7882)</code> refers to characters of <code>source.txt</code>.</p>
+</section>
+<section id="the-manifest" class="level2">
+<h2><span class="header-section-number">9.2</span> The manifest</h2>
+<p><code>ChunkStore._save_manifest</code> (<code>chunk_store.py:810-838</code>) writes this structure (schema version 2):</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><span class="fu">{</span></span>
+<span id="cb2-2">  <span class="dt">"schema_version"</span><span class="fu">:</span> <span class="dv">2</span><span class="fu">,</span></span>
+<span id="cb2-3">  <span class="dt">"job_id"</span><span class="fu">:</span> <span class="st">"4f1c9e..."</span><span class="fu">,</span></span>
+<span id="cb2-4">  <span class="dt">"voice"</span><span class="fu">:</span> <span class="st">"en-US-AndrewNeural"</span><span class="fu">,</span></span>
+<span id="cb2-5">  <span class="dt">"rate"</span><span class="fu">:</span> <span class="st">"+0%"</span><span class="fu">,</span></span>
+<span id="cb2-6">  <span class="dt">"volume"</span><span class="fu">:</span> <span class="st">"+0%"</span><span class="fu">,</span></span>
+<span id="cb2-7">  <span class="dt">"output_path"</span><span class="fu">:</span> <span class="st">"/Users/you/Desktop/book.mp3"</span><span class="fu">,</span></span>
+<span id="cb2-8">  <span class="dt">"text_hash"</span><span class="fu">:</span> <span class="st">"&lt;sha256 of source.txt, first 16 hex chars&gt;"</span><span class="fu">,</span></span>
+<span id="cb2-9">  <span class="dt">"total_chars"</span><span class="fu">:</span> <span class="dv">701783</span><span class="fu">,</span></span>
+<span id="cb2-10">  <span class="dt">"chars_consumed"</span><span class="fu">:</span> <span class="dv">268114</span><span class="fu">,</span></span>
+<span id="cb2-11">  <span class="dt">"chunks"</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb2-12">    <span class="fu">{</span> <span class="dt">"index"</span><span class="fu">:</span> <span class="dv">0</span><span class="fu">,</span> <span class="dt">"start_char"</span><span class="fu">:</span> <span class="dv">0</span><span class="fu">,</span> <span class="dt">"end_char"</span><span class="fu">:</span> <span class="dv">1141</span><span class="fu">,</span></span>
+<span id="cb2-13">      <span class="dt">"text_hash"</span><span class="fu">:</span> <span class="st">"&lt;sha256[:16] of source[0:1141]&gt;"</span><span class="fu">,</span></span>
+<span id="cb2-14">      <span class="dt">"file"</span><span class="fu">:</span> <span class="st">"chunk_000000.mp3"</span><span class="fu">,</span> <span class="dt">"audio_bytes"</span><span class="fu">:</span> <span class="dv">433152</span><span class="fu">,</span></span>
+<span id="cb2-15">      <span class="dt">"retries"</span><span class="fu">:</span> <span class="dv">0</span><span class="fu">,</span> <span class="dt">"used_recovery"</span><span class="fu">:</span> <span class="kw">false</span><span class="fu">,</span> <span class="dt">"sub_ranges"</span><span class="fu">:</span> <span class="ot">[[</span><span class="dv">0</span><span class="ot">,</span> <span class="dv">1141</span><span class="ot">]]</span><span class="fu">,</span></span>
+<span id="cb2-16">      <span class="dt">"completed_at"</span><span class="fu">:</span> <span class="fl">1759650000.0</span> <span class="fu">}</span></span>
+<span id="cb2-17">  <span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb2-18">  <span class="dt">"chunks_completed"</span><span class="fu">:</span> <span class="ot">[</span><span class="dv">0</span><span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb2-19">  <span class="dt">"status"</span><span class="fu">:</span> <span class="st">"running"</span><span class="fu">,</span></span>
+<span id="cb2-20">  <span class="dt">"failed_at_chunk"</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span></span>
+<span id="cb2-21">  <span class="dt">"failed_at_chunk_total"</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span></span>
+<span id="cb2-22">  <span class="dt">"expected_duration_min_s"</span><span class="fu">:</span> <span class="fl">31899.2</span><span class="fu">,</span></span>
+<span id="cb2-23">  <span class="dt">"expected_duration_max_s"</span><span class="fu">:</span> <span class="fl">58481.9</span><span class="fu">,</span></span>
+<span id="cb2-24">  <span class="dt">"measured_duration_s"</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span></span>
+<span id="cb2-25">  <span class="dt">"created_at"</span><span class="fu">:</span> <span class="fl">1759649000.0</span><span class="fu">,</span></span>
+<span id="cb2-26">  <span class="dt">"updated_at"</span><span class="fu">:</span> <span class="fl">1759650000.0</span></span>
+<span id="cb2-27"><span class="fu">}</span></span></code></pre></div>
+<p>The field names and structure are real; the values are illustrative. Note <code>sub_ranges</code>: even a chunk that succeeded first time records its own range as a single sub-range, because <code>_process_chunk</code> reports the ranges “that actually produced audio”.</p>
+</section>
+<section id="the-invariants" class="level2">
+<h2><span class="header-section-number">9.3</span> The invariants</h2>
+<p>The manifest is only useful because a few rules always hold, and are checked rather than assumed:</p>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Invariant</th>
+<th>Enforced in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0 &lt;= start_char &lt; end_char &lt;= total_chars</code></td>
+<td><code>record_chunk</code> refuses to save otherwise</td>
+</tr>
+<tr>
+<td>sub-ranges start at <code>start_char</code>, touch end to end, stop at <code>end_char</code></td>
+<td><code>record_chunk</code>, <code>coverage_report</code>, <code>_validate_chunk_records</code></td>
+</tr>
+<tr>
+<td>a chunk’s file exists and is exactly <code>audio_bytes</code> long</td>
+<td><code>coverage_report</code>, resume validation, <code>finalize</code></td>
+</tr>
+<tr>
+<td>a chunk’s <code>text_hash</code> equals the hash of <code>source[start:end]</code></td>
+<td><code>coverage_report</code>, resume validation</td>
+</tr>
+<tr>
+<td><code>source.txt</code> has <code>total_chars</code> characters and the job’s <code>text_hash</code></td>
+<td><code>coverage_report</code> (both); <code>try_resume</code> (hash)</td>
+</tr>
+<tr>
+<td><code>chars_consumed</code> never exceeds the end of the trusted prefix</td>
+<td><code>update_chars_consumed</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>Hashes are SHA-256 truncated to 16 hex characters (64 bits). They are not a security measure; they detect accidental mismatch, such as a resume against a different text.</p>
+</section>
+<section id="coverage-what-happens-when-chunk-2-fails" class="level2">
+<h2><span class="header-section-number">9.4</span> Coverage: what happens when chunk 2 fails</h2>
+<p>Coverage is a question about intervals: do the recorded ranges tile <code>[0, total_chars)</code> exactly, with no gaps and no overlaps? Figure 9.1 shows the normal case and the recovery case together.</p>
+<figure id="fig-manifest">
+<img src="/books/setuptts/media/file8.webp" alt="Seven chunks tiling a 20,000-character source. Chunk 2 exhausted its retries and was split into three recovery sub-ranges that together cover exactly its own range, characters 4,671 to 7,882. The JSON is an example manifest entry." width="1680" height="864" loading="lazy" decoding="async">
+<figcaption><strong>Figure 9.1.</strong> Seven chunks tiling a 20,000-character source. Chunk 2 exhausted its retries and was split into three recovery sub-ranges that together cover exactly its own range, characters 4,671 to 7,882. The JSON is an example manifest entry.</figcaption>
+</figure>
+<p>Suppose chunk 2, covering <code>[4671, 7882)</code>, keeps failing:</p>
+<ol type="1">
+<li><strong>Retries.</strong> Up to five attempts (two for no-audio), with back-off. Nothing is written.</li>
+<li><strong>Split.</strong> The range is subdivided at sentence or clause boundaries into, say, <code>[4671, 5760)</code>, <code>[5760, 6830)</code>, <code>[6830, 7882)</code>. Each runs the full attempt machine.</li>
+<li><strong>If all three succeed</strong>, their audio is concatenated and saved as <code>chunk_000002.mp3</code>, with <code>used_recovery: true</code> and those three <code>sub_ranges</code>. The range of record is still <code>[4671, 7882)</code>. Coverage is unaffected; chunk 3 starts at 7882 as before.</li>
+<li><strong>If a sub-range still fails</strong> and cannot be split further, <code>_ChunkError</code> is raised. Chunks 0 and 1 stay on disk, the manifest becomes <code>failed</code> with <code>failed_at_chunk: 3</code> (one-based, as displayed), and Resume is offered.</li>
+<li><strong>On resume</strong>, chunks 0 and 1 validate, the cursor restarts at 4671, and chunk 2 is attempted again from scratch, often successfully a few minutes later.</li>
+</ol>
+<p>The old bug would have saved chunk 2 with only the audio of the two sub-ranges that worked. Its recorded range would still say <code>[4671, 7882)</code>, so coverage would have looked complete while about a thousand characters were never spoken. Recording <code>sub_ranges</code> and requiring every sub-range to have produced audio is what makes that impossible now. <code>test_irrecoverable_subchunk_fails_closed_instead_of_skipping</code> is the regression test.</p>
+</section>
+<section id="the-coverage-report" class="level2">
+<h2><span class="header-section-number">9.5</span> The coverage report</h2>
+<p><code>ChunkStore.coverage_report</code> (<code>chunk_store.py:544-643</code>) sorts records by start position and walks them, collecting:</p>
+<ul>
+<li><strong>gaps</strong> and <strong>overlaps</strong> between consecutive ranges, plus a trailing gap if the last range stops short;</li>
+<li><strong>missing_files</strong> (absent or empty) and <strong>invalid_files</strong> (size differs from <code>audio_bytes</code>);</li>
+<li><strong>invalid_ranges</strong> (out of bounds, empty, or bad sub-ranges);</li>
+<li><strong>duplicate_indexes</strong> and <strong>text_hash_mismatches</strong>;</li>
+<li><strong>source_errors</strong> if <code>source.txt</code> is missing, the wrong length, or the wrong hash.</li>
+</ul>
+<p><code>is_complete</code> (<code>chunk_store.py:105-119</code>) is true only if every list is empty, <code>covered_chars == total_chars</code>, every recorded chunk has audio, and at least one chunk exists. The worker checks it right after the last chunk; <code>finalize</code> checks it again before writing a byte.</p>
+</section>
+<section id="resume-validation" class="level2">
+<h2><span class="header-section-number">9.6</span> Resume validation</h2>
+<p>Resume uses a stricter rule than coverage, because it must decide what to <strong>trust</strong> after a crash. <code>_validate_chunk_records</code> (<code>chunk_store.py:914-1003</code>) walks records in index order and stops at the first one that has the wrong index, does not start where the previous one ended, has an empty or out-of-bounds range, bad sub-ranges, a missing or wrong-sized file, or a text hash that does not match. Everything from that point on is dropped, even records that look fine.</p>
+<figure id="fig-resume">
+<img src="/books/setuptts/media/file9.webp" alt="After a crash with chunk 3 damaged, only chunks 0 to 2 are trusted. Chunks 4 and 5 are regenerated, because trusting them would require reasoning about a gap." width="1680" height="720" loading="lazy" decoding="async">
+<figcaption><strong>Figure 9.2.</strong> After a crash with chunk 3 damaged, only chunks 0 to 2 are trusted. Chunks 4 and 5 are regenerated, because trusting them would require reasoning about a gap.</figcaption>
+</figure>
+<p>Throwing away apparently good chunks costs a few minutes of regeneration. In return the resume position is a single, simple number, <code>_trusted_cursor_from_records</code>, and there is never a question of what lies between two trusted islands.</p>
+</section>
+<section id="manifest-status" class="level2">
+<h2><span class="header-section-number">9.7</span> Manifest status</h2>
+<figure id="fig-states">
+<img src="/books/setuptts/media/file10.webp" alt="Status values in manifest.json. “interrupted” is never written by a worker; it is how the resume listing labels a “running” manifest whose worker no longer exists." width="1680" height="864" loading="lazy" decoding="async">
+<figcaption><strong>Figure 9.3.</strong> Status values in manifest.json. “interrupted” is never written by a worker; it is how the resume listing labels a “running” manifest whose worker no longer exists.</figcaption>
+</figure>
+<p>The <code>running</code> → <code>interrupted</code> relabelling has a subtlety. The resume listing runs on the UI thread every time a job starts, finishes or fails, and it “repairs” manifests still marked running. For a job that <strong>is</strong> running in this process, that used to flip its manifest to interrupted underneath the worker and offer it for resume while it was being generated. The fix is a process-wide set of live staging folders, <code>_LIVE_DIRS</code>, guarded by a lock (<code>chunk_store.py:189-210</code>). <code>create</code> and <code>try_resume</code> add a folder; terminal states and <code>release()</code> remove it; the listing skips live folders.</p>
+</section>
+<section id="atomic-writes" class="level2">
+<h2><span class="header-section-number">9.8</span> Atomic writes</h2>
+<p>Every manifest and chunk write goes through <code>_atomic_write_bytes</code> (<code>chunk_store.py:1055-1076</code>):</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb3-1">tmp <span class="op">=</span> path.with_name(<span class="ss">f"</span><span class="sc">{</span>path<span class="sc">.</span>name<span class="sc">}</span><span class="ss">.</span><span class="sc">{</span>uuid<span class="sc">.</span>uuid4()<span class="sc">.</span><span class="bu">hex</span>[:<span class="dv">8</span>]<span class="sc">}</span><span class="ss">.tmp"</span>)</span>
+<span id="cb3-2"><span class="cf">with</span> <span class="bu">open</span>(tmp, <span class="st">"wb"</span>) <span class="im">as</span> fh:</span>
+<span id="cb3-3">    fh.write(payload)</span>
+<span id="cb3-4">    fh.flush()</span>
+<span id="cb3-5">    os.fsync(fh.fileno())</span>
+<span id="cb3-6">_replace_with_retry(tmp, path)</span></code></pre></div>
+<p>Each line prevents a specific failure:</p>
+<ul>
+<li><strong>Write to a temporary file, then rename.</strong> <code>os.replace</code> is atomic on the same filesystem: a reader sees either the old file or the new one, never half of one.</li>
+<li><strong>A unique temporary name per call.</strong> The UI thread (listing resume candidates) and a worker can both rewrite the same manifest. A shared <code>.tmp</code> name let one writer rename the other’s half-written file.</li>
+<li><strong><code>fsync</code> before the rename.</strong> Without it, a power cut can leave a file of the right size containing zeros, which resume validation (size-based) would accept as a real chunk.</li>
+<li><strong>Rename with retries on Windows.</strong> Antivirus scanners, search indexers and sync clients open new files for a moment; a rename in that window fails with a sharing violation. Up to five tries with growing short sleeps turn that into a non-event.</li>
+</ul>
+</section>
+<section id="legacy-manifests-and-cleanup" class="level2">
+<h2><span class="header-section-number">9.9</span> Legacy manifests and cleanup</h2>
+<p>Manifests from before the coverage system (schema version 1) have a list of completed indexes but no ranges. <code>_load_manifest</code> discards their progress rather than “silently trusting unverifiable history” (<code>chunk_store.py:896-911</code>).</p>
+<p>Old staging folders are swept by <code>cleanup_stale_staging</code> at the start of each job: folders that cannot be resumed go after 7 days, resumable ones after <strong>60</strong> days, and the folder being resumed is never touched. Before v1.6.0 the limit was a week for everything, which “silently discards generated audio the user can still see and expects to continue”.</p>
+</section>
+</section>

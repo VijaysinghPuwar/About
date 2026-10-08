@@ -32,12 +32,13 @@ const CATEGORY_ICONS: Record<string, typeof Compass> = {
   Projects: Folder,
 };
 
-function buildCommands(isAuthed: boolean, goLogin: () => void): Command[] {
+function buildCommands(isAuthed: boolean, goLogin: () => void, go: (path: string) => void): Command[] {
   const nav: Command[] = [
     { category: 'Navigation', label: 'Go to Home', keywords: 'hero top', action: () => scrollTo('home') },
     { category: 'Navigation', label: 'Go to Projects', keywords: 'work portfolio', action: () => scrollTo('projects') },
     { category: 'Navigation', label: 'Go to Experience', keywords: 'timeline education', action: () => scrollTo('experience') },
     { category: 'Navigation', label: 'Go to Contact', keywords: 'email message', action: () => scrollTo('contact') },
+    { category: 'Navigation', label: 'Go to Books', hint: 'Library', keywords: 'books read guides library epub', action: () => go('/books') },
   ];
 
   const actions: Command[] = [
@@ -129,7 +130,7 @@ export function CommandPalette() {
 
   const isAuthed = !!user;
   const commands = useMemo(
-    () => buildCommands(isAuthed, () => navigate(loginHref())),
+    () => buildCommands(isAuthed, () => navigate(loginHref()), path => navigate(path)),
     [isAuthed, navigate],
   );
 

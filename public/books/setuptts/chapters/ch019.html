@@ -1,0 +1,88 @@
+<section id="security-and-privacy" class="level1">
+<h1><span class="header-section-number">14</span> Security and Privacy</h1>
+<p>This chapter describes what the implementation does. It is not a privacy policy and makes no promises the code does not keep.</p>
+<section id="what-leaves-your-computer" class="level2">
+<h2><span class="header-section-number">14.1</span> What leaves your computer</h2>
+<div class="table-scroll" tabindex="0"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Data</th>
+<th>Sent to</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>The full cleaned text</strong>, chunk by chunk</td>
+<td><code>speech.platform.bing.com</code> (Microsoft)</td>
+<td>every generation</td>
+</tr>
+<tr>
+<td>A sample of about 220 characters from the start of the text</td>
+<td>same</td>
+<td>startup check, texts of 4,000+ characters</td>
+</tr>
+<tr>
+<td>A fixed preview sentence (“Hello! This is a preview…”)</td>
+<td>same</td>
+<td>Preview Voice</td>
+</tr>
+<tr>
+<td>Voice name, rate, volume</td>
+<td>same</td>
+<td>every request</td>
+</tr>
+<tr>
+<td>A request for the voice list</td>
+<td>same</td>
+<td>start-up, Retry, and before each job (cached 15 minutes)</td>
+</tr>
+<tr>
+<td>Your IP address, and request headers that edge-tts sets to resemble the Edge browser, including a randomly generated <code>muid</code> cookie</td>
+<td>same</td>
+<td>every connection</td>
+</tr>
+</tbody>
+</table></div>
+<p>Nothing else is sent anywhere. A search of <code>app/</code> finds no other host names, no analytics, no crash reporting and no update check.</p>
+<div class="callout lesson">
+<p><strong>What this means in practice.</strong> Anything you convert is transmitted to Microsoft’s service and processed there. How Microsoft handles that text is governed by Microsoft, not by SetupTTS, and SetupTTS uses the service without an official API agreement. Do not convert text you are not willing to send to a third party.</p>
+</div>
+</section>
+<section id="what-stays-local" class="level2">
+<h2><span class="header-section-number">14.2</span> What stays local</h2>
+<ul>
+<li>The text in the editor, and the cleaned text in <code>staging/&lt;job&gt;/source.txt</code>, <strong>in plain text</strong>, until the job completes (folder deleted) or is swept: 7 days for non-resumable folders, 60 days for resumable ones. Discarding saved progress from the Resume menu deletes it immediately.</li>
+<li>The first 80 characters of each completed job’s text, its voice, rate and output path, in <code>history.db</code>, until removed from history.</li>
+<li>Logs, which record file paths, voice names, character counts and ranges, timings and error causes. SetupTTS’s own log statements do not write the text itself.</li>
+<li>Generated audio: chunk files in staging, the final MP3 in the folder you chose, and, if the duration check fails, a <code>name (incomplete).mp3</code> beside it.</li>
+<li>The preview’s temporary MP3, created in the system temp folder and deleted after playback or on stop.</li>
+</ul>
+<p>None of this is encrypted by SetupTTS; it is protected only by your operating-system account.</p>
+</section>
+<section id="credentials" class="level2">
+<h2><span class="header-section-number">14.3</span> Credentials</h2>
+<p>SetupTTS has <strong>no API keys, accounts or secrets</strong> of its own, and stores none. The edge-tts library contains a public client token constant that identifies it as an Edge-style client, and computes a short-lived <code>Sec-MS-GEC</code> value from the current time. Neither belongs to the user, and this book deliberately does not reproduce them.</p>
+</section>
+<section id="network-security" class="level2">
+<h2><span class="header-section-number">14.4</span> Network security</h2>
+<ul>
+<li><strong>TLS is always verified.</strong> <code>build_ssl_context</code> starts from certifi’s CA bundle and adds the operating system’s store. Verification is never turned off. <code>tests/test_network_setup.py</code> checks that edge-tts uses this context for both the voice list and synthesis, and the packaged self-test checks it again inside each built app.</li>
+<li><strong>The trade-off of trusting the system store.</strong> It means trusting any root the machine already trusts, including the roots that antivirus HTTPS scanners and corporate proxies install to inspect traffic. That is what makes SetupTTS work in those environments, and it also means such software can read the text in transit, exactly as it can for the user’s browser.</li>
+<li><strong>Proxies.</strong> If no proxy environment variables are set, <code>system_proxy</code> reads the operating system’s proxy settings (on Windows, the registry via <code>urllib</code>), skips it if the speech host is on the bypass list, and passes only <code>http://</code> proxies to aiohttp, which cannot tunnel through SOCKS. A broken proxy setting is logged and ignored rather than stopping the app.</li>
+</ul>
+</section>
+<section id="distribution-security" class="level2">
+<h2><span class="header-section-number">14.5</span> Distribution security</h2>
+<p>The macOS app is not signed or notarised and the Windows installer and EXE are not code-signed, so macOS Gatekeeper and Windows SmartScreen warn on first launch and users must override them. Practically, this means a user cannot verify the publisher cryptographically; trust rests on downloading from the project’s GitHub Releases page. The release workflow builds from the tagged source on GitHub-hosted runners with pinned dependency versions, which narrows but does not remove supply-chain risk. <code>scripts/entitlements.plist</code> exists for a future signed build but is not referenced by <code>setuptts.spec</code> (<code>entitlements_file=None</code>).</p>
+</section>
+<section id="local-safety-measures" class="level2">
+<h2><span class="header-section-number">14.6</span> Local safety measures</h2>
+<p>A few smaller choices reduce local risk: output names that Windows reserves for devices (<code>CON</code>, <code>NUL</code>, <code>COM1</code>…) are refused; writes go through temporary files so an interrupted write never corrupts an existing file; the single-instance socket is local-only and named after a hash of the data folder; and an existing output file is never replaced without asking.</p>
+</section>
+</section>

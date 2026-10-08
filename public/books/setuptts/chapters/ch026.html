@@ -1,0 +1,72 @@
+<section id="engineering-lessons" class="level1">
+<h1><span class="header-section-number">19</span> Engineering Lessons</h1>
+<p>Each section names a concept, shows where SetupTTS uses it, and says why it matters beyond this project.</p>
+<section id="asynchronous-programming" class="level2">
+<h2><span class="header-section-number">19.1</span> Asynchronous programming</h2>
+<p><strong>The idea.</strong> Code that mostly waits on I/O can wait cooperatively: an <code>await</code> hands control back to an event loop, which runs something else until the data arrives. <strong>In SetupTTS.</strong> edge-tts’s <code>stream()</code> is an async generator. The worker consumes it inside <code>asyncio.wait_for</code> so that every wait has a deadline, and cancellation arrives as a <code>CancelledError</code> at the next <code>await</code>. <strong>Why it matters.</strong> Async code makes timeouts and cancellation composable. <code>_consume_stream</code> expresses three different timeouts in a few lines because each <code>await</code> is a natural place to stop.</p>
+</section>
+<section id="gui-architecture-and-the-event-loop" class="level2">
+<h2><span class="header-section-number">19.2</span> GUI architecture and the event loop</h2>
+<p><strong>The idea.</strong> A GUI is a loop that processes events: input, timers, repaints, posted calls. Anything slow inside a handler freezes the window. <strong>In SetupTTS.</strong> Widgets only read inputs, validate them and submit jobs. Work happens elsewhere; results come back as events. Heavy UI-side computations are debounced (250 ms editor settle, 150 ms search) or sampled (120,000-character guidance profile). <strong>Why it matters.</strong> Responsiveness is an architectural property, not an optimisation. It comes from deciding what may run on the UI thread at all.</p>
+</section>
+<section id="worker-threads" class="level2">
+<h2><span class="header-section-number">19.3</span> Worker threads</h2>
+<p><strong>The idea.</strong> Move blocking or long-running work to another thread and communicate with messages, not shared state. <strong>In SetupTTS.</strong> Each <code>QThread</code> owns its own asyncio loop, its own staging folder and its own output path. The only shared mutable structure, the live-folder set, has a lock. Thread objects are kept alive until their OS thread exits. <strong>Why it matters.</strong> Most threading bugs come from sharing. Designing for isolation removes whole classes of bugs before locks are even considered.</p>
+</section>
+<section id="event-driven-programming" class="level2">
+<h2><span class="header-section-number">19.4</span> Event-driven programming</h2>
+<p><strong>The idea.</strong> Components announce what happened and others react, instead of calling each other directly. <strong>In SetupTTS.</strong> Qt signals connect worker to queue to panel to row widget. The worker never knows a progress bar exists. Queued connections make cross-thread delivery safe automatically. <strong>Why it matters.</strong> Loose coupling made it possible to rebuild the Active Jobs display in v1.6.0 without touching the worker.</p>
+</section>
+<section id="network-programming" class="level2">
+<h2><span class="header-section-number">19.5</span> Network programming</h2>
+<p><strong>The idea.</strong> Networks fail partially: connections succeed then stall, servers accept requests and never answer, streams end early. <strong>In SetupTTS.</strong> Layered timeouts for connect, first byte, idle gap and whole operation; a fresh connection per attempt; failure classification into kinds that each get a different response. <strong>Why it matters.</strong> A single “timeout = 30 s” is wrong for every request except the one it was tuned on. The 65-second floor that killed slow voices is the cautionary tale.</p>
+</section>
+<section id="retries-and-exponential-backoff" class="level2">
+<h2><span class="header-section-number">19.6</span> Retries and exponential backoff</h2>
+<p><strong>The idea.</strong> Retry transient failures, waiting longer each time so a struggling service gets room to recover. <strong>In SetupTTS.</strong> Five attempts with 2, 4, 8, 16 s waits; early exit after two for failures that repetition rarely fixes; a longer deadline after a mid-stream cut; and, when retrying stops helping, a different request (a split) rather than the same one again. <strong>Why it matters.</strong> A retry policy is a set of decisions about which failures are transient. Treating all failures the same either gives up too early or wastes minutes on hopeless requests.</p>
+</section>
+<section id="fault-tolerance-and-failing-closed" class="level2">
+<h2><span class="header-section-number">19.7</span> Fault tolerance and failing closed</h2>
+<p><strong>The idea.</strong> A fault-tolerant system keeps working through faults, and when it cannot, it stops in a safe state. <strong>In SetupTTS.</strong> Recoverable faults are absorbed at the smallest scope: an attempt, a chunk, a sub-range. Unrecoverable ones stop the job with all finished work kept. Nothing incomplete is ever published under the user’s file name. <strong>Why it matters.</strong> The project’s history (Chapter 8) shows a well-meant fail-open choice producing 3-hour audiobooks from 10-hour texts. Visible failures are cheap; invisible ones destroy trust.</p>
+</section>
+<section id="checkpointing" class="level2">
+<h2><span class="header-section-number">19.8</span> Checkpointing</h2>
+<p><strong>The idea.</strong> Save progress at boundaries so that a crash loses only the work since the last checkpoint. <strong>In SetupTTS.</strong> Every validated chunk is written with its manifest entry before the next begins; resume continues from the last trusted chunk. <strong>Why it matters.</strong> The cost of a crash becomes “one chunk” instead of “the job”, which is what makes multi-hour work on consumer machines practical.</p>
+</section>
+<section id="data-integrity" class="level2">
+<h2><span class="header-section-number">19.9</span> Data integrity</h2>
+<p><strong>The idea.</strong> Record enough metadata to prove that data is complete and correct, and check it rather than assume it. <strong>In SetupTTS.</strong> Absolute source ranges, per-chunk text hashes, byte counts, sub-range coverage, a coverage report, a byte-total check during assembly, a duration window, and atomic writes with <code>fsync</code>. <strong>Why it matters.</strong> “The file exists” proves nothing (Chapter 10). Integrity comes from invariants that are cheap to check and checked at every boundary.</p>
+</section>
+<section id="working-with-a-service-you-do-not-control" class="level2">
+<h2><span class="header-section-number">19.10</span> Working with a service you do not control</h2>
+<p><strong>The idea.</strong> A remote service can change, slow down, or answer in ways its client library does not report. <strong>In SetupTTS.</strong> The service is used unofficially through a library that ends streams silently. SetupTTS verifies completeness from the service’s own metadata (sentence timing) and the physics of the format (6,000 bytes per second), instead of trusting “no exception” to mean “success”. <strong>Why it matters.</strong> When you cannot fix the other side, verify its output using information it already gives you. This is a small instance of a general distributed-systems truth: the absence of an error is not an acknowledgement.</p>
+</section>
+<section id="chunking" class="level2">
+<h2><span class="header-section-number">19.11</span> Chunking</h2>
+<p><strong>The idea.</strong> Split large work into units small enough to retry, verify and checkpoint individually. <strong>In SetupTTS.</strong> Chunks are sized to map one-to-one onto provider requests, cut at natural boundaries, and sized adaptively. <strong>Why it matters.</strong> The unit of work decides the unit of failure, progress and recovery. Choosing it is one of the most consequential design decisions in any batch system.</p>
+</section>
+<section id="state-machines" class="level2">
+<h2><span class="header-section-number">19.12</span> State machines</h2>
+<p><strong>The idea.</strong> Model a lifecycle as named states with explicit transitions. <strong>In SetupTTS.</strong> The manifest status (<code>running</code>, <code>completed</code>, <code>failed</code>, <code>cancelled</code>, <code>interrupted</code>), the <code>JobItem</code> status in the queue, and the attempt machine of Figure 8.2. <strong>Why it matters.</strong> Explicit states make it possible to ask “what should resume do with a manifest that says running?” and get a single, testable answer.</p>
+</section>
+<section id="persistence" class="level2">
+<h2><span class="header-section-number">19.13</span> Persistence</h2>
+<p><strong>The idea.</strong> Choose the storage format that matches the data’s shape and failure modes. <strong>In SetupTTS.</strong> JSON for small documents rewritten whole (settings, manifests) with atomic replace; SQLite for an appendable, queryable table (history) with WAL, migrations and read-only fallbacks; plain files for bulk binary data (chunks). Every store is designed to survive being damaged, being newer than the code, or being locked by another process. <strong>Why it matters.</strong> User data outlives versions of your program. Plan for reading files your past and future selves wrote.</p>
+</section>
+<section id="packaging" class="level2">
+<h2><span class="header-section-number">19.14</span> Packaging</h2>
+<p><strong>The idea.</strong> Ship the runtime with the program so users need nothing else. <strong>In SetupTTS.</strong> PyInstaller with explicit data files and hidden imports; different shapes for different delivery channels (bundle, installer folder, single EXE); fixes for things that only break when frozen. <strong>Why it matters.</strong> For desktop software, the packaged artifact is the product. Packaging decisions (onefile versus onedir) have user-visible consequences such as a 30-second start-up.</p>
+</section>
+<section id="cicd" class="level2">
+<h2><span class="header-section-number">19.15</span> CI/CD</h2>
+<p><strong>The idea.</strong> Automate build, test and release so every release is produced the same way. <strong>In SetupTTS.</strong> Tag-triggered builds on both platforms, consistency checks on versions and notes, and self-tests of every artifact, including live network checks, before publishing. <strong>Why it matters.</strong> The workflow encodes lessons as gates: the minimum-macOS check exists because a release once lied about its requirement.</p>
+</section>
+<section id="cross-platform-development" class="level2">
+<h2><span class="header-section-number">19.16</span> Cross-platform development</h2>
+<p><strong>The idea.</strong> “Works on my machine” hides platform differences. <strong>In SetupTTS</strong>, platform differences that needed code: Windows forbids certain file names and characters; paths over 260 characters fail; antivirus and sync clients briefly lock new files; proxies and trusted certificates live in the registry and the Windows store; the default UI font is wider on Windows; macOS’s default file system is case-insensitive; named pipes behave differently from Unix sockets; a windowed Windows app has no stderr. <strong>Why it matters.</strong> Each of these was a real bug. Cross-platform code is mostly a catalogue of such differences, discovered by testing on each platform.</p>
+</section>
+<section id="measure-before-you-tune" class="level2">
+<h2><span class="header-section-number">19.17</span> Measure before you tune</h2>
+<p>The 65-second deadline was replaced because a user’s log showed “22 of 29 such failures … hit exactly 65 s”. The streaming-speed constants (15.8 characters per second, 0.45x slowest) and the completeness tolerances (0.35 s, 4 letters, validated on 36 voices) are all measured. Good reliability work in this project starts from logs, not guesses, which is why the per-job summary line exists.</p>
+</section>
+</section>

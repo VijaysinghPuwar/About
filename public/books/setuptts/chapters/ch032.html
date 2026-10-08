@@ -1,0 +1,21 @@
+<section id="appendix-d-knowledge-check" class="level1 unnumbered appendix">
+<h1 class="unnumbered appendix">Appendix D: Knowledge Check</h1>
+<p>Try each question before reading its answer.</p>
+<ol type="1">
+<li><p><strong>Why does SetupTTS keep chunks under about 3,600 payload bytes when edge-tts accepts 4,096?</strong> So each SetupTTS chunk is exactly one provider request. Above 4,096 bytes edge-tts splits internally, and SetupTTS could no longer retry, verify or range-record the pieces individually. The margin absorbs XML escaping and multi-byte characters.</p></li>
+<li><p><strong>Why do most English chunks end up around 3,300 characters when the ceiling is 9,200?</strong> The payload byte limit binds first. For mostly ASCII text, bytes and characters are nearly equal, so 3,600 bytes means roughly 3,600 characters at most.</p></li>
+<li><p><strong>A stream ends without any exception. Name the two checks that decide whether its audio is complete.</strong> Audio length must reach the end of the last announced sentence (within 0.35 s), and the announced sentences must reach the end of the chunk’s text (within 4 letters).</p></li>
+<li><p><strong>Why must the resume path use <code>source.txt</code> instead of re-cleaning the user’s text?</strong> Cleanup is not idempotent. Re-cleaning can change the text, change its hash, fail the match, and silently restart from chunk 1.</p></li>
+<li><p><strong>Chunk 3 of 7 is corrupt after a crash, but chunks 4 and 5 look valid. What does resume do with them, and why?</strong> It drops 4 and 5 as well and resumes after chunk 2. Trusting only a contiguous prefix keeps the resume position a single number with no gaps to reason about.</p></li>
+<li><p><strong>What was the root cause of 10-hour texts producing 2 to 3-hour audiobooks, and what replaced it?</strong> Irrecoverable recovery fragments returned empty bytes (v1.5.4), so their text was silently absent. v1.5.5 made them raise, recorded per-chunk ranges and sub-ranges, and verified coverage before assembly.</p></li>
+<li><p><strong>Why does the duration check run before the output file is replaced?</strong> So a suspect result can never overwrite an existing good file; it is kept as “(incomplete).mp3” instead.</p></li>
+<li><p><strong>Why did the fixed 65-second chunk deadline cause failures, and what replaced it?</strong> It was shorter than slow voices need to stream a full chunk, so healthy streams were killed. The deadline is now proportional to the expected audio length and speaking rate, and stalls are caught by the short idle timeout.</p></li>
+<li><p><strong>Which failure kinds skip straight to recovery splitting after two attempts, and why?</strong> No-audio failures and timeouts before any audio. Repeating the identical request rarely helps; a smaller request often does.</p></li>
+<li><p><strong>Why does each <code>TTSWorker</code> create its own asyncio loop?</strong> A loop belongs to one thread, and the UI thread runs Qt’s loop. A private loop keeps all network waiting off the UI thread.</p></li>
+<li><p><strong>How does Cancel reach a coroutine running on another thread safely?</strong> <code>loop.call_soon_threadsafe(task.cancel)</code> schedules the cancellation on the worker’s own loop.</p></li>
+<li><p><strong>What would go wrong if two writers used the same <code>.tmp</code> name when updating the manifest?</strong> One writer could rename the other’s half-written file into place. Unique temporary names prevent it.</p></li>
+<li><p><strong>Why does the Windows release include both an onedir and a onefile build?</strong> Onedir starts fast and suits the installer; onefile runs from anywhere, including directly from a zip, which onedir cannot.</p></li>
+<li><p><strong>What does the minimum-macOS check in CI compare?</strong> <code>LSMinimumSystemVersion</code> in the bundle’s <code>Info.plist</code> against the highest <code>minos</code> of every Mach-O binary in the bundle, found with <code>otool -l</code>.</p></li>
+<li><p><strong>Why will a faster internet plan barely speed up a long job?</strong> The data rate is tiny (48 kbit/s of audio); time is spent waiting for the service to synthesise, on per-request latency, and on retries.</p></li>
+</ol>
+</section>

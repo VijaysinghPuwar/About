@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { LogoIcon } from '@/components/LogoIcon';
+import { isReaderPath } from '@/lib/routes';
 
 // Order mirrors the page: work first, then the record, then supporting detail.
 const sections = [
@@ -33,6 +34,8 @@ export function Navigation() {
   const location = useLocation();
   const { user, profile, isAdmin, signOut } = useAuth();
   const isHomePage = location.pathname === '/';
+  const onBooks = location.pathname.startsWith('/books');
+  const navigate = useNavigate();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -89,14 +92,21 @@ export function Navigation() {
     if (el) {
       const top = el.getBoundingClientRect().top + window.scrollY - BAR_HEIGHT;
       window.scrollTo({ top, behavior: 'smooth' });
+    } else if (id === 'home') {
+      // The logo off the home page: it used to do nothing at all here.
+      navigate('/');
     }
     setMenuOpen(false);
-  }, []);
+  }, [navigate]);
 
   const handleSignOut = async () => {
     await signOut();
     setMenuOpen(false);
   };
+
+  // The reader has its own bar. Hooks above this line still run, so the
+  // listeners stay balanced when the reader is entered and left.
+  if (isReaderPath(location.pathname)) return null;
 
   const userInitials = profile?.full_name
     ? profile.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -152,6 +162,19 @@ export function Navigation() {
               ← Back home
             </Link>
           )}
+
+          {/* A page, not a section, so it is a link rather than a scroll. */}
+          <Link
+            to="/books"
+            aria-current={onBooks ? 'page' : undefined}
+            className={cn(
+              'relative flex h-11 items-center px-[13px] text-[14px] transition-colors',
+              onBooks ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            Books
+            {onBooks && <span className="absolute bottom-[13px] left-[13px] right-[13px] h-px bg-primary" />}
+          </Link>
 
           <a
             href="/resume.pdf"
@@ -247,10 +270,22 @@ export function Navigation() {
               </button>
             ))
           ) : (
-            <Link to="/" className="flex h-12 items-center text-[15px] text-foreground">
+            <Link to="/" className="flex h-12 items-center border-b border-border text-[15px] text-foreground">
               ← Back home
             </Link>
           )}
+
+          <Link
+            to="/books"
+            aria-current={onBooks ? 'page' : undefined}
+            className={cn(
+              'flex h-12 items-center border-t border-border text-[15px] transition-colors',
+              !isHomePage && 'border-t-0',
+              onBooks ? 'text-primary' : 'text-foreground'
+            )}
+          >
+            Books
+          </Link>
 
           <a
             href="/resume.pdf"

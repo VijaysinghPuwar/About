@@ -1,5 +1,7 @@
 import { useCallback } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LogoIcon } from '@/components/LogoIcon';
+import { isReaderPath } from '@/lib/routes';
 
 const navLinks = [
   { label: 'Work', id: 'projects' },
@@ -15,13 +17,20 @@ const navLinks = [
  * hex values that ignored the theme.
  */
 export function Footer() {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
   const scrollTo = useCallback((id: string) => {
     const el = document.getElementById(id);
     if (el) {
       const top = el.getBoundingClientRect().top + window.scrollY - 72;
       window.scrollTo({ top, behavior: 'smooth' });
+    } else {
+      // Off the home page the sections are not in the document; go there first.
+      navigate(`/#${id}`);
     }
-  }, []);
+  }, [navigate]);
+
+  if (isReaderPath(pathname)) return null;
 
   /* The back-to-top button is fixed 20-24px from the right edge and is always
      showing by the time the footer is on screen. Below ~1240px the footer's
@@ -45,6 +54,9 @@ export function Footer() {
               {link.label}
             </button>
           ))}
+          <Link to="/books" className="tap-44 text-muted-foreground transition-colors hover:text-primary">
+            Books
+          </Link>
         </nav>
       </div>
     </footer>

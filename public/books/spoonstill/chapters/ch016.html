@@ -1,0 +1,89 @@
+<section id="tracing-everyday-operations" class="level1">
+<h1><span class="header-section-number">12</span> Tracing Everyday Operations</h1>
+<p>This chapter follows four ordinary commands from the moment you press Enter to the moment the terminal prompt returns. The render is big enough to get its own chapter (Chapter 14).</p>
+<figure>
+<img src="/books/spoonstill/media/file6.svg" alt="The general shape of every CLI command." width="455" height="601" loading="lazy" decoding="async">
+<figcaption>The general shape of every CLI command.</figcaption>
+</figure>
+<section id="creating-a-project-still-new-dir-file..." class="level2">
+<h2><span class="header-section-number">12.1</span> Creating a project: <code>still new DIR FILE...</code></h2>
+<pre class="text"><code>main.rs: Cli::parse()                     clap builds Command::New(NewArgs)
+  -&gt; run(): Journal::for_surface(DIR)     machine runs.csv only (no .spoonstill yet)
+       records "command invoked"
+  -&gt; dispatch(): new_project(args)
+       -&gt; spoonstill_app::create_project(&amp;path)           ingest.rs:423
+            create_project_with(path, machine::load().default_voice)
+              refuse if DIR already holds stills (AlreadyAProject)
+              create_dir_all(DIR)
+              write project.yaml ONLY if absent: starter_settings()
+                 "motion_seed: v2" (+ "tts: voice: X" if a fallback voice is set)
+       -&gt; if FILEs given: spoonstill_app::add_media(&amp;path, files)   ingest.rs:519
+            expand folders (one level, natural order)
+            classify by extension: images / audio / scripts / skipped
+            assign(images, audio, any_recording)    by stem, then by position
+            assign(images, scripts, a_plain_script) .md never by position
+            next number = highest numbered still + 1; width = max(3, digits)
+            for each photo: copy_in(photo), copy_in(its narration), copy_in(its script)
+                 copy to hidden partial -&gt; claim name with create_new -&gt; rename
+       -&gt; print the pairing table and a summary
+  -&gt; run(): records "command finished"
+ExitCode::SUCCESS</code></pre>
+<p>Two facts worth remembering. First, <strong>nothing is moved or modified</strong> in your source folder; everything is copied. Second, <code>create_project</code> writes <code>project.yaml</code> only when no such file exists, so re-running it can never overwrite your settings.</p>
+</section>
+<section id="adding-files-still-add-dir-file..." class="level2">
+<h2><span class="header-section-number">12.2</span> Adding files: <code>still add DIR FILE...</code></h2>
+<p><code>add</code> is <code>add_media</code> alone. It numbers new photos after the highest existing number, so files are never overwritten. If a scene is <strong>waiting for a picture</strong> (a numbered <code>.txt</code> with no image, created by <code>import-chapter</code>), the new photo fills it, and the report says which scenes it filled.</p>
+</section>
+<section id="validating-still-validate-dir" class="level2">
+<h2><span class="header-section-number">12.3</span> Validating: <code>still validate DIR</code></h2>
+<pre class="text"><code>validate(args)                                    main.rs:1200
+  media = ProbeCheck::from_env()   (or SkipProbe with --no-probe)
+  spoonstill_app::import::load(&amp;dir, media, &amp;Cancel::new())
+     1. canonicalize root; must be a directory          -&gt; ImportError::NoProject
+     2. settings::load: project.yaml &lt;= 1 MiB, unknown keys rejected,
+        each value validated (aspect, resolution XOR short_edge, fps, crf...)
+     3. rows::collect: manifest, scenes.csv, or folder convention
+     4. media.ready(): is ffprobe runnable at all?  one ToolingMissing if not
+     5. core::validate_drafts: exactly one audio source per scene, ids, zoom words
+     6. pool::run over rows (probe_jobs = 2 x default jobs):
+           resolve_within(root, path)  -&gt; Problem::Path if outside
+           ffprobe the still (geometry) and the recording (duration)
+     7. warnings: unlisted images, undersized stills, undrawable caption characters,
+        scenes waiting for pictures
+     8. order problems: project first, then by scene
+  print scenes and problems
+  Ok if only warnings; Err("N problems in DIR (M warnings)") if any error -&gt; exit 1</code></pre>
+<p>Validation reads only. It never creates <code>.spoonstill/</code> in a folder that does not have one, and Ctrl-C ends it immediately.</p>
+</section>
+<section id="checking-tools-still-doctor---install" class="level2">
+<h2><span class="header-section-number">12.4</span> Checking tools: <code>still doctor [--install]</code></h2>
+<pre class="text"><code>doctor()                                          main.rs:859
+  spoonstill_app::tooling::check_all()            tooling.rs:111
+     ffmpeg(): Tools::from_env() (locate ffmpeg + ffprobe), then ready():
+               a stat for "is this file executable", no process started
+               version only if ready: ffmpeg -hide_banner -version (first line)
+     provider("edge"): Edge::availability(): edge-tts --version (20 s limit)
+  print "ok" or "missing" with the Remedy sentence for each
+  --install: tooling::install(id) for each missing tool
+     ffmpeg -&gt; brew install ffmpeg (macOS) / winget install --id Gyan.FFmpeg (Windows)
+     edge   -&gt; pipx, brew, or python -m pip --user
+  report_graphics(): tooling::hardware() -&gt; hardware::detect()
+     ffmpeg -encoders (what is compiled in), then encode 0.2 s of black
+     with each candidate to see what actually works</code></pre>
+</section>
+<section id="voices-still-voices-filter---use-name---forget---install" class="level2">
+<h2><span class="header-section-number">12.5</span> Voices: <code>still voices [FILTER] [--use NAME] [--forget] [--install]</code></h2>
+<pre class="text"><code>list_voices()                                     main.rs:1076
+  --forget: machine::set_default_voice(None) BEFORE asking the provider anything
+  provider = tts::provider("edge")
+  availability(); if missing and --install: provider.install()
+  voices(): edge-tts --list-voices (retried like speech), parsed from its table
+  --use NAME: checked against the catalogue when there is one, then saved to
+              settings.yaml as the machine's fallback voice
+  print voices matching FILTER, marking the fallback with *</code></pre>
+<p><code>--forget</code> runs before any network call so an operator with no internet can still undo a setting that is failing them (D-168).</p>
+<div class="callout exercise">
+<p><strong>Exercise 12.1 (Intermediate).</strong> In <code>ingest.rs</code>, find <code>assign</code>. Suppose a folder holds <code>a.jpg</code>, <code>b.jpg</code>, <code>b.m4a</code>, <code>x.m4a</code>. Which recording pairs with which photo, and why?</p>
+</div>
+</section>
+</section>

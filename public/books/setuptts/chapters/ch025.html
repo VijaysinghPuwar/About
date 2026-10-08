@@ -1,0 +1,118 @@
+<section id="how-to-debug-setuptts" class="level1">
+<h1><span class="header-section-number">18</span> How to Debug SetupTTS</h1>
+<section id="where-the-evidence-is" class="level2">
+<h2><span class="header-section-number">18.1</span> Where the evidence is</h2>
+<figure id="fig-debug">
+<img src="/books/setuptts/media/file16.webp" alt="Five places to look, from the quickest to the most detailed." width="1680" height="792" loading="lazy" decoding="async">
+<figcaption><strong>Figure 18.1.</strong> Five places to look, from the quickest to the most detailed.</figcaption>
+</figure>
+<p>The fastest route through most problems:</p>
+<ol type="1">
+<li>Read the dialog, then <strong>Show Details…</strong> for the raw cause.</li>
+<li>Open <strong>Settings ▸ Logs &amp; Troubleshooting ▸ Open Current Log</strong>, or the log folder from the Help menu.</li>
+<li>Search the log for the job’s <strong><code>Job summary</code></strong> line, then for <code>failed on attempt</code> lines with their <code>kind=</code>.</li>
+<li>If the problem is about saved progress, open <code>staging/&lt;job&gt;/manifest.json</code>.</li>
+<li>For a crash with nothing in the log, read <code>crash.log</code>.</li>
+</ol>
+<p>Useful commands on macOS:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><span class="co"># follow the log while reproducing a problem</span></span>
+<span id="cb1-2"><span class="fu">tail</span> <span class="at">-f</span> ~/Library/Logs/SetupTTS/setuptts.log</span>
+<span id="cb1-3"></span>
+<span id="cb1-4"><span class="co"># the one-line outcome of every job</span></span>
+<span id="cb1-5"><span class="fu">grep</span> <span class="st">"Job summary"</span> ~/Library/Logs/SetupTTS/setuptts.log</span>
+<span id="cb1-6"></span>
+<span id="cb1-7"><span class="co"># what each unfinished job has saved</span></span>
+<span id="cb1-8"><span class="fu">ls</span> ~/Library/<span class="st">"Application Support"</span>/SetupTTS/staging/</span>
+<span id="cb1-9"><span class="ex">python3</span> <span class="at">-m</span> json.tool ~/Library/<span class="st">"Application Support"</span>/SetupTTS/staging/<span class="op">&lt;</span>job<span class="op">&gt;</span>/manifest.json</span>
+<span id="cb1-10"></span>
+<span id="cb1-11"><span class="co"># run the packaged app's own end-to-end check (works while the app is open)</span></span>
+<span id="cb1-12"><span class="ex">/Applications/SetupTTS.app/Contents/MacOS/SetupTTS</span> <span class="at">--selftest</span> ~/Desktop/selftest.json <span class="at">--network</span></span></code></pre></div>
+<p>On Windows the log is <code>%LOCALAPPDATA%\SetupTTSApp\SetupTTS\Logs\setuptts.log</code>, and the same <code>--selftest</code> flag works on <code>SetupTTS.exe</code>; it writes a JSON file instead of printing because the app has no console.</p>
+</section>
+<section id="by-symptom" class="level2">
+<h2><span class="header-section-number">18.2</span> By symptom</h2>
+<section id="the-voice-list-does-not-load" class="level3">
+<h3><span class="header-section-number">18.2.1</span> The voice list does not load</h3>
+<ol type="1">
+<li><strong>Is it offline mode?</strong> A note beginning “Offline” that says your saved voice list is shown means the live fetch failed three times and <code>voices.json</code> from the cache was used. The picker works; generation needs the connection.</li>
+<li><strong>Read the cause in the log</strong> (<code>Voice loading failed (attempt n/3)</code>). A name-resolution error means DNS or no connection. <code>SSL</code> or <code>CERTIFICATE</code> means TLS: check the computer’s date and time, and on Windows check antivirus HTTPS scanning. Builds before v1.6.1 ignored the Windows certificate store and failed behind such scanners.</li>
+<li><strong>Proxies.</strong> Environment variables (<code>HTTPS_PROXY</code>) take precedence. Otherwise the system proxy is used only if it is an <code>http://</code> proxy; SOCKS proxies are not passed to aiohttp.</li>
+<li><strong>Run <code>--selftest --network</code>.</strong> Its <code>tls</code> and <code>voices</code> entries say exactly which layer failed.</li>
+<li><strong>If everything else works,</strong> the service may have changed its protocol. Look for <code>UnexpectedResponse</code> or <code>UnknownResponse</code> from edge-tts; the fix is usually a newer edge-tts pin.</li>
+</ol>
+</section>
+<section id="generation-is-slow" class="level3">
+<h3><span class="header-section-number">18.2.2</span> Generation is slow</h3>
+<ol type="1">
+<li><strong>Read the Job summary.</strong> <code>retried_chunks</code>, <code>failures[...]</code>, and the <code>first_audio</code> and <code>receive</code> distributions show whether time went into retries, waiting for first audio, or streaming.</li>
+<li><strong>Which voice?</strong> Andrew and the multilingual voices stream much slower than others; that is the service, not the app. A same-language standard voice is often faster.</li>
+<li><strong>Is the chunk size shrinking?</strong> Stage lines reading “Reducing upcoming chunk size” or “using safer smaller chunks” mean failures pushed the job into conservative mode, which means more requests.</li>
+<li><strong>Is a second job running?</strong> Two jobs share the connection and the service.</li>
+<li><strong>Network stability, not bandwidth.</strong> Frequent <code>network</code> or <code>timeout_after_audio</code> failures point to an unstable connection. A faster plan will not help; a wired connection or a different network might.</li>
+</ol>
+</section>
+<section id="no-audio-received" class="level3">
+<h3><span class="header-section-number">18.2.3</span> “No audio received”</h3>
+<ol type="1">
+<li><strong>During the startup check?</strong> The message says the voice “may not be compatible with this text”. Check that the voice’s language and script match the text; accept the recommended voice if one is offered.</li>
+<li><strong>Has the voice been removed?</strong> The worker refreshes the voice list to distinguish this; the message then says the voice “is no longer available”.</li>
+<li><strong>Mid-job on one chunk?</strong> SetupTTS already retried and split the chunk. Look at that chunk’s text (its range is in the log) for something unusual: a line of symbols, a very long token, mixed scripts.</li>
+<li><strong>Multilingual voice on a long English job?</strong> The message suggests a standard voice; use it.</li>
+<li><strong>Otherwise</strong> the service may be having a bad period. Resume later; finished chunks are kept.</li>
+</ol>
+</section>
+<section id="the-final-audio-is-shorter-than-expected" class="level3">
+<h3><span class="header-section-number">18.2.4</span> The final audio is shorter than expected</h3>
+<ol type="1">
+<li><strong>Is there a <code>name (incomplete).mp3</code>?</strong> Then the duration check refused the result. The log line <code>Duration sanity check failed ... measured=... expected_min=...</code> gives both numbers.</li>
+<li><strong>Check the speed setting.</strong> +100 % halves the audio length; the expected range accounts for it, but your own expectation might not.</li>
+<li><strong>Check what cleanup removed.</strong> Decorative lines, bullets, symbols and bracketed labels are rewritten or dropped (Chapter 6). Compare the job’s <code>source.txt</code> with your original if the difference matters.</li>
+<li><strong>Check the coverage line.</strong> <code>File written: ... coverage=chunks=214 covered=701783/701783</code> proves every character had audio.</li>
+<li><strong>Old builds.</strong> v1.5.4 could silently drop failed fragments, and every version before 1.6.0 could accept a chunk cut short by a dropped connection. Re-generate with a current build.</li>
+</ol>
+</section>
+<section id="a-job-fails-at-the-very-end-or-resume-always-fails-the-same-way" class="level3">
+<h3><span class="header-section-number">18.2.5</span> A job fails at the very end, or Resume always fails the same way</h3>
+<ol type="1">
+<li><strong>“Part of the text has no audio yet”.</strong> The coverage check found a gap. Click <strong>Resume</strong>; it regenerates from the first unverified chunk.</li>
+<li><strong>The same failure on every resume</strong> was the whitespace-gap bug fixed in v1.6.0. On a current build, inspect <code>manifest.json</code>: consecutive <code>end_char</code> and <code>start_char</code> values must be equal.</li>
+<li><strong>“could not save the finished MP3”</strong> means the output folder is unwritable, full, or the file is open in a player. Fix that and Resume; the audio is kept.</li>
+</ol>
+</section>
+<section id="resume-is-missing-or-starts-from-the-beginning" class="level3">
+<h3><span class="header-section-number">18.2.6</span> Resume is missing or starts from the beginning</h3>
+<ol type="1">
+<li><strong>The text or voice changed.</strong> Resume requires the same text hash and voice. The log says <code>Source text changed</code> or <code>Voice changed</code>.</li>
+<li><strong>The folder was swept.</strong> Resumable progress is kept for 60 days.</li>
+<li><strong>The saved data failed validation.</strong> <code>Could not resume from ... starting fresh</code> is logged, and the old folder is left untouched. <code>Dropping un-resumable chunk record</code> lines show where trust ended.</li>
+</ol>
+</section>
+<section id="the-windows-build-fails" class="level3">
+<h3><span class="header-section-number">18.2.7</span> The Windows build fails</h3>
+<ol type="1">
+<li><strong>Which step?</strong> CI names it. A failing <code>Run tests</code> on Windows only is usually layout under Windows font metrics; the August 2026 <code>v1.5.8</code> runs failed exactly this way.</li>
+<li><strong><code>ModuleNotFoundError</code> in the self-test</strong> means PyInstaller missed a module: add it to <code>hiddenimports</code> or use <code>collect_all</code> in both spec files.</li>
+<li><strong><code>Failed to load Python DLL</code></strong> means a onedir build was run without its <code>_internal</code> folder, usually from inside a zip. The portable download must come from <code>setuptts_portable.spec</code>.</li>
+<li><strong>Installer step fails</strong> if Inno Setup is not at <code>C:\Program Files (x86)\Inno Setup 6\ISCC.exe</code> or <code>/DAppVersion</code> is missing.</li>
+<li><strong>Version mismatch</strong> errors mean the tag and <code>APP_VERSION</code> differ, or the installed EXE’s ProductVersion did not match.</li>
+</ol>
+</section>
+<section id="macos-blocks-the-application" class="level3">
+<h3><span class="header-section-number">18.2.8</span> macOS blocks the application</h3>
+<ol type="1">
+<li><strong>First launch of an unsigned app.</strong> Open <strong>System Settings ▸ Privacy &amp; Security</strong> and click <strong>Open Anyway</strong>. The app is not notarised, so this is expected.</li>
+<li><strong>macOS older than 15, or an Intel Mac.</strong> The bundled Qt requires macOS 15 on Apple Silicon; the app will not start on anything older.</li>
+<li><strong>A zip extracted with a third-party tool.</strong> The release zip is made with <code>ditto</code>; tools that drop symlinks or extended attributes can break the bundle. Use the DMG or Finder’s built-in unzip.</li>
+<li><strong>“Damaged” warnings</strong> on downloaded unsigned apps are usually Gatekeeper’s quarantine attribute. Removing it with <code>xattr -dr com.apple.quarantine /Applications/SetupTTS.app</code> is a general macOS technique, not something the project documents; prefer <strong>Open Anyway</strong>.</li>
+</ol>
+</section>
+<section id="the-app-will-not-start-or-opens-and-closes" class="level3">
+<h3><span class="header-section-number">18.2.9</span> The app will not start, or opens and closes</h3>
+<ol type="1">
+<li><strong>Another copy is running.</strong> A second launch brings the first window forward and exits. Check the Dock or taskbar.</li>
+<li><strong>Read <code>crash.log</code></strong> for native faults and the end of <code>setuptts.log</code> for uncaught exceptions with a session id.</li>
+<li><strong>Settings problems</strong> reset per key with a warning; a file that is not JSON becomes <code>settings.json.corrupt</code>.</li>
+</ol>
+</section>
+</section>
+</section>

@@ -46,7 +46,45 @@ function SectionHeader({
   );
 }
 
+/**
+ * Arriving from another page at `/#contact` (the footer links on /books do
+ * this). The sections are lazy, so the target may not exist yet, and once it
+ * does, the sections above it are still mounting and pushing it down. Keep
+ * the target under the bar for up to three seconds, stopping early once it
+ * has held still, or as soon as the reader scrolls for themselves.
+ */
+function useScrollToHashOnArrival() {
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    if (!id) return;
+    let ticks = 0;
+    let steady = 0;
+    const stop = () => window.clearInterval(timer);
+    const timer = window.setInterval(() => {
+      const el = document.getElementById(id);
+      if (++ticks > 30) return stop();
+      if (!el) return;
+      const off = el.getBoundingClientRect().top - 72;
+      if (Math.abs(off) > 4) {
+        steady = 0;
+        window.scrollTo({ top: window.scrollY + off, behavior: 'instant' as ScrollBehavior });
+      } else if (++steady >= 5) {
+        stop();
+      }
+    }, 100);
+    const userScroll = () => stop();
+    window.addEventListener('wheel', userScroll, { passive: true, once: true });
+    window.addEventListener('touchstart', userScroll, { passive: true, once: true });
+    return () => {
+      stop();
+      window.removeEventListener('wheel', userScroll);
+      window.removeEventListener('touchstart', userScroll);
+    };
+  }, []);
+}
+
 export default function Index() {
+  useScrollToHashOnArrival();
   /* projects */
   const { projects: dbProjects } = useProjects();
   const allProjects = useMemo(() => {

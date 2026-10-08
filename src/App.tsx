@@ -46,6 +46,12 @@ const Resume = lazy(() => import("./pages/Resume"));
 const Environment = lazy(() => import("./pages/Environment"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
+// The book routes are their own chunk: the catalogue, the reader and its
+// stylesheet are not something the home page should pay for.
+const Books = lazy(() => import("./pages/Books"));
+const BookDetail = lazy(() => import("./pages/BookDetail"));
+const BookReader = lazy(() => import("./pages/BookReader"));
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -79,6 +85,12 @@ const App = () => (
                       home page links to its section here. */}
                   <Route path="/environment" element={<Environment />} />
                   <Route path="/admin" element={<ProtectedRoute requireAdmin><Admin /></ProtectedRoute>} />
+                  {/* The shelf and each book's page are public, so a book can
+                      be linked and found. Reading needs an account: that is
+                      what lets the reader's place follow them between devices. */}
+                  <Route path="/books" element={<Suspense fallback={null}><Books /></Suspense>} />
+                  <Route path="/books/:slug" element={<Suspense fallback={null}><BookDetail /></Suspense>} />
+                  <Route path="/books/:slug/read/:chapterId?" element={<ProtectedRoute><Suspense fallback={null}><BookReader /></Suspense></ProtectedRoute>} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
                 </Suspense>

@@ -1,0 +1,63 @@
+<section id="the-render-path-step-by-step" class="level1">
+<h1><span class="header-section-number">14</span> The Render Path, Step by Step</h1>
+<p>This chapter follows <code>spoonstill_app::render_project</code> (<code>crates/spoonstill-app/src/film.rs:544</code>) in order. Line numbers are approximate pointers into <code>film.rs</code> unless another file is named.</p>
+<section id="entry" class="level2">
+<h2><span class="header-section-number">14.1</span> Entry</h2>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">// film.rs:544-548</span></span>
+<span id="cb1-2"><span class="kw">pub</span> <span class="kw">fn</span> render_project(</span>
+<span id="cb1-3">    options<span class="op">:</span> <span class="op">&amp;</span>RenderProjectOptions<span class="op">,</span></span>
+<span id="cb1-4">    cancel<span class="op">:</span> <span class="op">&amp;</span>Cancel<span class="op">,</span></span>
+<span id="cb1-5">    on_event<span class="op">:</span> <span class="op">&amp;</span>(<span class="kw">dyn</span> <span class="bu">Fn</span>(FilmEvent) <span class="op">+</span> <span class="bu">Sync</span>)<span class="op">,</span></span>
+<span id="cb1-6">) <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span>RenderedFilm<span class="op">,</span> FilmError<span class="op">&gt;</span> <span class="op">{</span></span></code></pre></div>
+<p><code>options</code> carries the project root and every per-run override (<code>out</code>, <code>jobs</code>, <code>audio_jobs</code>, <code>force</code>, <code>voice</code>, <code>fallback_voice</code>, <code>provider</code>, <code>subtitles</code>, <code>subtitle_theme</code>, <code>subtitle_placement</code>, <code>encoder</code>, <code>keep_cache</code>, <code>aspect</code>, <code>short_edge</code>, <code>fps</code>). <code>on_event</code> is called from several threads, so it must be <code>Fn + Sync</code>.</p>
+</section>
+<section id="the-steps" class="level2">
+<h2><span class="header-section-number">14.2</span> The steps</h2>
+<ol type="1">
+<li><strong>Import and validate</strong> (553-558): <code>import::load(root, &amp;ProbeCheck::from_env(), cancel)</code> (Chapter 12). A cancelled import becomes <code>FilmError::Cancelled</code>.</li>
+<li><strong>Voice override</strong> (<code>apply_voice_override</code>, 980-1009): for every spoken scene, <code>voice::resolve</code> decides whether this run's voice or the machine fallback replaces the project's. Done on the in-memory model before any key is computed, so a different voice is a cache miss, as it should be.</li>
+<li><strong>Geometry override</strong> (<code>apply_geometry_override</code>, 1073-1103): build a new <code>OutputSpec</code> from <code>--aspect</code>, <code>--resolution</code>/<code>--short-edge</code>, <code>--fps</code>, then recompute the undersized-stills warning for the new frame.</li>
+<li><strong>Subtitle override</strong> (1115-1129): recompute the "characters no font can draw" warning if subtitles were switched.</li>
+<li><strong>Gate</strong> (563-569): any error-severity problem stops here with <code>FilmError::HasProblems</code>; an empty project with <code>NoScenes</code>.</li>
+<li><strong>Capacity</strong> (574-577): <code>capacity::plan(output_spec)</code> gives the automatic worker count; an explicit <code>--jobs</code> wins; <code>capacity::pressure</code> decides whether to warn.</li>
+<li><strong>Destination</strong> (<code>destination</code>, 1141-1163): <code>--out</code> is used as given; otherwise <code>output:</code> must resolve inside the project (<code>resolve_destination_within</code>).</li>
+<li><strong>Journal</strong> (587-588): open the project log and <code>runs.csv</code>.</li>
+<li><strong>Lock</strong> (<code>Lock::take</code>, 1893-1942): <code>.spoonstill/render.lock</code>, <code>try_lock</code>, write <code>pid N</code>. Held in <code>_lock</code> until the function returns.</li>
+<li><strong>Events</strong>: <code>Planned</code> (scenes, jobs, audio jobs, memory per worker), <code>MemoryPressure</code> if an explicit <code>--jobs</code> will not fit, one <code>Warned</code> per warning, and the unchosen-voice warning. All printed <strong>before</strong> any work starts, because a line printed under five minutes of progress is a line nobody reads (D-144, D-145).</li>
+<li><strong>Tools</strong> (653-665): <code>Tools::from_env()</code> resolves absolute paths for <code>ffmpeg</code> and <code>ffprobe</code>; the FFmpeg version is written to the log once per run (D-151).</li>
+<li><strong>Encode settings</strong>: preset and CRF from settings, encoder from <code>--encoder</code> (default libx264).</li>
+<li><strong>Segments directory</strong>: <code>create_dir_all(.spoonstill/segments)</code>.</li>
+<li><strong>Pre-flight voice check</strong> (<code>check_voice_service</code>, 1173-1218): for scenes whose speech is <strong>not</strong> already cached, ask each provider <code>availability()</code> once. A missing <code>edge-tts</code> fails here, before any work, naming the provider and how many scenes need it (D-002, D-094). A fully cached project needs no provider at all.</li>
+<li><strong>The pipeline</strong> (<code>resolve_and_render</code>, 1238-1353): <code>pool::pipeline(&amp;scenes, audio_jobs, jobs, cancel, first, second)</code>.
+<ul>
+<li><strong>Stage one</strong> (per scene, up to <code>audio_jobs</code> at once): <code>audio::resolve</code> returns <code>(normalized WAV path, measured duration, key, reused)</code>, emitting <code>FilmEvent::Audio</code> or <code>Failed</code>.</li>
+<li><strong>Stage two</strong> (per scene, up to <code>jobs</code> at once, starting as soon as that scene's audio is ready): <code>plan_scene</code> then <code>render_one</code>, emitting <code>FilmEvent::Segment</code> or <code>Failed</code>.</li>
+</ul></li>
+<li><strong><code>plan_scene</code></strong> (1457-1518): <code>frames = frames_for_duration(duration, fps)</code>; the image's content hash (read once per photo, shared between workers); the motion (<code>MotionSpec::seeded_with(motion_seed, project_id, index, occurrence, hash)</code>, unless the scene names its own); the subtitle cues if captions are on; the segment key; and the output path <code>segments/seg-{key:016x}.mp4</code>.</li>
+<li><strong><code>render_one</code></strong> (1533-1574): if the segment file exists, probe it; reuse it only if the profile matches and the frame count equals the plan; otherwise delete it. If not reusable, call <code>spoonstill_media::render_scene</code> (Chapter 15).</li>
+<li><strong>Collect</strong> (1338-1351): audio outcomes first, then segment outcomes, so an error report names the cause (a failed narration) before its consequence (segments not started).</li>
+<li><strong>Join</strong> (704-744): emit <code>Joining</code>, compute the expected total frames and duration, and call <code>concat::concat</code> (Chapter 16): write the list, <code>ffmpeg -f concat -safe 0 -i list -c copy</code>, validate the film, check for cancellation once more, rename into place.</li>
+<li><strong>Prune</strong> (749-761): sweep segments and derived audio down to the live set plus two spare generations, unless <code>--keep-cache</code>.</li>
+<li><strong>Record</strong> (770-783): a <code>film complete</code> row with <code>duration_s</code>, <code>scenes</code>, <code>frames</code>, <code>reused_segments</code>, <code>reused_audio</code>, <code>spoken</code>, <code>freed_bytes</code>.</li>
+<li><strong>Return</strong> <code>RenderedFilm</code>; <code>_lock</code> drops and the OS lock is released.</li>
+</ol>
+<div class="callout warning">
+<p><strong>A naming quirk (Verified by runtime experiment).</strong> The <code>spoken</code> field in the <code>film complete</code> row counts every narration that was <strong>not reused</strong>, including silent scenes and supplied recordings, not only lines spoken by a voice. The analysis run of the fixture project (no text at all) logged <code>spoken: 6</code>.</p>
+</div>
+</section>
+<section id="errors" class="level2">
+<h2><span class="header-section-number">14.3</span> Errors</h2>
+<p><code>FilmError</code> has twelve variants: <code>Import</code>, <code>HasProblems</code>, <code>NoScenes</code>, <code>Locked</code>, <code>OutputOutsideProject</code>, <code>UnusableGeometry</code>, <code>VoiceService</code>, <code>Audio { failures, not_started }</code>, <code>Render { failures, not_started }</code>, <code>Cancelled</code>, <code>Media</code>, <code>Io</code>. Each has a <code>Display</code> written as an operator sentence. Failures are collected per scene: one broken photo does not hide the others, and the report adds "N more scenes were not started, because ..." when the pipeline stopped admitting work.</p>
+</section>
+<section id="cancellation-everywhere" class="level2">
+<h2><span class="header-section-number">14.4</span> Cancellation everywhere</h2>
+<p>The same <code>Cancel</code> flag is consulted at every layer: the import's probe pool, the pipeline's admission loops, <code>audio::resolve</code> before starting work, every child-process wait (with the <code>q</code>, 2 s, kill ladder), the join, and once more just before the final rename (D-181: a Ctrl-C during the join used to publish the film and exit 0). Finished segments are kept, so the next run resumes. A cancelled run always surfaces as the single <code>FilmError::Cancelled</code>.</p>
+</section>
+<section id="determinism" class="level2">
+<h2><span class="header-section-number">14.5</span> Determinism</h2>
+<p>Nothing in <code>plan_scene</code> depends on which worker ran it or when. Results come back in input order. The motion seed is a pure function of content and settings. Therefore <code>--jobs 1</code> and <code>--jobs 8</code> produce <strong>byte-identical</strong> films; M2 gate 3 asserts this on every <code>make gates</code> run (D-077).</p>
+<div class="callout exercise">
+<p><strong>Exercise 14.1 (Advanced).</strong> Why does step 14 (the pre-flight voice check) count only uncached lines? Describe a real situation where checking all lines would make a working project fail.</p>
+</div>
+</section>
+</section>
