@@ -310,20 +310,18 @@ export default function Resume() {
                     </span>
                   )}
                 </h3>
-                <div className="mt-0.5 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-                  <p className="text-xs text-muted-foreground font-mono min-w-0">{p.stack}</p>
-                  {/* The GitHub URLs are too long for the date column the
-                      experience rows use — they squeezed the stack into a
-                      narrow column. On their own line they read cleanly. */}
-                  <a
-                    href={p.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs font-mono text-primary hover:underline underline-offset-4 break-all shrink-0 sm:text-right"
-                  >
-                    {p.label}
-                  </a>
-                </div>
+                {/* The GitHub URLs are too long to share a row with anything:
+                    they squeezed the stack into a narrow column. Each gets its
+                    own line under the stack. */}
+                <p className="text-xs text-muted-foreground font-mono">{p.stack}</p>
+                <a
+                  href={p.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-mono text-primary hover:underline underline-offset-4 break-all"
+                >
+                  {p.label}
+                </a>
                 <Bullets items={p.bullets} />
               </div>
             ))}
