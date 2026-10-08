@@ -20,6 +20,10 @@ interface AuthContextType {
   profile: Profile | null;
   profileError: Error | null;
   loading: boolean;
+  /** True until the user_roles check for the current session has finished
+      (or there is no session). ProtectedRoute must gate requireAdmin on this
+      too, or an admin gets bounced to "/" before the roles query resolves. */
+  adminLoading: boolean;
   isAdmin: boolean;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -35,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileError, setProfileError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [adminLoading, setAdminLoading] = useState(true);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
