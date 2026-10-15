@@ -32,7 +32,7 @@ const EXPERIENCE: Role[] = [
     location: 'New York, NY',
     bullets: [
       'Review Active Directory, DUO MFA, and Zscaler ZPA access requests with the security team against policy.',
-      'Handle about 14 ServiceNow incidents a week and escalate to senior staff or vendors such as Dell, HP, and Solari.',
+      'Handle incidents in ServiceNow and escalate to senior staff or vendors such as Dell, HP, and Solari.',
       'Inventoried every device on the railway network and traced each one to its switch port.',
       'Troubleshoot Cisco Catalyst switches and OSPF and BGP routing at sites across the railway.',
       'Built the SIR IT request intake system in Power Automate and SharePoint and wrote its runbook.',
