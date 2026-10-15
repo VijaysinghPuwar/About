@@ -93,6 +93,40 @@
     ]
   },
   {
+    "id": "breachscope",
+    "title": "BreachScope: Live Threat Intelligence Map",
+    "description": "A live threat-intelligence map built on six public security feeds, with provenance and location accuracy on every record.",
+    "category": "Threat Intelligence",
+    "tech": [
+      "Go",
+      "PostgreSQL",
+      "React",
+      "TypeScript",
+      "MapLibre GL",
+      "Vercel"
+    ],
+    "year": "2026",
+    "status": "live",
+    "featured": true,
+    "keyResults": [
+      "Load tested at 20,000 requests and 200 concurrent with zero errors and zero data races",
+      "Pulls C2 servers, malware hosts, scanners, exploited CVEs and breaches from ThreatFox, URLhaus, Feodo Tracker, SANS DShield, CISA KEV and Have I Been Pwned",
+      "Runs at $0 a month"
+    ],
+    "links": {
+      "github": "https://github.com/VijaysinghPuwar/BreachScope",
+      "writeup": null,
+      "demo": "https://breachscope-live.vercel.app"
+    },
+    "image": "",
+    "tags": [
+      "threat intelligence",
+      "go",
+      "postgres",
+      "react"
+    ]
+  },
+  {
     "id": "cutmox",
     "title": "cutmox",
     "description": "A browser-based audio tool built on WebAssembly for fast, fully client-side processing.",
@@ -108,7 +142,7 @@
     ],
     "year": "2026",
     "status": "in-progress",
-    "featured": true,
+    "featured": false,
     "keyResults": [
       "Phase 1: WebAssembly viability proof completed",
       "Phase 2: settings and upload flow in active development",

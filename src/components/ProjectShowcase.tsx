@@ -195,7 +195,7 @@ const FEATURED_LIMIT = 3;
 // project leads regardless of where it came from (database rows or projects.json).
 const FEATURED_ORDER = [
   'recap-verse',
-  'vaultsnake-platform', 'cutmox', 'iptables-hardening',
+  'vaultsnake-platform', 'breachscope', 'iptables-hardening',
   'win-dev-sec-bootstrap', 'automating-infosec', 'aws-cloud-security',
   'cs601c-capstone', 'secure-ubuntu-fleet', 'http-hardening-nmap-nse',
 ];

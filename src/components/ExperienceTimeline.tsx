@@ -157,7 +157,7 @@ const rows: Row[] = [
   },
   {
     id: 'rs-infotech',
-    dates: 'FEB 2023 → MAR 2026',
+    dates: 'FEB 2023 → AUG 2024',
     kind: 'Full-time',
     title: 'System Engineer',
     org: 'R.S. Infotech',
@@ -174,7 +174,7 @@ const rows: Row[] = [
   },
   {
     id: 'be-mech',
-    dates: 'COMPLETED MAY 2023',
+    dates: 'COMPLETED AUG 2023',
     place: 'Anand, India',
     kind: 'B.E.',
     title: 'B.E. Mechanical Engineering',

@@ -64,7 +64,6 @@ const GROUPS: { key: string; label: string; blurb: string; skills: Skill[] }[] =
       { label: 'AWS', match: ['aws', 'ec2', 'vpc'] },
       { label: 'Google Cloud Run', match: ['cloud run', 'gcp'] },
       { label: 'Docker', match: ['docker'] },
-      { label: 'Kubernetes', match: ['kubernetes', 'k8s'] },
       { label: 'Linux', match: ['linux', 'ubuntu', 'wsl'] },
       { label: 'Windows Administration', match: ['windows'] },
       { label: 'ServiceNow' },
