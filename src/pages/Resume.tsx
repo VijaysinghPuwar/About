@@ -5,7 +5,7 @@ import { ProtectedEmail } from '@/components/ProtectedEmail';
 /**
  * Web resume.
  *
- * Content is transcribed from the canonical PDF at /resume.pdf (2026-10-08) and
+ * Content is transcribed from the canonical PDF at /resume.pdf (2026-10-15) and
  * must not drift from it: a recruiter who reads this page and then downloads
  * the PDF should find the same claims. Nothing here is inferred or generated.
  *
@@ -14,7 +14,7 @@ import { ProtectedEmail } from '@/components/ProtectedEmail';
  */
 
 const PROFILE =
-  'Cybersecurity engineer with systems and network operations experience at R.S. Infotech and the MTA. At the MTA, handles access requests and incidents on a 24/7 rail network. Outside work, builds and runs two production web platforms and fixes their security issues. CompTIA Security+, CompTIA CySA+, and Cisco CCNA certified.';
+  'Cybersecurity engineer with IT infrastructure experience at the MTA and R.S. Infotech across identity and access, Cisco networking and Windows and Linux operations. Builds and runs production web and AI applications in Python, TypeScript, Java and Go. CompTIA Security+, CySA+ and Cisco CCNA.';
 
 interface Role {
   org: string;
@@ -31,12 +31,11 @@ const EXPERIENCE: Role[] = [
     period: 'Jun 2026 – Present',
     location: 'New York, NY',
     bullets: [
-      'Review Active Directory, DUO MFA, and Zscaler ZPA access requests with the security team against policy.',
-      'Handle incidents in ServiceNow and escalate to senior staff or vendors such as Dell, HP, and Solari.',
-      'Inventoried every device on the railway network and traced each one to its switch port.',
-      'Troubleshoot Cisco Catalyst switches and OSPF and BGP routing at sites across the railway.',
-      'Built the SIR IT request intake system in Power Automate and SharePoint and wrote its runbook.',
-      'Wrote and deployed a Python service that corrects clock drift over NTP on a Rail Control Center workstation.',
+      'Resolve incidents and service requests in ServiceNow on a 24/7 rail operation, isolating faults across application, network path, access policy and host, and escalating to senior staff or vendors (Dell, HP, Solari).',
+      'Review Active Directory, DUO MFA and Zscaler ZPA access requests with the security team against policy.',
+      'Troubleshoot Cisco Catalyst switches, VLANs, trunk ports and OSPF and BGP routing at sites across the railway; inventoried every network device and traced each one to its switch port.',
+      'Built the SIR IT request intake system in Microsoft Forms, Power Automate and SharePoint, caught a defect silently writing incorrect values before release, and wrote the operator runbook.',
+      'Wrote and deployed a Python NTP clock-correction service on a Rail Control Center workstation with dry-run mode, elevation check, rotating logs and distinct exit codes.',
     ],
   },
   {
@@ -46,11 +45,10 @@ const EXPERIENCE: Role[] = [
     location: 'Vadodara, India',
     bullets: [
       'Ran 150+ Windows and Linux systems on premises and on AWS and Azure, including patching and scheduled changes.',
-      'Managed Active Directory and Group Policy: MFA enrollment, privileged group reviews, onboarding, and offboarding.',
-      'Investigated incidents in Splunk and tuned IDS/IPS and firewall rules to cut false positives.',
-      'Triaged SonarQube, OWASP ZAP, Burp Suite, and Nessus findings and added security checks to GitLab CI.',
-      'Wrote Python, PowerShell, and Bash scripts for compliance checks, log review, and inventory.',
-      'Tested backup and disaster recovery, and prepared evidence for audits and client security questionnaires.',
+      'Managed Active Directory and Group Policy: MFA enrollment, privileged group reviews, onboarding and offboarding.',
+      'Wrote Splunk SPL queries for failed authentication and suspicious activity, and tuned IDS/IPS and firewall rules to cut false positives.',
+      'Triaged SonarQube, OWASP ZAP, Burp Suite and Nessus findings and added security checks to GitLab CI.',
+      'Wrote Python, PowerShell and Bash scripts for compliance checks, log review and inventory.',
     ],
   },
 ];
@@ -66,89 +64,58 @@ interface ResumeProject {
 
 const PROJECTS: ResumeProject[] = [
   {
-    name: 'Web Audio TV',
-    descriptor: 'Audiobook streaming platform, about 1,000 users',
-    stack: 'TypeScript, React, PostgreSQL, Supabase, Cloudflare Workers',
-    href: 'https://webaudiotv.com',
-    label: 'webaudiotv.com',
-    bullets: [
-      'Found and fixed three production security flaws: an email queue the public API key could call, a storage bucket anyone could download from, and a leaderboard farming exploit.',
-      'Found the farming account with SQL over raw listening events (credited 16 to 21 hours a day) and added daily caps.',
-      'Moved audio behind a Cloudflare Worker that serves a file only with a valid signed ticket.',
-      'Verify every database role’s permissions against the real migrations with a 48-check access matrix.',
-    ],
-  },
-  {
     name: 'Recap Verse',
     descriptor: 'AI video SaaS with paying subscribers',
-    stack: 'Python, FastAPI, Next.js, MongoDB, Redis, Google Cloud Run',
+    stack: 'Python, FastAPI, Next.js, MongoDB, Redis, Google Cloud Run, Anthropic, OpenAI and Gemini APIs',
     href: 'https://recapverse.com',
     label: 'recapverse.com',
     bullets: [
-      'Built and run it alone: 398 deployments and 2,019 automated tests.',
-      'Encrypt stored user API keys with AES-GCM and check resource ownership on every route.',
-      'Remediated a leaked API key and added gitleaks secret scanning to CI.',
+      'Built and run it alone: a multi-stage pipeline that combines LLM calls with deterministic stages, covered by 2,019 automated tests across five CI jobs.',
+      'Provider-abstracted LLM layer across Anthropic, OpenAI and Gemini with schema-validated JSON output and quality-gated retries.',
+      'Encrypt per-user API keys with AES-GCM, enforce resource ownership on every route, and gate CI on gitleaks secret scanning.',
+      'Stripe and PayPal subscriptions through deduplicated webhooks, so a redelivered event is never applied twice.',
     ],
   },
   {
-    name: 'AWS Cloud Security Lab',
-    stack: 'Terraform, AWS EC2, VPC, KMS, Systems Manager, Checkov',
-    href: 'https://github.com/VijaysinghPuwar/Configuring-Cloud-Security-in-Amazon-Web-Services',
-    label: 'github.com/VijaysinghPuwar/Configuring-Cloud-Security-in-Amazon-Web-Services',
+    name: 'Web Audio TV',
+    descriptor: 'Audiobook streaming platform, about 1,000 users',
+    stack: 'TypeScript, React, PostgreSQL with row level security (Supabase), Cloudflare Workers and R2',
+    href: 'https://webaudiotv.com',
+    label: 'webaudiotv.com',
     bullets: [
-      'Audited an earlier console build: SSH open to the internet, a NACL deny rule that never matched, and a dead CPU alarm.',
-      'Rebuilt it in Terraform with no inbound SSH, IMDSv2 required, and KMS-encrypted VPC flow logs.',
-      'Gated every push on TFLint, Checkov (121 passed, 0 failed), and 10 plan-time tests.',
+      'Found and fixed three production security flaws: an email queue the public API key could call, a publicly downloadable storage bucket, and a leaderboard farming exploit traced with SQL over raw listening events.',
+      'Serve audio only through a Cloudflare Worker that checks a short-lived signed ticket bound to caller, resource and expiry.',
+      'Verify every database role’s permissions against the real migrations with a 48-check access matrix; 1,059 automated tests.',
+    ],
+  },
+  {
+    name: 'BreachScope',
+    descriptor: 'Live threat-intelligence map',
+    stack: 'Go (chi, pgx), PostgreSQL, React, TypeScript, MapLibre GL, Vercel',
+    href: 'https://github.com/VijaysinghPuwar/BreachScope',
+    label: 'github.com/VijaysinghPuwar/BreachScope',
+    bullets: [
+      'Ingests six public feeds (ThreatFox, URLhaus, Feodo Tracker, SANS DShield, CISA KEV, Have I Been Pwned) and records provenance and location precision on every record.',
+      'Resumable SSE stream with Last-Event-ID; load tested at 20,000 requests and 200 concurrent with zero errors and zero data races.',
     ],
   },
   {
     name: 'TrustKart',
-    descriptor: 'Online store',
-    stack: 'Java 21, Spring Boot, Spring Security, PostgreSQL, Redis, React',
+    descriptor: 'Full-stack online store',
+    stack: 'Java 21, Spring Boot, PostgreSQL, Redis, React',
     href: 'https://github.com/VijaysinghPuwar/TrustKart',
     label: 'github.com/VijaysinghPuwar/TrustKart',
     bullets: [
-      'Made checkout a single transaction that cannot duplicate orders, oversell, or deadlock under 100 concurrent shoppers.',
-      'Secured accounts with Argon2id hashing, rotating refresh tokens, CSRF protection, and Redis rate limits.',
+      'Checkout runs as one database transaction, so 100 concurrent shoppers cannot duplicate orders, oversell or deadlock; idempotency keys guarantee exactly-once orders.',
     ],
   },
   {
-    name: 'Dual ISP Network Assessment',
-    stack: 'Nmap, Wireshark, PowerShell, Python',
+    name: 'Dual-ISP Network Assessment',
+    stack: 'Nmap, Wireshark, PowerShell, Bash, Python',
     href: 'https://github.com/VijaysinghPuwar/Dual-ISP-Network-Assessment-and-Subnet-Remediation',
     label: 'github.com/VijaysinghPuwar/Dual-ISP-Network-Assessment-and-Subnet-Remediation',
     bullets: [
-      'Traced conflicting device inventories to two ISP routers on the same subnet; one gateway IP answered from two MACs.',
-      'Moved one LAN to its own subnet and confirmed one gateway MAC, one DHCP server, and no duplicate addresses.',
-    ],
-  },
-  {
-    name: 'x86-64 Binary Hardening Lab',
-    stack: 'NASM, ELF, gdb, readelf, GitHub Actions',
-    href: 'https://github.com/VijaysinghPuwar/x86-64-assembly-intro-lab',
-    label: 'github.com/VijaysinghPuwar/x86-64-assembly-intro-lab',
-    bullets: [
-      'Found an executable stack and a stack alignment bug in working programs, then rebuilt them with NX, PIE, and full RELRO.',
-      'Added a CI check that fails any binary missing those protections, tested against deliberately broken binaries.',
-    ],
-  },
-  {
-    name: 'Hardened Static Page',
-    stack: 'Content Security Policy, security headers, gitleaks, GitHub Actions',
-    href: 'https://github.com/VijaysinghPuwar/hardened-static-page',
-    label: 'github.com/VijaysinghPuwar/hardened-static-page',
-    bullets: [
-      'Set a strict CSP and nine security headers, and wrote a CI test that injects an inline script and fails if it runs.',
-    ],
-  },
-  {
-    name: 'spoonstill',
-    descriptor: 'Open source video renderer',
-    stack: 'Rust, GitHub Actions, macOS and Windows',
-    href: 'https://github.com/VijaysinghPuwar/spoonstill',
-    label: 'github.com/VijaysinghPuwar/spoonstill',
-    bullets: [
-      'Shipped 21 releases; CI runs 776 tests and cargo audit, and the installers verify SHA-256 before installing.',
+      'Traced conflicting device inventories to two ISP routers on the same 192.168.0.0/24 subnet (one gateway IP answering from two MACs), moved one LAN to 192.168.20.0/24 and confirmed one gateway MAC, one DHCP server and no duplicate addresses.',
     ],
   },
 ];
@@ -157,7 +124,7 @@ const EDUCATION = [
   {
     school: 'Pace University, Seidenberg School of CSIS',
     degree: 'M.S. Cybersecurity | GPA 3.92',
-    detail: 'Relevant coursework: Network Security and Defense, Ethical Hacking and Penetration Testing, Cyber Intelligence Analysis',
+    detail: 'Coursework: Ethical Hacking, Network Security and Defense, Automating Information Security with Python and PowerShell, Cyber Intelligence Analysis, Algorithms, Object-Oriented Programming',
     period: 'Jan 2025 – Dec 2026 (expected)',
   },
   {
@@ -169,12 +136,13 @@ const EDUCATION = [
 ];
 
 const SKILLS: { label: string; items: string }[] = [
-  { label: 'Security', items: 'Splunk, IDS/IPS, firewalls, Burp Suite, OWASP ZAP, Nessus, SonarQube, Checkov, gitleaks, Wireshark, Nmap' },
-  { label: 'Identity', items: 'Active Directory, Group Policy, DUO MFA, Zscaler ZPA' },
-  { label: 'Cloud and Systems', items: 'AWS, Azure, Google Cloud Run, Cloudflare, Terraform, Ansible, Docker, Linux, Windows Server' },
-  { label: 'Networking', items: 'TCP/IP, DNS, DHCP, VLANs, OSPF, BGP, VPN, Cisco Catalyst, Cisco IOS' },
-  { label: 'Languages', items: 'Python, Java, TypeScript, SQL, PowerShell, Bash, C#, Rust, R' },
+  { label: 'Security and Identity', items: 'Splunk (SPL), IDS/IPS, firewalls, Burp Suite, OWASP ZAP, Nessus, Active Directory, Group Policy, DUO MFA, Zscaler ZPA' },
+  { label: 'Networking and Systems', items: 'TCP/IP, DNS, DHCP, VLANs, OSPF, BGP, Cisco Catalyst, Linux, Windows Server, ServiceNow' },
+  { label: 'Cloud and DevOps', items: 'AWS, Azure, Google Cloud Run, Cloudflare, Terraform, Docker, GitHub Actions, GitLab CI' },
+  { label: 'Languages and Frameworks', items: 'Python, TypeScript, Java, Go, C#, Rust, SQL, PowerShell, Bash, FastAPI, Spring Boot, React, Next.js' },
+  { label: 'AI', items: 'Anthropic, OpenAI and Gemini APIs, structured-output prompting, schema validation, evaluation harnesses' },
   { label: 'Databases', items: 'PostgreSQL, MongoDB, Redis' },
+  { label: 'Activities', items: 'Pace University Cybersecurity Club; STEM outreach volunteer mentoring undergraduate and high school students in cybersecurity; TryHackMe top 8%, 217 active days in 2025' },
 ];
 
 /** Section heading plus the hairline rule the print layout also uses. */
@@ -219,7 +187,7 @@ export default function Resume() {
         <title>Resume | Vijaysingh Puwar</title>
         <meta
           name="description"
-          content="Resume of Vijaysingh Puwar, cybersecurity engineer in New York. Access and incident work on the MTA rail network, systems and network operations at R.S. Infotech, and two production web platforms. CompTIA Security+, CySA+, Cisco CCNA."
+          content="Resume of Vijaysingh Puwar, cybersecurity engineer in New York. Identity, access and incident work on the MTA rail network, systems and network operations at R.S. Infotech, and production web and AI applications. CompTIA Security+, CySA+, Cisco CCNA."
         />
         <link rel="canonical" href="https://vijaysinghpuwar.com/resume" />
       </Helmet>
@@ -231,7 +199,7 @@ export default function Resume() {
             Vijaysingh Puwar
           </h1>
           <p className="mt-1 text-base sm:text-lg text-primary font-medium">
-            Cybersecurity Engineer: networks, systems, and the software on top
+            Cybersecurity Engineer: IT Infrastructure, Networking and Secure Software
           </p>
 
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
@@ -352,13 +320,13 @@ export default function Resume() {
           </div>
         </section>
 
-        {/* ── Skills ── */}
+        {/* ── Skills and Activities ── */}
         <section>
-          <SectionHeading>Skills</SectionHeading>
+          <SectionHeading>Skills and Activities</SectionHeading>
           <dl className="space-y-3">
             {SKILLS.map(s => (
               <div key={s.label} className="sm:flex sm:gap-4">
-                <dt className="text-sm font-semibold text-foreground sm:w-44 sm:shrink-0">
+                <dt className="text-sm font-semibold text-foreground sm:w-48 sm:shrink-0">
                   {s.label}
                 </dt>
                 <dd className="text-sm leading-relaxed text-muted-foreground">{s.items}</dd>
