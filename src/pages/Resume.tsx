@@ -14,7 +14,7 @@ import { ProtectedEmail } from '@/components/ProtectedEmail';
  */
 
 const PROFILE =
-  'Cybersecurity engineer with three years in systems and network operations. At the MTA, handles access requests and incidents on a 24/7 rail network. Outside work, builds and runs two production web platforms and fixes their security issues. CompTIA Security+, CompTIA CySA+, and Cisco CCNA certified.';
+  'Cybersecurity engineer with systems and network operations experience at R.S. Infotech and the MTA. At the MTA, handles access requests and incidents on a 24/7 rail network. Outside work, builds and runs two production web platforms and fixes their security issues. CompTIA Security+, CompTIA CySA+, and Cisco CCNA certified.';
 
 interface Role {
   org: string;
@@ -32,7 +32,7 @@ const EXPERIENCE: Role[] = [
     location: 'New York, NY',
     bullets: [
       'Review Active Directory, DUO MFA, and Zscaler ZPA access requests with the security team against policy.',
-      'Handle incidents in ServiceNow and escalate to senior staff or vendors such as Dell, HP, and Solari.',
+      'Handle about 14 ServiceNow incidents a week and escalate to senior staff or vendors such as Dell, HP, and Solari.',
       'Inventoried every device on the railway network and traced each one to its switch port.',
       'Troubleshoot Cisco Catalyst switches and OSPF and BGP routing at sites across the railway.',
       'Built the SIR IT request intake system in Power Automate and SharePoint and wrote its runbook.',
@@ -42,7 +42,7 @@ const EXPERIENCE: Role[] = [
   {
     org: 'R.S. Infotech',
     title: 'System Engineer',
-    period: 'Feb 2023 – Mar 2026',
+    period: 'Feb 2023 – Aug 2024',
     location: 'Vadodara, India',
     bullets: [
       'Ran 150+ Windows and Linux systems on premises and on AWS and Azure, including patching and scheduled changes.',
@@ -158,13 +158,13 @@ const EDUCATION = [
     school: 'Pace University, Seidenberg School of CSIS',
     degree: 'M.S. Cybersecurity | GPA 3.92',
     detail: 'Relevant coursework: Network Security and Defense, Ethical Hacking and Penetration Testing, Cyber Intelligence Analysis',
-    period: 'Jan 2025 – Present',
+    period: 'Jan 2025 – Dec 2026 (expected)',
   },
   {
     school: 'G H Patel College of Engineering and Technology',
     degree: 'B.E. Mechanical Engineering',
     detail: null,
-    period: 'May 2023',
+    period: 'Aug 2023',
   },
 ];
 
@@ -219,7 +219,7 @@ export default function Resume() {
         <title>Resume | Vijaysingh Puwar</title>
         <meta
           name="description"
-          content="Resume of Vijaysingh Puwar, cybersecurity engineer in New York. Access and incident work on the MTA rail network, three years in systems and network operations, and two production web platforms. CompTIA Security+, CySA+, Cisco CCNA."
+          content="Resume of Vijaysingh Puwar, cybersecurity engineer in New York. Access and incident work on the MTA rail network, systems and network operations at R.S. Infotech, and two production web platforms. CompTIA Security+, CySA+, Cisco CCNA."
         />
         <link rel="canonical" href="https://vijaysinghpuwar.com/resume" />
       </Helmet>
