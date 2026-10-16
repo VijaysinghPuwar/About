@@ -14,7 +14,7 @@ import { ProtectedEmail } from '@/components/ProtectedEmail';
  */
 
 const PROFILE =
-  'Cybersecurity engineer with IT infrastructure experience at the MTA and R.S. Infotech across identity and access, Cisco networking and Windows and Linux operations. Builds and runs production web and AI applications in Python, TypeScript, Java and Go. CompTIA Security+, CySA+ and Cisco CCNA.';
+  'Cybersecurity engineer with IT infrastructure experience at R.S. Infotech across identity and access, Cisco networking and Windows and Linux operations. Builds and runs production web and AI applications in Python, TypeScript, Java and Go. CompTIA Security+, CySA+ and Cisco CCNA.';
 
 interface Role {
   org: string;
@@ -25,19 +25,6 @@ interface Role {
 }
 
 const EXPERIENCE: Role[] = [
-  {
-    org: 'Metropolitan Transportation Authority (MTA)',
-    title: 'Emerging Talent Intern',
-    period: 'Jun 2026 – Aug 2026',
-    location: 'New York, NY',
-    bullets: [
-      'Resolved incidents and service requests in ServiceNow on a 24/7 rail operation, isolating faults across application, network path, access policy and host, and escalated to senior staff or vendors (Dell, HP, Solari).',
-      'Reviewed Active Directory, DUO MFA and Zscaler ZPA access requests with the security team against policy.',
-      'Troubleshot Cisco Catalyst switches, VLANs, trunk ports and OSPF and BGP routing at sites across the railway; inventoried every network device and traced each one to its switch port.',
-      'Built the SIR IT request intake system in Microsoft Forms, Power Automate and SharePoint, caught a defect silently writing incorrect values before release, and wrote the operator runbook.',
-      'Wrote and deployed a Python NTP clock-correction service on a Rail Control Center workstation with dry-run mode, elevation check, rotating logs and distinct exit codes.',
-    ],
-  },
   {
     org: 'R.S. Infotech',
     title: 'System Engineer',
@@ -187,7 +174,7 @@ export default function Resume() {
         <title>Resume | Vijaysingh Puwar</title>
         <meta
           name="description"
-          content="Resume of Vijaysingh Puwar, cybersecurity engineer in New York. Identity, access and incident work on the MTA rail network, systems and network operations at R.S. Infotech, and production web and AI applications. CompTIA Security+, CySA+, Cisco CCNA."
+          content="Resume of Vijaysingh Puwar, cybersecurity engineer in New York. Systems and network operations at R.S. Infotech, and production web and AI applications. CompTIA Security+, CySA+, Cisco CCNA."
         />
         <link rel="canonical" href="https://vijaysinghpuwar.com/resume" />
       </Helmet>
