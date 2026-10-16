@@ -464,7 +464,7 @@ export function SecurityDiagram() {
         </div>
         {[
           { key: 'focus', value: 'Infrastructure · Network · Application security' },
-          { key: 'current', value: 'MTA, Staten Island Railway' },
+          { key: 'current', value: 'M.S. Cybersecurity, Pace University' },
           { key: 'availability', value: 'Open to security engineering roles', live: true },
         ].map(({ key, value, live }) => (
           <div

@@ -65,7 +65,6 @@ const NODES: NodeDoc[] = [
     work: [
       'Endpoint hardening across 150+ Windows and Linux production machines: baselines, patching, and post-change validation.',
       'Hardware deployed and replaced at remote facilities.',
-      'A Python NTP clock-correction service written for a Rail Control Center workstation whose time had drifted, which matters because a log with the wrong timestamp is worse than no log.',
     ],
     risk: 'Where an intrusion usually lands first, because it is the only node that opens attachments.',
   },
@@ -86,7 +85,6 @@ const NODES: NodeDoc[] = [
     work: [
       'Failed-authentication patterns investigated with Splunk SPL in a prior role, which is the search that turns "someone tried" into "someone tried 400 times from one host".',
       'Log analysis, configuration-compliance checking and inventory automated in Python, PowerShell and Bash.',
-      'A daily System Verification Log maintained at the MTA, so a change that broke something is caught by a person the same day rather than by a user the next week.',
     ],
     risk: 'The first thing a competent intruder tries to stop writing to. Gaps in it are themselves a signal.',
   },
