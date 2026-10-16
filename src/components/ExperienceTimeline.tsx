@@ -77,10 +77,7 @@ const rows: Row[] = [
     bullets: [
       <>Resolved incidents and service requests in ServiceNow for a 24/7 rail operation, isolating faults across the application, network path, access policy and host.</>,
       <>Processed access requests for Active Directory groups, DUO MFA and Zscaler ZPA against policy.</>,
-      <>Supported Cisco Catalyst switching: VLANs, access and trunk ports; mapped devices and verified addressing and port assignments.</>,
       <>Built an IT request intake system with Microsoft Forms, Power Automate and SharePoint, and caught a defect writing incorrect values before release.</>,
-      <>Built a Python NTP clock-correction service for a Rail Control Center workstation with dry-run mode, elevation checks and rotating logs.</>,
-      <>Wrote the operator runbook the team now works from.</>,
     ],
     metaLabel: 'Working with',
     meta: ['Active Directory', 'ServiceNow', 'Cisco Catalyst', 'Power Automate', 'Python'],
