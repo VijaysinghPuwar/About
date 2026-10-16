@@ -41,7 +41,6 @@ const NODES: NodeDoc[] = [
     name: 'Firewall and edge',
     what: 'Where traffic is allowed in or stopped, and where the network is cut into segments so that a foothold in one place is not a foothold everywhere.',
     work: [
-      'Cisco Catalyst switching configured with VLANs and access and trunk ports, so operational systems and office systems are not on one flat network.',
       'Firewall policy and IDS/IPS maintained in a prior role, with traffic and system logs reviewed to find misconfigurations rather than waiting for an alert to find them.',
     ],
     risk: 'The first thing probed and the last thing to close. A rule that is too broad here is worth more to an attacker than any exploit.',
@@ -64,7 +63,6 @@ const NODES: NodeDoc[] = [
     work: [
       'Endpoint hardening across 150+ Windows and Linux production machines: baselines, patching, and post-change validation.',
       'Hardware deployed and replaced at remote facilities.',
-      'A Python NTP clock-correction service written for a Rail Control Center workstation whose time had drifted, which matters because a log with the wrong timestamp is worse than no log.',
     ],
     risk: 'Where an intrusion usually lands first, because it is the only node that opens attachments.',
   },
