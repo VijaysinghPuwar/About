@@ -384,7 +384,7 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
           className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md px-5 text-[14px] font-medium text-muted-foreground transition-colors hover:text-primary sm:w-auto"
         >
           <Github className="h-4 w-4" aria-hidden="true" />
-          18+ repositories on GitHub
+          All repositories on GitHub
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </a>
       </div>

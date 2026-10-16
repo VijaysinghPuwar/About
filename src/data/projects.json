@@ -21,6 +21,7 @@
     "status": "completed",
     "featured": true,
     "keyResults": [
+      "Built and run alone, with paying subscribers and 2,100+ automated tests that run in CI on every pull request",
       "Integrates three LLM providers (Anthropic Claude, OpenAI GPT, Google Gemini) behind a deterministic 5-stage pipeline",
       "AES-GCM encrypted BYOK (bring-your-own-key) credentials, encrypted per user",
       "JWT authentication with per-user ownership scoping enforced on every route, not trusted at the gateway",
@@ -95,7 +96,7 @@
   {
     "id": "breachscope",
     "title": "BreachScope: Live Threat Intelligence Map",
-    "description": "A live threat-intelligence map built on six public security feeds, with provenance and location accuracy on every record.",
+    "description": "A live threat-intelligence map built on public security feeds, with provenance and location accuracy on every record.",
     "category": "Threat Intelligence",
     "tech": [
       "Go",
@@ -109,7 +110,7 @@
     "status": "live",
     "featured": true,
     "keyResults": [
-      "Load tested at 20,000 requests and 200 concurrent with zero errors and zero data races",
+      "Load tested locally at 20,000 requests and 200 concurrent with zero errors and zero data races",
       "Pulls C2 servers, malware hosts, scanners, exploited CVEs and breaches from ThreatFox, URLhaus, Feodo Tracker, SANS DShield, CISA KEV and Have I Been Pwned",
       "Runs at $0 a month"
     ],
@@ -160,6 +161,46 @@
       "Audio",
       "Client-side",
       "Cloudflare Workers"
+    ]
+  },
+  {
+    "id": "trustkart",
+    "title": "TrustKart: Full-Stack Store with a Virtual Wallet",
+    "description": "An online electronics store with 1,260+ real products from 128 brands, where every visitor shops with $100,000 of virtual money. React on Vercel in front of a Spring Boot API and PostgreSQL on Render.",
+    "category": "Application Development",
+    "tech": [
+      "Java 21",
+      "Spring Boot 4",
+      "Spring Security",
+      "PostgreSQL 17",
+      "Redis",
+      "React 19",
+      "TypeScript",
+      "Vercel",
+      "Render"
+    ],
+    "year": "2026",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "Checkout is one database transaction that locks the wallet, re-prices every item server side and reserves stock in a fixed order, so orders never deadlock",
+      "One-time order keys make a double click or a retried request return the existing order instead of creating a second one",
+      "Race-tested with 12 shoppers buying the last 3 units at once: exactly 3 sold, 9 rejected, stock never negative",
+      "120+ server tests on real PostgreSQL and Redis via Testcontainers, plus Playwright shopping journeys on desktop and mobile in CI",
+      "Argon2id passwords, rotating refresh tokens in HttpOnly cookies, CSRF protection, a strict Content Security Policy and Bucket4j rate limiting"
+    ],
+    "links": {
+      "github": "https://github.com/VijaysinghPuwar/TrustKart",
+      "writeup": null,
+      "demo": "https://trustkart-xi.vercel.app"
+    },
+    "image": "",
+    "tags": [
+      "Transactions",
+      "Idempotency",
+      "Concurrency",
+      "Spring Security",
+      "Testcontainers"
     ]
   },
   {
@@ -557,34 +598,38 @@
   },
   {
     "id": "toc-extractor",
-    "title": "TOC Extractor - Web Scraping Tool",
-    "description": "GUI tool to extract chapter pages from a Table of Contents using Playwright + Tkinter with headful browser support for authentication.",
-    "category": "Python Tools",
+    "title": "TOC Extractor: Cross-Platform Web Novel Saver",
+    "description": "A desktop app for Mac and Windows that reads a web novel's table of contents, lets you pick any chapters, and saves them as one clean TXT or PDF. Built in C# on .NET 10 with Avalonia, with the original Python tool kept as a tested reference implementation.",
+    "category": "Application Development",
     "tech": [
-      "Python",
+      "C#",
+      ".NET 10",
+      "Avalonia",
       "Playwright",
-      "Tkinter",
-      "Web Scraping"
+      "Python"
     ],
-    "year": "2024",
+    "year": "2026",
     "status": "completed",
     "featured": false,
     "keyResults": [
-      "Automated TOC extraction from web pages",
-      "Built user-friendly GUI with Tkinter",
-      "Implemented polite delays and authentication support"
+      "Scale tested on 40 books at once across five sites, 2,000 chapters per run, with every saved chapter audited for gaps, order, duplicates and doubled paragraphs",
+      "Against version 2.2.1 on the same 40 books, average CPU fell from 272% to 142% and peak memory from 8.2 GB to 7.1 GB in the same time",
+      "Follows robots.txt (RFC 9309) and Crawl-delay; the C# and Python code decide robots.txt identically on a shared conformance corpus",
+      "Refuses redirects to private network addresses mid-chain, and never solves or works around a human-verification check",
+      "CI on Linux, Windows and macOS with warnings as errors; tagged releases build and self-test the Mac and Windows packages (v2.6.7, MIT)"
     ],
     "links": {
-      "github": "https://github.com/vijaysinghpuwar/TOC_Extractor",
+      "github": "https://github.com/VijaysinghPuwar/TOC_Extractor",
       "writeup": null,
       "demo": null
     },
     "image": "",
     "tags": [
-      "Python",
-      "Automation",
-      "Web Scraping",
-      "GUI"
+      "Desktop app",
+      "Cross-platform",
+      "Polite crawling",
+      "SSRF defense",
+      "CI"
     ]
   },
   {

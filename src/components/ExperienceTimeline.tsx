@@ -68,6 +68,43 @@ interface Row {
 
 const rows: Row[] = [
   {
+    id: 'mta-sirtoa',
+    dates: 'JUN 2026 → AUG 2026',
+    place: 'New York, NY',
+    kind: 'Internship',
+    title: 'Emerging Talent Intern',
+    org: 'Metropolitan Transportation Authority · Staten Island Railway',
+    bullets: [
+      <>Resolved incidents and service requests in ServiceNow for a 24/7 rail operation, isolating faults across the application, network path, access policy and host.</>,
+      <>Processed access requests for Active Directory groups, DUO MFA and Zscaler ZPA against policy.</>,
+      <>Supported Cisco Catalyst switching: VLANs, access and trunk ports; mapped devices and verified addressing and port assignments.</>,
+      <>Built an IT request intake system with Microsoft Forms, Power Automate and SharePoint, and caught a defect writing incorrect values before release.</>,
+      <>Built a Python NTP clock-correction service for a Rail Control Center workstation with dry-run mode, elevation checks and rotating logs.</>,
+      <>Wrote the operator runbook the team now works from.</>,
+    ],
+    metaLabel: 'Working with',
+    meta: ['Active Directory', 'ServiceNow', 'Cisco Catalyst', 'Power Automate', 'Python'],
+    detail: (
+      <div>
+        <p className="text-[13.5px] leading-[1.6] text-muted-foreground">
+          IT network and infrastructure support for MTA Staten Island Railway: incidents, access
+          control, switching, and the hardware itself, as servers, thin clients and telephony
+          equipment were installed, cabled and decommissioned.
+        </p>
+        {[
+          { label: 'Networking', items: ['Cisco Catalyst', 'VLANs', 'Access & trunk ports', 'IP addressing'] },
+          { label: 'Identity & access', items: ['Active Directory', 'DUO MFA', 'Zscaler ZPA'] },
+          { label: 'Tools', items: ['ServiceNow', 'Microsoft Forms', 'Power Automate', 'SharePoint', 'Python'] },
+        ].map(group => (
+          <div key={group.label}>
+            <DetailHeading>{group.label}</DetailHeading>
+            <Chips items={group.items} />
+          </div>
+        ))}
+      </div>
+    ),
+  },
+  {
     id: 'ms-cyber',
     dates: 'EXPECTED DEC 2026',
     place: 'New York, NY',

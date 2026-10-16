@@ -87,17 +87,20 @@ export default function Index() {
   useScrollToHashOnArrival();
   /* projects */
   const { projects: dbProjects } = useProjects();
+  /* projects.json is the maintained source and wins on a shared id. The
+     database still holds January seed copies of eight entries that were never
+     updated, and letting them win hid every later edit to those projects. A
+     row that exists only in the database is still shown. */
   const allProjects = useMemo(() => {
-    const dbIds = new Set((dbProjects || []).map(p => p.id));
-    const normalized = (dbProjects || []).map(p => ({
+    const jsonIds = new Set(projectsData.map(p => p.id));
+    const normalized = (dbProjects || []).filter(p => !jsonIds.has(p.id)).map(p => ({
       id: p.id, title: p.title, description: p.description || '', category: p.category || '',
       tech: p.tech || [], year: p.year || '', status: p.status || 'completed',
       featured: p.featured || false, keyResults: p.key_results || [],
       links: { github: p.github_link, writeup: p.writeup_link, demo: p.demo_link },
       image: p.image || '', tags: p.tags || [],
     }));
-    const jsonOnly = projectsData.filter(p => !dbIds.has(p.id));
-    return [...normalized, ...jsonOnly];
+    return [...normalized, ...projectsData];
   }, [dbProjects]);
 
   /* Selecting a skill filters the projects section to the work that uses it. */
@@ -195,7 +198,7 @@ export default function Index() {
           <SectionHeader
             label="Selected work"
             title="Systems in production"
-            blurb="Built, deployed and maintained. Three case studies below, and a searchable index of the rest."
+            blurb="Built, deployed and maintained."
           />
 
           <Suspense fallback={<div className="h-64" />}>
@@ -221,7 +224,6 @@ export default function Index() {
           <SectionHeader
             align="left"
             title="Journey"
-            blurb="Work and study in one sequence, most recent first. Coursework and tooling detail sit behind each entry."
           />
           <Suspense fallback={<div className="h-64" />}>
             <ExperienceTimeline />
@@ -240,7 +242,7 @@ export default function Index() {
           <SectionHeader
             label="Capabilities"
             title="What I work with"
-            blurb="The number on a skill is how many indexed projects actually use it. Select one to filter the work above. No ratings, no percentages."
+            blurb="The number is how many projects use a skill. Select one to filter the projects."
           />
 
           <Suspense fallback={<div className="h-64" />}>
@@ -261,7 +263,7 @@ export default function Index() {
             <div className="section-heading">Contact</div>
             <h2 className="section-title mt-3">Open to security engineering roles</h2>
             <p className="mt-3 text-[15px] text-muted-foreground">
-              New York, NY and remote. Résumé, projects and links stay public, no sign-in required.
+              New York, NY or remote. Available from January 2027.
             </p>
           </div>
 

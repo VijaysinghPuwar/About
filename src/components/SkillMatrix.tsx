@@ -27,11 +27,10 @@ interface Skill {
   match?: string[];
 }
 
-const GROUPS: { key: string; label: string; blurb: string; skills: Skill[] }[] = [
+const GROUPS: { key: string; label: string; skills: Skill[] }[] = [
   {
     key: 'secops',
     label: 'Security Operations',
-    blurb: 'Detection, triage, and response on enterprise systems.',
     skills: [
       { label: 'SIEM / Splunk', match: ['splunk', 'siem'] },
       { label: 'Detection Engineering' },
@@ -45,7 +44,6 @@ const GROUPS: { key: string; label: string; blurb: string; skills: Skill[] }[] =
   {
     key: 'identity',
     label: 'Identity & Access',
-    blurb: 'Who gets in, to what, and with how little privilege.',
     skills: [
       { label: 'Active Directory', match: ['active directory', 'ldap'] },
       { label: 'IAM', match: ['iam'] },
@@ -59,7 +57,6 @@ const GROUPS: { key: string; label: string; blurb: string; skills: Skill[] }[] =
   {
     key: 'cloud',
     label: 'Cloud & Infrastructure',
-    blurb: 'Running and securing workloads in cloud and on Windows/Linux.',
     skills: [
       { label: 'AWS', match: ['aws', 'ec2', 'vpc'] },
       { label: 'Google Cloud Run', match: ['cloud run', 'gcp'] },
@@ -72,7 +69,6 @@ const GROUPS: { key: string; label: string; blurb: string; skills: Skill[] }[] =
   {
     key: 'network',
     label: 'Networking',
-    blurb: 'Enterprise routing, segmentation, and traffic analysis.',
     skills: [
       { label: 'TCP/IP', match: ['tcp'] },
       { label: 'Cisco Routing & Switching', match: ['cisco', 'packet tracer', 'pvst'] },
@@ -85,7 +81,6 @@ const GROUPS: { key: string; label: string; blurb: string; skills: Skill[] }[] =
   {
     key: 'build',
     label: 'Automation & Engineering',
-    blurb: 'The code behind the tooling and the platforms I ship.',
     skills: [
       { label: 'Python', match: ['python'] },
       { label: 'PowerShell', match: ['powershell'] },
@@ -166,7 +161,6 @@ export function SkillMatrix({ projects, onSelectSkill, activeSkill }: SkillMatri
               </svg>
               <h3 className="text-[15.5px] font-semibold tracking-[-0.01em] text-foreground">{group.label}</h3>
             </div>
-            <p className="mt-2 text-[13.5px] text-muted-dim">{group.blurb}</p>
 
             <ul className="mt-4 flex flex-wrap gap-[7px]">
               {group.skills.map(skill => {

@@ -5,7 +5,8 @@ import { ProtectedEmail } from '@/components/ProtectedEmail';
 /**
  * Web resume.
  *
- * Content is transcribed from the canonical PDF at /resume.pdf (2026-10-15) and
+ * Content is transcribed from the canonical PDF at /resume.pdf (source:
+ * scripts/resume/resume.html, regenerated 2026-10-16) and
  * must not drift from it: a recruiter who reads this page and then downloads
  * the PDF should find the same claims. Nothing here is inferred or generated.
  *
@@ -14,7 +15,7 @@ import { ProtectedEmail } from '@/components/ProtectedEmail';
  */
 
 const PROFILE =
-  'Cybersecurity engineer with IT infrastructure experience at R.S. Infotech across identity and access, Cisco networking and Windows and Linux operations. Builds and runs production web and AI applications in Python, TypeScript, Java and Go. CompTIA Security+, CySA+ and Cisco CCNA.';
+  'Cybersecurity engineer with IT infrastructure experience at the MTA and R.S. Infotech across identity and access, Cisco networking and Windows and Linux operations. Builds and runs production web and AI applications in Python, TypeScript, Java and Go. CompTIA Security+, CySA+ and Cisco CCNA.';
 
 interface Role {
   org: string;
@@ -25,6 +26,20 @@ interface Role {
 }
 
 const EXPERIENCE: Role[] = [
+  {
+    org: 'Metropolitan Transportation Authority (MTA)',
+    title: 'Emerging Talent Intern',
+    period: 'Jun 2026 – Aug 2026',
+    location: 'New York, NY',
+    bullets: [
+      'Resolved incidents and service requests in ServiceNow for a 24/7 rail operation, isolating faults across the application, network path, access policy and host.',
+      'Processed access requests for Active Directory groups, DUO MFA and Zscaler ZPA against policy.',
+      'Supported Cisco Catalyst switching: VLANs, access and trunk ports; mapped devices and verified addressing and port assignments.',
+      'Built an IT request intake system with Microsoft Forms, Power Automate and SharePoint, and caught a defect writing incorrect values before release; wrote the operator runbook the team now works from.',
+      'Built a Python NTP clock-correction service for a Rail Control Center workstation with dry-run mode, elevation checks and rotating logs.',
+      'Installed, cabled and decommissioned servers, thin clients and telephony equipment.',
+    ],
+  },
   {
     org: 'R.S. Infotech',
     title: 'System Engineer',
@@ -57,7 +72,7 @@ const PROJECTS: ResumeProject[] = [
     href: 'https://recapverse.com',
     label: 'recapverse.com',
     bullets: [
-      'Built and run it alone: a multi-stage pipeline that combines LLM calls with deterministic stages, covered by 2,019 automated tests across five CI jobs.',
+      'Built and run it alone: a multi-stage pipeline that combines LLM calls with deterministic stages, covered by 2,100+ automated tests that run in CI on every pull request.',
       'Provider-abstracted LLM layer across Anthropic, OpenAI and Gemini with schema-validated JSON output and quality-gated retries.',
       'Encrypt per-user API keys with AES-GCM, enforce resource ownership on every route, and gate CI on gitleaks secret scanning.',
       'Stripe and PayPal subscriptions through deduplicated webhooks, so a redelivered event is never applied twice.',
@@ -65,7 +80,7 @@ const PROJECTS: ResumeProject[] = [
   },
   {
     name: 'Web Audio TV',
-    descriptor: 'Audiobook streaming platform, about 1,000 users',
+    descriptor: 'Audiobook streaming platform',
     stack: 'TypeScript, React, PostgreSQL with row level security (Supabase), Cloudflare Workers and R2',
     href: 'https://webaudiotv.com',
     label: 'webaudiotv.com',
@@ -82,8 +97,8 @@ const PROJECTS: ResumeProject[] = [
     href: 'https://github.com/VijaysinghPuwar/BreachScope',
     label: 'github.com/VijaysinghPuwar/BreachScope',
     bullets: [
-      'Ingests six public feeds (ThreatFox, URLhaus, Feodo Tracker, SANS DShield, CISA KEV, Have I Been Pwned) and records provenance and location precision on every record.',
-      'Resumable SSE stream with Last-Event-ID; load tested at 20,000 requests and 200 concurrent with zero errors and zero data races.',
+      'Ingests public threat feeds including ThreatFox, URLhaus, Feodo Tracker, SANS DShield, CISA KEV and Have I Been Pwned, and records provenance and location precision on every record.',
+      'Resumable SSE stream with Last-Event-ID; load tested locally at 20,000 requests and 200 concurrent with zero errors and zero data races.',
     ],
   },
   {
@@ -93,7 +108,7 @@ const PROJECTS: ResumeProject[] = [
     href: 'https://github.com/VijaysinghPuwar/TrustKart',
     label: 'github.com/VijaysinghPuwar/TrustKart',
     bullets: [
-      'Checkout runs as one database transaction, so 100 concurrent shoppers cannot duplicate orders, oversell or deadlock; idempotency keys guarantee exactly-once orders.',
+      'Checkout runs as one database transaction: 12 shoppers racing for the last 3 units sell exactly 3 and stock never goes negative; idempotency keys guarantee exactly-once orders.',
     ],
   },
   {
@@ -174,7 +189,7 @@ export default function Resume() {
         <title>Resume | Vijaysingh Puwar</title>
         <meta
           name="description"
-          content="Resume of Vijaysingh Puwar, cybersecurity engineer in New York. Systems and network operations at R.S. Infotech, and production web and AI applications. CompTIA Security+, CySA+, Cisco CCNA."
+          content="Resume of Vijaysingh Puwar, cybersecurity engineer in New York. Identity, access and incident work on the MTA rail network, systems and network operations at R.S. Infotech, and production web and AI applications. CompTIA Security+, CySA+, Cisco CCNA."
         />
         <link rel="canonical" href="https://vijaysinghpuwar.com/resume" />
       </Helmet>

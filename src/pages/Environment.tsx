@@ -65,6 +65,7 @@ const NODES: NodeDoc[] = [
     work: [
       'Endpoint hardening across 150+ Windows and Linux production machines: baselines, patching, and post-change validation.',
       'Hardware deployed and replaced at remote facilities.',
+      'A Python NTP clock-correction service written for a Rail Control Center workstation whose time had drifted, which matters because a log with the wrong timestamp is worse than no log.',
     ],
     risk: 'Where an intrusion usually lands first, because it is the only node that opens attachments.',
   },
