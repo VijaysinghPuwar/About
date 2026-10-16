@@ -31,7 +31,7 @@ const EXPERIENCE: Role[] = [
     period: 'Jun 2026 – Aug 2026',
     location: 'New York, NY',
     bullets: [
-      'Resolve incidents and service requests in ServiceNow on a 24/7 rail operation, isolating faults across application, network path, access policy and host, and escalating to senior staff or vendors (Dell, HP, Solari).',
+      'Resolved incidents and service requests in ServiceNow on a 24/7 rail operation, isolating faults across application, network path, access policy and host, and escalated to senior staff or vendors (Dell, HP, Solari).',
       'Reviewed Active Directory, DUO MFA and Zscaler ZPA access requests with the security team against policy.',
       'Troubleshot Cisco Catalyst switches, VLANs, trunk ports and OSPF and BGP routing at sites across the railway; inventoried every network device and traced each one to its switch port.',
       'Built the SIR IT request intake system in Microsoft Forms, Power Automate and SharePoint, caught a defect silently writing incorrect values before release, and wrote the operator runbook.',
