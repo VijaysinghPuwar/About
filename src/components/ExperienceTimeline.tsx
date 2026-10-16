@@ -69,17 +69,16 @@ interface Row {
 const rows: Row[] = [
   {
     id: 'mta-sirtoa',
-    dates: 'JUN 2026 → NOW',
+    dates: 'JUN 2026 → AUG 2026',
     place: 'New York, NY',
     kind: 'Internship',
-    now: true,
     title: 'IT Infrastructure & Network Operations',
     org: 'Metropolitan Transportation Authority · Staten Island Railway (SIRTOA) · title of record: Emerging Talent Intern',
     bullets: [
-      <>Review Active Directory, DUO MFA, and Zscaler ZPA access requests with the security team against policy.</>,
-      <>Handle incidents in ServiceNow and escalate to senior staff or vendors such as Dell, HP, and Solari.</>,
+      <>Reviewed Active Directory, DUO MFA, and Zscaler ZPA access requests with the security team against policy.</>,
+      <>Handled incidents in ServiceNow and escalated to senior staff or vendors such as Dell, HP, and Solari.</>,
       <>Inventoried every device on the railway network and traced each one to its switch port.</>,
-      <>Troubleshoot Cisco Catalyst switches and OSPF and BGP routing at sites across the railway.</>,
+      <>Troubleshot Cisco Catalyst switches and OSPF and BGP routing at sites across the railway.</>,
       <>Built the SIR IT request intake system in Power Automate and SharePoint and wrote its runbook.</>,
       <>Wrote and deployed a Python service that corrects clock drift over NTP on a Rail Control Center workstation.</>,
     ],
@@ -88,7 +87,7 @@ const rows: Row[] = [
     detail: (
       <div>
         <p className="text-[13.5px] leading-[1.6] text-muted-foreground">
-          Supporting enterprise IT infrastructure, network operations, endpoint systems, and secure
+          Supported enterprise IT infrastructure, network operations, endpoint systems, and secure
           technology services for MTA Staten Island Railway, focusing on system reliability,
           troubleshooting, and operational efficiency.
         </p>
