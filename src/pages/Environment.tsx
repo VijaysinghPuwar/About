@@ -42,7 +42,6 @@ const NODES: NodeDoc[] = [
     what: 'Where traffic is allowed in or stopped, and where the network is cut into segments so that a foothold in one place is not a foothold everywhere.',
     work: [
       'Cisco Catalyst switching configured with VLANs and access and trunk ports, so operational systems and office systems are not on one flat network.',
-      'OSPF and BGP routing supported on production devices.',
       'Firewall policy and IDS/IPS maintained in a prior role, with traffic and system logs reviewed to find misconfigurations rather than waiting for an alert to find them.',
     ],
     risk: 'The first thing probed and the last thing to close. A rule that is too broad here is worth more to an attacker than any exploit.',

@@ -139,7 +139,7 @@ const EDUCATION = [
 
 const SKILLS: { label: string; items: string }[] = [
   { label: 'Security and Identity', items: 'Splunk (SPL), IDS/IPS, firewalls, Burp Suite, OWASP ZAP, Nessus, Active Directory, Group Policy, DUO MFA, Zscaler ZPA' },
-  { label: 'Networking and Systems', items: 'TCP/IP, DNS, DHCP, VLANs, OSPF, BGP, Cisco Catalyst, Linux, Windows Server, ServiceNow' },
+  { label: 'Networking and Systems', items: 'TCP/IP, DNS, DHCP, VLANs, OSPF, Cisco Catalyst, Linux, Windows Server, ServiceNow' },
   { label: 'Cloud and DevOps', items: 'AWS, Azure, Google Cloud Run, Cloudflare, Terraform, Docker, GitHub Actions, GitLab CI' },
   { label: 'Languages and Frameworks', items: 'Python, TypeScript, Java, Go, C#, Rust, SQL, PowerShell, Bash, FastAPI, Spring Boot, React, Next.js' },
   { label: 'AI', items: 'Anthropic, OpenAI and Gemini APIs, structured-output prompting, schema validation, evaluation harnesses' },
