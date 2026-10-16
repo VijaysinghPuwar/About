@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useReducedMotion } from 'framer-motion';
+import { useReducedMotion } from '@/lib/motion';
 import { useTheme } from '@/hooks/useTheme';
 import { sweepHold } from '@/lib/theme-transition';
 import { usePauseOffscreen } from '@/hooks/usePauseOffscreen';
@@ -476,8 +476,8 @@ export function SecurityDiagram() {
             </dt>
             {/* Grown from the left so the value stays anchored to its key, and
                 by a transform so no row moves under the cursor. */}
-            <dd className="flex min-w-0 flex-1 origin-left items-baseline gap-2 text-[12.5px] leading-[1.5] text-foreground transition-transform duration-300 ease-out group-hover:scale-[1.06] motion-reduce:transition-none motion-reduce:group-hover:scale-100">
-              <span className={live ? 'live-glow' : undefined}>{value}</span>
+            <dd className="flex min-w-0 flex-1 origin-left items-baseline gap-2 text-[12.5px] leading-[1.5] text-foreground transition-transform duration-300 ease-out group-hover:scale-[1.06] reduced:transition-none reduced:group-hover:scale-100">
+              <span className={live ? 'live-glow' : undefined} data-text={live ? value : undefined}>{value}</span>
             </dd>
           </div>
         ))}

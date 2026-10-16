@@ -50,6 +50,26 @@
         }
       })();
     </script>
+    <!--
+      Motion, decided before first paint. Mirrors decide() in src/lib/motion.ts:
+      a choice made on this site wins, Windows animates (its "Animation effects"
+      switch is off on plenty of fast machines), everyone else follows the OS.
+    -->
+    <script>
+      (function () {
+        var reduce;
+        try {
+          var p = localStorage.getItem('motion');
+          if (p === 'full' || p === 'reduce') reduce = p === 'reduce';
+        } catch (e) {}
+        if (reduce === undefined) {
+          var ua = navigator.userAgentData;
+          var win = (ua && ua.platform === 'Windows') || /Windows/i.test(navigator.userAgent);
+          reduce = !win && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        }
+        if (reduce) document.documentElement.dataset.motion = 'reduce';
+      })();
+    </script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",

@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { useReducedMotion } from 'framer-motion';
+import { useReducedMotion } from '@/lib/motion';
 
 /**
  * Shared: fires once when `ref` first scrolls into view.

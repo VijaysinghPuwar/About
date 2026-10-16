@@ -34,7 +34,7 @@ function Chips({ items }: { items: string[] }) {
              never reflow under the cursor. The accent comes from the mode
              token, so the same hover reads green in defensive mode and red in
              offensive without a second rule. */
-          className="relative origin-left rounded-md border border-border bg-card-elevated px-2.5 py-1 text-[12px] text-muted-foreground transition-[transform,color,border-color] duration-300 ease-out hover:z-10 hover:scale-150 hover:border-primary hover:text-primary motion-reduce:transition-none motion-reduce:hover:scale-100"
+          className="relative origin-left rounded-md border border-border bg-card-elevated px-2.5 py-1 text-[12px] text-muted-foreground transition-[transform,color,border-color] duration-300 ease-out hover:z-10 hover:scale-150 hover:border-primary hover:text-primary reduced:transition-none reduced:hover:scale-100"
         >
           {item}
         </span>
@@ -213,7 +213,7 @@ function TimelineEntry({ row, index }: { row: Row; index: number }) {
           <span
             aria-hidden="true"
             className={cn(
-              'mt-0.5 shrink-0 text-[14px] text-muted-dim transition-transform duration-500 ease-out motion-reduce:transition-none',
+              'mt-0.5 shrink-0 text-[14px] text-muted-dim transition-transform duration-500 ease-out reduced:transition-none',
               open && 'rotate-180',
             )}
           >
@@ -227,7 +227,7 @@ function TimelineEntry({ row, index }: { row: Row; index: number }) {
               {row.now && (
                 <span className="inline-flex items-center gap-[7px] font-mono text-[11px] tracking-[0.14em] text-primary">
                   CURRENT
-                  <span className="h-3 w-1.5 animate-pulse bg-primary motion-reduce:animate-none" aria-hidden="true" />
+                  <span className="h-3 w-1.5 animate-pulse bg-primary reduced:animate-none" aria-hidden="true" />
                 </span>
               )}
             </div>
@@ -326,15 +326,18 @@ function CertRow({ name, org, earned }: { name: string; org: string; earned: boo
       {/* Scaled rather than sized, so the wipe costs no layout. */}
       <span
         aria-hidden="true"
-        className="absolute left-0 top-0 h-full w-[2px] origin-top scale-y-0 bg-primary transition-transform duration-[220ms] ease-[cubic-bezier(.2,.8,.3,1)] group-hover:scale-y-100 motion-reduce:transition-none"
+        className="absolute left-0 top-0 h-full w-[2px] origin-top scale-y-0 bg-primary transition-transform duration-[220ms] ease-[cubic-bezier(.2,.8,.3,1)] group-hover:scale-y-100 reduced:transition-none"
       />
-      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 rounded-md px-0 py-[18px] transition-colors duration-200 group-hover:bg-card wide:px-[18px]">
+      {/* Stacked on a phone, one line from `sm` up. It used to `flex-wrap`,
+          which put the issuer beside a short name and under a long one, so the
+          list changed shape from row to row. */}
+      <div className="flex flex-col gap-1 rounded-md px-0 py-[18px] transition-colors duration-200 group-hover:bg-card sm:flex-row sm:items-baseline sm:justify-between sm:gap-x-6 wide:px-[18px]">
         <span className="flex min-w-0 items-baseline gap-3">
           {/* The gutter is present on every row, so the names keep one left
               edge whether or not there is a mark to put in front of them. */}
           <span className="flex w-6 shrink-0 translate-y-[5px] justify-center" aria-hidden="true">
             {!earned && (
-              <svg viewBox="0 0 14 14" className="h-6 w-6 animate-spin [animation-duration:2.2s] motion-reduce:animate-none">
+              <svg viewBox="0 0 14 14" className="h-6 w-6 animate-spin [animation-duration:2.2s] reduced:animate-none">
                 <circle cx="7" cy="7" r="5.6" fill="none" stroke="hsl(var(--border-strong))" strokeWidth="1.5" />
                 <circle
                   cx="7"
@@ -366,8 +369,13 @@ function CertRow({ name, org, earned }: { name: string; org: string; earned: boo
                and the zoom ran six times too fast. Both timings live together
                in the one rule in index.css now. */
             'cert-wipe origin-left text-[clamp(20px,2.4vw,28px)] font-semibold leading-[1.25] tracking-[-0.02em]',
-            'group-hover:scale-[2]',
-            'motion-reduce:group-hover:scale-100',
+            /* Hover variants only fire where there is a real hover
+               (`hoverOnlyWhenSupported` in tailwind.config.ts): a tap on a
+               phone used to leave the row in :hover and run the 2x name off
+               the screen. Below `wide` there is no empty measure to grow
+               into, so it grows less. */
+            'group-hover:scale-[1.25] wide:group-hover:scale-[2]',
+            'reduced:group-hover:scale-100',
           )}
           >
             {name}
@@ -375,7 +383,9 @@ function CertRow({ name, org, earned }: { name: string; org: string; earned: boo
         </span>
         <span
           className={cn(
-            'font-mono text-[10.5px] uppercase tracking-[0.1em] transition-colors duration-200',
+            /* `pl-9` is the mark gutter plus its gap, so the stacked issuer
+               lines up under the name rather than under the spinner. */
+            'pl-9 font-mono text-[10.5px] uppercase tracking-[0.1em] transition-colors duration-200 sm:shrink-0 sm:pl-0',
             earned ? 'text-muted-dim group-hover:text-muted-foreground' : 'text-primary',
           )}
         >

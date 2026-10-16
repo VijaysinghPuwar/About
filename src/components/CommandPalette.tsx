@@ -7,6 +7,7 @@ import { loginHref } from '@/lib/auth-redirect';
 import { useAuth } from '@/hooks/useAuth';
 import { contactEmail } from '@/lib/contact-email';
 import { isSoundMuted, setSoundMuted } from '@/lib/theme-transition';
+import { isReducedMotion, setReducedMotion } from '@/lib/motion';
 import { toast } from 'sonner';
 
 interface Command {
@@ -68,6 +69,19 @@ function buildCommands(isAuthed: boolean, goLogin: () => void, go: (path: string
         const muted = !isSoundMuted();
         setSoundMuted(muted);
         toast(muted ? 'Transition sound muted' : 'Transition sound on');
+      },
+    },
+    // Windows animates by default even when its "Animation effects" switch is
+    // off (see src/lib/motion.ts), so the opt-out has to live here instead.
+    {
+      category: 'Actions',
+      label: 'Toggle reduced motion',
+      hint: 'Stop animations on this site',
+      keywords: 'motion animation reduce static accessibility',
+      action: () => {
+        const reduce = !isReducedMotion();
+        setReducedMotion(reduce);
+        toast(reduce ? 'Reduced motion on' : 'Animations on');
       },
     },
     { category: 'Actions', label: 'Open GitHub', keywords: 'code repo', action: () => window.open('https://github.com/vijaysinghpuwar', '_blank') },

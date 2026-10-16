@@ -106,6 +106,19 @@ timeline. It is the only sound on the site; the command palette can mute it.
 Both the plates and the audio are skipped entirely under
 `prefers-reduced-motion`.
 
+Reduced motion is the site's decision, not the raw media query:
+`src/lib/motion.ts` (mirrored by an inline script in `index.html`) writes
+`<html data-motion="reduce">`. A choice made in the command palette wins;
+otherwise Windows animates, because Chrome there reports `reduce` whenever the
+OS "Animation effects" switch is off, which it is on plenty of fast machines;
+everyone else follows the OS. Write CSS against `:root[data-motion="reduce"]`,
+Tailwind against `reduced:`, and React against `useReducedMotion` from
+`@/lib/motion` — never `@media (prefers-reduced-motion)`, `motion-reduce:` or
+framer-motion's hook, or Windows visitors get the static site again.
+
+`hover:` and `group-hover:` only apply on devices with a real hover
+(`hoverOnlyWhenSupported`), so a tap on a phone cannot leave something zoomed.
+
 ## Books
 
 `/books` is a library of long-form guides, read in the site's own reader.

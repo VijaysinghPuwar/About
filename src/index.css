@@ -280,10 +280,8 @@ svg [stroke], svg [fill] {
     background-position: 0 0;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .cert-wipe {
-      transition: none;
-    }
+  :root[data-motion="reduce"] .cert-wipe {
+    transition: none;
   }
 
   /* The rule grid drifts.
@@ -317,10 +315,8 @@ svg [stroke], svg [fill] {
     will-change: transform;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .rule-grid-drift {
-      animation: none;
-    }
+  :root[data-motion="reduce"] .rule-grid-drift {
+    animation: none;
   }
 
   /* Section entrance. See SectionReveal.tsx.
@@ -367,17 +363,17 @@ svg [stroke], svg [fill] {
     animation: section-rule-draw 1.1s ease-out both;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .section-reveal {
-      opacity: 1;
-      transform: none;
-      transition: none;
-    }
+  :root[data-motion="reduce"] .section-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
   }
 
   /* Loops scrolled out of view stop. Set by `usePauseOffscreen`. */
   [data-offscreen],
-  [data-offscreen] * {
+  [data-offscreen] *,
+  [data-offscreen] *::before,
+  [data-offscreen] *::after {
     animation-play-state: paused !important;
   }
 
@@ -397,10 +393,8 @@ svg [stroke], svg [fill] {
     animation: disclose 0.45s cubic-bezier(0.22, 0.8, 0.28, 1) both;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .animate-disclose {
-      animation: none;
-    }
+  :root[data-motion="reduce"] .animate-disclose {
+    animation: none;
   }
 
   /* The live line breathes.
@@ -413,27 +407,43 @@ svg [stroke], svg [fill] {
      This is the only glow on the site and it is deliberate: the halo is at 30%
      of the accent and never leaves the glyphs, so it registers as the line
      brightening rather than as a light source. */
+  /* Painted once and faded, not recoloured. Looping `color` and `text-shadow`
+     repainted the line every frame, forever, which on a Windows laptop's
+     integrated GPU was a steady cost for a three-word effect. The accent copy
+     sits on its own layer (`data-text`, from SecurityDiagram.tsx) and only its
+     opacity moves, so the compositor does the work. `inline-block` makes the
+     copy wrap exactly where the line does. */
   @keyframes live-glow {
     0%,
     100% {
-      color: hsl(var(--foreground));
-      text-shadow: none;
+      opacity: 0;
     }
     50% {
-      color: hsl(var(--primary));
-      text-shadow: 0 0 9px hsl(var(--primary) / 0.3);
+      opacity: 1;
     }
   }
 
   .live-glow {
+    position: relative;
+    display: inline-block;
+  }
+
+  .live-glow::after {
+    content: attr(data-text);
+    position: absolute;
+    inset: 0;
+    color: hsl(var(--primary));
+    text-shadow: 0 0 9px hsl(var(--primary) / 0.3);
+    opacity: 0;
+    pointer-events: none;
+    will-change: opacity;
     animation: live-glow 3.2s ease-in-out infinite;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .live-glow {
-      animation: none;
-      color: hsl(var(--primary));
-    }
+  :root[data-motion="reduce"] .live-glow::after {
+    animation: none;
+    opacity: 1;
+    text-shadow: none;
   }
 
   /* Page gutter.
@@ -574,17 +584,18 @@ html[data-theme-sweep] * {
   animation: none;
 }
 
-/* Reduced motion: every decorative animation stops, the layout does not change. */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
+/* Reduced motion: every decorative animation stops, the layout does not change.
+   Keyed off the site's decision, not the raw media query: see src/lib/motion.ts. */
+:root[data-motion="reduce"] *,
+:root[data-motion="reduce"] *::before,
+:root[data-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
 
-  html {
-    scroll-behavior: auto;
-  }
+:root[data-motion="reduce"] {
+  scroll-behavior: auto;
 }
 
 /*

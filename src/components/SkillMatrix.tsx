@@ -143,7 +143,7 @@ export function SkillMatrix({ projects, onSelectSkill, activeSkill }: SkillMatri
                beside the heading brightens with it, so the card reads as one
                object responding rather than four parts each doing something.
                Transform only, so the grid never reflows. */
-            className={`panel group/card flex flex-col rounded-lg p-[22px] hover:-translate-y-0.5 hover:border-primary hover:bg-card-elevated motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${spanFor(i)}`}
+            className={`panel group/card flex flex-col rounded-lg p-[22px] hover:-translate-y-0.5 hover:border-primary hover:bg-card-elevated reduced:transition-none reduced:hover:translate-y-0 ${spanFor(i)}`}
           >
             <div className="flex items-center gap-2.5">
               {/* One mark for all five groups. Five different lucide glyphs
@@ -154,7 +154,7 @@ export function SkillMatrix({ projects, onSelectSkill, activeSkill }: SkillMatri
                 height="16"
                 viewBox="0 0 14 16"
                 aria-hidden="true"
-                className="shrink-0 transition-transform duration-300 ease-out group-hover/card:scale-110 motion-reduce:transition-none"
+                className="shrink-0 transition-transform duration-300 ease-out group-hover/card:scale-110 reduced:transition-none"
               >
                 <path
                   d="M7 .9 L13 4.4 L13 11.6 L7 15.1 L1 11.6 L1 4.4 Z"

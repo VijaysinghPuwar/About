@@ -1,3 +1,4 @@
+import { isReducedMotion } from '@/lib/motion';
 /*
   Theme switch as a shutter, not a cross-fade.
 
@@ -114,7 +115,7 @@ export function setSoundMuted(muted: boolean) {
 }
 
 function prefersReducedMotion() {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return isReducedMotion();
 }
 
 /*

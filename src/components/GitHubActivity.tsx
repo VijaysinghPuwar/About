@@ -234,7 +234,7 @@ export function GitHubActivity() {
         <div className="flex flex-none items-center gap-2.5">
           <span
             aria-hidden="true"
-            className="h-[7px] w-[7px] animate-pulse rounded-full bg-primary motion-reduce:animate-none"
+            className="h-[7px] w-[7px] animate-pulse rounded-full bg-primary reduced:animate-none"
           />
           <span className="font-mono text-[11.5px] tracking-[0.14em] text-muted-dim">
             CURRENTLY BUILDING
@@ -297,7 +297,7 @@ export function GitHubActivity() {
                   <span
                     aria-hidden="true"
                     className={cn(
-                      'block w-[5px] rounded-[1.5px] transition-[transform,opacity,background-color] duration-150 ease-out motion-reduce:transition-none',
+                      'block w-[5px] rounded-[1.5px] transition-[transform,opacity,background-color] duration-150 ease-out reduced:transition-none',
                       day.count ? 'bg-primary' : 'bg-border-strong',
                       /* The hovered bar grows from its base; the rest step
                          back so the one being read is the one that reads. */

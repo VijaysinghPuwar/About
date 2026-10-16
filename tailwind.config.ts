@@ -1,8 +1,13 @@
 import type { Config } from "tailwindcss";
 import tailwindcssAnimate from "tailwindcss-animate";
+import plugin from "tailwindcss/plugin";
 
 export default {
   darkMode: ["class"],
+  /* `hover:` and `group-hover:` compile under `@media (hover: hover)`, so a
+     tap on a touch screen does not leave an element stuck in its hover state
+     (the certification name used to zoom 2x off a phone screen that way). */
+  future: { hoverOnlyWhenSupported: true },
   content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
   prefix: "",
   theme: {
@@ -159,5 +164,10 @@ export default {
       },
     },
   },
-  plugins: [tailwindcssAnimate],
+  plugins: [
+    tailwindcssAnimate,
+    /* `reduced:` replaces `motion-reduce:`. It follows the site's decision on
+       <html data-motion>, not the raw OS query; see src/lib/motion.ts. */
+    plugin(({ addVariant }) => addVariant('reduced', ':root[data-motion="reduce"] &')),
+  ],
 } satisfies Config;
