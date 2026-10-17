@@ -211,6 +211,7 @@ function ChapterView({
   const [spreads, setSpreads] = useState(1);
   const [columns, setColumns] = useState(1);
   const [fontsReady, setFontsReady] = useState(0);
+  const [figuresReady, setFiguresReady] = useState(0);
   const [drag, setDrag] = useState(0);
   const [animate, setAnimate] = useState(false);
 
@@ -248,6 +249,28 @@ function ChapterView({
     document.fonts?.ready.then(() => live && setFontsReady(n => n + 1));
     return () => { live = false; };
   }, []);
+
+  // A figure has no height until it loads, so the pages are counted short and
+  // the end of the chapter falls off the last spread. Count again as each one
+  // arrives. They load eagerly: lazily, a figure on a later page would only
+  // load when turned to, and the page count would keep changing under the
+  // reader.
+  const hasTrack = !!html && !!size;
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!hasTrack || !track) return;
+    const bump = () => setFiguresReady(n => n + 1);
+    const pending = [...track.querySelectorAll('img')].filter(img => !img.complete);
+    for (const img of pending) {
+      img.addEventListener('load', bump);
+      img.addEventListener('error', bump);
+      img.loading = 'eager';
+    }
+    return () => pending.forEach(img => {
+      img.removeEventListener('load', bump);
+      img.removeEventListener('error', bump);
+    });
+  }, [html, hasTrack]);
 
   // Measure the frame. Rotation, a window resize and a mobile toolbar
   // showing or hiding all land here.
@@ -308,12 +331,12 @@ function ChapterView({
         target = Math.round(fraction.current * (total - 1));
       }
     } else {
-      // Re-paginated (resize, type size, fonts): stay on the same passage.
+      // Re-paginated (resize, type size, fonts, figures): stay on the same passage.
       target = Math.round(fraction.current * (total - 1));
     }
     setSpread(Math.min(total - 1, Math.max(0, target)));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on layout inputs only, by design
-  }, [html, size, geom, ready, settings.size, settings.font, fontsReady]);
+  }, [html, size, geom, ready, settings.size, settings.font, fontsReady, figuresReady]);
 
   // Record the place on every turn.
   useEffect(() => {
