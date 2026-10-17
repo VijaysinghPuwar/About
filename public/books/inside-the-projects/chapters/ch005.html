@@ -1,0 +1,1064 @@
+<section id="chapter-5-text-to-speech-projects" class="level1">
+<h1><span class="header-section-number">5</span> Text-to-Speech Projects</h1>
+<p>This chapter covers the projects that turn written text into spoken audio. They range from a set of quick experiments (Gradio, Tkinter and Next.js front ends wrapped around the Kokoro model) to SetupTTS, a shipped desktop app with installers, a CI pipeline and more than 700 automated tests, built to finish twelve-hour audiobooks without losing a sentence. A short primer on how neural speech synthesis works comes first, because every project in the chapter builds on the same ideas: text normalization, phonemization with espeak-ng, an acoustic model run through ONNX Runtime, and careful handling of chunks of audio.</p>
+<section id="primer-how-neural-text-to-speech-works" class="level2">
+<h2>Primer: How Neural Text-to-Speech Works</h2>
+<section id="the-pipeline-in-five-stages" class="level3">
+<h3>The pipeline in five stages</h3>
+<p>A modern text-to-speech (TTS) system is a chain of transformations. Each stage turns one representation into a slightly more "sound-like" one.</p>
+<pre class="text"><code> raw text
+    |  1. normalization  ("Dr. 5 km" -&gt; "Doctor five kilometres")
+    v
+ clean text
+    |  2. phonemization  (espeak-ng / misaki: letters -&gt; IPA)
+    v
+ phonemes  "h@l'oU w'3:ld"
+    |  3. tokenization   (phoneme -&gt; integer id via a lookup map)
+    v
+ int64 ids [0, 50, 83, 54, ...]
+    |  4. acoustic model (VITS / StyleTTS2 in ONNX Runtime)
+    v
+ float32 waveform, 22 050 or 24 000 samples per second
+    |  5. encoding       (PCM -&gt; WAV, MP3 via LAME, AAC via FFmpeg)
+    v
+ audio file</code></pre>
+<ol type="1">
+<li><strong>Normalization</strong> rewrites text into something speakable. Curly quotes become straight quotes, soft hyphens disappear, bullet characters are dropped, and numbers are expanded.</li>
+<li><strong>Phonemization</strong> converts spelling into pronunciation. English spelling is irregular ("though", "through", "tough"), so a model that reads letters directly has to learn pronunciation rules from scratch. Instead, a grapheme-to-phoneme (G2P) tool produces symbols from the International Phonetic Alphabet (IPA), a notation where each symbol is one sound. <strong>espeak-ng</strong> is an open source speech synthesizer whose rule tables and dictionaries cover over 100 languages; Piper and Kokoro both use it (Kokoro through its <code>misaki</code> G2P library, which falls back to espeak-ng for words it does not know).</li>
+<li><strong>Tokenization</strong> maps each phoneme symbol to an integer using a fixed table that was frozen when the model was trained. Piper ships this table in the voice's <code>.onnx.json</code> file as <code>phoneme_id_map</code>. Kokoro's <code>config.json</code> (present in the <code>kokoro_CPU Only or AMD/model</code> folder) has a <code>vocab</code> with <code>n_token: 178</code>.</li>
+<li><strong>The acoustic model</strong> is a neural network that takes the ids and outputs audio samples. Piper voices are <strong>VITS</strong> models: an encoder reads phonemes, a duration predictor decides how long each phoneme lasts, and a decoder generates the waveform directly. Kokoro (82 million parameters) is based on <strong>StyleTTS 2</strong>: a phoneme encoder, a prosody predictor conditioned on a <strong>style vector</strong> (a list of numbers that captures a speaker's timbre and delivery), and an <strong>ISTFTNet</strong> vocoder. A vocoder turns an intermediate representation into a waveform; ISTFTNet predicts short spectra and runs an inverse short-time Fourier transform to produce samples cheaply. The Kokoro config in the workspace confirms this: an <code>istftnet</code> block with <code>gen_istft_n_fft: 20</code>, a <code>plbert</code> block (a small BERT that reads phonemes for context), and <code>style_dim: 128</code>.</li>
+<li><strong>Encoding</strong> packs the floating-point samples into a file. A WAV file stores raw 16-bit integers; MP3 compresses them with a psychoacoustic model.</li>
+</ol>
+</section>
+<section id="why-onnx-runtime-shows-up-everywhere" class="level3">
+<h3>Why ONNX Runtime shows up everywhere</h3>
+<p><strong>ONNX</strong> (Open Neural Network Exchange) is a file format that stores a trained network as a graph of standard operators plus its weights. <strong>ONNX Runtime</strong> is Microsoft's engine that executes that graph. It is the reason a model trained in PyTorch can run in a 30 MB desktop app with no PyTorch installed. Its key concept is the <strong>execution provider</strong>: a backend that runs operators on specific hardware. <code>CPUExecutionProvider</code> is always present; <code>CoreMLExecutionProvider</code> targets Apple's Neural Engine and GPU, <code>CUDAExecutionProvider</code> targets NVIDIA cards, and <code>DmlExecutionProvider</code> (DirectML) targets any DirectX 12 GPU on Windows. You pass an ordered list of providers when you create an <code>InferenceSession</code>, and ONNX Runtime assigns each operator to the first provider that supports it. That list, and checking what was actually used, is a recurring theme in this chapter.</p>
+</section>
+<section id="speed-rate-and-length-scale" class="level3">
+<h3>Speed, rate and length scale</h3>
+<p>Both model families expose speed as a scaling factor on predicted phoneme durations. In Piper this is <code>length_scale</code> (bigger means slower); Kokoro takes a <code>speed</code> input (bigger means faster). SetupTTS converts a "+24%" rate into <code>length_scale = default / 1.24</code>, and LocalTTSVideoStudio passes <code>--length_scale 1/speed</code> to the Piper command line.</p>
+</section>
+<section id="why-everything-is-chunked" class="level3">
+<h3>Why everything is chunked</h3>
+<p>Every project splits long text into pieces before synthesis. Neural models have a maximum input length (Kokoro's BERT has 512 positions), memory grows with input length, and the online Microsoft service limits each request to a few thousand bytes. The interesting engineering is in how each project splits, how it stitches the pieces back together, and how it proves nothing was lost.</p>
+</section>
+</section>
+<section id="setuptts" class="level2">
+<h2>SetupTTS</h2>
+<section id="at-a-glance-3" class="level3">
+<h3>At a Glance</h3>
+<p>SetupTTS is a desktop application for macOS and Windows that converts pasted text or <code>.txt</code> files into MP3 audio. It offers three voice sources in one picker: more than 300 Microsoft neural voices streamed over a websocket, about 170 offline Piper neural voices that run on the CPU (or an NVIDIA GPU on Windows), and the operating system's built-in voices. It is aimed at people producing long-form audio, such as audiobooks from web novels, where a job can run for many hours. The core problem it solves is not "call a speech API" but "finish a 12-hour job over an unreliable connection and refuse to hand over a file that is missing even one sentence."</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Python 3.12, PowerShell (SAPI helper), Inno Setup script, Bash</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>PySide6 (Qt 6), asyncio</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>edge-tts 7.2.8, aiohttp, piper-tts 1.8.0, onnxruntime 1.30.0, numpy, lameenc, certifi, platformdirs</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>macOS 15+ (Apple Silicon), Windows 10/11 x64</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/setuptts" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/setuptts</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Active; version 1.8.1, 77 commits from March to October 2026</td>
+</tr>
+</tbody>
+</table></div>
+<p>A note on duplicates: the task notes mentioned a possible copy at <code>Random git/apps/Setuptts</code>. That folder does not exist; a search of <code>Random git</code> for anything named "setuptts" found nothing, so the top-level <code>Setuptts</code> repository is the only copy.</p>
+</section>
+<section id="how-it-works-simple-version-3" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Think of a book printer who has to photocopy a 900-page manuscript on a copier that sometimes jams silently and spits out half a page.</p>
+<ol type="1">
+<li>The printer splits the manuscript into sections that end at a paragraph or sentence break, and writes on a tracking sheet exactly which pages each section covers.</li>
+<li>Each section is sent to the copier. When the copy comes back, the printer checks it against the original: does the last line match? Is the page the right length?</li>
+<li>A good copy goes into a numbered folder and its line goes on the tracking sheet. A bad copy is thrown away and the section is tried again, later in smaller pieces if it keeps failing.</li>
+<li>If the power goes out, the printer reopens the folder the next day, trusts only the unbroken run of good copies from page one, and carries on from there.</li>
+<li>Only when the tracking sheet shows every page covered exactly once, with no gaps and no overlaps, does the printer bind the book.</li>
+</ol>
+<p>SetupTTS does the same with text ranges, audio chunk files and a JSON manifest.</p>
+</section>
+<section id="architecture-3" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>+---------------------- UI thread (PySide6) ----------------------+
+| InputPanel (editor, file import)    HistoryPanel (SQLite rows)  |
+| OutputPanel (voice, speed, export, active jobs)                 |
++---------------+-------------------------------------------------+
+                | submit / cancel / resume (Qt signals)
+                v
+        +---------------+      max 2 concurrent jobs
+        |   JobQueue    |-----------------------------+
+        +-------+-------+                             |
+                |                                     |
+     online     v                         offline     v
+   +--------------------+           +----------------------+
+   | TTSWorker (QThread |           | LocalTTSWorker       |
+   |  + asyncio loop)   |           |  PiperSynthesizer or |
+   +----+----------+----+           |  SystemSynthesizer   |
+        |          |                +----------+-----------+
+        | wss      | verified                  | PCM
+        v          v chunks                    v
+ +------------+ +-------------------+   +--------------+
+ | Microsoft  | | ChunkStore        |   | Mp3Writer    |
+ | neural TTS | | manifest.json     |   | (lameenc,    |
+ | websocket  | | source.txt        |   |  .part file) |
+ +------------+ | chunk_000001.mp3  |   +------+-------+
+                +---------+---------+          |
+                          | coverage check     | rename
+                          v                    v
+                     book.mp3  &lt;-------- book.mp3</code></pre>
+<p>The UI thread never does network or model work. Each job runs in a <code>QThread</code>; online jobs create their own <code>asyncio</code> event loop inside the thread because edge-tts is an async library. Workers talk back only through Qt signals (<code>progress</code>, <code>stage_changed</code>, <code>telemetry_updated</code>, <code>completed</code>, <code>failed</code>, <code>resumable</code>), which Qt delivers safely on the UI thread.</p>
+</section>
+<section id="deep-dive-3" class="level3">
+<h3>Deep Dive</h3>
+<section id="entry-point-and-process-modes" class="level4">
+<h4>Entry point and process modes</h4>
+<p><code>main.py</code> is three lines that call <code>app.main.main()</code>. That function does several things before Qt even starts:</p>
+<ul>
+<li>Sets <code>SSL_CERT_FILE</code> to certifi's bundle, because a PyInstaller bundle cannot find it otherwise.</li>
+<li>Handles two hidden command-line modes. <code>--selftest &lt;out.json&gt; [--network]</code> (in <code>app/selftest.py</code>) is used by CI to test the packaged app; <code>--gpu-check</code> (in <code>app/gpu_check.py</code>) runs a GPU speed test in a separate process.</li>
+<li>Acquires a single-instance lock (<code>app/utils/single_instance.py</code>). The first copy holds a <code>QLockFile</code> and listens on a <code>QLocalServer</code>; a second launch sends the word <code>activate</code> over a local socket and exits. The docstring explains why: a real log showed two copies started nine seconds apart, and a second copy could resume a job the first was still writing.</li>
+<li>On Windows, calls <code>gpu_accel.startup()</code> before anything imports <code>onnxruntime</code>, so the GPU build can be swapped in (covered below).</li>
+</ul>
+</section>
+<section id="online-voices-edge-tts-over-a-websocket" class="level4">
+<h4>Online voices: edge-tts over a websocket</h4>
+<p><code>app/services/tts_service.py</code> is the only module that imports <code>edge_tts</code>, a community library that speaks the same protocol as the Microsoft Edge browser's Read Aloud feature. The client opens a <strong>websocket</strong> (a long-lived, two-way TCP connection upgraded from HTTP), sends an SSML document (Speech Synthesis Markup Language, an XML format that names the voice, rate and text), and receives a stream of binary MP3 frames (24 kHz, 48 kbit/s, mono) interleaved with JSON metadata events. The metadata includes <code>SentenceBoundary</code> or <code>WordBoundary</code> events, each with an <code>offset</code> and <code>duration</code> measured in <strong>ticks</strong> of 100 nanoseconds and the <code>text</code> that was spoken.</p>
+<p>The module patches edge-tts in three places:</p>
+<ul>
+<li><strong>Endpoint failover.</strong> On 12 October 2026 the legacy host began answering every synthesis request with HTTP 403. The module keeps a tuple <code>SYNTHESIS_ENDPOINTS</code> with <code>api.msedgeservices.com</code> first and the legacy host second; <code>synthesis_refused(host)</code> rotates to the next one under a lock, and ignores late refusals from a host already abandoned so that two failing jobs cannot flip it back and forth.</li>
+<li><strong>Certificates.</strong> <code>build_ssl_context()</code> trusts certifi plus the operating system store (<code>ctx.load_default_certs()</code>). Antivirus "web shields" and corporate proxies re-sign HTTPS with their own root certificate installed in the Windows store, which certifi alone does not trust; this one change fixed "Could not load voices" for those users.</li>
+<li><strong>Proxies.</strong> aiohttp only reads proxy environment variables, while Windows stores the proxy in the registry. <code>system_proxy()</code> reads it via <code>urllib.request.getproxies()</code> and caches the bypass check for five minutes, because on Windows that check performs DNS lookups and it ran once per chunk.</li>
+</ul>
+<p>It also replaces edge-tts's HTTP date parser with <code>email.utils.parsedate_to_datetime</code>, because <code>strptime</code> follows the process locale and failed to parse "Mon, 12 Oct 2026" under German or Portuguese locales, which broke clock-skew correction.</p>
+</section>
+<section id="detecting-silent-truncation" class="level4">
+<h4>Detecting silent truncation</h4>
+<p>The hardest bug the project solved: when the websocket closes before the service's <code>turn.end</code> message, edge-tts ends the stream quietly and returns the partial audio as if it were complete. A chunk that should hold four minutes of speech might hold three, and nothing raises. <code>_stream_incomplete_reason()</code> in <code>app/workers/tts_worker.py</code> catches this with two independent checks:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb3-1">_MP3_BYTES_PER_SECOND <span class="op">=</span> <span class="dv">48_000</span> <span class="op">//</span> <span class="dv">8</span></span>
+<span id="cb3-2">_TICKS_PER_SECOND <span class="op">=</span> <span class="dv">10_000_000</span></span>
+<span id="cb3-3">_AUDIO_END_TOLERANCE_S <span class="op">=</span> <span class="fl">0.35</span></span>
+<span id="cb3-4">_UNSPOKEN_TAIL_LETTERS <span class="op">=</span> <span class="dv">4</span></span>
+<span id="cb3-5"></span>
+<span id="cb3-6">audio_s <span class="op">=</span> audio_bytes <span class="op">/</span> _MP3_BYTES_PER_SECOND</span>
+<span id="cb3-7">speech_end_s <span class="op">=</span> <span class="bu">max</span>(off <span class="op">+</span> dur <span class="cf">for</span> off, dur, _ <span class="kw">in</span> boundaries) <span class="op">\</span></span>
+<span id="cb3-8">    <span class="op">/</span> _TICKS_PER_SECOND</span>
+<span id="cb3-9"><span class="cf">if</span> audio_s <span class="op">+</span> _AUDIO_END_TOLERANCE_S <span class="op">&lt;</span> speech_end_s:</span>
+<span id="cb3-10">    <span class="cf">return</span> (<span class="ss">f"received </span><span class="sc">{</span>audio_s<span class="sc">:.1f}</span><span class="ss"> s of audio but the "</span></span>
+<span id="cb3-11">            <span class="ss">f"speech runs to </span><span class="sc">{</span>speech_end_s<span class="sc">:.1f}</span><span class="ss"> s"</span>)</span>
+<span id="cb3-12"></span>
+<span id="cb3-13">source <span class="op">=</span> _speakable(text)          <span class="co"># letters+digits, casefolded</span></span>
+<span id="cb3-14">position <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb3-15"><span class="cf">for</span> _, _, boundary_text <span class="kw">in</span> boundaries:</span>
+<span id="cb3-16">    spoken <span class="op">=</span> _speakable(boundary_text)</span>
+<span id="cb3-17">    idx <span class="op">=</span> source.find(spoken, position)</span>
+<span id="cb3-18">    ...</span>
+<span id="cb3-19">    position <span class="op">=</span> idx <span class="op">+</span> <span class="bu">len</span>(spoken)</span>
+<span id="cb3-20">unspoken <span class="op">=</span> <span class="bu">len</span>(source) <span class="op">-</span> position</span>
+<span id="cb3-21"><span class="cf">if</span> unspoken <span class="op">&gt;</span> _UNSPOKEN_TAIL_LETTERS:</span>
+<span id="cb3-22">    <span class="cf">return</span> <span class="ss">f"the audio stopped with about </span><span class="sc">{</span>unspoken<span class="sc">}</span><span class="ss"> letters unspoken"</span></span></code></pre></div>
+<p>Because the stream is constant bit rate (CBR: every second of audio uses the same number of bytes), the byte count converts exactly to seconds: 48 000 bits per second is 6000 bytes per second. The first check catches a cut inside a sentence: the audio stops before the last announced sentence ends. The second check catches a cut between sentences: the announced sentences, matched in order against the source text (letters and digits only, so punctuation and case differences do not matter), stop short of the end. If the service rewrote part of a sentence (numbers, symbols), the matcher anchors on the last 12 letters instead. The comments record the validation: complete streams from 36 voices in 9 languages produced zero false alarms, and every possible cut point of real streams was detected. A detected truncation raises <code>_AttemptFailure("timeout_after_audio")</code>, which the retry logic treats exactly like a stall.</p>
+</section>
+<section id="chunk-planning-and-adaptive-recovery" class="level4">
+<h4>Chunk planning and adaptive recovery</h4>
+<p>The worker cuts text with <code>_take_chunk_at()</code>, which prefers paragraph breaks, then sentence boundaries (a regex that also understands CJK punctuation such as <code>，、；：</code>), then word gaps, and only hard-splits as a last resort. Limits depend on job size: 10 500 characters and 3 750 payload bytes for short jobs, shrinking to 9 200 and 3 600 for jobs over 90 000 characters. The payload is measured by <code>_edge_payload_size()</code>, which XML-escapes the text the same way edge-tts does, because <code>&amp;</code> becomes <code>&amp;amp;</code> and inflates the request. Complex scripts get tighter limits from <code>_COMPLEX_SCRIPT_LIMITS</code>, and multilingual voices get about 15 % less on long jobs.</p>
+<p>The first chunk is a small "probe" (1 200 characters), followed by "ramp" chunks of 3 200, so the user hears progress quickly and a broken voice fails fast. Per-chunk timeouts scale with the expected audio length (measured at 15.8 source characters per audio second, with a worst-case streaming speed of 0.45x realtime). After a slow chunk the size shrinks by a factor of 0.82; after healthy chunks it grows by 1.18.</p>
+<p>Failures follow a ladder. Up to five attempts per chunk with exponential backoff (base 2 s), each with a fresh <code>edge_tts.Communicate</code> object so no half-dead socket is reused. If a chunk keeps failing, <code>_subdivide_range_for_recovery()</code> splits its <code>[start, end)</code> range into smaller sub-ranges (down to 180 characters, at most three levels deep) whose union must equal the parent range exactly. Before counting a failure, <code>_wait_out_outage()</code> probes the service; if it is unreachable, the job shows "Waiting for internet connection" and polls at 3, 5, 10, 15, then every 30 seconds for up to 30 minutes, without spending retries.</p>
+</section>
+<section id="the-chunk-store-a-crash-safe-manifest" class="level4">
+<h4>The chunk store: a crash-safe manifest</h4>
+<p><code>app/workers/chunk_store.py</code> is 1 135 lines devoted to making progress durable. Each job gets a staging folder containing <code>source.txt</code> (the cleaned text), <code>manifest.json</code> (schema version 2) and one <code>chunk_NNNNNN.mp3</code> per finished section. Each <code>ChunkRecord</code> stores <code>index</code>, <code>start_char</code>, <code>end_char</code>, a 16-hex-digit SHA-256 prefix of the chunk text, the file name, <code>audio_bytes</code>, retries, and any recovery <code>sub_ranges</code>.</p>
+<p>Every write goes through this helper:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><span class="kw">def</span> _atomic_write_bytes(path: Path, payload: <span class="bu">bytes</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb4-2">    tmp <span class="op">=</span> path.with_name(</span>
+<span id="cb4-3">        <span class="ss">f"</span><span class="sc">{</span>path<span class="sc">.</span>name<span class="sc">}</span><span class="ss">.</span><span class="sc">{</span>uuid<span class="sc">.</span>uuid4()<span class="sc">.</span><span class="bu">hex</span>[:<span class="dv">8</span>]<span class="sc">}</span><span class="ss">.tmp"</span>)</span>
+<span id="cb4-4">    <span class="cf">try</span>:</span>
+<span id="cb4-5">        <span class="cf">with</span> <span class="bu">open</span>(tmp, <span class="st">"wb"</span>) <span class="im">as</span> fh:</span>
+<span id="cb4-6">            fh.write(payload)</span>
+<span id="cb4-7">            fh.flush()</span>
+<span id="cb4-8">            os.fsync(fh.fileno())</span>
+<span id="cb4-9">        _replace_with_retry(tmp, path)</span>
+<span id="cb4-10">    <span class="cf">finally</span>:</span>
+<span id="cb4-11">        <span class="cf">try</span>:</span>
+<span id="cb4-12">            tmp.unlink(missing_ok<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb4-13">        <span class="cf">except</span> <span class="pp">Exception</span>:</span>
+<span id="cb4-14">            <span class="cf">pass</span></span></code></pre></div>
+<p>This is the classic <strong>write-then-rename</strong> pattern: the new content goes to a temporary file, <code>fsync</code> forces it from the OS cache onto the disk, and <code>os.replace</code> swaps it in atomically, so readers see either the old file or the new one, never half of each. The docstring explains two subtleties. The temp name is unique per call because the UI thread (listing resume candidates) and a worker could both rewrite a manifest, and a shared <code>.tmp</code> name let one rename the other's half-written file. The <code>fsync</code> matters because a power cut could otherwise leave a chunk with the right size but zeroed contents, which a size-based check would accept. <code>replace_with_retry()</code> in <code>app/utils/file_ops.py</code> retries the rename up to five times on Windows, where antivirus scanners and search indexers briefly lock new files.</p>
+<p>On resume, only the unbroken prefix is trusted:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><span class="kw">def</span> _trusted_cursor_from_records(records) <span class="op">-&gt;</span> <span class="bu">int</span>:</span>
+<span id="cb5-2">    cursor <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb5-3">    expected_index <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb5-4">    <span class="cf">for</span> record <span class="kw">in</span> <span class="bu">sorted</span>(records, key<span class="op">=</span><span class="kw">lambda</span> c: c.index):</span>
+<span id="cb5-5">        <span class="cf">if</span> record.index <span class="op">!=</span> expected_index:</span>
+<span id="cb5-6">            <span class="cf">break</span></span>
+<span id="cb5-7">        <span class="cf">if</span> record.start_char <span class="op">!=</span> cursor:</span>
+<span id="cb5-8">            <span class="cf">break</span></span>
+<span id="cb5-9">        <span class="cf">if</span> record.end_char <span class="op">&lt;=</span> record.start_char:</span>
+<span id="cb5-10">            <span class="cf">break</span></span>
+<span id="cb5-11">        cursor <span class="op">=</span> record.end_char</span>
+<span id="cb5-12">        expected_index <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb5-13">    <span class="cf">return</span> cursor</span></code></pre></div>
+<p>The function walks records in index order and stops at the first gap, out-of-order index, or empty range. Everything after that point is regenerated. Combined with hash checks of each record's text against <code>source.txt</code>, a damaged manifest can never cause audio to be stitched in the wrong place.</p>
+<p><code>finalize()</code> then fails closed. <code>coverage_report()</code> must show no gaps, no overlaps, no missing or invalid files, no hash mismatches, and <code>covered_chars == total_chars</code>. The chunks are concatenated into <code>book.mp3.part</code> (MP3 frames are self-contained, so byte concatenation produces a valid file), the written size must equal the sum of recorded sizes, and an optional <code>verify</code> callback checks that the audio length is plausible for the text. Only then is the <code>.part</code> file renamed over the destination. If verification fails, the existing file is untouched and the suspect audio is kept as <code>name (incomplete).mp3</code>. Staging folders are kept for 60 days so the Resume button keeps working.</p>
+</section>
+<section id="offline-voices-piper-on-onnx-runtime" class="level4">
+<h4>Offline voices: Piper on ONNX Runtime</h4>
+<p><code>app/services/piper_tts.py</code> (837 lines) wraps the <code>piper-tts</code> package. Voice keys look like <code>en_US-lessac-medium</code> (language, speaker, quality) and are exposed in the picker as <code>piper:en_US-lessac-medium</code>. One voice is bundled; the rest come from the <code>rhasspy/piper-voices</code> catalog on Hugging Face. <code>download_voice()</code> streams the config and model in 256 KB blocks to <code>.part</code> files, verifies both size and MD5 against the catalog, and renames the model last so the rename is the commit point. Chinese, Japanese, Hebrew and Thai voices are hidden because their phonemizers need packages that are not bundled.</p>
+<p><code>_open_voice()</code> builds the ONNX Runtime session itself rather than letting <code>PiperVoice.load</code> build a default one and then replacing it (which loaded the model twice). It sets <code>intra_op_num_threads</code>, and disables thread spinning (<code>session.intra_op.allow_spinning = 0</code>), because idle worker threads otherwise busy-wait, costing about 30 % more CPU for no speed gain.</p>
+<p><code>PiperSynthesizer.synthesize()</code> is where phonemization and inference meet. It holds a global <code>_PHONEMIZE_LOCK</code> while calling <code>voice.phonemize(text)</code>, because espeak-ng keeps global C state and is not thread-safe; inference itself runs unlocked. Each sentence's phoneme list is then shaped by two splitters:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb6-1">_CLAUSE_SPLIT_PHONEMES <span class="op">=</span> <span class="dv">60</span></span>
+<span id="cb6-2">_MIN_CLAUSE_PHONEMES <span class="op">=</span> <span class="dv">12</span></span>
+<span id="cb6-3">_CLAUSE_MARKS <span class="op">=</span> <span class="bu">frozenset</span>(<span class="st">",;:"</span>)</span>
+<span id="cb6-4"></span>
+<span id="cb6-5"><span class="kw">def</span> _split_clauses(phonemes, limit<span class="op">=</span>_CLAUSE_SPLIT_PHONEMES):</span>
+<span id="cb6-6">    <span class="cf">if</span> <span class="bu">len</span>(phonemes) <span class="op">&lt;=</span> limit:</span>
+<span id="cb6-7">        <span class="cf">return</span> [phonemes]</span>
+<span id="cb6-8">    pieces, start <span class="op">=</span> [], <span class="dv">0</span></span>
+<span id="cb6-9">    <span class="cf">for</span> i, ph <span class="kw">in</span> <span class="bu">enumerate</span>(phonemes):</span>
+<span id="cb6-10">        end <span class="op">=</span> i <span class="op">+</span> <span class="dv">1</span></span>
+<span id="cb6-11">        <span class="cf">if</span> (ph <span class="kw">in</span> _CLAUSE_MARKS</span>
+<span id="cb6-12">                <span class="kw">and</span> end <span class="op">-</span> start <span class="op">&gt;=</span> _MIN_CLAUSE_PHONEMES</span>
+<span id="cb6-13">                <span class="kw">and</span> <span class="bu">len</span>(phonemes) <span class="op">-</span> end <span class="op">&gt;=</span> _MIN_CLAUSE_PHONEMES):</span>
+<span id="cb6-14">            pieces.append(phonemes[start:end])</span>
+<span id="cb6-15">            start <span class="op">=</span> end</span>
+<span id="cb6-16">            <span class="cf">while</span> start <span class="op">&lt;</span> <span class="bu">len</span>(phonemes) <span class="kw">and</span> phonemes[start] <span class="op">==</span> <span class="st">" "</span>:</span>
+<span id="cb6-17">                start <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb6-18">    pieces.append(phonemes[start:])</span>
+<span id="cb6-19">    <span class="cf">return</span> [p <span class="cf">for</span> p <span class="kw">in</span> pieces <span class="cf">if</span> p]</span></code></pre></div>
+<p>The comment above it records the evidence: the Ryan (high) voice garbled one long sentence 8 times in 8 and another 6 in 8, but split at commas both came out right 8 in 8, and on 120 other sentences the split changed nothing measurable when checked with speech recognition. A second splitter, <code>_cap_phonemes()</code>, hard-limits any run to 250 phonemes at word gaps, because VITS memory grows steeply with input length and ONNX Runtime keeps its peak arena: one long unpunctuated table pushed the app past 3 GB.</p>
+<p>Each piece is rendered by <code>voice.phonemes_to_ids()</code> then <code>voice.phoneme_ids_to_audio()</code>, peak-normalized to 16-bit PCM, and joined with silence: 120 ms after a sentence, 70 ms after a clause, none after a memory-only cut, because Piper trims each output and pieces would otherwise run together.</p>
+<p>Version 1.8.1 added <code>_known_phonemes()</code>. espeak-ng marks syllabic consonants (the "n" in "button") with the combining character U+0329, which some voices have no id for. Piper silently skipped it but logged a warning each time, 290 in one book. SetupTTS now drops unknown phonemes itself and logs each once per voice; the release notes record that model input was byte-identical across 150 000 characters.</p>
+<p>Concurrency is bounded at several levels. <code>_plan_parallel_runs()</code> returns two runs per voice with the cores split between them on machines with 4+ cores and 8+ GB of RAM (measured 133 to 171 characters per second for Ryan high on an M-series Mac), and one run otherwise. Each loaded voice carries a <code>BoundedSemaphore(_PARALLEL_RUNS)</code> shared across all jobs and previews, and only one voice stays cached (<code>_MAX_LOADED = 1</code>) because each holds about 400 MB once run.</p>
+<p>On Windows, espeak-ng opens files with ANSI APIs, so a data folder under a profile like <code>C:\Users\José</code> cannot be read. <code>_espeak_data_dir()</code> falls back to the 8.3 short path via <code>GetShortPathNameW</code>, or copies the data once to an ASCII-named folder under <code>ProgramData</code>.</p>
+</section>
+<section id="built-in-voices-and-mp3-encoding" class="level4">
+<h4>Built-in voices and MP3 encoding</h4>
+<p><code>app/services/system_tts.py</code> lists and drives OS voices. On Windows a long-lived PowerShell helper drives SAPI (including OneCore voices such as David and Zira), so a misbehaving third-party voice can crash only the helper. On macOS it calls <code>say</code>. Both write WAV, which is read back and resampled to 22 050 Hz.</p>
+<p><code>app/services/local_tts.py</code> defines the <code>LocalSynthesizer</code> protocol (<code>synthesize</code>, <code>cancel</code>, <code>close</code>) and <code>Mp3Writer</code>, which streams PCM into <code>lameenc</code> (Python bindings for the LAME encoder) at 64 kbit/s mono into <code>name.mp3.part</code>, <code>fsync</code>s it, then renames. If the destination is open in a media player, it saves under the next free name instead of discarding the work. <code>LocalTTSWorker</code> cuts text into 1 200-character chunks, retries each, and reports characters per second and an ETA.</p>
+</section>
+<section id="nvidia-gpu-acceleration-windows-beta" class="level4">
+<h4>NVIDIA GPU acceleration (Windows, beta)</h4>
+<p><code>app/services/gpu_accel.py</code> (761 lines) adds GPU support without bloating the installer. The CUDA build of ONNX Runtime plus NVIDIA's CUDA 13 and cuDNN 9 libraries total about 1.3 GB, so they are an optional download. Each wheel in <code>WHEELS</code> is pinned by URL, size and SHA-256, and downloads are resumable. Requirements are checked against <code>nvidia-smi</code> output: driver R580 or newer and compute capability 7.5 or higher (CUDA 13 dropped Maxwell, Pascal and Volta).</p>
+<p>The clever part is how the GPU build replaces the bundled CPU build at runtime. <code>activate()</code> inserts a custom import finder at the front of <code>sys.meta_path</code>:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><span class="kw">class</span> _RedirectFinder(importlib.abc.MetaPathFinder):</span>
+<span id="cb7-2">    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, package, directory):</span>
+<span id="cb7-3">        <span class="va">self</span>.package <span class="op">=</span> package</span>
+<span id="cb7-4">        <span class="va">self</span>.directory <span class="op">=</span> directory</span>
+<span id="cb7-5"></span>
+<span id="cb7-6">    <span class="kw">def</span> find_spec(<span class="va">self</span>, fullname, path<span class="op">=</span><span class="va">None</span>, target<span class="op">=</span><span class="va">None</span>):</span>
+<span id="cb7-7">        <span class="cf">if</span> fullname <span class="op">==</span> <span class="va">self</span>.package:</span>
+<span id="cb7-8">            <span class="cf">return</span> importlib.machinery.PathFinder.find_spec(</span>
+<span id="cb7-9">                fullname, [<span class="bu">str</span>(<span class="va">self</span>.directory)])</span>
+<span id="cb7-10">        <span class="cf">if</span> fullname.startswith(<span class="va">self</span>.package <span class="op">+</span> <span class="st">"."</span>):</span>
+<span id="cb7-11">            parent <span class="op">=</span> sys.modules.get(fullname.rpartition(<span class="st">"."</span>)[<span class="dv">0</span>])</span>
+<span id="cb7-12">            search <span class="op">=</span> <span class="bu">getattr</span>(parent, <span class="st">"__path__"</span>, <span class="va">None</span>)</span>
+<span id="cb7-13">            <span class="cf">if</span> search <span class="kw">is</span> <span class="va">None</span>:</span>
+<span id="cb7-14">                <span class="cf">return</span> <span class="va">None</span></span>
+<span id="cb7-15">            <span class="cf">return</span> importlib.machinery.PathFinder.find_spec(</span>
+<span id="cb7-16">                fullname, <span class="bu">list</span>(search))</span>
+<span id="cb7-17">        <span class="cf">return</span> <span class="va">None</span></span></code></pre></div>
+<p>Python asks each finder on <code>sys.meta_path</code> in order where a module lives. This one answers only for <code>onnxruntime</code> and its submodules, pointing them at the downloaded folder, so <code>import onnxruntime</code> anywhere in the app loads the GPU build. The NVIDIA DLL folders are added with <code>os.add_dll_directory</code> and also prepended to <code>PATH</code>, because cuDNN loads its engine libraries with plain <code>LoadLibrary</code>, which ignores the former.</p>
+<p><code>decide(mode, installed, check)</code> chooses the device. "Processor" never uses the card; "Graphics card" always does when installed; "Automatic" uses the card only if a speed check found it at least 1.25x faster. That check runs <code>SetupTTS --gpu-check</code> in a separate process so a driver crash cannot take down the app, and times <code>piper_tts.benchmark()</code> (best characters per second over two runs of a fixed narrative passage) on both devices.</p>
+<p>Two defensive details in <code>_open_voice()</code>: ONNX Runtime quietly drops a provider that fails to start, so the code checks <code>session.get_providers()[0]</code> and raises <code>GpuUnavailable</code> if CUDA is not first; and it calls <code>session.disable_fallback()</code>, because otherwise a CUDA failure inside <code>run()</code> makes ONNX Runtime silently rebuild the session on the CPU and the voice would still be reported as "on the card". If the card fails mid-job, <code>PiperSynthesizer</code> retries that piece on the CPU, and only if the CPU succeeds does it blame the card, mark it failed, and switch the rest of the job to the processor.</p>
+</section>
+<section id="power-management" class="level4">
+<h4>Power management</h4>
+<p><code>app/utils/power.py</code> keeps long jobs alive. On macOS it runs <code>caffeinate -i -w &lt;pid&gt;</code>, reference-counted across jobs; <code>-w</code> makes caffeinate exit when SetupTTS does, so a crash never leaves the Mac unable to sleep. It also calls <code>NSProcessInfo beginActivityWithOptions:</code> through <code>ctypes</code> and the Objective-C runtime, because macOS App Nap lowered a hidden window's priority within a minute and made offline jobs 3 to 4 times slower (the <code>NSAppSleepDisabled</code> Info.plist key no longer works on macOS 26). On Windows it calls <code>SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)</code> per worker thread and opts the process out of EcoQoS power throttling with <code>SetProcessInformation</code>. Every failure is logged and ignored: a job must never fail because the computer could not be kept awake.</p>
+</section>
+<section id="text-cleanup-and-language-checks" class="level4">
+<h4>Text cleanup and language checks</h4>
+<p><code>app/services/tts_quality.py</code> (1 102 lines) normalizes text before any engine sees it. It strips zero-width characters but deliberately keeps ZWNJ and ZWJ (U+200C/D), which change how Persian and Indic words are shaped. It removes soft hyphens so "inter-national" reads as one word, maps curly quotes and full-width brackets to ASCII, collapses runs of decorative symbols, and keeps meaningful symbols such as degree and trademark signs. It also classifies the script of the text across 24 Unicode ranges so the app can warn when, say, Devanagari text is sent to an English voice; a 1.6.2 fix stopped reading one to three accented Latin letters as Cyrillic.</p>
+</section>
+<section id="history-packaging-and-ci" class="level4">
+<h4>History, packaging and CI</h4>
+<p>Finished jobs go into a SQLite table <code>jobs</code> (id, text_preview, voice, rate, output_path, created_at, duration_secs, status, error_message) with an index on <code>created_at DESC</code>, managed by <code>app/services/history_service.py</code> with versioned migrations.</p>
+<p>Packaging uses PyInstaller with two spec files. <code>setuptts.spec</code> builds a macOS <code>.app</code> or a Windows <strong>onedir</strong> folder (an executable plus an <code>_internal</code> folder of libraries). It reads the version from <code>app/__init__.py</code> so nothing else needs editing, writes a Windows VERSIONINFO resource so Explorer shows the version, and uses <code>collect_all</code> for aiohttp and its C-extension dependencies (<code>multidict</code>, <code>yarl</code>, <code>frozenlist</code>, <code>aiosignal</code>), which PyInstaller's static analysis sometimes misses. <code>setuptts_portable.spec</code> builds a <strong>onefile</strong> EXE for the portable zip; its docstring explains that users ran the onedir EXE from inside a zip without extracting <code>_internal</code>, causing "Failed to load Python DLL" errors. An early commit records the opposite trade-off for the installer: onefile was replaced by onedir there to fix slow Windows startup, since onefile unpacks itself to <code>%TEMP%</code> on every launch.</p>
+<p><code>installers/windows.iss</code> is an Inno Setup script: per-user install (<code>PrivilegesRequired=lowest</code>), LZMA2 compression, x64 only, and <code>MinVersion=10.0.17763</code> because Qt 6.8+ needs Windows 10 1809. <code>build_macos.sh</code> reads the version, runs <code>scripts/fetch_bundled_voice.py</code>, builds, verifies assets, and zips with <code>ditto -c -k --keepParent</code> because plain <code>zip</code> can break the symlinks inside an app bundle.</p>
+<p><code>.github/workflows/build.yml</code> runs the test suite on both operating systems, checks that the git tag matches <code>APP_VERSION</code> and that release notes exist, verifies that the declared minimum macOS covers every bundled binary, and then self-tests the packaged app in every form it ships: the bundle, the app inside the DMG, the app extracted from the zip, the onedir build, the app installed silently by the real installer, and the portable EXE. The Windows job also downloads the GPU pack and confirms that with "Graphics card" chosen on a runner with no card, offline synthesis still succeeds on the processor.</p>
+</section>
+<section id="tests-and-benchmarks" class="level4">
+<h4>Tests and benchmarks</h4>
+<p>The <code>tests/</code> folder has 21 files and 458 test functions (749 test cases once parametrized), run headless with <code>QT_QPA_PLATFORM=offscreen</code>. Names show the focus: <code>test_long_form_scale.py</code> (12-hour-scale simulations), <code>test_long_session_stability.py</code>, <code>test_chunk_store.py</code>, <code>test_reliability_regressions.py</code>, <code>test_piper_phonemes.py</code>, and <code>test_network_setup.py</code>, which checks that the private edge-tts names the app patches (<code>_SSL_CTX</code>, <code>WSS_URL</code>) still exist in the pinned version.</p>
+<p><code>scripts/stress_voices.py</code> runs hostile text through every voice source, and <code>scripts/local_benchmark.py</code> times a real 715 000-character book with the worker's own chunking at the +24 % rate real jobs use, appending results to <code>benchmark_results.jsonl</code>. The one recorded run (app 1.7.4, Apple M5, Ryan high, CPU) shows 5 994 characters in 50 seconds: 120 characters per second, 5.5x realtime. The 1.8.1 notes report about 209 characters per second for the same voice after the parallel-run optimization.</p>
+</section>
+</section>
+<section id="key-design-decisions-and-trade-offs-3" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Fail closed rather than best effort.</strong> The app would rather stop with a resumable job than produce an MP3 with a silent hole. This costs complexity (a 1 100-line chunk store) but matches the user's real problem: nobody notices a missing paragraph until hour nine of listening.</li>
+<li><strong>Character ranges, not chunk counts, as the unit of truth.</strong> Recording <code>[start, end)</code> ranges lets recovery split chunks arbitrarily and still prove exact coverage, and lets resume validate against the source text.</li>
+<li><strong>edge-tts without an official agreement.</strong> It gives 300+ high-quality voices for free, but the README states plainly that availability can change, and the 403 incident proved it. The two-endpoint failover and the offline Piper path both hedge against that risk.</li>
+<li><strong>Piper over Kokoro for offline voices.</strong> Piper has a catalog of about 170 voices in about 50 languages with per-file checksums and runs fast on CPU. Kokoro sounds richer but covers fewer languages and needs more compute.</li>
+<li><strong>Patching library internals.</strong> Replacing <code>edge_tts.communicate._SSL_CTX</code> and <code>WSS_URL</code> is fragile, so versions are pinned exactly in <code>requirements.txt</code> and a test fails if the names disappear.</li>
+<li><strong>GPU as an optional, measured download.</strong> Shipping CUDA in every installer would add over a gigabyte for a minority of users, and a weak card can lose to a strong CPU, so "Automatic" only enables the card after measuring it.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-3" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Problem (from commits and comments)</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Websocket closed mid-chunk returned partial audio as complete</td>
+<td>Two-check <code>_stream_incomplete_reason</code> using CBR byte length and boundary text</td>
+</tr>
+<tr>
+<td>Legacy Microsoft host returned 403 for all synthesis (v1.7.2)</td>
+<td>Switch to <code>api.msedgeservices.com</code> with automatic failover</td>
+</tr>
+<tr>
+<td>"Could not load voices" on Windows behind antivirus or proxies (v1.6.1)</td>
+<td>Trust the OS certificate store; read the registry proxy</td>
+</tr>
+<tr>
+<td>Laptop slept mid-job, retries exhausted</td>
+<td><code>caffeinate</code>, <code>SetThreadExecutionState</code>, outage waiting without spending retries</td>
+</tr>
+<tr>
+<td>Hidden window ran 3 to 4x slower (v1.7.4)</td>
+<td>NSProcessInfo activity on macOS, EcoQoS opt-out on Windows</td>
+</tr>
+<tr>
+<td>Piper spoke gibberish on long sentences (v1.7.2)</td>
+<td>Split sentences over 60 phonemes at clause marks</td>
+</tr>
+<tr>
+<td>Memory over 3 GB on long unpunctuated input (v1.7.0)</td>
+<td>250-phoneme cap, one cached voice, bounded runs per model</td>
+</tr>
+<tr>
+<td>espeak-ng crashed when two jobs phonemized at once</td>
+<td>Global phonemize lock</td>
+</tr>
+<tr>
+<td>espeak-ng could not open non-ASCII paths on Windows</td>
+<td>8.3 short path or an ASCII copy of the data</td>
+</tr>
+<tr>
+<td>290 "Missing phoneme" warnings per book (v1.8.1)</td>
+<td>Drop unknown ids before Piper, log each once</td>
+</tr>
+<tr>
+<td>Two app copies wrote the same job</td>
+<td>Lock file plus local-socket single instance</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="security-and-performance-notes-3" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>Every downloaded artifact is verified: Piper voices by size and MD5 from the catalog, GPU wheels by SHA-256 pinned in source.</li>
+<li>The SSL context adds the OS store but never disables verification, so it trusts nothing the machine does not already trust.</li>
+<li>The apps are not code-signed; the README tells users how to get past Gatekeeper and SmartScreen.</li>
+<li>Performance levers that the code measures rather than guesses: thread spinning off (about 30 % less CPU), two parallel runs per voice (about 30 % faster), cached proxy bypass checks (avoids per-chunk DNS on Windows), payload sizes computed once per chunk rather than per stream event.</li>
+</ul>
+</section>
+<section id="how-to-run-it-3" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb8"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><span class="fu">git</span> clone https://github.com/VijaysinghPuwar/setuptts.git</span>
+<span id="cb8-2"><span class="bu">cd</span> setuptts</span>
+<span id="cb8-3"><span class="ex">python3.12</span> <span class="at">-m</span> venv .venv <span class="kw">&amp;&amp;</span> <span class="bu">source</span> .venv/bin/activate</span>
+<span id="cb8-4"><span class="ex">pip</span> install <span class="at">-r</span> requirements.txt</span>
+<span id="cb8-5"><span class="ex">python</span> main.py</span>
+<span id="cb8-6"></span>
+<span id="cb8-7"><span class="ex">pip</span> install pytest pytest-qt</span>
+<span id="cb8-8"><span class="va">QT_QPA_PLATFORM</span><span class="op">=</span>offscreen <span class="ex">pytest</span> <span class="at">-q</span></span>
+<span id="cb8-9"></span>
+<span id="cb8-10"><span class="ex">python</span> scripts/stress_voices.py</span>
+<span id="cb8-11"><span class="ex">./build_macos.sh</span>          <span class="co"># macOS release zip</span></span></code></pre></div>
+</section>
+<section id="learn-more-3" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://github.com/rhasspy/piper" target="_blank" rel="noopener noreferrer">Piper (rhasspy) on GitHub</a></li>
+<li><a href="https://github.com/espeak-ng/espeak-ng/blob/master/docs/index.md" target="_blank" rel="noopener noreferrer">espeak-ng documentation</a></li>
+<li><a href="https://onnxruntime.ai/docs/execution-providers/" target="_blank" rel="noopener noreferrer">ONNX Runtime execution providers</a></li>
+<li><a href="https://arxiv.org/abs/2106.06103" target="_blank" rel="noopener noreferrer">VITS paper: Conditional Variational Autoencoder with Adversarial Learning for End-to-End TTS</a></li>
+<li><a href="https://github.com/rany2/edge-tts" target="_blank" rel="noopener noreferrer">edge-tts on GitHub</a></li>
+<li><a href="https://www.w3.org/TR/speech-synthesis11/" target="_blank" rel="noopener noreferrer">W3C Speech Synthesis Markup Language (SSML) 1.1</a></li>
+<li><a href="https://pyinstaller.org/en/stable/" target="_blank" rel="noopener noreferrer">PyInstaller manual</a></li>
+<li><a href="https://doc.qt.io/qtforpython-6/" target="_blank" rel="noopener noreferrer">Qt for Python (PySide6) documentation</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=4Lbox-d0UcE" target="_blank" rel="noopener noreferrer">Text-to-Speech &amp; Voice Cloning Course: Neural TTS Revolution</a></li>
+<li><a href="https://www.youtube.com/watch?v=8arC6rntpp0" target="_blank" rel="noopener noreferrer">Piper TTS 2026: What Changed &amp; How to Use It Now</a></li>
+<li><a href="https://www.youtube.com/watch?v=493xbPIQBSU" target="_blank" rel="noopener noreferrer">Increase Text to Speech pronunciation quality with eSpeak | Tutorial</a></li>
+<li><a href="https://www.youtube.com/watch?v=0t2jOBZSd6s" target="_blank" rel="noopener noreferrer">295 - ONNX: open format for machine learning models</a></li>
+<li><a href="https://www.youtube.com/watch?v=t5Bo1Je9EmE" target="_blank" rel="noopener noreferrer">Python Asynchronous Programming - AsyncIO &amp; Async/Await</a></li>
+<li><a href="https://www.youtube.com/watch?v=1BfCnjr_Vjg" target="_blank" rel="noopener noreferrer">WebSockets in 100 Seconds &amp; Beyond with Socket.io</a></li>
+</ul>
+</section>
+</section>
+<section id="the-tts-experiments-workspace" class="level2">
+<h2>The TTS Experiments Workspace</h2>
+<section id="at-a-glance-4" class="level3">
+<h3>At a Glance</h3>
+<p>The <code>Projects/TTS</code> folder is a lab bench: a collection of experiments, downloaded tools and partial apps used while learning local speech synthesis before SetupTTS existed. It holds a structured Tkinter app for raw Kokoro ONNX inference (<code>kokoro_tts</code>), PyInstaller packaging for a Kokoro GUI (<code>KOKORO_GUI</code>), a portable Windows Kokoro bundle with a Gradio web UI (<code>kokoro_CPU Only or AMD</code>), a small Kokoro desktop narrator misleadingly named <code>coqui_tts_gui.py</code>, a vendored copy of the third-party Electron app LocalSpeech, and a Next.js front end that talks to a Kokoro FastAPI server and to Qwen via Ollama (<code>qwen</code>). It is useful mainly as a record of what was tried and why the later projects look the way they do.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Python, TypeScript, JavaScript, Batch</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Tkinter, Gradio, Next.js 14 (App Router), Electron, Express</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>onnxruntime, kokoro / kokoro-onnx, misaki, soundfile, sounddevice, ttstokenizer, nltk, Coqui TTS, sherpa-onnx (via LocalSpeech)</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>macOS and Windows</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>local only (not a git repository; LocalSpeech is a copy of JEMcats-Software/LocalSpeech)</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Experimental; several subfolders are incomplete or hold only artifacts</td>
+</tr>
+</tbody>
+</table></div>
+<p>What each folder actually contains, so readers do not go looking for missing code:</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Folder</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>kokoro_tts/</code></td>
+<td>5 400-line Tkinter app (own code); README and requirements files are empty</td>
+</tr>
+<tr>
+<td><code>KOKORO_GUI/</code></td>
+<td><code>KokoroTTS.spec</code>, four Kokoro ONNX variants, <code>voices-v1.0.bin</code>, a voice cache; the <code>kokoro_tts.pyw</code> source the spec points to is not present</td>
+</tr>
+<tr>
+<td><code>kokoro_CPU Only or AMD/</code></td>
+<td>Third-party portable bundle: embedded Python, ffmpeg.exe, espeak-ng.msi, five Gradio script versions, a vendored <code>kokoro-tts</code> CLI</td>
+</tr>
+<tr>
+<td><code>GENERAL SOFTWARE/</code></td>
+<td><code>coqui_tts_gui.py</code> (actually Kokoro), <code>voice/download_voices.py</code> (Coqui)</td>
+</tr>
+<tr>
+<td><code>JEMcats/LocalSpeech/</code></td>
+<td>Third-party Electron app (GPL-3.0)</td>
+</tr>
+<tr>
+<td><code>qwen/</code></td>
+<td>Next.js UI, a Qwen3-TTS 0.6B checkpoint, <code>constraints.txt</code>; <code>app/api</code> is empty</td>
+</tr>
+<tr>
+<td><code>Docker/</code></td>
+<td>Only <code>out.wav</code>, an output from a containerized Kokoro server</td>
+</tr>
+<tr>
+<td><code>Kokoro_github/</code></td>
+<td>Empty</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-4" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Imagine trying five different coffee machines before buying one. Each subfolder is a machine: one you assemble from parts (raw ONNX), one that comes in a box (the <code>kokoro</code> pip package), one you reach through a web page (Gradio), one that runs in a separate kitchen you call on the phone (a Docker server with an HTTP API), and one you borrowed from a neighbour (LocalSpeech). They all brew the same coffee, Kokoro, but you learn something different from each about water pressure, grind size and cleanup.</p>
+</section>
+<section id="architecture-4" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>            +------------------ Kokoro-82M ------------------+
+            | kokoro-v1.0.onnx  +  voices-v1.0.bin (styles)  |
+            +---+-----------+-----------+-----------+--------+
+                |           |           |           |
+     raw ORT    |  kokoro   | kokoro-   | sherpa-   | HTTP
+     session    |  KPipeline| onnx lib  | onnx exe  | :8880
+                v           v           v           v
+        kokoro_tts/   kokoro_CPU/   coqui_tts_   LocalSpeech   qwen/
+        (Tkinter)     (Gradio)      gui.py       (Electron +   kokoro-
+                                    KOKORO_GUI   Express + ws) next-ui
+                                    (Tkinter)                  (Next.js)
+                                                                  |
+                                                     Ollama :11434 (Qwen
+                                                     rewrites text first)</code></pre>
+</section>
+<section id="deep-dive-4" class="level3">
+<h3>Deep Dive</h3>
+<section id="kokoro_tts-talking-to-the-onnx-graph-directly" class="level4">
+<h4>kokoro_tts: talking to the ONNX graph directly</h4>
+<p>This is the most substantial original code in the folder. <code>main.py</code> starts a Tkinter <code>AppRoot</code> and, on any startup exception, shows the full traceback in a dialog. A comment notes that on macOS the error box "flashes then disappears" if the process exits immediately, so it runs a tiny Tk main loop just for the dialog.</p>
+<p><code>app/tts/engine.py</code> wraps an ONNX Runtime session without assuming input names, because different Kokoro exports name their tensors differently. <code>KokoroEngine</code> searches candidate lists (<code>tokens</code>, <code>input_ids</code>, <code>ids</code>; <code>style</code>, <code>speaker_embedding</code>; <code>speed</code>, <code>rate</code>; <code>audio</code>, <code>wav</code>, <code>output</code>) first exactly, then case-insensitively, and raises a clear error listing what it found if anything is missing. <code>pick_default_providers()</code> prefers CoreML, then CUDA, then DirectML, always ending with CPU. Output is sanitized with <code>np.nan_to_num</code> and clipped to the range -1 to 1.</p>
+<p>The most instructive piece is how a voice style is chosen. In <code>voices-v1.0.bin</code>, each Kokoro voice is not one vector but a stack of 510 vectors of 256 numbers, one per possible input length; the model was trained so that the style for a given utterance is the row matching its token count. <code>app/tts/synth.py</code> reproduces that indexing:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><span class="kw">def</span> _style_for_tokens(style_raw, tokens):</span>
+<span id="cb10-2">    style <span class="op">=</span> np.asarray(style_raw, dtype<span class="op">=</span>np.float32)</span>
+<span id="cb10-3">    t <span class="op">=</span> np.asarray(tokens).reshape(<span class="op">-</span><span class="dv">1</span>)</span>
+<span id="cb10-4">    token_len <span class="op">=</span> <span class="bu">int</span>(t.shape[<span class="dv">0</span>])</span>
+<span id="cb10-5">    <span class="cf">if</span> token_len <span class="op">&gt;=</span> <span class="dv">2</span> <span class="kw">and</span> <span class="bu">int</span>(t[<span class="dv">0</span>]) <span class="op">==</span> <span class="dv">0</span> <span class="kw">and</span> <span class="bu">int</span>(t[<span class="op">-</span><span class="dv">1</span>]) <span class="op">==</span> <span class="dv">0</span>:</span>
+<span id="cb10-6">        token_len <span class="op">-=</span> <span class="dv">2</span>                 <span class="co"># ignore BOS/EOS padding</span></span>
+<span id="cb10-7">    <span class="cf">if</span> style.ndim <span class="op">==</span> <span class="dv">3</span> <span class="kw">and</span> style.shape[<span class="dv">1</span>] <span class="op">==</span> <span class="dv">1</span>:</span>
+<span id="cb10-8">        style <span class="op">=</span> style[:, <span class="dv">0</span>, :]         <span class="co"># (510,1,256) -&gt; (510,256)</span></span>
+<span id="cb10-9">    <span class="cf">if</span> style.shape <span class="op">==</span> (STYLE_DIM,):</span>
+<span id="cb10-10">        <span class="cf">return</span> style.reshape(<span class="dv">1</span>, STYLE_DIM)</span>
+<span id="cb10-11">    <span class="cf">if</span> style.ndim <span class="op">==</span> <span class="dv">2</span> <span class="kw">and</span> style.shape[<span class="dv">1</span>] <span class="op">==</span> STYLE_DIM:</span>
+<span id="cb10-12">        idx <span class="op">=</span> <span class="bu">min</span>(token_len, style.shape[<span class="dv">0</span>] <span class="op">-</span> <span class="dv">1</span>)</span>
+<span id="cb10-13">        <span class="cf">return</span> style[idx : idx <span class="op">+</span> <span class="dv">1</span>, :]</span>
+<span id="cb10-14">    ...</span></code></pre></div>
+<p>The 256 numbers are two 128-dimensional halves (the config's <code>style_dim: 128</code>): one conditions the decoder's timbre, the other the prosody predictor.</p>
+<p>Tokenization is the weak point, and the code is honest about it. The primary tokenizer uses <code>ttstokenizer.IPATokenizer</code> (which needs NLTK's part-of-speech tagger, downloaded on first use) and frames the ids with 0 at each end. Nothing in the code maps those ids onto Kokoro's own 178-symbol vocabulary, so quality depends on whether the two tables happen to agree. The fallback <code>ByteFallbackTokenizer</code> feeds raw UTF-8 bytes as ids, and its docstring says it is "NOT ideal quality" and exists only to avoid a crash. This is a good lesson: the official <code>kokoro</code> and <code>kokoro-onnx</code> packages exist largely to get stage 2 and 3 of the pipeline right.</p>
+<p>Stitching is handled carefully. Chunks are packed to 240 characters at sentence boundaries; each chunk is synthesized with the last 18 characters of the previous chunk prepended so the model has context for intonation, and then 120 ms is trimmed from the head of its audio to remove the repeated words. Leading silence below an amplitude of 0.008 is trimmed, and the non-streaming path joins pieces with an <strong>equal-power crossfade</strong>:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb11-1">x <span class="op">=</span> np.linspace(<span class="fl">0.0</span>, <span class="fl">1.0</span>, n, dtype<span class="op">=</span>np.float32)</span>
+<span id="cb11-2">fade_out <span class="op">=</span> np.cos(x <span class="op">*</span> (np.pi <span class="op">/</span> <span class="fl">2.0</span>)).astype(np.float32)</span>
+<span id="cb11-3">fade_in <span class="op">=</span> np.sin(x <span class="op">*</span> (np.pi <span class="op">/</span> <span class="fl">2.0</span>)).astype(np.float32)</span>
+<span id="cb11-4">head <span class="op">=</span> a[:<span class="op">-</span>n]</span>
+<span id="cb11-5">mid <span class="op">=</span> a[<span class="op">-</span>n:] <span class="op">*</span> fade_out <span class="op">+</span> b[:n] <span class="op">*</span> fade_in</span>
+<span id="cb11-6">tail <span class="op">=</span> b[n:]</span>
+<span id="cb11-7"><span class="cf">return</span> np.concatenate([head, mid, tail], axis<span class="op">=</span><span class="dv">0</span>)</span></code></pre></div>
+<p>Because cos squared plus sin squared equals one, the combined power stays constant through the 50 ms overlap, avoiding the volume dip a linear crossfade produces.</p>
+<p><code>app/services/stream_session.py</code> and <code>wav_stream_writer.py</code> add "save while generating": chunks go to an optional <code>sounddevice</code> realtime player and to a background thread writing a 16-bit PCM WAV through a bounded queue (256 chunks) with a configurable <strong>backpressure</strong> policy (what to do when the producer outruns the consumer): <code>drop_oldest</code>, <code>drop_newest</code> or <code>block</code>. Dropping is a questionable default for a file writer, since it would lose audio, and it suggests the code was designed with realtime playback in mind first.</p>
+</section>
+<section id="kokoro_gui-packaging" class="level4">
+<h4>KOKORO_GUI: packaging</h4>
+<p><code>KokoroTTS.spec</code> is a PyInstaller spec that bundles all four model variants (<code>kokoro-v1.0.onnx</code> full precision, <code>fp16</code>, <code>fp16-gpu</code>, <code>int8</code>) and the voices file into a windowed macOS <code>.app</code>, using <code>collect_all('kokoro_onnx')</code> for the library's data files. Bundling every variant makes the app several hundred megabytes; later projects instead pick one file at runtime. <code>.voicecache.json</code> lists 50-odd validated voice ids (<code>af_alloy</code> to <code>zm_yunyang</code>), the same cache format used by the KokoroTTS v5 app described below.</p>
+</section>
+<section id="kokoro_cpu-only-or-amd-a-portable-windows-bundle" class="level4">
+<h4>kokoro_CPU Only or AMD: a portable Windows bundle</h4>
+<p>This folder is a downloaded community package, not original code: the Gradio UI's header promotes another creator's YouTube channel, and <code>kokoro-tts/</code> is a vendored copy of nazdridoy's CLI. <code>Run KOKORO.bat</code> launches <code>python\python.exe scripts\gradio_v5\gradio_inf.py</code> with an embedded interpreter, and setting <code>HF_HOME</code> to the current folder keeps all downloaded voices (<code>.cache/huggingface/.../voices/*.pt</code>) inside the bundle, making it relocatable.</p>
+<p><code>scripts/gradio_v5/tts_core.py</code> uses the official <code>kokoro</code> package's <code>KPipeline</code>. The first letter of a voice id selects the language pipeline (<code>a</code> American English, <code>b</code> British, <code>j</code> Japanese, <code>z</code> Mandarin, <code>e</code> Spanish, <code>f</code> French, <code>h</code> Hindi, <code>i</code> Italian, <code>p</code> Portuguese), which decides which G2P misaki uses. <code>smart_chunk_text()</code> packs sentences up to 50 words, counts characters instead of words when CJK text is detected, and splits overlong sentences at commas including <code>，、；</code>. Each chunk is written as a WAV in a temp folder and FFmpeg's concat demuxer joins them with <code>-c copy</code> (no re-encoding). The generator yields progress percentages to a Gradio slider. The five <code>gradio_v*</code> folders show the evolution from single-shot generation to chunked progress.</p>
+</section>
+<section id="coqui_tts_gui.py-and-the-coqui-downloader" class="level4">
+<h4>coqui_tts_gui.py and the Coqui downloader</h4>
+<p>Despite its file name, <code>GENERAL SOFTWARE/coqui_tts_gui.py</code> is a "Kokoro TTS - Chapter Narrator" for macOS using <code>kokoro_onnx</code>. It loads the model lazily on first use, splits text into chunks to drive a progress bar, generates on a background thread, and previews with <code>afplay</code>. Two issues are visible in the code: it calls <code>Kokoro()</code> with no paths and <code>kokoro.generate(chunk, speaker=...)</code>, while the kokoro-onnx API used elsewhere in the workspace is <code>Kokoro(model, voices).create(text, voice=..., speed=..., lang=...)</code>; and its voice list includes ids such as <code>am_david</code> and <code>cf_jenny</code> that do not appear in Kokoro's validated list. The neighbouring <code>voice/download_voices.py</code> is genuinely Coqui: it sets <code>TTS_HOME</code> and downloads Tacotron2-DDC, Glow-TTS and XTTS v2, synthesizing a test sentence with each. Together they show the moment the author switched from Coqui (heavy PyTorch models) to Kokoro.</p>
+</section>
+<section id="localspeech-third-party" class="level4">
+<h4>LocalSpeech (third party)</h4>
+<p>This is a copy of JEMcats-Software's GPL-3.0 Electron app, kept as a reference for packaging Kokoro on Apple Silicon. Its <code>index.js</code> starts an Express server on a random port (<code>server.listen(0)</code>), downloads the <code>kokoro-multi-lang-v1_0</code> model and a compiled <strong>sherpa-onnx</strong> binary (a C++ speech toolkit from the k2-fsa project) on first run, and for each request creates a websocket path named by a UUID. Synthesis shells out using a command template in <code>backend/run_cmd.txt</code>:</p>
+<pre class="text"><code>USERDATAPATH/ApplicationResources/mac_exec \
+  --kokoro-model=.../kokoro-multi-lang-v1_0/model.onnx \
+  --kokoro-voices=.../voices.bin \
+  --kokoro-tokens=.../tokens.txt \
+  --kokoro-data-dir=.../espeak-ng-data \
+  --kokoro-lexicon=.../lexicon-us-en.txt,.../lexicon-zh.txt \
+  --num-threads=providerThreads --sid=voiceId \
+  --provider="providerMethod" \
+  --output-filename=USERDATAPATH/OutputFiles/outputfiletitle.wav \
+  ''text''</code></pre>
+<p>The flags make the pipeline explicit: a tokens table (stage 3), espeak-ng data plus English and Chinese lexicons (stage 2), and a speaker id selecting a style. Progress is scraped from lines matching <code>progress=</code> on stdout and forwarded over the websocket. The text is escaped with a single-quote shell escaper before substitution, but the command still runs with <code>spawn(..., { shell: true })</code> and other values (threads, voice, provider) come from a user config file unescaped, which is a pattern worth avoiding.</p>
+</section>
+<section id="qwenkokoro-next-ui-an-http-client-and-an-llm-rewriter" class="level4">
+<h4>qwen/kokoro-next-ui: an HTTP client and an LLM rewriter</h4>
+<p>This Next.js 14 App Router project calls a Kokoro server rather than running a model. <code>app/lib/kokoro.ts</code> posts an OpenAI-compatible payload (<code>model: "kokoro-v1"</code>, <code>input</code>, <code>voice</code>, <code>format</code>, <code>speed</code>) to <code>KOKORO_BASE_URL</code> (default <code>http://127.0.0.1:8880/v1/audio/speech</code>), the API exposed by the Kokoro-FastAPI Docker image; the <code>Docker/out.wav</code> file is a leftover output from that server. <code>app/api/tts/route.ts</code> streams the upstream body with <code>getReader()</code> and estimates progress by comparing bytes received with an expected size (14 characters per second of speech, 48 000 bytes per second for 24 kHz 16-bit WAV, 6 000 for MP3), storing it in an in-memory <code>Map</code> that clients poll with <code>GET /api/tts?jobId=</code>. A comment notes the map only works for a single server instance.</p>
+<p><code>app/api/qwen/route.ts</code> adds a pre-processing step: it sends the text to a local Ollama server (<code>qwen2.5:7b</code> by default, temperature 0.2) with the instruction "Rewrite the text to be clear, natural, and ready for TTS", truncating input to 12 000 characters. <code>api/qwen/model/route.ts</code> lists installed Ollama models and filters those containing "qwen". The folder also holds a downloaded <code>Qwen3-TTS-12Hz-0.6B-CustomVoice</code> checkpoint (a 600 million parameter TTS model controllable by natural-language instructions), but no code in the workspace loads it, and <code>qwen/app/api</code> is empty.</p>
+</section>
+</section>
+<section id="key-design-decisions-and-trade-offs-4" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Raw ONNX versus a wrapper library.</strong> <code>kokoro_tts</code> shows full control over sessions, providers and style selection, but has to solve phonemization itself and does so imperfectly. <code>kokoro-onnx</code> and <code>KPipeline</code> handle G2P correctly at the cost of control.</li>
+<li><strong>In-process versus server.</strong> The Next.js UI and LocalSpeech keep the model in another process (a Docker server, a sherpa-onnx binary), which isolates crashes and allows any front end, at the cost of an extra service to run.</li>
+<li><strong>Overlap-and-trim versus clean sentence cuts.</strong> The overlap trick gives the model context but trims a fixed 120 ms regardless of how long the repeated words take, which can cut real speech or leave fragments. SetupTTS later chose clean cuts at clause marks plus inserted pauses instead.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-4" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li><strong>Model export differences.</strong> Solved in <code>engine.py</code> by searching for tensor names instead of hard-coding them.</li>
+<li><strong>Silent failures at startup on macOS.</strong> Solved with the mini main loop for the error dialog.</li>
+<li><strong>Large first-run downloads.</strong> The portable bundle pins <code>HF_HOME</code> inside its folder so voices download once and travel with it.</li>
+<li><strong>Unresolved:</strong> missing source for <code>KOKORO_GUI</code>, empty README and requirements in <code>kokoro_tts</code>, and the API mismatch in <code>coqui_tts_gui.py</code> show this folder was a scratchpad rather than a maintained project.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-4" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li><code>.env.local</code> files exist in <code>TTS/</code> and <code>qwen/</code>; they were not read for this chapter and should stay out of any published copy.</li>
+<li>LocalSpeech's <code>shell: true</code> command assembly is the main risk; argument arrays (as LocalTTSVideoStudio uses) avoid shell parsing entirely.</li>
+<li>The int8 and fp16 model variants trade a little quality for smaller size and faster inference; fp16 tends to suit CoreML, and int8 suits CPUs.</li>
+</ul>
+</section>
+<section id="how-to-run-it-4" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb13"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb13-1"><span class="co"># kokoro_tts (needs models/kokoro.onnx and voices/voices.json)</span></span>
+<span id="cb13-2"><span class="bu">cd</span> <span class="st">"TTS/kokoro_tts"</span></span>
+<span id="cb13-3"><span class="ex">pip</span> install onnxruntime numpy soundfile sounddevice ttstokenizer nltk</span>
+<span id="cb13-4"><span class="ex">python</span> main.py</span>
+<span id="cb13-5"></span>
+<span id="cb13-6"><span class="co"># Gradio bundle (Windows)</span></span>
+<span id="cb13-7"><span class="st">"Run KOKORO.bat"</span></span>
+<span id="cb13-8"></span>
+<span id="cb13-9"><span class="co"># Next.js UI (needs a Kokoro-FastAPI server on :8880)</span></span>
+<span id="cb13-10"><span class="bu">cd</span> TTS/qwen/kokoro-next-ui <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> install <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> run dev</span></code></pre></div>
+</section>
+<section id="learn-more-4" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://huggingface.co/hexgrad/Kokoro-82M" target="_blank" rel="noopener noreferrer">Kokoro-82M model card on Hugging Face</a></li>
+<li><a href="https://github.com/thewh1teagle/kokoro-onnx" target="_blank" rel="noopener noreferrer">kokoro-onnx on GitHub</a></li>
+<li><a href="https://arxiv.org/abs/2306.07691" target="_blank" rel="noopener noreferrer">StyleTTS 2 paper</a></li>
+<li><a href="https://github.com/hexgrad/misaki" target="_blank" rel="noopener noreferrer">misaki G2P library</a></li>
+<li><a href="https://k2-fsa.github.io/sherpa/onnx/index.html" target="_blank" rel="noopener noreferrer">sherpa-onnx documentation</a></li>
+<li><a href="https://github.com/remsky/Kokoro-FastAPI" target="_blank" rel="noopener noreferrer">Kokoro-FastAPI on GitHub</a></li>
+<li><a href="https://www.gradio.app/docs" target="_blank" rel="noopener noreferrer">Gradio documentation</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=5sT-nx1ZhFA" target="_blank" rel="noopener noreferrer">Local Text-to-Speech with Python | Kokoro TTS Tutorial</a></li>
+<li><a href="https://www.youtube.com/watch?v=2Vj2KEvNGt4" target="_blank" rel="noopener noreferrer">Text to Speech Conversion with Kokoro</a></li>
+<li><a href="https://www.youtube.com/watch?v=8HQmOe_DfV0" target="_blank" rel="noopener noreferrer">Research Paper Explained - Neural Text To Speech basics: Tacotron2!</a></li>
+<li><a href="https://www.youtube.com/watch?v=m3OjWNFREJo" target="_blank" rel="noopener noreferrer">Electron JS in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=Gjnup-PuquQ" target="_blank" rel="noopener noreferrer">Docker in 100 Seconds</a></li>
+</ul>
+</section>
+</section>
+<section id="kokorotts-hybrid-gui" class="level2">
+<h2>KokoroTTS (Hybrid GUI)</h2>
+<section id="at-a-glance-5" class="level3">
+<h3>At a Glance</h3>
+<p>KokoroTTS is a single-file Tkinter desktop app that runs the Kokoro ONNX model locally on macOS (CoreML or CPU) and Windows (CUDA, DirectML or CPU). It is for anyone who wants private, offline narration with a simple interface: paste text, pick a validated voice, set speed and loudness, preview, and save a WAV. The repository keeps every version side by side (v1.0 to v5.0), which makes it a readable history of learning how ONNX Runtime providers behave on real hardware.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Python, Batch</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Tkinter (ttk)</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>kokoro-onnx, onnxruntime (CPU, CoreML, CUDA, DirectML builds), numpy, soundfile, sounddevice (winsound fallback), huggingface_hub</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>macOS Apple Silicon, Windows 10/11</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/KokoroTTS" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/KokoroTTS</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>v5.0 is the latest; maintained as versioned folders</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-5" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<ol type="1">
+<li>On launch the app finds <code>kokoro-v1.0.onnx</code> (or the fp16 variant) and <code>voices-v1.0.bin</code> next to the script, optionally downloading them from Hugging Face.</li>
+<li>It asks ONNX Runtime which accelerators exist and picks the best one, like a driver choosing the fastest open lane.</li>
+<li>It builds a list of candidate voice names and tests each one by saying "Hi". Only voices that actually speak appear in the menu.</li>
+<li>When you press Speak, the text is split into sentence groups of up to 480 characters, each group is spoken, and the pieces are joined.</li>
+<li>Preview plays through the sound card; Save writes the WAV in one-second blocks so the progress bar moves smoothly.</li>
+</ol>
+</section>
+<section id="architecture-5" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>+------------------- KokoroApp (tk.Tk) --------------------+
+| text box | voice/lang/speed/boost | presets | history    |
+| provider banner | progress bar | Diagnostics dialog      |
++------+-------------------------------+-------------------+
+       | worker threads                | app.after(0, ...)
+       v                               | (back to Tk thread)
++--------------+   providers   +-----------------------+
+| init_kokoro  |--------------&gt;| kokoro_onnx.Kokoro    |
+| resolve_     |               |  -&gt; ORT InferenceSess.|
+| providers()  |               +-----------+-----------+
++------+-------+                           | float32 PCM
+       |                                   v
++--------------+              +-------------------------+
+| validate_    |              | synthesize_chunked      |
+| voices_async |              | apply_volume_boost      |
+| (probe "Hi") |              | SDPlayer / WinSound     |
++------+-------+              | save_wav_chunked (sf)   |
+       | .voicecache.json     +-------------------------+</code></pre>
+</section>
+<section id="deep-dive-5" class="level3">
+<h3>Deep Dive</h3>
+<section id="version-history" class="level4">
+<h4>Version history</h4>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Version</th>
+<th>Platform</th>
+<th>What changed (from the version READMEs)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>v1.0/1.1</td>
+<td>Windows</td>
+<td>4 curated voices, <code>simpleaudio</code> playback, <code>install_deps.bat</code> and <code>run_app.bat</code>, Hugging Face auto-download</td>
+</tr>
+<tr>
+<td>v2.0</td>
+<td>Windows</td>
+<td>AUTO/CPU/CUDA/DirectML selector, sentence-aware chunking, deterministic progress</td>
+</tr>
+<tr>
+<td>v2.1</td>
+<td>Windows</td>
+<td>Primary-provider assertion, provider pruning, live voice validation, warm-up, Diagnostics panel</td>
+</tr>
+<tr>
+<td>v3.0</td>
+<td>macOS + Windows</td>
+<td>Cross-platform; CoreML; streamed WAV writes; unified playback</td>
+</tr>
+<tr>
+<td>v4.0</td>
+<td>macOS + Windows</td>
+<td>Split-layout dashboard, session history, presets in <code>kokoro_presets.json</code>, language picker, plus or minus 6 dB loudness</td>
+</tr>
+<tr>
+<td>v5.0</td>
+<td>macOS + Windows</td>
+<td>Online voice catalog with validation and cache, refined AUTO order, fixed <code>VOICE_CANDIDATES</code> NameError</td>
+</tr>
+</tbody>
+</table></div>
+<p>The v4.0 change arrived through a pull request from a branch named <code>codex/update-to-version-4.0-with-improvements</code>, indicating an AI coding agent drafted that revision.</p>
+</section>
+<section id="provider-selection-and-verification" class="level4">
+<h4>Provider selection and verification</h4>
+<p><code>v5.0/kokoro_tts_gui.py</code> (1 407 lines) maps the Compute menu to a provider list:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><span class="kw">def</span> resolve_providers(choice: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="bu">list</span>[<span class="bu">str</span>]:</span>
+<span id="cb15-2">    avail <span class="op">=</span> available_providers()</span>
+<span id="cb15-3">    <span class="cf">if</span> choice <span class="op">==</span> <span class="st">"CPU"</span>:</span>
+<span id="cb15-4">        <span class="cf">return</span> [<span class="st">"CPUExecutionProvider"</span>]</span>
+<span id="cb15-5">    <span class="cf">if</span> choice <span class="op">==</span> <span class="st">"CoreML"</span>:</span>
+<span id="cb15-6">        <span class="cf">return</span> [<span class="st">"CoreMLExecutionProvider"</span>, <span class="st">"CPUExecutionProvider"</span>]</span>
+<span id="cb15-7">    <span class="cf">if</span> choice <span class="op">==</span> <span class="st">"CUDA"</span>:</span>
+<span id="cb15-8">        <span class="cf">return</span> [<span class="st">"CUDAExecutionProvider"</span>, <span class="st">"CPUExecutionProvider"</span>]</span>
+<span id="cb15-9">    <span class="cf">if</span> choice <span class="op">==</span> <span class="st">"DirectML"</span>:</span>
+<span id="cb15-10">        <span class="cf">return</span> [<span class="st">"DmlExecutionProvider"</span>, <span class="st">"CPUExecutionProvider"</span>]</span>
+<span id="cb15-11">    <span class="co"># AUTO</span></span>
+<span id="cb15-12">    <span class="cf">if</span> _is_apple_silicon() <span class="kw">and</span> <span class="st">"CoreMLExecutionProvider"</span> <span class="kw">in</span> avail:</span>
+<span id="cb15-13">        <span class="cf">return</span> [<span class="st">"CoreMLExecutionProvider"</span>, <span class="st">"CPUExecutionProvider"</span>]</span>
+<span id="cb15-14">    <span class="cf">if</span> <span class="st">"CUDAExecutionProvider"</span> <span class="kw">in</span> avail:</span>
+<span id="cb15-15">        <span class="cf">return</span> [<span class="st">"CUDAExecutionProvider"</span>, <span class="st">"CPUExecutionProvider"</span>]</span>
+<span id="cb15-16">    <span class="cf">if</span> <span class="st">"DmlExecutionProvider"</span> <span class="kw">in</span> avail:</span>
+<span id="cb15-17">        <span class="cf">return</span> [<span class="st">"DmlExecutionProvider"</span>, <span class="st">"CPUExecutionProvider"</span>]</span>
+<span id="cb15-18">    <span class="cf">return</span> [<span class="st">"CPUExecutionProvider"</span>]</span></code></pre></div>
+<p>CPU is always appended as a fallback so that operators the accelerator cannot run still execute. Requesting a provider does not guarantee it is used, so <code>_assert_primary_provider()</code> reads the session's actual <code>get_providers()</code> and raises "Requested CUDA but active providers: [...]" if the first entry differs; the UI shows this in a banner. The Compute dropdown also hides options that <code>ort.get_available_providers()</code> does not report, because the CPU, GPU and DirectML ONNX Runtime packages are separate pip packages that cannot be installed together. The README walks users through swapping them (<code>pip uninstall onnxruntime</code> then <code>pip install onnxruntime-directml==1.20.1</code>).</p>
+<p><code>init_kokoro()</code> creates <code>Kokoro(model, voices, providers=...)</code> and runs a warm-up <code>create("Hi", ...)</code>. The first inference is slow because ONNX Runtime allocates its memory arena and CoreML compiles the graph for the Neural Engine; paying that cost at startup makes the first real request feel fast.</p>
+</section>
+<section id="voice-discovery-by-probing" class="level4">
+<h4>Voice discovery by probing</h4>
+<p><code>validate_voices_async()</code> runs on a daemon thread. It fetches candidate ids from online sources (Kokoro's <code>VOICES.md</code> and the ONNX model card, parsed with regexes), falls back to the cached list in <code>.voicecache.json</code>, then to a hard-coded <code>FALLBACK_VOICES</code>. It then calls <code>k.create("Hi", voice=vid, ...)</code> for every candidate and keeps the ones that do not throw. This is an empirical approach: rather than parsing the binary voices file, it asks the library. Results are cached, and the callback is marshalled back to the Tk thread with <code>app.after(0, finish)</code>, since Tkinter widgets must only be touched from the main thread.</p>
+</section>
+<section id="synthesis-loudness-and-saving" class="level4">
+<h4>Synthesis, loudness and saving</h4>
+<p><code>chunk_text()</code> splits with the regex <code>([.!?]+[\s\n]+)</code> (keeping punctuation with its sentence) and packs sentences up to 480 characters. <code>synthesize_chunked()</code> calls <code>kokoro.create()</code> per chunk and reports progress by characters done, capped at 99 until the end so the bar never claims completion early. Pieces are joined with <code>np.concatenate</code>, with no crossfade or inserted pause.</p>
+<p><code>apply_volume_boost()</code> converts decibels to a linear factor with <code>10 ** (dB / 20)</code> (so +6 dB roughly doubles amplitude) and clips to the range -1 to 1 in place. <code>save_wav_chunked()</code> writes 48 000 frames at a time through <code>soundfile.SoundFile</code>, which is about two seconds at Kokoro's 24 kHz.</p>
+<p>Playback prefers <code>sounddevice</code> (PortAudio bindings) and falls back to <code>winsound</code> on Windows, which can only play files, so the app writes a temporary WAV and retries deleting it because Windows keeps it locked while playing.</p>
+<p>The Diagnostics dialog collects the ONNX Runtime and kokoro-onnx versions, available versus active providers, model paths, the CUDA GPU name (from <code>nvidia-smi</code>) and Metal information on macOS (from <code>system_profiler</code>).</p>
+</section>
+</section>
+<section id="key-design-decisions-and-trade-offs-5" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>One script per version.</strong> Easy to download and run, and keeps old versions working, but bug fixes must be repeated and the repo carries 4 900 lines of mostly duplicated code.</li>
+<li><strong>kokoro-onnx instead of raw ONNX.</strong> After the tokenization difficulties in the experiments folder, delegating G2P and style selection to the library made quality reliable.</li>
+<li><strong>Probe-based validation.</strong> Accurate and simple, but it costs one inference per candidate at startup, which is why v5 added the cache.</li>
+<li><strong>WAV only.</strong> No MP3 encoder dependency; files are larger (about 2.9 MB per minute at 24 kHz 16-bit mono).</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-5" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li><strong>Silent CPU fallback.</strong> Users chose CUDA and got CPU speed without knowing; v2.1 added the primary-provider assertion and banner.</li>
+<li><strong>Voices in the menu that failed at runtime.</strong> Solved with probe validation.</li>
+<li><strong><code>NameError: VOICE_CANDIDATES</code> in edge paths.</strong> Caused by duplicate legacy worker blocks; v5 removed them.</li>
+<li><strong>Documentation drift.</strong> The READMEs tell users to run <code>kokoro_tts_hybrid_cross.py</code>, but the v5 file is <code>kokoro_tts_gui.py</code>; v1.0's <code>install_deps.bat</code> installs from a <code>requirements.txt</code> that is not in the folder. The git log also contains a stray commit, "Update print statement from 'Hello' to 'Goodbye'".</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-5" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>Fully offline after the model files exist; text never leaves the machine.</li>
+<li>Auto-download is off by default in v5 (<code>AUTO_DOWNLOAD = False</code>), so the app makes no network calls unless the online voice catalog is reachable.</li>
+<li>For speed, the README recommends the fp16 model with CoreML on Apple Silicon and AUTO elsewhere.</li>
+</ul>
+</section>
+<section id="how-to-run-it-5" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb16"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb16-1"><span class="bu">cd</span> KokoroTTS/v5.0</span>
+<span id="cb16-2"><span class="ex">python3</span> <span class="at">-m</span> venv .venv <span class="kw">&amp;&amp;</span> <span class="bu">source</span> .venv/bin/activate</span>
+<span id="cb16-3"><span class="ex">pip</span> install onnxruntime soundfile numpy sounddevice kokoro-onnx</span>
+<span id="cb16-4"><span class="co"># place kokoro-v1.0.onnx and voices-v1.0.bin next to the script</span></span>
+<span id="cb16-5"><span class="ex">python</span> kokoro_tts_gui.py</span>
+<span id="cb16-6"><span class="ex">python</span> <span class="at">-c</span> <span class="st">"import onnxruntime as o; print(o.get_available_providers())"</span></span></code></pre></div>
+</section>
+<section id="learn-more-5" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://onnxruntime.ai/docs/execution-providers/CoreML-ExecutionProvider.html" target="_blank" rel="noopener noreferrer">ONNX Runtime CoreML execution provider</a></li>
+<li><a href="https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html" target="_blank" rel="noopener noreferrer">ONNX Runtime CUDA execution provider</a></li>
+<li><a href="https://onnxruntime.ai/docs/execution-providers/DirectML-ExecutionProvider.html" target="_blank" rel="noopener noreferrer">ONNX Runtime DirectML execution provider</a></li>
+<li><a href="https://github.com/thewh1teagle/kokoro-onnx" target="_blank" rel="noopener noreferrer">kokoro-onnx on GitHub</a></li>
+<li><a href="https://python-sounddevice.readthedocs.io/" target="_blank" rel="noopener noreferrer">python-sounddevice documentation</a></li>
+<li><a href="https://docs.python.org/3/library/tkinter.html" target="_blank" rel="noopener noreferrer">Tkinter documentation</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=5sT-nx1ZhFA" target="_blank" rel="noopener noreferrer">Local Text-to-Speech with Python | Kokoro TTS Tutorial</a></li>
+<li><a href="https://www.youtube.com/watch?v=_wch-ODPNis" target="_blank" rel="noopener noreferrer">Inference Optimization with ONNX Runtime</a></li>
+<li><a href="https://www.youtube.com/watch?v=aircAruvnKk" target="_blank" rel="noopener noreferrer">But what is a neural network? | Deep learning chapter 1</a></li>
+<li><a href="https://www.youtube.com/watch?v=IEEhzQoKtQU" target="_blank" rel="noopener noreferrer">Python Threading Tutorial: Run Code Concurrently Using the Threading Module</a></li>
+</ul>
+</section>
+</section>
+<section id="localttsvideostudio" class="level2">
+<h2>LocalTTSVideoStudio</h2>
+<section id="at-a-glance-6" class="level3">
+<h3>At a Glance</h3>
+<p>LocalTTSVideoStudio is a Flask web app that runs on <code>localhost</code> and turns pasted story text into a narrated MP4 video: text in, cleaned and spoken by a local TTS engine, timed into subtitles, and rendered over a still image or a looping background video with FFmpeg. It targets creators making narrated story videos who want the whole pipeline on their own machine. Its central idea is an <strong>engine adapter</strong> layer: Piper, Kokoro and Coqui run offline, and edge-tts is available as a clearly labelled online fallback.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Python, JavaScript, HTML/CSS</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Flask 3</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>piper-tts 1.4.1, kokoro-onnx 0.4.7, coqui-tts 0.27.5, torch 2.10, edge-tts 7, onnxruntime, soundfile, numpy, FFmpeg/ffprobe</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>macOS (tested on Apple Silicon), Windows</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>local only (has a <code>.gitignore</code> but no git history)</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Working prototype from March 2026, with self-test outputs in <code>temp/</code></td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-6" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Picture a small film studio with four rooms:</p>
+<ol type="1">
+<li><strong>The editor's desk</strong> cleans the script: removes "Read more at..." scraping junk, fixes quotes, applies a pronunciation dictionary.</li>
+<li><strong>The recording booth</strong> has several narrators (Piper, Kokoro, Coqui, Edge). A receptionist checks who is in today and lets you pick one.</li>
+<li><strong>The captioner</strong> listens to how long the narration is and divides that time across the sentences, giving longer sentences more seconds.</li>
+<li><strong>The projection room</strong> (FFmpeg) puts the narration under a picture or a looping clip, burns in the captions, and exports an MP4.</li>
+</ol>
+<p>You watch it all from a web page that polls for progress and shows a live log.</p>
+</section>
+<section id="architecture-6" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> Browser (templates/index.html + static/app.js)
+     |  fetch /api/...           ^ poll /api/job/&lt;id&gt;/status
+     v                           |
+ +----------------------- app.py (Flask) ------------------------+
+ | ConfigManager  HistoryManager  JobManager (background thread) |
+ +----+-------------+---------------+---------------+------------+
+      |             |               |               |
+      v             v               v               v
+ TextCleanup   TTSManager     SubtitleService   VideoService
+ Service       |              (SRT + ASS,       (build ffmpeg
+               | adapters     timing model)      argv)
+               +- PiperEngine  (piper CLI)          |
+               +- KokoroEngine (KPipeline/onnx)     v
+               +- CoquiEngine  (TTS.api)      FFmpegRunner +
+               +- EdgeTTSEngine (online)      RenderCapabilities
+                                              (libx264 / NVENC /
+                                               VideoToolbox)</code></pre>
+</section>
+<section id="deep-dive-6" class="level3">
+<h3>Deep Dive</h3>
+<section id="engine-adapters" class="level4">
+<h4>Engine adapters</h4>
+<p><code>services/tts_engines/base_engine.py</code> defines an abstract class <code>BaseTTSEngine</code> with three required methods: <code>diagnose()</code>, <code>list_voices()</code> and <code>synthesize(text, voice, settings, output_path, log_callback, cancel_event)</code>. <code>metadata()</code> fills in a uniform status dictionary (<code>installed</code>, <code>usable</code>, <code>executable_found</code>, <code>python_package_found</code>, <code>models_found</code>, voice counts, a <code>status_label</code> of Ready, Partial or Missing, and a <code>fix_suggestion</code>) so the UI can show one consistent System Check panel regardless of engine. This is the <strong>adapter pattern</strong>: different libraries with different APIs are wrapped behind one interface.</p>
+<ul>
+<li><code>PiperEngine</code> runs the <code>piper</code> executable with an argument list and pipes the text on stdin. Speed becomes <code>--length_scale</code> equal to 1 divided by speed, and the optional <code>--noise_scale</code> (randomness in the audio) and <code>--noise_w</code> (randomness in phoneme durations) expose VITS's sampling controls.</li>
+<li><code>KokoroEngine</code> supports two runtimes. With the official <code>kokoro</code> package it iterates <code>KPipeline(lang_code)(text, voice, speed)</code> and concatenates segments; with <code>kokoro-onnx</code> it calls <code>Kokoro(model, voices).create(...)</code> directly. <code>_infer_lang_code()</code> derives the language from the voice prefix unless one is configured. The README explains the choice: on newer Python versions <code>kokoro-onnx</code> is the practical path.</li>
+<li><code>CoquiEngine</code> scans <code>models/coqui/</code> recursively for folders with <code>config.json</code> and weights; the workspace has Tacotron2-DDC with a HiFi-GAN v2 vocoder downloaded.</li>
+<li><code>EdgeTTSEngine</code> is marked <code>is_local = False</code> and only selectable when <code>allow_online_tts</code> is true.</li>
+</ul>
+<p>Volume adjustments go through <code>FFmpegRunner.apply_audio_volume()</code>, writing a <code>_raw</code> file first and filtering it.</p>
+</section>
+<section id="subtitle-timing-without-alignment" class="level4">
+<h4>Subtitle timing without alignment</h4>
+<p>The app has no forced aligner (a model that finds exactly when each word is spoken), so <code>services/subtitle_service.py</code> estimates timing. <code>build_segments()</code> splits text into sentences or chunks, gives each a weight of <code>words * 1.7 + chars / 18</code> (a blend of word count and length), assigns each segment a share of the measured audio duration proportional to its weight with a minimum of 0.24 s per word, then rescales so the last segment ends exactly at the audio's end. Word-level timings for highlight and karaoke modes divide each segment by word length:</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb18-1"><span class="kw">def</span> _word_timings(<span class="va">self</span>, words, start, duration):</span>
+<span id="cb18-2">    <span class="cf">if</span> <span class="kw">not</span> words:</span>
+<span id="cb18-3">        <span class="cf">return</span> []</span>
+<span id="cb18-4">    weights <span class="op">=</span> [<span class="bu">max</span>(<span class="fl">1.0</span>, <span class="bu">len</span>(word.strip(<span class="st">".,!?;:'</span><span class="ch">\"</span><span class="st">"</span>)))</span>
+<span id="cb18-5">               <span class="cf">for</span> word <span class="kw">in</span> words]</span>
+<span id="cb18-6">    total <span class="op">=</span> <span class="bu">max</span>(<span class="bu">sum</span>(weights), <span class="fl">1.0</span>)</span>
+<span id="cb18-7">    current <span class="op">=</span> start</span>
+<span id="cb18-8">    timings <span class="op">=</span> []</span>
+<span id="cb18-9">    <span class="cf">for</span> index, word <span class="kw">in</span> <span class="bu">enumerate</span>(words):</span>
+<span id="cb18-10">        word_duration <span class="op">=</span> duration <span class="op">*</span> (weights[index] <span class="op">/</span> total)</span>
+<span id="cb18-11">        end <span class="op">=</span> current <span class="op">+</span> word_duration</span>
+<span id="cb18-12">        timings.append({<span class="st">"text"</span>: word,</span>
+<span id="cb18-13">                        <span class="st">"start"</span>: <span class="bu">round</span>(current, <span class="dv">3</span>),</span>
+<span id="cb18-14">                        <span class="st">"end"</span>: <span class="bu">round</span>(end, <span class="dv">3</span>)})</span>
+<span id="cb18-15">        current <span class="op">=</span> end</span>
+<span id="cb18-16">    <span class="cf">if</span> timings:</span>
+<span id="cb18-17">        timings[<span class="op">-</span><span class="dv">1</span>][<span class="st">"end"</span>] <span class="op">=</span> <span class="bu">round</span>(start <span class="op">+</span> duration, <span class="dv">3</span>)</span>
+<span id="cb18-18">    <span class="cf">return</span> timings</span></code></pre></div>
+<p>Forcing the last word to end exactly at the segment end prevents rounding drift from accumulating across a long video. The service writes both <strong>SRT</strong> (a simple numbered list of time ranges and lines) and <strong>ASS</strong> (Advanced SubStation Alpha, a richer format with styles, positions, colours in <code>&amp;HAABBGGRR</code> order, and override tags such as <code>\k</code> for karaoke timing). Settings cover placement, wrapping width, highlight colours and simple animations. <code>shift_segments_for_insertion()</code> pushes subtitle times later when a promotional clip is inserted.</p>
+</section>
+<section id="rendering-with-ffmpeg" class="level4">
+<h4>Rendering with FFmpeg</h4>
+<p><code>VideoService.build_render_command()</code> produces an argument list, never a shell string. For an image it uses <code>-loop 1 -i image</code>; for a video, <code>-stream_loop -1</code> (loop forever) with optional <code>-ss</code> and <code>-t</code> trimming. The audio is the second input. The filter chain scales with <code>force_original_aspect_ratio=decrease</code>, pads to the target size with a dark colour, sets <code>fps</code>, and appends a <code>subtitles=</code> or <code>ass=</code> filter when burning is requested and the FFmpeg build has libass. The output uses AAC audio, <code>yuv420p</code> pixel format (needed for wide player compatibility), <code>+faststart</code> (moves the index to the front so playback can begin before download completes) and <code>-shortest</code> (stop when the narration ends, since the background loops forever).</p>
+<p><code>RenderCapabilitiesService</code> probes <code>ffmpeg -encoders</code> and chooses between <code>libx264</code> (software), <code>h264_nvenc</code>/<code>hevc_nvenc</code> (NVIDIA) and <code>h264_videotoolbox</code>/<code>hevc_videotoolbox</code> (Apple). A smoke-test render verifies that a hardware encoder actually works before recommending it, the same "check what really ran" lesson as the ONNX provider assertions in KokoroTTS.</p>
+<p><code>TimelineService.resolve_insert_seconds()</code> places a promo clip at a number of minutes or a percentage of the main video and refuses positions outside it; separate commands normalize the promo and concatenate the three parts.</p>
+</section>
+<section id="jobs-state-and-the-api" class="level4">
+<h4>Jobs, state and the API</h4>
+<p><code>JobManager</code> allows one active job at a time, runs it on a background thread, keeps an in-memory log and progress, registers the FFmpeg <code>Popen</code> so <code>/api/job/&lt;id&gt;/cancel</code> can terminate it, and appends finished jobs to <code>config/history.json</code>. Configuration lives in four JSON files (app defaults, last-used form values, an engine detection snapshot, history). The Flask app exposes about 30 routes, including <code>/api/system/check</code>, <code>/api/tts/engines</code>, <code>/api/generate/audio</code>, <code>/api/generate/subtitles</code>, <code>/api/preview/command</code> (shows the exact FFmpeg command before running it) and <code>/api/generate/video</code>, plus self-test endpoints that render small samples for each engine; their outputs (<code>kokoro_local_render_check.srt</code>, <code>piper_local_render_check.srt</code>, <code>coqui_local_render_check.srt</code>) are in <code>outputs/</code>.</p>
+</section>
+</section>
+<section id="key-design-decisions-and-trade-offs-6" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Web UI on localhost instead of a desktop toolkit.</strong> HTML and CSS make rich controls (subtitle styling, live logs) easier than Tkinter, at the cost of running a server and opening a browser.</li>
+<li><strong>Estimated rather than aligned subtitles.</strong> No extra model or download, but timing drifts within long segments; aligning with word boundaries (as edge-tts provides) or a forced aligner would be more accurate.</li>
+<li><strong>Pinned heavy dependencies.</strong> Coqui requires <code>torch</code>, <code>torchaudio</code> and <code>torchcodec</code> at matching versions and <code>transformers</code> below 5, so <code>requirements.txt</code> pins them; this makes the install large but reproducible.</li>
+<li><strong>One job at a time.</strong> Simple and safe for FFmpeg's CPU use; the README lists a queue as a future extension.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-6" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li><strong>Matplotlib and fontconfig cache warnings from Coqui</strong> were redirected into <code>temp/</code> (visible as <code>temp/mplconfig</code> and <code>temp/.cache/fontconfig</code>).</li>
+<li><strong>FFmpeg builds without libass</strong> cannot burn subtitles; the render falls back to a sidecar file and adds a warning instead of failing.</li>
+<li><strong>Engines partly installed</strong> (package present but no model) are reported as Partial with a specific fix suggestion rather than crashing the UI.</li>
+<li><strong>Upstream <code>kokoro</code> on new Python versions</strong> was impractical, so the ONNX path was added as an alternative runtime.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-6" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>All subprocesses use argument arrays, so file names with spaces or quotes cannot inject shell commands.</li>
+<li><code>/files/&lt;path&gt;</code> and the open-folder endpoints resolve paths and check them with <code>is_within_allowed_roots()</code> before serving or revealing anything, which blocks <code>../</code> traversal to arbitrary files.</li>
+<li>The server binds to <code>127.0.0.1</code> by default, so it is not exposed to the local network.</li>
+<li>Hardware video encoders (NVENC, VideoToolbox) are much faster than libx264 for long videos, at slightly larger file sizes for the same quality.</li>
+</ul>
+</section>
+<section id="how-to-run-it-6" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb19"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb19-1"><span class="bu">cd</span> <span class="st">"Random git/scratch/LocalTTSVideoStudio"</span></span>
+<span id="cb19-2"><span class="ex">python3</span> <span class="at">-m</span> venv .venv <span class="kw">&amp;&amp;</span> <span class="bu">source</span> .venv/bin/activate</span>
+<span id="cb19-3"><span class="ex">pip</span> install <span class="at">-r</span> requirements.txt</span>
+<span id="cb19-4"><span class="ex">brew</span> install ffmpeg</span>
+<span id="cb19-5"><span class="ex">./.venv/bin/python</span> <span class="at">-m</span> piper.download_voices en_US-lessac-medium <span class="dt">\</span></span>
+<span id="cb19-6">    <span class="at">--download-dir</span> models/piper</span>
+<span id="cb19-7"><span class="ex">python</span> app.py              <span class="co"># opens http://127.0.0.1:5000</span></span></code></pre></div>
+</section>
+<section id="learn-more-6" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://ffmpeg.org/ffmpeg-filters.html" target="_blank" rel="noopener noreferrer">FFmpeg filters documentation (scale, pad, subtitles)</a></li>
+<li><a href="https://aegisub.org/docs/latest/ass_tags/" target="_blank" rel="noopener noreferrer">Advanced SubStation Alpha format specification (Aegisub)</a></li>
+<li><a href="https://flask.palletsprojects.com/" target="_blank" rel="noopener noreferrer">Flask documentation</a></li>
+<li><a href="https://coqui-tts.readthedocs.io/" target="_blank" rel="noopener noreferrer">Coqui TTS documentation</a></li>
+<li><a href="https://huggingface.co/rhasspy/piper-voices" target="_blank" rel="noopener noreferrer">Piper voices on Hugging Face</a></li>
+<li><a href="https://refactoring.guru/design-patterns/adapter" target="_blank" rel="noopener noreferrer">Adapter pattern (Refactoring Guru)</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=26Mayv5JPz0" target="_blank" rel="noopener noreferrer">FFmpeg in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=bjhN2mjQ_X8" target="_blank" rel="noopener noreferrer">Subtitles &amp; FFMPEG: How To Caption Your Video The FFmpeg Way</a></li>
+<li><a href="https://www.youtube.com/watch?v=Z1RJmh_OqeA" target="_blank" rel="noopener noreferrer">Learn Flask for Python - Full Tutorial</a></li>
+<li><a href="https://www.youtube.com/watch?v=7JmPmDa4cns" target="_blank" rel="noopener noreferrer">Piper TTS Demo: From Short Commands to Complex Speech</a></li>
+<li><a href="https://www.youtube.com/watch?v=spUNpyF58BY" target="_blank" rel="noopener noreferrer">But what is the Fourier Transform? A visual introduction.</a></li>
+</ul>
+</section>
+</section>
+</section>

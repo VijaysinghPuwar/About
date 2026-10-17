@@ -1,0 +1,1460 @@
+<section id="chapter-9-cybersecurity-and-networking" class="level1">
+<h1><span class="header-section-number">9</span> Cybersecurity and Networking</h1>
+<p>This chapter covers nine projects about protecting computers and moving packets between them. Six are security tools: a Windows detection and hardening module, a CISSP study page, an AWS network lab built in Terraform, an Nmap script that grades HTTP security headers, an Ansible playbook for Ubuntu, and a Windows workstation assessor. Three are Cisco Packet Tracer labs covering dynamic routing with RIP, inter-VLAN routing with a router-on-a-stick, and Rapid PVST+ spanning tree. Each section explains the underlying concepts from first principles, so a reader new to firewalls, VLANs or security headers can follow the code.</p>
+<section id="automating-infosec-winseckit" class="level2">
+<h2>Automating InfoSec (WinSecKit)</h2>
+<section id="at-a-glance-37" class="level3">
+<h3>At a Glance</h3>
+<p>Automating InfoSec started as four graded Windows security labs from a graduate course (Pace University, CYB 631). It grew into <code>WinSecKit</code>, a PowerShell module with nine commands. The module reads Windows event logs for signs of attack, audits a host against a small hardening baseline, signs scripts, and writes the results to a self-contained HTML report. It is for defenders who want repeatable, tested checks instead of one-off console commands. The repository also documents a real incident: a leaked encryption key in its own git history, which was purged and then guarded against.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>PowerShell 5.1 and 7, a little Bash and YAML</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Pester 5 (tests), PSScriptAnalyzer (lint)</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>.NET <code>System.Net.WebUtility</code>, NetSecurity cmdlets, <code>Get-WinEvent</code></td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Windows (acquisition), any OS (detection logic)</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/Automating-InfoSec</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Active; 88 Pester tests, CI on GitHub Actions</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-37" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Think of a building with a security guard and a building inspector. The guard watches the visitor log. If one visitor fails to badge in five times in five minutes, or someone tears pages out of the log, the guard raises an alarm. That is the detection half: Windows writes an event for every logon failure, account creation and log wipe, and WinSecKit reads those events and flags suspicious patterns.</p>
+<p>The inspector walks the building with a checklist: are the fire doors shut, is the alarm switched on? That is the baseline half. WinSecKit checks six settings (firewall on, SMBv1 off, PowerShell logging on, and so on). It reports which ones fail, and if asked, it fixes them and checks again to prove the fix worked.</p>
+<p>Both halves hand their results to a report writer, which produces one HTML page you can open offline or email.</p>
+</section>
+<section id="architecture-37" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> Windows event logs              Host configuration
+ (Security, System,              (registry, firewall)
+  PowerShell/Operational)              |
+        |                              v
+        v                     Test-SecurityBaseline
+ Get-SecurityEventRecord               |
+        |  (plain records)             v
+        v                     Invoke-SecurityBaseline
+ Test-SecurityDetection        (-WhatIf, verify after)
+   reads Data/detections.psd1          |
+        |  (findings)                  | (findings)
+        +---------------+--------------+
+                        v
+              Export-SecurityReport
+              (single offline HTML)</code></pre>
+<p>The module separates <em>acquisition</em> (reading Windows logs, which needs Windows) from <em>evaluation</em> (pure functions over records). <code>Get-SecurityEventRecord</code> is the only command that touches the event log. <code>Test-SecurityDetection</code> takes records in and emits findings out, so it is tested on Linux CI runners with synthetic events.</p>
+</section>
+<section id="deep-dive-37" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Windows event logs.</strong> Windows records security-relevant actions as numbered events in named logs. Each event has an ID, a timestamp, a machine name, a message and structured data fields. The project's detections depend on six of them:</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Event ID</th>
+<th>Log</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4625</td>
+<td>Security</td>
+<td>An account failed to log on</td>
+</tr>
+<tr>
+<td>4720</td>
+<td>Security</td>
+<td>A user account was created</td>
+</tr>
+<tr>
+<td>4732</td>
+<td>Security</td>
+<td>A member was added to a security-enabled local group</td>
+</tr>
+<tr>
+<td>4104</td>
+<td>Microsoft-Windows-PowerShell/Operational</td>
+<td>PowerShell script block logged</td>
+</tr>
+<tr>
+<td>7045</td>
+<td>System</td>
+<td>A new service was installed</td>
+</tr>
+<tr>
+<td>1102</td>
+<td>Security</td>
+<td>The audit log was cleared</td>
+</tr>
+</tbody>
+</table></div>
+<p>The comment at the top of <code>Data/detections.psd1</code> warns that 4104 and 7045 are <em>not</em> in the Security log. A query against the wrong log returns nothing, and a detection that returns nothing looks like a pass. That is why <code>Test-SecurityDetection</code> matches on both <code>Id</code> and <code>LogName</code>.</p>
+<p><strong>MITRE ATT&amp;CK.</strong> ATT&amp;CK is a public catalogue of attacker techniques, each with an ID. For example T1110 is Brute Force and T1070.001 is Clear Windows Event Logs. Mapping each detection to a technique tells an analyst <em>what</em> the attacker was likely doing, not only <em>which</em> event fired.</p>
+<p><strong>Detections as data.</strong> Each rule is a PowerShell data file (<code>.psd1</code>) entry, so adding a rule never means changing code. The strategy field picks one of three evaluators: <code>Presence</code> (any matching event is a finding), <code>Threshold</code> (N events in a time window, grouped by a field) and <code>Content</code> (the message matches a regex). Here is the content rule for suspicious script blocks:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb2-1">@<span class="op">{</span></span>
+<span id="cb2-2">    Id             <span class="op">=</span> <span class="st">'WSK0004'</span></span>
+<span id="cb2-3">    LogName        <span class="op">=</span> <span class="st">'Microsoft-Windows-PowerShell/Operational'</span></span>
+<span id="cb2-4">    EventId        <span class="op">=</span> <span class="op">@(</span><span class="dv">4104</span><span class="op">)</span></span>
+<span id="cb2-5">    Strategy       <span class="op">=</span> <span class="st">'Content'</span></span>
+<span id="cb2-6">    PatternList    <span class="op">=</span> <span class="op">@(</span></span>
+<span id="cb2-7">        <span class="st">'-enc(odedcommand)?\s'</span><span class="op">,</span></span>
+<span id="cb2-8">        <span class="st">'FromBase64String'</span><span class="op">,</span></span>
+<span id="cb2-9">        <span class="st">'DownloadString'</span><span class="op">,</span></span>
+<span id="cb2-10">        <span class="st">'IEX\s*\('</span><span class="op">,</span></span>
+<span id="cb2-11">        <span class="st">'System\.Net\.WebClient'</span><span class="op">,</span></span>
+<span id="cb2-12">        <span class="st">'Bypass\s+-Scope'</span><span class="op">,</span></span>
+<span id="cb2-13">        <span class="st">'HiddenWindowStyle|-w\s+hidden'</span></span>
+<span id="cb2-14">    <span class="op">)</span></span>
+<span id="cb2-15">    Severity       <span class="op">=</span> <span class="st">'High'</span></span>
+<span id="cb2-16">    Technique      <span class="op">=</span> <span class="st">'T1059.001'</span></span>
+<span id="cb2-17"><span class="op">}</span></span></code></pre></div>
+<p>These patterns are the fingerprints of a "download cradle": PowerShell code that fetches a payload from the internet (<code>DownloadString</code>, <code>WebClient</code>) and runs it in memory (<code>IEX</code>, short for <code>Invoke-Expression</code>), often hidden behind Base64 encoding (<code>-enc</code>, <code>FromBase64String</code>).</p>
+<p><strong>The sliding window.</strong> The brute-force rule (WSK0001) fires when one account has five or more failed logons inside five minutes. A naive approach buckets time into fixed five-minute blocks, but then a burst of three at 10:04 and three at 10:06 lands in two buckets and is missed. The code uses a two-pointer sliding window over sorted timestamps instead:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb3-1"><span class="va">$times</span> <span class="op">=</span> <span class="op">@(</span><span class="va">$group</span><span class="op">.</span><span class="fu">Group</span><span class="op">.</span><span class="fu">TimeCreated</span> <span class="op">|</span> <span class="fu">Sort-Object</span><span class="op">)</span></span>
+<span id="cb3-2"><span class="va">$window</span> <span class="op">=</span> <span class="op">[</span>timespan<span class="op">]::</span>FromMinutes<span class="op">(</span><span class="va">$det</span><span class="op">.</span><span class="fu">WindowMinutes</span><span class="op">)</span></span>
+<span id="cb3-3"><span class="va">$start</span>  <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb3-4"><span class="dt">for</span> <span class="op">(</span><span class="va">$end</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> <span class="va">$end</span> <span class="op">-lt</span> <span class="va">$times</span><span class="op">.</span><span class="fu">Count</span><span class="op">;</span> <span class="va">$end</span><span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb3-5">    <span class="cf">while</span> <span class="op">((</span><span class="va">$times</span><span class="op">[</span><span class="va">$end</span><span class="op">]</span> <span class="op">-</span> <span class="va">$times</span><span class="op">[</span><span class="va">$start</span><span class="op">])</span> <span class="op">-gt</span> <span class="va">$window</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-6">        <span class="va">$start</span><span class="op">++</span></span>
+<span id="cb3-7">    <span class="op">}</span></span>
+<span id="cb3-8">    <span class="va">$inWindow</span> <span class="op">=</span> <span class="va">$end</span> <span class="op">-</span> <span class="va">$start</span> <span class="op">+</span> <span class="dv">1</span></span>
+<span id="cb3-9">    <span class="cf">if</span> <span class="op">(</span><span class="va">$inWindow</span> <span class="op">-ge</span> <span class="va">$det</span><span class="op">.</span><span class="fu">MinimumCount</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-10">        ConvertTo-WinSecKitFinding <span class="op">-</span>Detection <span class="va">$det</span> `</span>
+<span id="cb3-11">            <span class="op">-</span>Count <span class="va">$inWindow</span> <span class="op">-</span>FirstSeen <span class="va">$times</span><span class="op">[</span><span class="va">$start</span><span class="op">]</span> <span class="op">...</span></span>
+<span id="cb3-12">        <span class="cf">break</span>   <span class="co"># one finding per group</span></span>
+<span id="cb3-13">    <span class="op">}</span></span>
+<span id="cb3-14"><span class="op">}</span></span></code></pre></div>
+<p><code>$end</code> walks forward through each event; <code>$start</code> is dragged forward whenever the gap between the two exceeds five minutes. The number of events between the pointers is always the count inside some five-minute window ending at <code>$end</code>. This is O(n) per group after sorting.</p>
+<p><strong>The host baseline.</strong> <code>Data/baseline.psd1</code> defines six controls of three check types: <code>Registry</code> (a value under <code>HKLM</code> equals an expected number), <code>FirewallProfile</code> (Domain, Private and Public profiles enabled) and <code>FirewallRule</code> (an enabled inbound Block rule exists for a protocol and port). The Windows registry is a hierarchical database of system settings; <code>HKLM</code> is the machine-wide hive. SMBv1 is the original Windows file-sharing protocol, unencrypted and the transport the EternalBlue exploit used, so WSB0003 requires <code>SMB1 = 0</code>.</p>
+<p>A private function, <code>Test-WinSecKitControl</code>, is shared by both the audit command and the remediation command. The comment explains why: "the audit and the remediation can never disagree about what compliant means." <code>Invoke-SecurityBaseline</code> calls it before acting and again after, and a remediation that does not flip the verdict is reported as failed.</p>
+<p><strong>Code signing.</strong> Authenticode is Microsoft's code-signing format: a hash of the script is signed with a certificate's private key and appended to the file. <code>Invoke-ScriptSigning</code> signs <code>.ps1</code>, <code>.psm1</code> and <code>.psd1</code> files and supports <code>-WhatIf</code>. An optional RFC 3161 timestamp server proves <em>when</em> the file was signed, so the signature stays valid after the certificate expires.</p>
+<p><strong>The report.</strong> <code>Export-SecurityReport</code> builds HTML with a <code>StringBuilder</code> and passes every value through <code>[System.Net.WebUtility]::HtmlEncode</code>. Event messages contain attacker-controlled text (a username in a failed logon can be anything), so unencoded output would turn the report into a cross-site scripting vector.</p>
+<p><strong>Lab 4 artifacts.</strong> The confidentiality lab used AES to encrypt a password with <code>ConvertFrom-SecureString -Key</code>. The original repo committed the key next to the ciphertext. The replacement script <code>generate-lab4-artifacts.ps1</code> generates a fresh random key with <code>RandomNumberGenerator</code> and a throwaway demo secret on each run, and <code>.gitignore</code> plus a pre-commit hook block the output from being committed.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-37" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Rules as data.</strong> Detections and controls live in <code>.psd1</code> files with a <code>SchemaVersion</code>. The trade-off is a small interpreter in code (three strategies, three check types) instead of arbitrary logic per rule.</li>
+<li><strong>Pure evaluation.</strong> Keeping <code>Test-SecurityDetection</code> free of I/O makes it testable everywhere. The cost is that records must be collected in memory before evaluation, because threshold rules need to see all events for a group.</li>
+<li><strong>Blank CIS IDs.</strong> The CIS Benchmarks (Center for Internet Security's hardening guides) require registration to download. The author chose to leave every <code>CisId</code> empty rather than guess, writing: "An unverified ID is worse than no ID: it looks authoritative and cannot be checked."</li>
+<li><strong>No domain controls.</strong> AD LDS, Group Policy and domain password policy were part of Lab 3 but need an Active Directory domain. CI only has standalone Windows runners, so those controls are left out instead of being stubbed or reported as passing.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-37" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>The engineering notes name a pattern: <em>gates that report clean while skipping their inputs</em>. It happened three times.</p>
+<ol type="1">
+<li>PSScriptAnalyzer reported "clean across 26 files" after two scripts were added under <code>.github/</code>. <code>Get-ChildItem -Recurse</code> does not enter dot-directories without <code>-Force</code>. Fixed with <code>-Force</code> and an explicit <code>.git</code> filter; the count became 28.</li>
+<li>The Windows PowerShell 5.1 test leg passed with 63 tests while PowerShell 7 ran 88. Two test files referenced <code>$IsWindows</code>, which does not exist in 5.1, so Pester's discovery under StrictMode threw and dropped them silently. Fixed by keying on <code>$env:OS</code>, failing on <code>FailedContainersCount</code>, and asserting that Windows-tagged tests ran.</li>
+<li>gitleaks (a secret scanner) failed with four real findings because <code>fetch-depth: 0</code> pulled the unpurged <code>main</code>. Narrowing the scan would have turned it green. The author purged <code>main</code> instead.</li>
+</ol>
+<p>The countermeasure is <code>tools/gate-coverage.psd1</code>, which sets a minimum input count for each gate, and <code>Assert-GateCoverage.ps1</code>, which fails the build when a gate processes fewer:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb4-1"><span class="co"># Was 26 while .github/scripts was invisible to the linter;</span></span>
+<span id="cb4-2"><span class="co"># is 28 with it. A floor has to be tight enough to fail on</span></span>
+<span id="cb4-3"><span class="co"># the actual historical bad value.</span></span>
+<span id="cb4-4"><span class="st">'PSScriptAnalyzer.Files'</span> <span class="op">=</span> <span class="dv">28</span></span>
+<span id="cb4-5"><span class="st">'Pester.Tests'</span>           <span class="op">=</span> <span class="dv">80</span></span>
+<span id="cb4-6"><span class="st">'Pester.WindowsTagged'</span>   <span class="op">=</span> <span class="dv">20</span></span>
+<span id="cb4-7"><span class="st">'Gitleaks.Commits'</span>       <span class="op">=</span> <span class="dv">30</span></span></code></pre></div>
+<p>Other notes record smaller bugs. One: <code>Status -eq 'Valid'</code> on an Authenticode signature also requires the certificate to chain to a trusted root, which a self-signed lab certificate never does, so signing was never idempotent. The fix splits "is this file signed by this certificate and unmodified" from "is the signer trusted". Another: a <code>git filter-repo</code> purge by path missed copies under an older folder layout whose name contained spaces. Verification became content-based: every blob in history is grepped for the key bytes.</p>
+</section>
+<section id="security-and-performance-notes-37" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>The incident response followed the standard sequence: contain (rotate credentials), eradicate (rewrite history), redact (black out two report figures at bitmap level), prevent (gitignore, filename guard, gitleaks in a pre-commit hook and CI).</li>
+<li>gitleaks drops path-only rules when <code>useDefault = true</code> is set, and a raw 16-byte AES key has no text pattern to match. Filename detection was moved to <code>tools/Test-ForbiddenPath.ps1</code>.</li>
+<li>CI runs with <code>permissions: contents: read</code>, the least privilege a workflow needs to check out code.</li>
+<li>Detection holds all records in memory. For very large logs, use <code>Get-SecurityEventRecord -MaxEvents</code> to bound the input.</li>
+</ul>
+</section>
+<section id="how-to-run-it-37" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb5"><pre class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb5-1"><span class="fu">Import-Module</span> <span class="op">./</span>src<span class="op">/</span>WinSecKit<span class="op">/</span>WinSecKit<span class="op">.</span><span class="fu">psd1</span></span>
+<span id="cb5-2"></span>
+<span id="cb5-3">Get-SecurityEventRecord <span class="op">-</span>LogName Security <span class="op">|</span></span>
+<span id="cb5-4">    Test-SecurityDetection <span class="op">|</span></span>
+<span id="cb5-5">    Export-SecurityReport <span class="op">-</span>Path findings<span class="op">.</span><span class="fu">html</span> <span class="op">-</span>Title <span class="st">'Logons'</span></span>
+<span id="cb5-6"></span>
+<span id="cb5-7">Test-SecurityBaseline <span class="op">|</span> Export-SecurityReport <span class="op">-</span>Path base<span class="op">.</span><span class="fu">html</span></span>
+<span id="cb5-8">Invoke-SecurityBaseline <span class="op">-</span>WhatIf</span>
+<span id="cb5-9">Invoke-SecurityBaseline</span></code></pre></div>
+<p>To enable the local secret guard: <code>git config core.hooksPath .githooks</code>.</p>
+</section>
+<section id="learn-more-37" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://attack.mitre.org/matrices/enterprise/" target="_blank" rel="noopener noreferrer">MITRE ATT&amp;CK Enterprise Matrix</a></li>
+<li><a href="https://learn.microsoft.com/powershell/module/microsoft.powershell.diagnostics/get-winevent" target="_blank" rel="noopener noreferrer">Microsoft: Get-WinEvent</a></li>
+<li><a href="https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_logging_windows" target="_blank" rel="noopener noreferrer">Microsoft: About Logging (script block logging)</a></li>
+<li><a href="https://learn.microsoft.com/powershell/module/microsoft.powershell.security/set-authenticodesignature" target="_blank" rel="noopener noreferrer">Microsoft: Set-AuthenticodeSignature</a></li>
+<li><a href="https://pester.dev/docs/quick-start" target="_blank" rel="noopener noreferrer">Pester documentation</a></li>
+<li><a href="https://github.com/gitleaks/gitleaks" target="_blank" rel="noopener noreferrer">gitleaks on GitHub</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=ZOoCaWyifmI" target="_blank" rel="noopener noreferrer">Learn PowerShell in Less Than 2 Hours</a></li>
+<li><a href="https://www.youtube.com/watch?v=0BEf6s1iu5g" target="_blank" rel="noopener noreferrer">MITRE ATT&amp;CK Framework</a></li>
+<li><a href="https://www.youtube.com/watch?v=rrEineZSarM" target="_blank" rel="noopener noreferrer">Understand, Deploy, and Hunt with MITRE's ATT&amp;CK Framework</a></li>
+</ul>
+</section>
+</section>
+<section id="cissp-domains" class="level2">
+<h2>CISSP Domains</h2>
+<section id="at-a-glance-38" class="level3">
+<h3>At a Glance</h3>
+<p>CISSP Domains is a single static web page that presents the eight domains of the CISSP certification (Certified Information Systems Security Professional, the ISC2 credential for security managers and architects). Each domain gets a heading, a plain description and a concrete example. The page uses a "hacker" visual style: green falling characters on a canvas behind the content, a typewriter effect on the title and glowing borders. It is a study aid and a front-end exercise rather than a tool.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>HTML, CSS, JavaScript</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>None (vanilla)</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>Canvas 2D API</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Browser; GitHub Pages via a Jekyll workflow</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/CISSP-Domains</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Complete, small (300 lines total)</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-38" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Picture a chalkboard that is never fully erased. Every 50 milliseconds the script paints a nearly transparent black layer over the whole board, then writes one new random character at the bottom of each falling column. Old characters fade a little with each coat of black paint, so each column leaves a fading trail. On top of that board sits a dark box holding the eight domain descriptions.</p>
+</section>
+<section id="architecture-38" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> index.html
+   |-- &lt;canvas id="matrixCanvas"&gt;  (full screen, behind)
+   |-- &lt;h1 id="typewriter"&gt;        (title typed letter by letter)
+   '-- .hacker-box
+         '-- 8 x .domain-item  (h2 + description + example)
+
+ script.js  --DOMContentLoaded--&gt;  typeWriter() loop
+                                   drawMatrix() every 50 ms
+ styles.css --&gt; glowCycle keyframes, glitch animation</code></pre>
+</section>
+<section id="deep-dive-38" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>The eight domains</strong> in <code>index.html</code> are: Security and Risk Management; Asset Security; Security Architecture and Engineering; Communication and Network Security; Identity and Access Management (IAM); Security Operations; Security Assessment and Testing; and Software Development Security. Several other projects in this chapter map onto them. The AWS lab is Communication and Network Security, WinSecKit's detections are Security Operations, and the HTTP header scanner is Security Assessment and Testing.</p>
+<p><strong>The Matrix effect</strong> in <code>script.js</code> keeps one integer per column, <code>drops[i]</code>, the row where that column's next character goes:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb7-1"><span class="kw">function</span> <span class="fu">drawMatrix</span>() {</span>
+<span id="cb7-2">    ctx<span class="op">.</span><span class="at">fillStyle</span> <span class="op">=</span> <span class="st">"rgba(0, 0, 0, 0.05)"</span><span class="op">;</span></span>
+<span id="cb7-3">    ctx<span class="op">.</span><span class="fu">fillRect</span>(<span class="dv">0</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> canvas<span class="op">.</span><span class="at">width</span><span class="op">,</span> canvas<span class="op">.</span><span class="at">height</span>)<span class="op">;</span></span>
+<span id="cb7-4">    ctx<span class="op">.</span><span class="at">fillStyle</span> <span class="op">=</span> <span class="st">"#00FF00"</span><span class="op">;</span></span>
+<span id="cb7-5">    ctx<span class="op">.</span><span class="at">font</span> <span class="op">=</span> <span class="vs">`</span><span class="sc">${</span>fontSize<span class="sc">}</span><span class="vs">px monospace`</span><span class="op">;</span></span>
+<span id="cb7-6">    drops<span class="op">.</span><span class="fu">forEach</span>((y<span class="op">,</span> index) <span class="kw">=&gt;</span> {</span>
+<span id="cb7-7">        <span class="kw">const</span> text <span class="op">=</span> letters<span class="op">.</span><span class="fu">charAt</span>(</span>
+<span id="cb7-8">            <span class="bu">Math</span><span class="op">.</span><span class="fu">floor</span>(<span class="bu">Math</span><span class="op">.</span><span class="fu">random</span>() <span class="op">*</span> letters<span class="op">.</span><span class="at">length</span>))<span class="op">;</span></span>
+<span id="cb7-9">        <span class="kw">const</span> x <span class="op">=</span> index <span class="op">*</span> fontSize<span class="op">;</span></span>
+<span id="cb7-10">        ctx<span class="op">.</span><span class="fu">fillText</span>(text<span class="op">,</span> x<span class="op">,</span> y <span class="op">*</span> fontSize)<span class="op">;</span></span>
+<span id="cb7-11">        <span class="cf">if</span> (y <span class="op">*</span> fontSize <span class="op">&gt;</span> canvas<span class="op">.</span><span class="at">height</span> <span class="op">&amp;&amp;</span></span>
+<span id="cb7-12">            <span class="bu">Math</span><span class="op">.</span><span class="fu">random</span>() <span class="op">&gt;</span> <span class="fl">0.975</span>) {</span>
+<span id="cb7-13">            drops[index] <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb7-14">        }</span>
+<span id="cb7-15">        drops[index]<span class="op">++;</span></span>
+<span id="cb7-16">    })<span class="op">;</span></span>
+<span id="cb7-17">}</span>
+<span id="cb7-18"><span class="pp">setInterval</span>(drawMatrix<span class="op">,</span> <span class="dv">50</span>)<span class="op">;</span></span></code></pre></div>
+<p>The 5 percent opaque black fill is the whole trick: a character fully fades after roughly 60 frames (about three seconds). The random reset with probability 0.025 once a column passes the bottom staggers the columns so they do not fall in lockstep. On <code>resize</code>, the canvas is resized, the font size is recomputed as <code>max(innerWidth / 50, 12)</code> and <code>initializeDrops()</code> rebuilds the column array.</p>
+<p><strong>The typewriter</strong> appends one character of <code>"CISSP"</code> every 150 ms with <code>setTimeout</code>, then waits one second and restarts.</p>
+<p><strong>Deployment.</strong> <code>.github/workflows/jekyll-gh-pages.yml</code> is GitHub's stock Pages workflow: checkout, <code>configure-pages</code>, <code>jekyll-build-pages</code>, upload, deploy. Jekyll passes a plain HTML site through unchanged.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-38" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li>No framework keeps the page instant to load and trivial to host.</li>
+<li><code>setInterval</code> is simpler than <code>requestAnimationFrame</code> but keeps drawing when the tab is hidden. <code>requestAnimationFrame</code> would pause automatically and save battery.</li>
+<li>The script writes the title with <code>innerHTML +=</code>. With a fixed string this is harmless; with user input, <code>textContent</code> would be the safe choice.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-38" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>The commit history shows iterative tuning of <code>styles.css</code> and <code>script.js</code>. The visible fix in the code is responsiveness: the font size and column count are derived from window width and recomputed on every resize, so the effect does not leave gaps or overflow when a phone rotates.</p>
+</section>
+<section id="security-and-performance-notes-38" class="level3">
+<h3>Security and Performance Notes</h3>
+<p>The page has no inputs and makes no network requests, so its attack surface is effectively nil. Canvas work is proportional to the number of columns (about 50), which is cheap.</p>
+</section>
+<section id="how-to-run-it-38" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb8"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><span class="fu">git</span> clone https://github.com/VijaysinghPuwar/CISSP-Domains.git</span>
+<span id="cb8-2"><span class="ex">open</span> CISSP-Domains/index.html</span></code></pre></div>
+</section>
+<section id="learn-more-38" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://www.isc2.org/certifications/cissp/cissp-certification-exam-outline" target="_blank" rel="noopener noreferrer">ISC2: CISSP exam outline</a></li>
+<li><a href="https://developer.mozilla.org/docs/Web/API/Canvas_API/Tutorial" target="_blank" rel="noopener noreferrer">MDN: Canvas API tutorial</a></li>
+<li><a href="https://developer.mozilla.org/docs/Web/API/Window/requestAnimationFrame" target="_blank" rel="noopener noreferrer">MDN: window.requestAnimationFrame</a></li>
+<li><a href="https://docs.github.com/pages" target="_blank" rel="noopener noreferrer">GitHub Pages documentation</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=0BEf6s1iu5g" target="_blank" rel="noopener noreferrer">MITRE ATT&amp;CK Framework</a></li>
+<li><a href="https://www.youtube.com/watch?v=ZhMw53Ud2tY" target="_blank" rel="noopener noreferrer">5 Steps to Secure Linux (protect from hackers)</a></li>
+<li><a href="https://www.youtube.com/watch?v=4t4kBkMsDbQ" target="_blank" rel="noopener noreferrer">Nmap Tutorial to find Network Vulnerabilities</a></li>
+</ul>
+</section>
+</section>
+<section id="configuring-cloud-security-in-aws" class="level2">
+<h2>Configuring Cloud Security in AWS</h2>
+<section id="at-a-glance-39" class="level3">
+<h3>At a Glance</h3>
+<p>This project rebuilds a 2025 console-based course lab as Terraform code. It creates a small Amazon Web Services network with one EC2 virtual machine and layers several controls around it: a security group, a network ACL, IMDSv2, VPC Flow Logs, a CloudWatch alarm and an encrypted SNS topic. Reviewing the original lab revealed three real mistakes: a NACL deny that could never fire, SSH open to the whole internet, and a CPU alarm with an impossible threshold. The rebuild fixes each one and adds tests that fail if the mistakes come back.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>HCL (Terraform)</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Terraform 1.6+, AWS provider 6.x</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td><code>terraform test</code>, TFLint (AWS ruleset), Checkov</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>AWS (us-east-1 by default), GitHub Actions</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/Configuring-Cloud-Security-in-Amazon-Web-Services</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Static checks pass; live AWS validation rows marked "not yet validated"</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-39" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Imagine an office building (the VPC) with one floor (the subnet) and one office (the EC2 instance). The floor has a guard at the stairwell with a printed list (the network ACL). He checks every person in <em>both</em> directions against the list, and he has no memory, so someone leaving after a meeting needs their own line on the list. The office door has a receptionist (the security group) who remembers who came in, so anyone she let in can leave freely.</p>
+<p>There is no front door key for administrators at all. Instead, a phone in the office (the SSM Agent) dials out to a help desk (AWS Systems Manager), and the admin talks through that call. Nothing outside can knock on the office door to get a shell.</p>
+<p>A camera at the building entrance (VPC Flow Logs) records every visitor who was let in or turned away. A smoke detector (CloudWatch alarm) watches CPU load and pages someone (SNS email) when it stays high.</p>
+</section>
+<section id="architecture-39" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> Admin (/32)                  AWS Systems Manager
+   |  ICMP echo only             ^
+   v                             | outbound HTTPS 443
+ +------------------- VPC 10.20.0.0/16 ----------------+
+ | Internet gateway                                     |
+ |   |                                                  |
+ | +-- subnet 10.20.1.0/24 --- NACL (stateless) ------+ |
+ | |  +-- security group (stateful) --+               | |
+ | |  | EC2 Amazon Linux 2023         |               | |
+ | |  | IMDSv2 required, EBS encrypted|               | |
+ | |  | no SSH, no key pair           |               | |
+ | |  +-------------------------------+               | |
+ | +--------------------------------------------------+ |
+ +------------------------------------------------------+
+     | flow logs                      | CPUUtilization
+     v                                v
+ CloudWatch Logs (KMS)         CloudWatch alarm &gt; 70%
+                                      v
+                               SNS topic (KMS) -&gt; email</code></pre>
+</section>
+<section id="deep-dive-39" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>VPC, subnet, route table.</strong> A VPC (Virtual Private Cloud) is a private IP address space inside AWS, here <code>10.20.0.0/16</code> (65,536 addresses). A subnet is a slice of it bound to one availability zone (a single data centre group), here <code>10.20.1.0/24</code>. A subnet is "public" only because its route table sends <code>0.0.0.0/0</code> (every destination not otherwise known) to an internet gateway. <code>network.tf</code> builds exactly that, with <code>map_public_ip_on_launch = false</code> so only the lab instance gets a public address on purpose.</p>
+<p><strong>The default security group.</strong> Every VPC is created with a default security group that allows all traffic between its members. <code>aws_default_security_group</code> with no rule blocks takes ownership of it and empties it, so nothing can fall back to it by accident.</p>
+<p><strong>Stateful versus stateless filtering.</strong> This is the core concept of the lab. A <em>stateful</em> firewall keeps a connection table: when it allows an outbound packet, it records the 5-tuple (protocol, source IP, source port, destination IP, destination port) and automatically allows the matching reply. Linux <code>iptables</code> with the <code>conntrack</code> module (<code>-m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT</code>) works this way, and so do AWS security groups. A <em>stateless</em> filter judges every packet alone, with no memory, so replies need their own rules. AWS network ACLs are stateless.</p>
+<p><strong>Security group rules</strong> in <code>security.tf</code> are minimal. There is no TCP or UDP ingress at all:</p>
+<pre class="hcl"><code># For ICMP rules, from_port is the ICMP type and
+# to_port is the ICMP code.
+resource "aws_vpc_security_group_ingress_rule" "admin_echo_request" {
+  security_group_id = aws_security_group.instance.id
+  ip_protocol       = "icmp"
+  from_port         = 8
+  to_port           = -1
+  cidr_ipv4         = var.trusted_admin_cidr
+}
+
+resource "aws_vpc_security_group_egress_rule" "https" {
+  security_group_id = aws_security_group.instance.id
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+  cidr_ipv4         = "0.0.0.0/0"
+}</code></pre>
+<p>ICMP (Internet Control Message Protocol) carries diagnostic messages; <code>ping</code> sends type 8 (echo request) and expects type 0 (echo reply). ICMP has no ports, so AWS reuses the port fields for type and code. A CIDR (Classless Inter-Domain Routing) block like <code>198.51.100.7/32</code> names an address range; <code>/32</code> means exactly one address.</p>
+<p><strong>Network ACL rule ordering.</strong> NACL rules are evaluated from the lowest number upward, and evaluation stops at the first match. The rebuild places the optional deny at rule 90, below the allows at 100 and 110:</p>
+<pre class="hcl"><code>resource "aws_network_acl_rule" "in_deny_icmp" {
+  count = local.icmp_deny_source == null ? 0 : 1
+
+  network_acl_id = aws_network_acl.public.id
+  egress         = false
+  rule_number    = 90
+  rule_action    = "deny"
+  protocol       = "icmp"
+  icmp_type      = -1
+  icmp_code      = -1
+  cidr_block     = local.icmp_deny_source
+}</code></pre>
+<p><code>local.icmp_deny_source</code> comes from a map keyed by the variable <code>nacl_icmp_mode</code>: <code>allow</code> yields <code>null</code> (no rule created, because <code>count = 0</code>), <code>deny_admin</code> yields the admin CIDR, and <code>deny_all</code> yields <code>0.0.0.0/0</code>. One variable flips the lab between three experiments.</p>
+<p><strong>Ephemeral ports and reply rules.</strong> When the instance opens an HTTPS connection, the kernel picks a random source port from its ephemeral range (<code>net.ipv4.ip_local_port_range</code>, 32768 to 60999 on Amazon Linux 2023). The server replies to that port. Because the NACL is stateless, it needs inbound rule 120 allowing TCP 32768 to 65535. Starting at 32768 keeps 22 (SSH) and 3389 (RDP) out of the allowed range. Similarly, rule In 110 allows ICMP echo replies so the instance's own outbound pings work, and Out 120 lets the instance answer the admin's pings.</p>
+<p><strong>IMDSv2.</strong> The Instance Metadata Service at <code>169.254.169.254</code> hands an EC2 instance its configuration, including temporary credentials for its IAM role. IMDSv1 answers a plain GET. That is dangerous: a server-side request forgery (SSRF) bug, where an attacker tricks the app into fetching a URL, can read the credentials. IMDSv2 requires a session token obtained by a PUT with a custom header first, which most SSRF primitives cannot send:</p>
+<pre class="hcl"><code>metadata_options {
+  http_endpoint               = "enabled"
+  http_tokens                 = "required" # IMDSv2 only
+  http_put_response_hop_limit = 1
+  instance_metadata_tags      = "disabled"
+}</code></pre>
+<p>The hop limit of 1 sets the IP TTL of the token response to 1, so the reply cannot cross a second network hop, such as into a container on the host.</p>
+<p><strong>IAM and Session Manager.</strong> IAM (Identity and Access Management) is AWS's permission system. A <em>role</em> is an identity with no password that a trusted entity can temporarily assume, and its <em>trust policy</em> says who may assume it. The instance role trusts <code>ec2.amazonaws.com</code> and has only the AWS-managed <code>AmazonSSMManagedInstanceCore</code> policy, which lets the SSM Agent register and carry Session Manager traffic. Administration happens with <code>aws ssm start-session</code>; there is no port 22 and no key pair.</p>
+<p><strong>Flow logs and confused-deputy protection.</strong> VPC Flow Logs record every flow's source, destination, ports, protocol (1 = ICMP, 6 = TCP) and <code>ACCEPT</code> or <code>REJECT</code>. The delivery role trusts <code>vpc-flow-logs.amazonaws.com</code>, but with two conditions:</p>
+<pre class="hcl"><code>condition {
+  test     = "StringEquals"
+  variable = "aws:SourceAccount"
+  values   = [local.account_id]
+}
+condition {
+  test     = "ArnLike"
+  variable = "aws:SourceArn"
+  values   = ["arn:${local.partition}:ec2:${var.aws_region}:..."]
+}</code></pre>
+<p>A "confused deputy" is a trusted service tricked into acting for the wrong customer. Pinning <code>aws:SourceAccount</code> and <code>aws:SourceArn</code> means only flow logs in this account can use the role. Its write policy is limited to the one log group.</p>
+<p><strong>KMS and the alarm.</strong> The log group and SNS topic are encrypted with a customer-managed KMS key with rotation enabled. A comment in <code>monitoring.tf</code> explains why the cheaper AWS-managed <code>aws/sns</code> key could not work: CloudWatch can only publish to an encrypted topic if the key policy grants <code>cloudwatch.amazonaws.com</code> permission, and an AWS-managed key's policy cannot be edited. The alarm fires when <code>CPUUtilization &gt; 70</code> for 2 of 3 one-minute datapoints.</p>
+<p><strong>Tests without credentials.</strong> <code>tests/security_controls.tftest.hcl</code> uses <code>mock_provider "aws"</code> so <code>terraform plan</code> runs offline. Ten assertions check things like <code>http_tokens == "required"</code>, the only ingress rule being ICMP type 8 from the admin CIDR, and the deny rule number being lower than the allow. A mutation check (moving the deny to rule 130, setting IMDS optional) made three runs fail, as intended.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-39" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Session Manager instead of SSH.</strong> No inbound management port removes the most-attacked service. The cost is a dependency on outbound HTTPS and the AWS CLI plugin.</li>
+<li><strong>Public IP kept.</strong> The lab must test ICMP from the admin's own machine over the internet. Checkov flags public IPs (CKV_AWS_88); the skip is documented inline.</li>
+<li><strong>Documented Checkov skips.</strong> CKV_AWS_352 flags every ICMP NACL rule because ICMP has no <code>from_port</code>. Rather than weaken rules, each skip carries a reason.</li>
+<li><strong>Variable validation as guardrails.</strong> <code>trusted_admin_cidr</code> rejects <code>0.0.0.0/0</code>; <code>cpu_alarm_threshold</code> must be 1 to 100; flow log retention must be a value CloudWatch accepts.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-39" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>From <code>docs/original-lab.md</code> and the README:</p>
+<ul>
+<li><strong>The NACL deny that never denied.</strong> In the console lab, rule 51 was meant to deny ICMP but was saved as "All traffic / Allow". Rule 1 already allowed everything, so even a correct deny at 51 would never be reached. The rebuild uses rule 90, and a test fails if the order changes.</li>
+<li><strong>Stateless means replies too.</strong> The original report claimed outbound pings would still work after an inbound ICMP deny. On a NACL they would not, because the echo reply arrives as new inbound traffic. <code>deny_all</code> mode exists to demonstrate this.</li>
+<li><strong>Self-ping blamed on AWS.</strong> Pinging the instance's own public IP failed, which the report blamed on an AWS limitation. Screenshots show it failed while the security group allowed only SSH and worked once ICMP was allowed: the reply arrives from the public IP and is filtered like any other sender.</li>
+<li><strong>An alarm that could never fire.</strong> The threshold was <code>&gt; 10000</code> on a percentage metric. Validation now rejects values above 100.</li>
+<li><strong>Detailed monitoring is not the CloudWatch agent.</strong> Detailed monitoring changes EC2 metric resolution from 5 minutes to 1 minute; the agent is separate software for OS metrics.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-39" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>The README's "What I Tested" table separates static proof (format, validate, test, TFLint, Checkov: 121 passed, 0 failed, 7 documented skips) from live proof. Live checks are honestly marked "Not yet validated in live AWS".</li>
+<li>Running cost is roughly two US cents per hour. <code>terraform destroy</code> removes everything except the KMS key, which enters a 7-day pending deletion window.</li>
+<li>Traffic to the Amazon DNS resolver, IMDS and Time Sync is not filtered by NACLs, so no rules are needed for them.</li>
+</ul>
+</section>
+<section id="how-to-run-it-39" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb14"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><span class="bu">cd</span> terraform</span>
+<span id="cb14-2"><span class="fu">cp</span> terraform.tfvars.example terraform.tfvars</span>
+<span id="cb14-3"><span class="co"># set trusted_admin_cidr to your own public IP with /32</span></span>
+<span id="cb14-4"><span class="ex">terraform</span> init <span class="kw">&amp;&amp;</span> <span class="ex">terraform</span> validate <span class="kw">&amp;&amp;</span> <span class="ex">terraform</span> test</span>
+<span id="cb14-5"><span class="ex">terraform</span> apply</span>
+<span id="cb14-6"><span class="va">$(</span><span class="ex">terraform</span> output <span class="at">-raw</span> ssm_session_command<span class="va">)</span></span>
+<span id="cb14-7"><span class="fu">ping</span> <span class="at">-c</span> 4 <span class="st">"</span><span class="va">$(</span><span class="ex">terraform</span> output <span class="at">-raw</span> instance_public_ip<span class="va">)</span><span class="st">"</span></span>
+<span id="cb14-8"><span class="ex">terraform</span> apply <span class="at">-var</span> <span class="st">'nacl_icmp_mode=deny_admin'</span></span>
+<span id="cb14-9"><span class="ex">terraform</span> destroy</span></code></pre></div>
+</section>
+<section id="learn-more-39" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://docs.aws.amazon.com/vpc/latest/userguide/infrastructure-security.html" target="_blank" rel="noopener noreferrer">AWS: Compare security groups and network ACLs</a></li>
+<li><a href="https://docs.aws.amazon.com/vpc/latest/userguide/nacl-rules.html" target="_blank" rel="noopener noreferrer">AWS: Network ACL rules</a></li>
+<li><a href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html" target="_blank" rel="noopener noreferrer">AWS: Use IMDSv2</a></li>
+<li><a href="https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html" target="_blank" rel="noopener noreferrer">AWS: VPC Flow Logs</a></li>
+<li><a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/confused-deputy.html" target="_blank" rel="noopener noreferrer">AWS: The confused deputy problem</a></li>
+<li><a href="https://developer.hashicorp.com/terraform/language/tests" target="_blank" rel="noopener noreferrer">Terraform: Tests</a></li>
+<li><a href="https://www.checkov.io/" target="_blank" rel="noopener noreferrer">Checkov documentation</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=g2JOHLHh4rI" target="_blank" rel="noopener noreferrer">AWS VPC Beginner to Pro - Virtual Private Cloud Tutorial</a></li>
+<li><a href="https://www.youtube.com/watch?v=SLB_c_ayRMo" target="_blank" rel="noopener noreferrer">Terraform Course - Automate your AWS cloud infrastructure</a></li>
+<li><a href="https://www.youtube.com/watch?v=ZhMw53Ud2tY" target="_blank" rel="noopener noreferrer">5 Steps to Secure Linux (protect from hackers)</a></li>
+</ul>
+</section>
+</section>
+<section id="http-hardening-check-nmap-nse" class="level2">
+<h2>HTTP Hardening Check (Nmap NSE)</h2>
+<section id="at-a-glance-40" class="level3">
+<h3>At a Glance</h3>
+<p><code>http-hardening-check</code> is an Nmap script that <em>judges</em> the security headers, cookies and CORS behaviour of a web service against a policy, instead of only listing them. Each weakness becomes a finding with a severity, evidence, a fix and a CWE/OWASP/ASVS reference. Each service gets a 0 to 100 score and a letter grade. A companion Python package, <code>hhc-report</code>, turns Nmap's XML into JSON, CSV, Markdown, HTML and SARIF and can fail a CI build. It is for security engineers and DevOps teams who want header regressions caught automatically.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Lua (NSE script, 1,343 lines), Python 3.10+ (reporter)</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Nmap Scripting Engine, pytest</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>NSE <code>http</code>, <code>shortport</code>, <code>stdnse</code>, <code>json</code>; Python stdlib only</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Any OS with Nmap 7.94+; Docker lab; GitHub Action</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/http-hardening-nmap-nse</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>v2.0.0, CI with unit, integration and stress tests</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-40" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>A home inspector does not just note that a smoke detector exists; she presses the test button. Nmap's bundled <code>http-security-headers</code> script notes that a header exists. This project presses the button. A site that sends <code>Strict-Transport-Security: max-age=0</code> has the header, but <code>max-age=0</code> tells browsers to <em>forget</em> the HTTPS-only rule, so this script reports <code>hsts-disabled</code>.</p>
+<p>For each web port, the script sends one GET request carrying a fake <code>Origin</code> header from a site that cannot exist. It reads every response header, checks each against the policy, subtracts points for each problem and prints a grade. If the server copies the fake origin into its CORS response and also allows credentials, the script knows any website on the internet could read logged-in users' data, and reports that as HIGH.</p>
+</section>
+<section id="architecture-40" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> Policy JSON ---+
+                v
+ Web service &lt;--GET (Origin: hardening-check.invalid)--+
+      |                                                |
+      +----- headers, cookies, body ------&gt; NSE script |
+                                            Engine.*   |
+                     optional exposure probes ---------+
+                     (/.git/HEAD, /.env, TRACE)
+                                  |
+                                  v
+                         Nmap XML (-oX scan.xml)
+                                  |
+                                  v
+                            hhc-report (Python)
+                 +--------+-------+-------+--------+
+                 v        v       v       v        v
+               JSON     CSV     MD      HTML     SARIF
+                                  |
+                          CI gate: exit 0/1/2</code></pre>
+</section>
+<section id="deep-dive-40" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>The Nmap Scripting Engine.</strong> Nmap discovers hosts and open ports. NSE lets Lua scripts run against what it found. A script declares a <code>portrule</code> (when to run) and an <code>action</code> (what to do). Here <code>portrule = shortport.http</code> runs it on any port Nmap identifies as HTTP. <code>action</code> returns a structured <code>stdnse.output_table()</code> (which becomes XML elements under <code>-oX</code>) plus a human-readable string. The script is organised as a pure <code>Engine</code> table of parsing and judging functions plus a thin Nmap runtime; a test hook (<code>HHC_TEST_EXPORT</code>) exposes <code>Engine</code> to the Lua unit tests.</p>
+<p><strong>The headers, from first principles.</strong></p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Header</th>
+<th>What it tells the browser</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Strict-Transport-Security (HSTS)</td>
+<td>Only use HTTPS for this host for <code>max-age</code> seconds</td>
+</tr>
+<tr>
+<td>Content-Security-Policy (CSP)</td>
+<td>Which sources may supply scripts, plugins, frames</td>
+</tr>
+<tr>
+<td>X-Frame-Options / <code>frame-ancestors</code></td>
+<td>Who may embed this page in an iframe (clickjacking)</td>
+</tr>
+<tr>
+<td>X-Content-Type-Options: nosniff</td>
+<td>Do not guess a file's type from its content</td>
+</tr>
+<tr>
+<td>Referrer-Policy</td>
+<td>How much of the URL to send in <code>Referer</code></td>
+</tr>
+<tr>
+<td>Permissions-Policy</td>
+<td>Which powerful APIs (camera, microphone) are allowed</td>
+</tr>
+<tr>
+<td>Set-Cookie flags</td>
+<td><code>Secure</code> (HTTPS only), <code>HttpOnly</code> (no JS), <code>SameSite</code></td>
+</tr>
+<tr>
+<td>Access-Control-Allow-Origin (CORS)</td>
+<td>Which other origins may read responses</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>HSTS parsing</strong> follows RFC 6797 precisely: a browser processes only the first HSTS header, and a header with a repeated directive is invalid:</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode lua"><code class="sourceCode lua"><span id="cb16-1"><span class="kw">function</span> <span class="va">Engine</span><span class="op">.</span>parse_hsts<span class="op">(</span><span class="va">value</span><span class="op">)</span></span>
+<span id="cb16-2">  <span class="kw">local</span> <span class="va">first</span> <span class="op">=</span> <span class="op">(</span><span class="va">value</span> <span class="kw">or</span> <span class="st">""</span><span class="op">):</span><span class="fu">match</span><span class="op">(</span><span class="st">"^[^,]*"</span><span class="op">)</span></span>
+<span id="cb16-3">  <span class="kw">local</span> <span class="va">seen</span><span class="op">,</span> <span class="va">out</span> <span class="op">=</span> <span class="op">{},</span> <span class="op">{</span><span class="va">subdomains</span> <span class="op">=</span> <span class="kw">false</span><span class="op">,</span> <span class="va">preload</span> <span class="op">=</span> <span class="kw">false</span><span class="op">}</span></span>
+<span id="cb16-4">  <span class="cf">for</span> <span class="va">part</span> <span class="kw">in</span> <span class="va">first</span><span class="op">:</span><span class="fu">gmatch</span><span class="op">(</span><span class="st">"[^;]+"</span><span class="op">)</span> <span class="cf">do</span></span>
+<span id="cb16-5">    <span class="kw">local</span> <span class="va">name</span><span class="op">,</span> <span class="va">val</span> <span class="op">=</span> <span class="va">part</span><span class="op">:</span><span class="fu">match</span><span class="op">(</span><span class="st">"^%s*([%w%-]+)%s*=?%s*(.-)%s*$"</span><span class="op">)</span></span>
+<span id="cb16-6">    <span class="cf">if</span> <span class="va">name</span> <span class="cf">then</span></span>
+<span id="cb16-7">      <span class="va">name</span> <span class="op">=</span> <span class="va">name</span><span class="op">:</span><span class="fu">lower</span><span class="op">()</span></span>
+<span id="cb16-8">      <span class="cf">if</span> <span class="va">seen</span><span class="op">[</span><span class="va">name</span><span class="op">]</span> <span class="cf">then</span></span>
+<span id="cb16-9">        <span class="cf">return</span> <span class="kw">nil</span><span class="op">,</span> <span class="op">(</span><span class="st">"directive %s appears twice"</span><span class="op">):</span><span class="fu">format</span><span class="op">(</span><span class="va">name</span><span class="op">)</span></span>
+<span id="cb16-10">      <span class="cf">end</span></span>
+<span id="cb16-11">      <span class="va">seen</span><span class="op">[</span><span class="va">name</span><span class="op">]</span> <span class="op">=</span> <span class="kw">true</span></span>
+<span id="cb16-12">      <span class="cf">if</span> <span class="va">name</span> <span class="op">==</span> <span class="st">"max-age"</span> <span class="cf">then</span></span>
+<span id="cb16-13">        <span class="kw">local</span> <span class="va">n</span> <span class="op">=</span> <span class="va">val</span><span class="op">:</span><span class="fu">match</span><span class="op">(</span><span class="st">'^"(%d+)"$'</span><span class="op">)</span> <span class="kw">or</span> <span class="va">val</span><span class="op">:</span><span class="fu">match</span><span class="op">(</span><span class="st">"^(%d+)$"</span><span class="op">)</span></span>
+<span id="cb16-14">        <span class="cf">if</span> <span class="kw">not</span> <span class="va">n</span> <span class="cf">then</span> <span class="cf">return</span> <span class="kw">nil</span><span class="op">,</span> <span class="st">"max-age is not a number"</span> <span class="cf">end</span></span>
+<span id="cb16-15">        <span class="va">out</span><span class="op">.</span><span class="va">max_age</span> <span class="op">=</span> <span class="fu">tonumber</span><span class="op">(</span><span class="va">n</span><span class="op">)</span></span>
+<span id="cb16-16">      <span class="op">...</span></span></code></pre></div>
+<p>HSTS is judged only over TLS, because browsers ignore it on plain HTTP. On port 80 the finding that matters is <code>no-https-redirect</code>.</p>
+<p><strong>CSP evaluation</strong> is the most careful part. <code>Engine.parse_csp</code> splits a header on commas (several policies) and semicolons (directives), lowercasing tokens. <code>csp_policy_weaknesses</code> then applies browser rules. <code>script-src</code> falls back to <code>default-src</code>. <code>'unsafe-inline'</code> is ignored by browsers when a nonce (<code>'nonce-...'</code>) or hash (<code>'sha256-...'</code>) is present, so it is only a finding without one. <code>'strict-dynamic'</code> makes browsers ignore host and scheme sources, so broad sources like <code>*</code>, <code>https:</code> and <code>data:</code> only count without it. <code>base-uri</code> does <em>not</em> fall back to <code>default-src</code>, so its absence is a separate finding. When several policies are present, a resource must satisfy all of them, so a weakness is real only if every policy has it:</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode lua"><code class="sourceCode lua"><span id="cb17-1"><span class="kw">function</span> <span class="va">Engine</span><span class="op">.</span>csp_weaknesses<span class="op">(</span><span class="va">policies</span><span class="op">)</span></span>
+<span id="cb17-2">  <span class="cf">if</span> <span class="op">#</span><span class="va">policies</span> <span class="op">==</span> <span class="dv">0</span> <span class="cf">then</span> <span class="cf">return</span> <span class="op">{}</span> <span class="cf">end</span></span>
+<span id="cb17-3">  <span class="kw">local</span> <span class="va">result</span> <span class="op">=</span> csp_policy_weaknesses<span class="op">(</span><span class="va">policies</span><span class="op">[</span><span class="dv">1</span><span class="op">])</span></span>
+<span id="cb17-4">  <span class="cf">for</span> <span class="va">i</span> <span class="op">=</span> <span class="dv">2</span><span class="op">,</span> <span class="op">#</span><span class="va">policies</span> <span class="cf">do</span></span>
+<span id="cb17-5">    <span class="kw">local</span> <span class="va">w</span> <span class="op">=</span> csp_policy_weaknesses<span class="op">(</span><span class="va">policies</span><span class="op">[</span><span class="va">i</span><span class="op">])</span></span>
+<span id="cb17-6">    <span class="cf">for</span> <span class="va">id</span> <span class="kw">in</span> <span class="fu">pairs</span><span class="op">(</span><span class="va">result</span><span class="op">)</span> <span class="cf">do</span></span>
+<span id="cb17-7">      <span class="cf">if</span> <span class="kw">not</span> <span class="va">w</span><span class="op">[</span><span class="va">id</span><span class="op">]</span> <span class="cf">then</span> <span class="va">result</span><span class="op">[</span><span class="va">id</span><span class="op">]</span> <span class="op">=</span> <span class="kw">nil</span> <span class="cf">end</span></span>
+<span id="cb17-8">    <span class="cf">end</span></span>
+<span id="cb17-9">  <span class="cf">end</span></span>
+<span id="cb17-10">  <span class="cf">return</span> <span class="va">result</span></span>
+<span id="cb17-11"><span class="kw">end</span></span></code></pre></div>
+<p>This is a set intersection: start with the first policy's weaknesses, then drop any that a later policy closes. CSP in a <code>&lt;meta http-equiv&gt;</code> tag is also extracted from the body, with HTML entities decoded.</p>
+<p><strong>Framing</strong> follows browser precedence: CSP <code>frame-ancestors</code> overrides <code>X-Frame-Options</code>. For X-Frame-Options, <code>DENY</code> and <code>SAMEORIGIN</code> protect, conflicting repeated values are ignored, and <code>ALLOW-FROM</code> is reported because current browsers ignore it.</p>
+<p><strong>Cookies.</strong> <code>Engine.cookie_kind</code> classifies names: anything containing <code>csrf</code> or <code>xsrf</code> is a CSRF token, which the double-submit pattern requires JavaScript to read, so a missing <code>HttpOnly</code> is not a finding. Names matching <code>sess</code>, <code>sid</code>, <code>auth</code>, <code>token</code>, <code>jwt</code> and similar are session cookies, judged strictly.</p>
+<p><strong>CORS probe.</strong> Every request carries <code>Origin: https://hardening-check.invalid</code>. The <code>.invalid</code> top-level domain is reserved and can never resolve. If the server echoes it in <code>Access-Control-Allow-Origin</code> with <code>Access-Control-Allow-Credentials: true</code>, any attacker site can make authenticated cross-origin reads: <code>cors-reflected-credentials</code>, HIGH.</p>
+<p><strong>Scoring.</strong></p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode lua"><code class="sourceCode lua"><span id="cb18-1"><span class="kw">local</span> <span class="cn">WEIGHT</span> <span class="op">=</span> <span class="op">{</span><span class="cn">CRITICAL</span> <span class="op">=</span> <span class="dv">40</span><span class="op">,</span> <span class="cn">HIGH</span> <span class="op">=</span> <span class="dv">25</span><span class="op">,</span> <span class="cn">MEDIUM</span> <span class="op">=</span> <span class="dv">10</span><span class="op">,</span></span>
+<span id="cb18-2">                <span class="cn">LOW</span> <span class="op">=</span> <span class="dv">3</span><span class="op">,</span> <span class="cn">INFO</span> <span class="op">=</span> <span class="dv">0</span><span class="op">}</span></span>
+<span id="cb18-3"><span class="op">...</span></span>
+<span id="cb18-4"><span class="cf">if</span> <span class="va">worst</span> <span class="op">==</span> <span class="cn">RANK</span><span class="op">.</span><span class="cn">CRITICAL</span> <span class="cf">then</span></span>
+<span id="cb18-5">  <span class="va">grade</span> <span class="op">=</span> <span class="st">"F"</span></span>
+<span id="cb18-6"><span class="cf">elseif</span> <span class="va">worst</span> <span class="op">==</span> <span class="cn">RANK</span><span class="op">.</span><span class="cn">HIGH</span> <span class="kw">and</span> <span class="op">(</span><span class="va">grade</span> <span class="op">==</span> <span class="st">"A"</span> <span class="kw">or</span> <span class="va">grade</span> <span class="op">==</span> <span class="st">"B"</span><span class="op">)</span> <span class="cf">then</span></span>
+<span id="cb18-7">  <span class="va">grade</span> <span class="op">=</span> <span class="st">"C"</span></span>
+<span id="cb18-8"><span class="cf">end</span></span></code></pre></div>
+<p>A score starts at 100 and loses points per finding, floored at 0. The grade caps stop a site with one HIGH problem from earning an A just because everything else is fine. PASS or FAIL is decided separately by the policy's <code>fail_on</code> severity.</p>
+<p><strong>Policies.</strong> <code>policies/baseline.json</code>, <code>strict.json</code> and <code>owasp-asvs-l1.json</code> set <code>fail_on</code>, HSTS minimums, exposure probing, skipped IDs and severity overrides. <code>Engine.apply_policy</code> rejects unknown keys and finding IDs with <code>result: ERROR</code>, so a typo such as <code>"hsts_min"</code> can never silently weaken a scan.</p>
+<p><strong>Exposure probes (opt-in).</strong> With <code>exposure=true</code>, the script requests sensitive paths (<code>/.git/HEAD</code>, <code>/.env</code>, <code>/server-status</code>) and one TRACE. Soft-404 servers answer every path with 200, so it uses Nmap's soft-404 calibration plus content signatures and never copies bodies into reports.</p>
+<p><strong>The reporter.</strong> <code>hhc-report</code> parses Nmap XML into a model. Each finding gets a stable <code>fingerprint</code>: a SHA-256 of target, ID, path and detail with digits replaced by <code>#</code>, so a version bump from nginx 1.24 to 1.25 is not a "new" finding. With <code>--baseline main.json</code>, only new fingerprints fail the gate. The CSV writer neutralises formula injection:</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb19-1"><span class="co"># A cell starting with one of these is a formula in Excel,</span></span>
+<span id="cb19-2"><span class="co"># LibreOffice and Google Sheets. Prefixing a quote makes it</span></span>
+<span id="cb19-3"><span class="co"># inert text (OWASP CSV injection).</span></span>
+<span id="cb19-4">FORMULA_START <span class="op">=</span> (<span class="st">"="</span>, <span class="st">"+"</span>, <span class="st">"-"</span>, <span class="st">"@"</span>, <span class="st">"</span><span class="ch">\t</span><span class="st">"</span>, <span class="st">"</span><span class="ch">\r</span><span class="st">"</span>, <span class="st">"</span><span class="ch">\n</span><span class="st">"</span>, <span class="st">"|"</span>)</span>
+<span id="cb19-5"></span>
+<span id="cb19-6"><span class="kw">def</span> safe_cell(value: Any) <span class="op">-&gt;</span> Any:</span>
+<span id="cb19-7">    <span class="cf">if</span> <span class="bu">isinstance</span>(value, <span class="bu">str</span>) <span class="kw">and</span> value.startswith(FORMULA_START):</span>
+<span id="cb19-8">        <span class="cf">return</span> <span class="st">"'"</span> <span class="op">+</span> value</span>
+<span id="cb19-9">    <span class="cf">return</span> value</span></code></pre></div>
+<p>A header value like <code>=HYPERLINK(...)</code> copied from a hostile server would otherwise execute when an analyst opens the CSV. SARIF (Static Analysis Results Interchange Format) 2.1.0 output is validated against the official schema.</p>
+<p><strong>The lab.</strong> <code>lab/docker/nginx/lab.conf</code> defines three virtual hosts on one nginx. <code>hardened.lab</code> redirects HTTP to HTTPS and sends a complete header set, including <code>Set-Cookie "__Host-session=lab; Path=/; Secure; HttpOnly; SameSite=Lax"</code>. <code>weak.lab</code> sends every header with a weak value, plus <code>Access-Control-Allow-Origin $http_origin</code> with credentials, "the classic CORS misconfiguration". <code>spa.lab</code> answers every path with <code>index.html</code> to exercise soft-404 handling. <code>lab/server.py</code> adds nine Python targets for edge cases.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-40" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>One GET per port.</strong> The request budget is tiny and documented, so the scan is safe against production. The cost is that only one page is judged; headers set on other routes are missed.</li>
+<li><strong>Browser semantics over string matching.</strong> Combining CSP policies, honouring nonces and <code>strict-dynamic</code>, and letting <code>frame-ancestors</code> override X-Frame-Options mean fewer false positives, at the cost of a more complex engine with dedicated unit tests.</li>
+<li><strong>Deprecated headers as INFO.</strong> HPKP, Expect-CT and X-XSS-Protection are reported but cost no points, since browsers have removed support.</li>
+<li><strong>No TLS checks.</strong> Cipher and certificate analysis is left to Nmap's <code>ssl-enum-ciphers</code> and <code>ssl-cert</code>.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-40" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li><strong>Version 1 arguments.</strong> v2 removed <code>headers</code>, <code>brief</code> and <code>host</code>. Instead of silently ignoring them, the action emits a warning naming the replacement.</li>
+<li><strong>Slow non-responders.</strong> The README notes that a port that accepts but never answers takes about the timeout plus 15 seconds, because Nmap's HTTP library retries over TLS. This is documented rather than hidden.</li>
+<li><strong>Docs drifting from code.</strong> A Lua unit test checks that <code>docs/checks.md</code> and the JSON schema list exactly the script's 48 checks.</li>
+<li><strong>Robustness.</strong> The stress suite covers 14 status codes, redirect loops, duplicate and oversized headers, 30 cookies and 9,000 random parser inputs.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-40" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>The GitHub Action runs <code>action/guard.py</code> first. It validates targets against a hostname regex (no URLs, options or shell characters), validates ports and severity, and resolves every target. Unless <code>allow-public-targets: true</code> is set, every address must be loopback, private (RFC 1918 or ULA) or link-local, so the action cannot be pointed at the internet by accident.</li>
+<li>No payloads, credentials or state-changing methods are sent. Exposure probes never copy response bodies into reports.</li>
+<li>The HTML report has no JavaScript and escapes hostile input.</li>
+</ul>
+</section>
+<section id="how-to-run-it-40" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb20"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb20-1"><span class="fu">make</span> demo          <span class="co"># build Docker lab, scan, write reports</span></span>
+<span id="cb20-2"><span class="fu">make</span> lab-down</span>
+<span id="cb20-3"><span class="fu">nmap</span> <span class="at">-sV</span> <span class="at">-p80,443</span> <span class="at">--script</span> ./http-hardening-check.nse host.internal</span>
+<span id="cb20-4"><span class="fu">nmap</span> <span class="at">-sV</span> <span class="at">-p443</span> <span class="at">--script</span> ./http-hardening-check.nse <span class="dt">\</span></span>
+<span id="cb20-5">  <span class="at">--script-args</span> <span class="st">'http-hardening-check.policy=policies/strict.json'</span> <span class="dt">\</span></span>
+<span id="cb20-6">  <span class="at">-oX</span> scan.xml 10.0.0.15</span>
+<span id="cb20-7"><span class="ex">pip</span> install ./reporter</span>
+<span id="cb20-8"><span class="ex">hhc-report</span> scan.xml <span class="at">-o</span> report.html <span class="at">--fail-on</span> high</span>
+<span id="cb20-9"><span class="fu">make</span> install <span class="kw">&amp;&amp;</span> <span class="fu">make</span> check</span></code></pre></div>
+</section>
+<section id="learn-more-40" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://nmap.org/book/nse.html" target="_blank" rel="noopener noreferrer">Nmap Scripting Engine documentation</a></li>
+<li><a href="https://owasp.org/www-project-secure-headers/" target="_blank" rel="noopener noreferrer">OWASP Secure Headers Project</a></li>
+<li><a href="https://developer.mozilla.org/docs/Web/HTTP/Headers/Content-Security-Policy" target="_blank" rel="noopener noreferrer">MDN: Content-Security-Policy</a></li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc6797" target="_blank" rel="noopener noreferrer">RFC 6797: HTTP Strict Transport Security</a></li>
+<li><a href="https://developer.mozilla.org/docs/Web/HTTP/CORS" target="_blank" rel="noopener noreferrer">MDN: Cross-Origin Resource Sharing</a></li>
+<li><a href="https://owasp.org/www-community/attacks/CSV_Injection" target="_blank" rel="noopener noreferrer">OWASP: CSV Injection</a></li>
+<li><a href="https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html" target="_blank" rel="noopener noreferrer">OASIS SARIF 2.1.0</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=4t4kBkMsDbQ" target="_blank" rel="noopener noreferrer">Nmap Tutorial to find Network Vulnerabilities</a></li>
+<li><a href="https://www.youtube.com/watch?v=4KHiSt0oLJ0" target="_blank" rel="noopener noreferrer">CORS in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=rYVGbOMV8Ng" target="_blank" rel="noopener noreferrer">CORS Error Explained: Fix Cross Origin Requests</a></li>
+</ul>
+</section>
+</section>
+<section id="secure-ubuntu-fleet-ansible" class="level2">
+<h2>Secure Ubuntu Fleet (Ansible)</h2>
+<section id="at-a-glance-41" class="level3">
+<h3>At a Glance</h3>
+<p>Secure Ubuntu Fleet is a starter Ansible project that applies a security baseline to a group of Ubuntu servers in one command. It updates the package cache, applies all upgrades, installs UFW and Fail2ban, enables the firewall with SSH allowed, and makes sure Fail2ban runs at boot. It is for anyone running a few Linux servers who wants patching and basic network defence to be repeatable instead of manual. The repository is small: one playbook, one inventory and a README.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>YAML (Ansible), INI (inventory)</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Ansible</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td><code>apt</code>, <code>ufw</code>, <code>service</code> modules</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Ubuntu targets over SSH</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/secure-ubuntu-fleet</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Starter; three commits</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-41" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Ansible is like a foreman with a clipboard. The inventory lists which houses to visit; the playbook lists the jobs to do at each house. The foreman walks to each house over SSH, checks whether each job is already done, and only does the jobs that are not. Running it twice does no harm, because the second time everything is already done.</p>
+</section>
+<section id="architecture-41" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> Control machine
+   ansible-playbook -i inventory/hosts.ini playbooks/site.yml
+        |
+        |  SSH (become: sudo)
+        +-------------------+-------------------+
+        v                   v                   v
+     server1             server2              ...
+   [ubuntu group]
+     apt update -&gt; dist-upgrade -&gt; install ufw, fail2ban
+     -&gt; ufw enable -&gt; ufw allow OpenSSH -&gt; fail2ban on</code></pre>
+</section>
+<section id="deep-dive-41" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Inventory.</strong> <code>inventory/hosts.ini</code> defines an <code>[ubuntu]</code> group with two hosts, each with an <code>ansible_host</code> address and an <code>ansible_user</code> (both redacted here as <code>&lt;IP&gt;</code> and <code>&lt;user&gt;</code>), plus a group variable pinning <code>ansible_python_interpreter=/usr/bin/python3</code>. Ansible runs small Python programs on each target, so the interpreter must exist there.</p>
+<p><strong>The playbook.</strong> <code>playbooks/site.yml</code> targets <code>hosts: ubuntu</code> with <code>become: true</code> (run tasks via sudo):</p>
+<div class="sourceCode" id="cb22"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb22-1"><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> Upgrade packages</span></span>
+<span id="cb22-2"><span class="at">  </span><span class="fu">apt</span><span class="kw">:</span></span>
+<span id="cb22-3"><span class="at">    </span><span class="fu">upgrade</span><span class="kw">:</span><span class="at"> dist</span></span>
+<span id="cb22-4"></span>
+<span id="cb22-5"><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> Install baseline security packages</span></span>
+<span id="cb22-6"><span class="at">  </span><span class="fu">apt</span><span class="kw">:</span></span>
+<span id="cb22-7"><span class="at">    </span><span class="fu">name</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">ufw</span><span class="kw">,</span><span class="at"> fail2ban</span><span class="kw">]</span></span>
+<span id="cb22-8"><span class="at">    </span><span class="fu">state</span><span class="kw">:</span><span class="at"> present</span></span>
+<span id="cb22-9"></span>
+<span id="cb22-10"><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> Ensure UFW is enabled</span></span>
+<span id="cb22-11"><span class="at">  </span><span class="fu">ufw</span><span class="kw">:</span></span>
+<span id="cb22-12"><span class="at">    </span><span class="fu">state</span><span class="kw">:</span><span class="at"> enabled</span></span>
+<span id="cb22-13"></span>
+<span id="cb22-14"><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> Allow SSH (OpenSSH profile)</span></span>
+<span id="cb22-15"><span class="at">  </span><span class="fu">ufw</span><span class="kw">:</span></span>
+<span id="cb22-16"><span class="at">    </span><span class="fu">rule</span><span class="kw">:</span><span class="at"> allow</span></span>
+<span id="cb22-17"><span class="at">    </span><span class="fu">name</span><span class="kw">:</span><span class="at"> OpenSSH</span></span></code></pre></div>
+<p><code>cache_valid_time: 3600</code> on the update task skips refreshing the apt index if it is less than an hour old, which keeps reruns fast. <code>upgrade: dist</code> is <code>apt-get dist-upgrade</code>, which may add or remove packages to resolve dependency changes (for example a new kernel).</p>
+<p><strong>UFW and iptables from first principles.</strong> Linux filters packets in the kernel with Netfilter. <code>iptables</code> (and its successor <code>nftables</code>) is the user-space tool that loads rules into Netfilter. Rules live in <em>tables</em> (<code>filter</code> for allow/deny, <code>nat</code> for address translation) and <em>chains</em> (<code>INPUT</code> for packets addressed to this machine, <code>OUTPUT</code> for packets it sends, <code>FORWARD</code> for packets routed through it). Each packet is checked against a chain's rules in order. The first rule that matches decides with a <em>target</em> such as <code>ACCEPT</code> or <code>DROP</code>, and if none match, the chain's default <em>policy</em> applies. A typical stateful host firewall looks like:</p>
+<div class="sourceCode" id="cb23"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb23-1"><span class="ex">iptables</span> <span class="at">-P</span> INPUT DROP</span>
+<span id="cb23-2"><span class="ex">iptables</span> <span class="at">-A</span> INPUT <span class="at">-i</span> lo <span class="at">-j</span> ACCEPT</span>
+<span id="cb23-3"><span class="ex">iptables</span> <span class="at">-A</span> INPUT <span class="at">-m</span> conntrack <span class="at">--ctstate</span> ESTABLISHED,RELATED <span class="dt">\</span></span>
+<span id="cb23-4">  <span class="at">-j</span> ACCEPT</span>
+<span id="cb23-5"><span class="ex">iptables</span> <span class="at">-A</span> INPUT <span class="at">-p</span> tcp <span class="at">--dport</span> 22 <span class="at">-j</span> ACCEPT</span></code></pre></div>
+<p>That snippet illustrates the concept and is not from the repo. UFW ("Uncomplicated Firewall") generates rules like these. <code>ufw enable</code> sets a default deny for incoming and allow for outgoing traffic, and inserts its own chains (<code>ufw-before-input</code>, <code>ufw-user-input</code> and so on) with conntrack rules so replies are allowed. <code>ufw allow OpenSSH</code> uses an <em>application profile</em> from <code>/etc/ufw/applications.d</code> that maps the name to TCP 22.</p>
+<p><strong>Fail2ban.</strong> Fail2ban tails log files (such as <code>/var/log/auth.log</code>) and matches lines with regex <em>filters</em>. When an IP fails too often inside a time window, a <em>jail</em> runs an <em>action</em>, normally inserting an iptables or nftables rule that drops that IP for a ban period. It is the same sliding-window idea as WinSecKit's brute-force detection, but it responds instead of only reporting. Ubuntu's package enables the <code>sshd</code> jail by default.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-41" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Modules over shell commands.</strong> Using <code>apt</code>, <code>ufw</code> and <code>service</code> modules makes every task idempotent and reports <code>changed</code> only when something actually changed.</li>
+<li><strong>Single play.</strong> Simple to read; roles would make it reusable across projects.</li>
+<li><strong>Upgrade everything.</strong> <code>dist</code> upgrades patch quickly but can pull in a new kernel that needs a reboot. The playbook does not check <code>/var/run/reboot-required</code> or reboot.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-41" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>The commit "Fix baseline playbook (UFW + fail2ban tasks)" corrected the firewall and Fail2ban tasks. Reading the current playbook closely shows two things worth knowing:</p>
+<ul>
+<li><strong>Task order and lockout risk.</strong> UFW is enabled <em>before</em> the OpenSSH allow rule is added. With default-deny incoming, there is a window where new SSH connections would be refused. Ansible's existing SSH session usually survives because conntrack already tracks it as established, but a dropped connection in that window would lock the controller out. Swapping the two tasks removes the risk.</li>
+<li><strong>README scope.</strong> The README promises "SSH hardening", but no task edits <code>sshd_config</code> (for example <code>PasswordAuthentication no</code> or <code>PermitRootLogin no</code>). That remains to be built.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-41" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>Fail2ban plus UFW reduces brute-force noise, but key-only SSH authentication is the stronger control.</li>
+<li>Real addresses and usernames belong in a private inventory or Ansible Vault, not a public repo.</li>
+<li>Ansible connects to hosts in parallel (5 forks by default), so the baseline scales to many servers.</li>
+</ul>
+</section>
+<section id="how-to-run-it-41" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb24"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb24-1"><span class="ex">ansible-playbook</span> <span class="at">-i</span> inventory/hosts.ini playbooks/site.yml</span>
+<span id="cb24-2"><span class="ex">ansible-playbook</span> <span class="at">-i</span> inventory/hosts.ini playbooks/site.yml <span class="at">--check</span></span></code></pre></div>
+<p>The <code>--check</code> dry run is standard Ansible and shows what would change.</p>
+</section>
+<section id="learn-more-41" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://docs.ansible.com/ansible/latest/getting_started/index.html" target="_blank" rel="noopener noreferrer">Ansible: Getting started</a></li>
+<li><a href="https://docs.ansible.com/ansible/latest/collections/community/general/ufw_module.html" target="_blank" rel="noopener noreferrer">Ansible: community.general.ufw module</a></li>
+<li><a href="https://documentation.ubuntu.com/server/how-to/security/firewalls/" target="_blank" rel="noopener noreferrer">Ubuntu Server: Firewall (ufw)</a></li>
+<li><a href="https://www.netfilter.org/" target="_blank" rel="noopener noreferrer">Netfilter project</a></li>
+<li><a href="https://github.com/fail2ban/fail2ban/wiki" target="_blank" rel="noopener noreferrer">Fail2ban wiki</a></li>
+<li><a href="https://www.cisecurity.org/benchmark/ubuntu_linux" target="_blank" rel="noopener noreferrer">CIS Ubuntu Linux Benchmarks</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=ZhMw53Ud2tY" target="_blank" rel="noopener noreferrer">5 Steps to Secure Linux (protect from hackers)</a></li>
+<li><a href="https://www.youtube.com/watch?v=1id6ERvfozo" target="_blank" rel="noopener noreferrer">What is Ansible | Ansible Playbook explained | Ansible Tutorial for Beginners</a></li>
+<li><a href="https://www.youtube.com/watch?v=4t4kBkMsDbQ" target="_blank" rel="noopener noreferrer">Nmap Tutorial to find Network Vulnerabilities</a></li>
+</ul>
+</section>
+</section>
+<section id="windows-dev-and-security-bootstrap" class="level2">
+<h2>Windows Dev and Security Bootstrap</h2>
+<section id="at-a-glance-42" class="level3">
+<h3>At a Glance</h3>
+<p><code>win-dev-sec-bootstrap</code> sets up a Windows 10 or 11 workstation for development and security work, then checks how well that workstation is protected. Provisioning installs categories of tools (Core, DevLangs, NetDebug, SecTools, Cloud) through winget, pipx and the VS Code CLI, safely and repeatably. The assessment reads 27 Windows security controls without changing anything and writes JSON and HTML evidence. An opt-in remediation step fixes 13 of them, one confirmation at a time, with a backup first, a check afterwards and a rollback command.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>PowerShell 5.1 and 7</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Pester (200+ tests), PSScriptAnalyzer</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>winget, pipx, Defender (<code>Get-MpPreference</code>), NetSecurity</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Windows 10/11; dry run on any OS with PowerShell</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/win-dev-sec-bootstrap</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Active; CI on Windows with PS 7 and 5.1, secret scanning</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-42" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>A new laptop arrives. You run one script with <code>-Mode Sec</code>, and it reads a shopping list (<code>packages.json</code>) and installs everything on it, skipping what is already there. Then you run <code>-Assess</code>, and it acts like a doctor's checkup: it measures 27 vital signs (is the antivirus on, is the firewall on, is old SMBv1 off) and writes a report, without prescribing anything. If you then run <code>-Remediate</code>, it asks before each treatment, writes down the old value, applies the change, re-measures, and keeps the notes so <code>-Rollback</code> can undo it.</p>
+</section>
+<section id="architecture-42" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> bootstrap-dev-sec.ps1  (parameter sets, elevation, exit codes)
+    |
+    +-- PackageManager.psm1 &lt;-- config/packages.json
+    |      winget / pipx / code --install-extension
+    +-- Environment.psm1     PATH refresh, profile block, WSL
+    +-- SecurityAssessment.psm1 &lt;-- config/controls.json
+    |      Get-SecuritySnapshot -&gt; evaluators -&gt; findings
+    +-- Remediation.psm1     handlers: backup, apply, verify,
+    |                        rollback (backup\*.json)
+    +-- Reporting.psm1       console, JSON, offline HTML
+    '-- Common.psm1          output, JSON I/O, redaction</code></pre>
+</section>
+<section id="deep-dive-42" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Probes with honest failure.</strong> Every data source (Defender, firewall, SMB, registry) is read once through <code>Invoke-StateProbe</code>, which classifies failures instead of hiding them:</p>
+<div class="sourceCode" id="cb26"><pre class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb26-1"><span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb26-2">    @<span class="op">{</span> Available <span class="op">=</span> <span class="va">$true</span><span class="op">;</span> <span class="kw">Data</span> <span class="op">=</span> <span class="op">(&amp;</span> <span class="va">$ScriptBlock</span><span class="op">)</span> <span class="op">}</span></span>
+<span id="cb26-3"><span class="op">}</span> <span class="cf">catch</span> <span class="op">{</span></span>
+<span id="cb26-4">    <span class="va">$message</span> <span class="op">=</span> <span class="va">$_</span><span class="op">.</span><span class="fu">Exception</span><span class="op">.</span><span class="fu">Message</span></span>
+<span id="cb26-5">    <span class="va">$reason</span> <span class="op">=</span> <span class="st">'Error'</span></span>
+<span id="cb26-6">    <span class="cf">if</span> <span class="op">(</span><span class="va">$_</span><span class="op">.</span><span class="fu">Exception</span> <span class="op">-is</span> <span class="op">[</span>System<span class="op">.</span><span class="fu">UnauthorizedAccessException</span><span class="op">]</span> <span class="op">-or</span></span>
+<span id="cb26-7">        <span class="va">$message</span> <span class="op">-match</span> <span class="st">'access (is |was )?denied|0x80070005'</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb26-8">        <span class="va">$reason</span> <span class="op">=</span> <span class="st">'AccessDenied'</span></span>
+<span id="cb26-9">    <span class="op">}</span> <span class="cf">elseif</span> <span class="op">(</span><span class="va">$message</span> <span class="op">-match</span> <span class="st">'not supported on this platform|</span></span>
+<span id="cb26-10"><span class="st">              Invalid class|Invalid namespace'</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb26-11">        <span class="va">$reason</span> <span class="op">=</span> <span class="st">'NotSupported'</span></span>
+<span id="cb26-12">    <span class="op">}</span></span>
+<span id="cb26-13">    @<span class="op">{</span> Available <span class="op">=</span> <span class="va">$false</span><span class="op">;</span> Reason <span class="op">=</span> <span class="va">$reason</span><span class="op">;</span> Error <span class="op">=</span> <span class="va">$message</span> <span class="op">}</span></span>
+<span id="cb26-14"><span class="op">}</span></span></code></pre></div>
+<p>A missing BitLocker module on Windows Home becomes <code>NOT_APPLICABLE</code>; a non-elevated session becomes <code>ERROR</code>. Neither is counted as passing. This is the same honesty principle as WinSecKit's gate coverage.</p>
+<p><strong>The controls.</strong> Highlights, explained:</p>
+<ul>
+<li><strong>LLMNR</strong> (Link-Local Multicast Name Resolution) lets Windows ask the whole local network "who is FILESERVER?" when DNS fails. Any machine can answer, so tools like Responder impersonate the server and capture password hashes. The control checks the policy <code>EnableMulticast = 0</code> under <code>HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient</code>.</li>
+<li><strong>SMB signing</strong> adds a cryptographic signature to file-sharing packets so a man-in-the-middle cannot relay or alter them.</li>
+<li><strong>LSA protection (RunAsPPL)</strong> runs the Local Security Authority, which holds credentials in memory, as a protected process so tools like Mimikatz cannot read it.</li>
+<li><strong>Script block logging, module logging and transcription</strong> make PowerShell activity visible (event 4104, as in WinSecKit), and removing the <strong>PowerShell 2.0 engine</strong> closes a downgrade path that bypasses that logging.</li>
+<li><strong>Defender exclusions.</strong> <code>Get-ExclusionRisk</code> flags exclusions that are drive roots, wildcards, user-writable staging folders (Temp, Downloads, Public), LOLBins (legitimate binaries attackers abuse, such as <code>mshta.exe</code>, <code>rundll32.exe</code>, <code>regsvr32.exe</code>) or executable extensions. An attacker who can drop a file into an excluded folder runs unscanned.</li>
+</ul>
+<p><strong>Remediation handlers are data.</strong> <code>Remediation.psm1</code> maps control IDs to handler kinds:</p>
+<div class="sourceCode" id="cb27"><pre class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb27-1"><span class="va">$script</span><span class="op">:</span><span class="va">Handlers</span> <span class="op">=</span> @<span class="op">{</span></span>
+<span id="cb27-2">  <span class="st">'WIN-DEF-001'</span> <span class="op">=</span> @<span class="op">{</span> Kind <span class="op">=</span> <span class="st">'MpPreference'</span><span class="op">;</span></span>
+<span id="cb27-3">      Property <span class="op">=</span> <span class="st">'DisableRealtimeMonitoring'</span><span class="op">;</span></span>
+<span id="cb27-4">      Desired <span class="op">=</span> <span class="va">$false</span><span class="op">;</span> Allowed <span class="op">=</span> <span class="op">@(</span><span class="va">$true</span><span class="op">,</span> <span class="va">$false</span><span class="op">)</span> <span class="op">}</span></span>
+<span id="cb27-5">  <span class="st">'WIN-FW-003'</span>  <span class="op">=</span> @<span class="op">{</span> Kind <span class="op">=</span> <span class="st">'FirewallProfile'</span><span class="op">;</span> Profile <span class="op">=</span> <span class="st">'Public'</span> <span class="op">}</span></span>
+<span id="cb27-6">  <span class="st">'WIN-SMB-001'</span> <span class="op">=</span> @<span class="op">{</span> Kind <span class="op">=</span> <span class="st">'SmbServer'</span><span class="op">;</span></span>
+<span id="cb27-7">      Property <span class="op">=</span> <span class="st">'EnableSMB1Protocol'</span><span class="op">;</span> Desired <span class="op">=</span> <span class="va">$false</span> <span class="op">}</span></span>
+<span id="cb27-8">  <span class="st">'WIN-NET-001'</span> <span class="op">=</span> @<span class="op">{</span> Kind <span class="op">=</span> <span class="st">'RegistryPolicy'</span><span class="op">;</span></span>
+<span id="cb27-9">      Path <span class="op">=</span> <span class="st">'HKLM:\SOFTWARE\Policies\...\DNSClient'</span><span class="op">;</span></span>
+<span id="cb27-10">      Name <span class="op">=</span> <span class="st">'EnableMulticast'</span><span class="op">;</span> Desired <span class="op">=</span> <span class="dv">0</span> <span class="op">}</span></span>
+<span id="cb27-11">  <span class="st">'WIN-ACC-001'</span> <span class="op">=</span> @<span class="op">{</span> Kind <span class="op">=</span> <span class="st">'GuestAccount'</span> <span class="op">}</span></span>
+<span id="cb27-12"><span class="op">}</span></span></code></pre></div>
+<p>The <code>Allowed</code> list is used during rollback: a value read from a backup file that the setting could never have had is refused, so a tampered backup cannot push arbitrary values.</p>
+<p><strong>The remediation loop</strong> in <code>Invoke-SecurityRemediation</code> runs, per finding: <code>ShouldProcess</code> (with <code>ConfirmImpact = 'High'</code>, PowerShell prompts unless <code>-Confirm:$false</code>); read the current state; write it to <code>backup\security-backup-&lt;timestamp&gt;.json</code> <em>before</em> changing anything; apply; read back; and record <code>Applied</code> or <code>Failed</code>. If the read-back disagrees, the detail reads "Group Policy, MDM or Defender tamper protection may control this setting." Firewall verification reads the <em>effective</em> policy, so a GPO override shows up as a failure instead of a false success.</p>
+<p><strong>Provisioning.</strong> <code>PackageManager.psm1</code> validates the catalog, resolves categories from <code>-Mode</code>, <code>-Only</code>, <code>-Include</code> and <code>-Skip</code>, detects packages by exact winget ID, and decodes winget's HRESULT exit codes into names via <code>Get-WingetExitDescription</code>. After installs, <code>Environment.psm1</code> rebuilds the session PATH from the registry so pipx tools and VS Code extensions install in the same run as Python and VS Code. Nmap, Npcap, Ghidra and Hashcat are listed as manual installs because winget either lacks them or, for Nmap, carries a 2019 release.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-42" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Assessment and remediation are separate commands.</strong> Reading is always safe; writing is explicit.</li>
+<li><strong>Only immediately verifiable settings are automated.</strong> Changes that need a restart (UAC, LSA protection), risk data (BitLocker) or often break developer tools (ASR rules, controlled folder access) are never applied automatically; the report gives manual guidance.</li>
+<li><strong>No overall score.</strong> The summary gives counts per status and FAIL counts per severity, avoiding a single number that hides context.</li>
+<li><strong>References checked against sources.</strong> NIST SP 800-53 Rev. 5 and ATT&amp;CK IDs were verified; CIS item numbers were left out because they change between benchmark versions and could not be checked against a licensed copy.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-42" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>Commit history records the hard parts: "rebuild provisioning for reliable, idempotent installs", "harden rollback input and CLI tests on Windows PowerShell 5.1", and "Windows PowerShell 5.1 dry run failed on Stop-Transcript -WhatIf". The last is a classic: <code>-WhatIf</code> propagates through <code>$WhatIfPreference</code> to commands that support it, including <code>Stop-Transcript</code>, which then refused to stop. CI now runs both PowerShell 7 and 5.1 on Windows, and PSScriptAnalyzer includes command compatibility checks for 5.1.</p>
+</section>
+<section id="security-and-performance-notes-42" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>The backup folder gets an ACL limited to Administrators and SYSTEM, because it records security settings.</li>
+<li>Rollback refuses backups from a different computer and unknown control IDs.</li>
+<li>Reports redact the user profile path to <code>%USERPROFILE%</code> and exclude user names, IP and MAC addresses. The HTML report has no scripts, makes no network requests and sets a restrictive Content Security Policy.</li>
+<li>The README tells users to run <code>Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass</code> because the scripts are unsigned, and to read the scripts before running them elevated.</li>
+</ul>
+</section>
+<section id="how-to-run-it-42" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb28"><pre class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb28-1"><span class="fu">Set-ExecutionPolicy</span> <span class="op">-</span>Scope <span class="cf">Process</span> <span class="op">-</span>ExecutionPolicy Bypass</span>
+<span id="cb28-2"><span class="op">.</span>\bootstrap-dev-sec<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>Mode Sec <span class="op">-</span>DryRun</span>
+<span id="cb28-3"><span class="op">.</span>\bootstrap-dev-sec<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>Mode Sec</span>
+<span id="cb28-4"><span class="op">.</span>\bootstrap-dev-sec<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>Assess</span>
+<span id="cb28-5"><span class="op">.</span>\bootstrap-dev-sec<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>Remediate <span class="op">-</span>WhatIf</span>
+<span id="cb28-6"><span class="op">.</span>\bootstrap-dev-sec<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>Remediate <span class="op">-</span>ControlId WIN-PS-001<span class="op">,</span>WIN-NET-001</span>
+<span id="cb28-7"><span class="op">.</span>\bootstrap-dev-sec<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>Rollback</span></code></pre></div>
+</section>
+<section id="learn-more-42" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://learn.microsoft.com/defender-endpoint/configure-exclusions-microsoft-defender-antivirus" target="_blank" rel="noopener noreferrer">Microsoft: Configure Defender exclusions</a></li>
+<li><a href="https://learn.microsoft.com/windows-server/security/credentials-protection-and-management/configuring-additional-lsa-protection" target="_blank" rel="noopener noreferrer">Microsoft: Configure added LSA protection</a></li>
+<li><a href="https://learn.microsoft.com/windows-server/storage/file-server/troubleshoot/detect-enable-and-disable-smbv1-v2-v3" target="_blank" rel="noopener noreferrer">Microsoft: Detect and disable SMBv1</a></li>
+<li><a href="https://attack.mitre.org/techniques/T1557/001/" target="_blank" rel="noopener noreferrer">MITRE ATT&amp;CK T1557.001: LLMNR/NBT-NS Poisoning</a></li>
+<li><a href="https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final" target="_blank" rel="noopener noreferrer">NIST SP 800-53 Rev. 5</a></li>
+<li><a href="https://learn.microsoft.com/windows/package-manager/winget/" target="_blank" rel="noopener noreferrer">winget documentation</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=ZOoCaWyifmI" target="_blank" rel="noopener noreferrer">Learn PowerShell in Less Than 2 Hours</a></li>
+<li><a href="https://www.youtube.com/watch?v=0BEf6s1iu5g" target="_blank" rel="noopener noreferrer">MITRE ATT&amp;CK Framework</a></li>
+<li><a href="https://www.youtube.com/watch?v=rrEineZSarM" target="_blank" rel="noopener noreferrer">Understand, Deploy, and Hunt with MITRE's ATT&amp;CK Framework</a></li>
+</ul>
+</section>
+</section>
+<section id="configuring-rip-in-cisco-packet-tracer" class="level2">
+<h2>Configuring RIP in Cisco Packet Tracer</h2>
+<section id="at-a-glance-43" class="level3">
+<h3>At a Glance</h3>
+<p>This lab connects two office LANs through three routers and uses RIP version 2 to let the routers learn each other's networks automatically. It is a CCNA-style exercise built in Cisco Packet Tracer (Cisco's network simulator). The repository holds the <code>.pkt</code> topology, a PDF report with every command and ping result, and screenshots. It shows the before-and-after of dynamic routing: pings across routers fail until RIP is configured, then succeed.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Cisco IOS CLI</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>None</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>None</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Cisco Packet Tracer</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/Configuring-RIP-Cisco-Packet-Tracer</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Complete coursework lab</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-43" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Imagine three towns in a row, each with a post office. Every 30 seconds, each post office shouts to its neighbours: "I can deliver to these streets, and this many towns away." The middle post office hears from both ends and passes the news along. After a minute or so, every post office knows a route to every street. That shouting is RIP. The "towns away" count is the hop count, RIP's only measure of distance.</p>
+</section>
+<section id="architecture-43" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> PC0 .2  PC1 .3                         PC2 .2  PC3 .3
+    \     /                                \     /
+   Switch0                                Switch1
+      | 192.168.0.0/24                       | 192.168.10.0/24
+   Router0 .1                             Router2 .1
+      | 172.168.0.1                          | 172.168.10.1
+      |        172.168.0.0/24                |  172.168.10.0/24
+      +---------- Router1 --------------------+
+             .0.2           .10.2</code></pre>
+</section>
+<section id="deep-dive-43" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Routing basics.</strong> A router forwards packets by looking up the destination IP in its routing table and choosing the longest matching prefix. <em>Connected</em> routes appear automatically for each configured interface. Everything else must come from static routes or a routing protocol. Before RIP, Router0 knows only <code>192.168.0.0/24</code> and <code>172.168.0.0/24</code>, so a ping from PC0 to <code>192.168.10.3</code> returns "Destination Host Unreachable" <em>from 192.168.0.1</em>. The report correctly reads that as Router0 having no route.</p>
+<p>The report also lists a ping from PC0 to Router1's near interface (<code>172.168.0.2</code>) failing before RIP. The echo request reaches Router1 through PC0's default gateway, but Router1 has no route back to <code>192.168.0.0/24</code>, so the reply is dropped. Routing must work in both directions.</p>
+<p><strong>RIP.</strong> RIP (Routing Information Protocol) is a <em>distance-vector</em> protocol: each router advertises its whole table to neighbours, adding one to each hop count. The metric is hop count, and 16 means unreachable, so RIP networks are limited to 15 hops. Updates go every 30 seconds. Cisco's administrative distance for RIP is 120 (lower is more trusted; OSPF is 110). Loop prevention uses <em>split horizon</em> (do not advertise a route back out the interface it was learned on) and <em>route poisoning</em> (advertise a failed route with metric 16).</p>
+<p><strong>RIPv1 versus RIPv2.</strong> RIPv1 is <em>classful</em>: its updates carry no subnet mask, and it broadcasts to <code>255.255.255.255</code>. RIPv2 is <em>classless</em>: it carries masks, multicasts to <code>224.0.0.9</code>, and supports authentication. The lab's configuration, from the report:</p>
+<pre class="text"><code>Router(config)# router rip
+Router(config-router)# version 2
+Router(config-router)# no auto-summary
+Router(config-router)# network 192.168.0.0
+Router(config-router)# network 172.168.0.0
+Router(config-router)# end
+Router# copy running-config startup-config</code></pre>
+<p><code>network</code> statements in RIP are classful. They select which interfaces send and listen for RIP and whose connected networks get advertised; they do not take a mask. <code>172.168.0.0</code> is a Class B address (first octet 128 to 191), so the statement matches every interface in <code>172.168.0.0/16</code>. Router1's <code>network 172.168.10.0</code> is converted by IOS to <code>172.168.0.0</code> as well. <code>no auto-summary</code> stops RIPv2 from collapsing subnets into their classful network at boundaries, which would break discontiguous designs. <code>copy running-config startup-config</code> saves RAM config to NVRAM so it survives a reboot.</p>
+<p><strong>Verification.</strong> <code>show ip route rip</code> lists learned routes marked <code>R</code>, with <code>[120/n]</code> showing administrative distance and hop count. After all three routers are configured, the report shows PC0 reaching Router1, Router2 and PC3.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-43" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>RIP for teaching.</strong> RIP is simple to configure and observe. OSPF (link-state, cost-based) converges faster and scales further, and is what the current CCNA emphasises.</li>
+<li><strong>Fiber between routers.</strong> Purely a Packet Tracer cabling choice; it does not change routing behaviour.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-43" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>The report's step 6 walks through each failed ping and explains why it failed before RIP was enabled, a good troubleshooting habit. One addressing detail is worth flagging: the WAN links use <code>172.168.0.0/24</code> and <code>172.168.10.0/24</code>. The RFC 1918 private block is <code>172.16.0.0/12</code> (172.16.0.0 to 172.31.255.255), so <code>172.168.x.x</code> is public address space owned by someone else. It works inside a simulator, but on a real network it would hijack those destinations. <code>172.16.0.0/24</code> and <code>172.16.10.0/24</code> would be the correct private choice.</p>
+</section>
+<section id="security-and-performance-notes-43" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>RIPv2 without authentication accepts updates from any neighbour, so a rogue device can inject routes. <code>ip rip authentication mode md5</code> with a key chain mitigates this, and <code>passive-interface</code> stops RIP updates from being sent onto LANs that have only hosts.</li>
+<li>RIP's 30-second updates and hold-down timers make convergence after a failure take minutes, not seconds.</li>
+</ul>
+</section>
+<section id="how-to-run-it-43" class="level3">
+<h3>How to Run It</h3>
+<p>Open <code>Prj 01.pkt</code> in Cisco Packet Tracer, then on each router:</p>
+<pre class="text"><code>show ip route
+show ip protocols
+ping 192.168.10.3</code></pre>
+</section>
+<section id="learn-more-43" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://www.rfc-editor.org/rfc/rfc2453" target="_blank" rel="noopener noreferrer">RFC 2453: RIP Version 2</a></li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc1918" target="_blank" rel="noopener noreferrer">RFC 1918: Address Allocation for Private Internets</a></li>
+<li><a href="https://en.wikipedia.org/wiki/Routing_Information_Protocol" target="_blank" rel="noopener noreferrer">Wikipedia: Routing Information Protocol</a></li>
+<li><a href="https://www.netacad.com/cisco-packet-tracer" target="_blank" rel="noopener noreferrer">Cisco Packet Tracer (Networking Academy)</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=xSTgb8JLkvs" target="_blank" rel="noopener noreferrer">Free CCNA | Dynamic Routing | Day 24 | CCNA 200-301 Complete Course</a></li>
+<li><a href="https://www.youtube.com/watch?v=N8PiZDld6Zc" target="_blank" rel="noopener noreferrer">Free CCNA | RIP &amp; EIGRP | Day 25 | CCNA 200-301 Complete Course</a></li>
+<li><a href="https://www.youtube.com/watch?v=cjFzOnm6u1g" target="_blank" rel="noopener noreferrer">Free CCNA | VLANs (Part 1) | Day 16 | CCNA 200-301 Complete Course</a></li>
+</ul>
+</section>
+</section>
+<section id="inter-vlan-routing-via-router-on-a-stick" class="level2">
+<h2>Inter-VLAN Routing via Router-on-a-Stick</h2>
+<section id="at-a-glance-44" class="level3">
+<h3>At a Glance</h3>
+<p>This mini-lab splits one switch into two isolated networks (VLAN 10 "USERS" and VLAN 20 "SERVERS") and routes between them through a single router port. It is practice for a larger multi-VLAN office project and covers the core CCNA switching skills: creating VLANs, assigning access ports, building an 802.1Q trunk and configuring router sub-interfaces. The repo contains the <code>.pkt</code> file, a PDF lab report, a topology illustration and a screenshot.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Cisco IOS CLI</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>None</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>None</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Cisco Packet Tracer (ISR 4331, Catalyst 2960-24TT)</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/inter-vlan-roas-lab</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Complete (July 2025)</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-44" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>A switch with VLANs is like one office building split into two companies with separate locked floors. People on floor 10 cannot walk to floor 20. To pass a note between them, you send it down the single shared lift (the trunk) to the mailroom (the router). Each note carries a coloured sticker (the VLAN tag) saying which floor it came from. The mailroom reads the sticker, swaps it for the other floor's colour, and sends it back up the same lift.</p>
+</section>
+<section id="architecture-44" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>              Router4 (ISR 4331)
+              Gi0/0/0  (no IP, trunk)
+               |-- .10  dot1Q 10  192.168.10.1/24
+               '-- .20  dot1Q 20  192.168.20.1/24
+                    |
+                    | 802.1Q trunk (VLANs 10,20)
+                    |
+              Gi0/1 Switch3 (2960)
+             Fa0/1 |          | Fa0/2
+          VLAN 10  |          |  VLAN 20
+                 PC0          PC1
+         192.168.10.10    192.168.20.20</code></pre>
+</section>
+<section id="deep-dive-44" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>VLANs.</strong> A switch normally forms one broadcast domain: an ARP broadcast from any port reaches all ports. A VLAN (Virtual LAN) divides one physical switch into several logical switches. Ports in VLAN 10 only exchange frames with other VLAN 10 ports. Each VLAN is its own Layer 2 network and needs its own IP subnet. To move traffic between VLANs, a Layer 3 device (a router or multilayer switch) must route it.</p>
+<p><strong>Access and trunk ports.</strong> An <em>access</em> port belongs to one VLAN and sends untagged frames, because PCs do not understand tags. A <em>trunk</em> carries many VLANs over one link by inserting an IEEE 802.1Q tag into each Ethernet frame: 4 bytes after the source MAC, holding a 12-bit VLAN ID (1 to 4094). The <em>native VLAN</em> (VLAN 1 by default) travels untagged on a trunk.</p>
+<p><strong>Switch configuration</strong> (from the report, reformatted one command per line):</p>
+<pre class="text"><code>vlan 10
+ name USERS
+vlan 20
+ name SERVERS
+interface Fa0/1
+ switchport mode access
+ switchport access vlan 10
+interface Fa0/2
+ switchport mode access
+ switchport access vlan 20
+interface Gi0/1
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20
+ switchport nonegotiate</code></pre>
+<p><code>switchport nonegotiate</code> disables DTP (Dynamic Trunking Protocol), so the port will not negotiate trunking with whatever is plugged in. That closes the "switch spoofing" attack, where a host pretends to be a switch to become a trunk and see every VLAN. <code>allowed vlan 10,20</code> prunes all other VLANs from the trunk.</p>
+<p><strong>Router-on-a-stick.</strong> The router's one physical interface is split into logical sub-interfaces, one per VLAN:</p>
+<pre class="text"><code>interface Gig0/0/0
+ description Trunk to Switch3
+ no shutdown
+interface Gig0/0/0.10
+ encapsulation dot1Q 10
+ ip address 192.168.10.1 255.255.255.0
+interface Gig0/0/0.20
+ encapsulation dot1Q 20
+ ip address 192.168.20.1 255.255.255.0</code></pre>
+<p><code>encapsulation dot1Q 10</code> tells the router that frames tagged 10 belong to <code>.10</code>, and frames it sends out <code>.10</code> get tag 10. Each sub-interface IP is that VLAN's default gateway. The physical interface has no IP; it only needs <code>no shutdown</code>.</p>
+<p><strong>Packet walk.</strong> PC0 pings <code>192.168.20.20</code>. That is outside its subnet, so PC0 ARPs for its gateway <code>192.168.10.1</code> and sends the frame untagged into Fa0/1. The switch tags it VLAN 10 and sends it up the trunk. The router receives it on <code>.10</code>, looks up <code>192.168.20.0/24</code> (a connected route on <code>.20</code>), rewrites the Layer 2 header and sends it back down tagged 20. The switch strips the tag and delivers it out Fa0/2. Verification uses <code>show vlan brief</code>, <code>show interfaces trunk</code>, <code>show ip interface brief</code> and <code>show ip route connected</code>.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-44" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>ROAS versus a Layer 3 switch.</strong> Router-on-a-stick needs one router port, so it is cheap. But all inter-VLAN traffic crosses one link twice (up and back down), which caps throughput at that link's speed. A multilayer switch with SVIs (Switch Virtual Interfaces, <code>interface vlan 10</code>) routes in hardware and scales better.</li>
+<li><strong>Static host addressing</strong> keeps the lab focused; DHCP with <code>ip helper-address</code> is planned for the follow-up project.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-44" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>The report says all objectives were met without configuration errors, and it lists typical failure points to check (trunk mismatches, gateway errors). One mismatch is in the repository itself: the README describes <code>configs/</code>, <code>report/</code> and <code>packet-tracer/</code> folders, but all files sit at the top level and no running-config text files exist. The commands are only in the PDF.</p>
+</section>
+<section id="security-and-performance-notes-44" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>Native VLAN 1 is left at its default. Moving the native VLAN to an unused ID and pruning VLAN 1 from trunks defends against double-tagging VLAN hopping.</li>
+<li>With no ACLs on the sub-interfaces, USERS can reach SERVERS on every port. The follow-up project plans ACL enforcement.</li>
+</ul>
+</section>
+<section id="how-to-run-it-44" class="level3">
+<h3>How to Run It</h3>
+<p>Open <code>INTER VLAN.pkt</code> in Packet Tracer. From PC0's command prompt: <code>ping 192.168.20.20</code>. On the switch: <code>show interfaces trunk</code>. On the router: <code>show ip route connected</code>.</p>
+</section>
+<section id="learn-more-44" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://en.wikipedia.org/wiki/IEEE_802.1Q" target="_blank" rel="noopener noreferrer">Wikipedia: IEEE 802.1Q</a></li>
+<li><a href="https://www.cisco.com/c/en/us/support/docs/lan-switching/inter-vlan-routing/41860-howto-L3-intervlanrouting.html" target="_blank" rel="noopener noreferrer">Cisco: Configure InterVLAN Routing with Catalyst switches</a></li>
+<li><a href="https://en.wikipedia.org/wiki/Router_on_a_stick" target="_blank" rel="noopener noreferrer">Wikipedia: Router on a stick</a></li>
+<li><a href="https://en.wikipedia.org/wiki/VLAN_hopping" target="_blank" rel="noopener noreferrer">Wikipedia: VLAN hopping</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=cjFzOnm6u1g" target="_blank" rel="noopener noreferrer">Free CCNA | VLANs (Part 1) | Day 16 | CCNA 200-301 Complete Course</a></li>
+<li><a href="https://www.youtube.com/watch?v=iRkFE_lpYgc" target="_blank" rel="noopener noreferrer">Free CCNA | VLANs (Part 2) | Day 17 Lab | CCNA 200-301 Complete Course</a></li>
+<li><a href="https://www.youtube.com/watch?v=OkPB028l2eE" target="_blank" rel="noopener noreferrer">Free CCNA | VLANs (Part 3) | Day 18 | CCNA 200-301 Complete Course</a></li>
+</ul>
+</section>
+</section>
+<section id="rapid-pvst-campus-lab" class="level2">
+<h2>Rapid PVST+ Campus Lab</h2>
+<section id="at-a-glance-45" class="level3">
+<h3>At a Glance</h3>
+<p>This Packet Tracer lab builds a redundant Layer 2 campus: two distribution switches and two dual-homed access switches, with loops on purpose. Rapid PVST+ (Cisco's per-VLAN version of Rapid Spanning Tree) blocks the loops while keeping backup paths ready, and each distribution switch is root for a different VLAN to spread the load. Access ports are hardened with PortFast and BPDU Guard, demonstrated by plugging in a rogue switch that gets shut down. The repo includes screenshots and a <code>PROJECT_OVERVIEW.md</code> that audits the README against the actual files.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Cisco IOS CLI</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>None</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>None</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Packet Tracer 8.x (3560-24PS, 2960-24TT, 2950T-24)</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/rapid-pvst-campus-lab</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Complete (August 2025); some README claims unverified</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-45" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Ethernet frames have no expiry counter. If switches are wired in a loop, a single broadcast circles forever and multiplies until the network melts down (a broadcast storm). Spanning tree is like closing some roads in a town so that there is exactly one route between any two houses, while keeping the closed roads ready to reopen if a bridge collapses. The switches elect a "town centre" (the root bridge), every switch keeps its cheapest road towards it open, and every other redundant road is blocked. Rapid PVST+ runs a separate election per VLAN, so VLAN 10 and VLAN 20 can have different town centres and use different roads.</p>
+</section>
+<section id="architecture-45" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>         SW1 (3560) ======= Gi0/1 ======= SW2 (3560)
+      root VLAN 10                     root VLAN 20
+     Fa0/1 Fa0/2  Fa0/3            Fa0/1 Fa0/2  Fa0/3
+       |    |       \               /    |     |
+       |    |        \             /     |     |
+       |    |         \           /      |     |
+     Fa0/23 Fa0/24   Fa0/21   Fa0/21  Fa0/23 Fa0/24
+       \    /          |         |       \    /
+        SW4 (2960) ----+         +------ SW3 (2960)
+        Fa0/1  Fa0/10                    Fa0/1
+         |        |                        |
+        PC1    SW5 (rogue,               PC0
+     10.10.10.21  err-disabled)       10.10.10.11</code></pre>
+<p>SW3 uses SW2 links (Fa0/23-24) as primary and Fa0/21 to SW1 as its cross link. SW4 is the mirror image.</p>
+</section>
+<section id="deep-dive-45" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>STP from first principles.</strong> Switches exchange BPDUs (Bridge Protocol Data Units) every 2 seconds. Each switch has a Bridge ID: a priority (default 32768) plus its MAC address. The lowest Bridge ID becomes root. Every non-root switch picks one <em>root port</em>, the port with the lowest total path cost to the root (cost 19 for FastEthernet, 4 for Gigabit). Each segment gets one <em>designated port</em> that forwards towards it. Every remaining port is blocked.</p>
+<p><strong>PVST+ and the system ID extension.</strong> In PVST+, the priority field is split: a 4-bit priority in steps of 4096 plus a 12-bit VLAN ID. That is why the screenshots show SW1's root priority as 24586 (24576 + VLAN 10) and SW2's as 4116 (4096 + VLAN 20). <code>spanning-tree vlan 10 root primary</code> is a macro that sets the priority to 24576, or lower than the current root if needed. That explains why SW2 ended up at 4096: it had to beat whatever root was already elected.</p>
+<p><strong>Rapid STP (802.1w).</strong> Classic STP moves a port through listening and learning states, each 15 seconds (the forward delay), so recovery takes 30 to 50 seconds. RSTP adds port roles: <em>alternate</em> (a pre-computed backup root port) and <em>backup</em>. On point-to-point links it uses a proposal/agreement handshake to move a designated port to forwarding immediately. When a root port fails, the alternate port takes over almost at once. The lab claims under 10 seconds of ping loss.</p>
+<p><strong>Global edge configuration</strong>, applied on every switch:</p>
+<pre class="text"><code>spanning-tree mode rapid-pvst
+spanning-tree portfast default
+spanning-tree portfast bpduguard default
+SW1(config)# spanning-tree vlan 10 root primary
+SW2(config)# spanning-tree vlan 20 root primary</code></pre>
+<p><code>portfast default</code> makes every access port an <em>edge port</em> that skips the listening and learning states, so PCs get connectivity instantly. <code>bpduguard default</code> puts any PortFast port that receives a BPDU into <em>err-disabled</em>: a host never sends BPDUs, so receiving one means someone plugged in a switch. That stops a rogue switch from triggering a topology change or claiming root.</p>
+<p><strong>Evidence of load balancing.</strong> On SW3 in VLAN 10, the root is SW1, reached through Fa0/21 (Root FWD, cost 19), with Fa0/23 and Fa0/24 Alternate Blocking. In VLAN 20 the root is SW2, reached through Fa0/23, with Fa0/24 and Fa0/21 blocked. So SW3 sends VLAN 10 traffic up one link and VLAN 20 traffic up another, which is the point of per-VLAN roots. SW4's <code>show interfaces status</code> shows Fa0/10 (<code>TO-SW5</code>) as <code>err-disabled</code> after the rogue SW5 was connected.</p>
+<p><strong>Trunks</strong> are 802.1Q, mode <code>on</code>, native VLAN 1, allowed VLANs 10 and 20, as shown in SW2's <code>show interfaces trunk</code>.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-45" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Individual trunks instead of EtherChannel.</strong> The README notes some 2960 Packet Tracer images do not support EtherChannel. With EtherChannel (LACP), parallel links bundle into one logical link that STP does not block, doubling usable bandwidth.</li>
+<li><strong>Root placement on distribution switches.</strong> Placing roots by design, not by lowest MAC, keeps the access layer from ever becoming root.</li>
+<li><strong>Global defaults over per-port config.</strong> <code>portfast default</code> and <code>bpduguard default</code> apply to all access ports automatically, so a newly patched port is protected without extra commands.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-45" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p><code>PROJECT_OVERVIEW.md</code> is an honest audit of the repo and lists 14 issues. The main ones:</p>
+<ul>
+<li><strong>Root Guard is claimed but not shown.</strong> No config or screenshot demonstrates <code>spanning-tree guard root</code>. Root Guard would block a downstream port that receives a superior BPDU, protecting root placement.</li>
+<li><strong>Configs are missing.</strong> The README promises sanitised per-device configs, but <code>config/</code> holds only an empty <code>readme.txt</code>.</li>
+<li><strong>Broken image and paths.</strong> The README topology image is hotlinked from an expired LinkedIn CDN URL (HTTP 403 now), and the paths <code>pkt/</code> and <code>/configs</code> do not match the real folders (<code>pkt file/</code>, <code>config/</code>).</li>
+<li><strong>No failover capture.</strong> The sub-10-second convergence claim lacks the continuous-ping screenshot.</li>
+<li><strong>Only VLAN 10 has hosts,</strong> so VLAN 20 forwarding is proven only by STP output.</li>
+<li><strong>Asymmetric root priorities</strong> (24576 versus 4096), harmless but untidy.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-45" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>BPDU Guard is the key Layer 2 security control here. Recovering an err-disabled port requires removing the rogue device and running <code>shutdown</code> then <code>no shutdown</code>, or configuring <code>errdisable recovery cause bpduguard</code>.</li>
+<li>Native VLAN 1 on trunks is a hardening gap; a dedicated unused native VLAN (for example 999) is best practice.</li>
+<li>RSTP convergence on point-to-point full-duplex links is typically sub-second; Packet Tracer timing is approximate.</li>
+</ul>
+</section>
+<section id="how-to-run-it-45" class="level3">
+<h3>How to Run It</h3>
+<p>Open <code>pkt file/Rapid-pvst-campus-lab.pkt</code> in Packet Tracer 8.x, then:</p>
+<pre class="text"><code>show interfaces trunk
+show spanning-tree vlan 10
+show spanning-tree vlan 20
+show interfaces status
+PC0&gt; ping -t 10.10.10.21
+SW4(config)# interface fa0/23
+SW4(config-if)# shutdown</code></pre>
+</section>
+<section id="learn-more-45" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://www.cisco.com/c/en/us/support/docs/lan-switching/spanning-tree-protocol/24062-146.html" target="_blank" rel="noopener noreferrer">Cisco: Understanding Rapid Spanning Tree Protocol (802.1w)</a></li>
+<li><a href="https://www.cisco.com/c/en/us/support/docs/lan-switching/spanning-tree-protocol/10586-65.html" target="_blank" rel="noopener noreferrer">Cisco: Spanning Tree PortFast BPDU Guard Enhancement</a></li>
+<li><a href="https://www.cisco.com/c/en/us/support/docs/lan-switching/spanning-tree-protocol/10588-74.html" target="_blank" rel="noopener noreferrer">Cisco: Spanning Tree Protocol Root Guard Enhancement</a></li>
+<li><a href="https://en.wikipedia.org/wiki/Spanning_Tree_Protocol" target="_blank" rel="noopener noreferrer">Wikipedia: Spanning Tree Protocol</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=j-bK-EFt9cY" target="_blank" rel="noopener noreferrer">Free CCNA | Spanning Tree Protocol (Part 1) | Day 20 | CCNA 200-301 Complete Course</a></li>
+<li><a href="https://www.youtube.com/watch?v=nWpldCc8msY" target="_blank" rel="noopener noreferrer">Free CCNA | Spanning Tree Protocol (Part 2) | Day 21 | CCNA 200-301 Complete Course</a></li>
+<li><a href="https://www.youtube.com/watch?v=EpazNsLlPps" target="_blank" rel="noopener noreferrer">Free CCNA | Rapid Spanning Tree Protocol | Day 22 | CCNA 200-301 Complete Course</a></li>
+</ul>
+</section>
+</section>
+</section>

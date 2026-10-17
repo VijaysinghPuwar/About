@@ -1,0 +1,897 @@
+<section id="chapter-10-academic-and-foundations-projects" class="level1">
+<h1><span class="header-section-number">10</span> Academic and Foundations Projects</h1>
+<p>Every engineer has a layer of work underneath the polished projects: course assignments, labs and small tools written while learning the basics. This chapter covers that layer. It has two graduate statistics projects in R, a classroom unit converter that grew into a full GPS analysis package, a small Python security app and an x86-64 assembly lab that was rebuilt into a binary hardening project. Several of these repositories were reopened after grading and rebuilt properly, so each one teaches the original concept and also shows how to turn coursework into engineering.</p>
+<section id="cs601c-computational-statistics-project" class="level2">
+<h2>CS601C Computational Statistics Project</h2>
+<section id="at-a-glance-46" class="level3">
+<h3>At a Glance</h3>
+<p>This is a reproducible regression study written in R. It asks three questions of three classic teaching datasets (College, Auto and Boston from <em>An Introduction to Statistical Learning</em>) and answers them with linear regression, lasso and regression trees. It began as a midterm project for CS601C at Pace University in Spring 2025 and was later reworked with a held-out test set, a mean-only baseline, residual diagnostics, unit tests and continuous integration. It is aimed at anyone learning how to evaluate a statistical model honestly, rather than reporting how well it fits the data it was trained on.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>R, R Markdown</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>rmarkdown, knitr, testthat</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>ggplot2, glmnet, rpart, renv</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Any OS with R 4.5 and pandoc; CI on Ubuntu</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/CS601C-Computational-Statistics-Project</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Complete; report published to GitHub Pages by CI</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-46" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Imagine a student who wants to prove they can predict exam scores. If they write the questions and also see the answers before predicting, any score they get means nothing. So a fair teacher hides 20% of the questions in a locked drawer. The student practises on the other 80%, and even while practising they quiz themselves in rounds (cross-validation). Only at the very end does the teacher open the drawer and grade once.</p>
+<p>This project does exactly that for each dataset:</p>
+<ol type="1">
+<li>Load the CSV and check it (no missing values, numbers really are numbers, percentages are within 0 to 100).</li>
+<li>Split the rows 80/20 with a fixed random seed.</li>
+<li>Fit several models on the 80% part, comparing them with 10-fold cross-validation.</li>
+<li>Score every model once on the hidden 20%, next to a "dumb" model that always predicts the average.</li>
+<li>Write everything into an HTML report, and refuse to finish if any sentence in the report is no longer true.</li>
+</ol>
+</section>
+<section id="architecture-46" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> data/*.csv (never modified)
+       |
+       v
+ R/helpers.R  read_college / read_auto / read_boston
+       |       validate_dataset, invalid_percent_rows
+       v
+ R/analysis.R run_analysis()
+       |   evaluate_dataset(): split -&gt; folds
+       |   compare_models(): fit_mean_baseline,
+       |       fit_linear, fit_lasso, fit_tree
+       v
+ one big result list
+   |                  |                     |
+   v                  v                     v
+ analysis/report.Rmd  tests/testthat/*     assets/*.png
+ (claims-check chunk) (README numbers     (README figures)
+   |                   must match)
+   v
+ render.R -&gt; _site/index.html -&gt; GitHub Pages</code></pre>
+<p>The key design idea is that <code>run_analysis()</code> is the only place where numbers are produced. The report, the README figures and the tests all read from the same list, so they cannot drift apart.</p>
+</section>
+<section id="deep-dive-46" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Data validation (<code>R/helpers.R</code>).</strong> <code>validate_dataset()</code> stops with a clear message if a required column is missing, contains <code>NA</code> (R's marker for a missing value) or is not numeric. The Auto loader treats <code>"?"</code> as missing because the raw ISLR file uses that symbol for unknown horsepower. The College loader checks the six percentage columns and found two impossible rows: one college reports a graduation rate of 118 and another reports 103% of faculty with PhDs. These rows are excluded in code; the raw CSV stays untouched, so the cleaning step is visible and reversible.</p>
+<p><strong>Reproducible randomness.</strong> Random splits are a classic source of "my numbers changed" bugs. The helper below runs an expression with a fixed seed and then restores whatever random state the caller had, so calling it never disturbs other code.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1">with_seed <span class="ot">&lt;-</span> <span class="cf">function</span>(seed, expr) {</span>
+<span id="cb2-2">  had_seed <span class="ot">&lt;-</span> <span class="fu">exists</span>(<span class="st">".Random.seed"</span>, <span class="at">envir =</span> <span class="fu">globalenv</span>(),</span>
+<span id="cb2-3">                     <span class="at">inherits =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb2-4">  <span class="cf">if</span> (had_seed) old_seed <span class="ot">&lt;-</span> <span class="fu">get</span>(<span class="st">".Random.seed"</span>, <span class="at">envir =</span> <span class="fu">globalenv</span>())</span>
+<span id="cb2-5">  <span class="fu">on.exit</span>({</span>
+<span id="cb2-6">    <span class="cf">if</span> (had_seed) {</span>
+<span id="cb2-7">      <span class="fu">assign</span>(<span class="st">".Random.seed"</span>, old_seed, <span class="at">envir =</span> <span class="fu">globalenv</span>())</span>
+<span id="cb2-8">    } <span class="cf">else</span> <span class="cf">if</span> (<span class="fu">exists</span>(<span class="st">".Random.seed"</span>, <span class="at">envir =</span> <span class="fu">globalenv</span>(),</span>
+<span id="cb2-9">                      <span class="at">inherits =</span> <span class="cn">FALSE</span>)) {</span>
+<span id="cb2-10">      <span class="fu">rm</span>(<span class="st">".Random.seed"</span>, <span class="at">envir =</span> <span class="fu">globalenv</span>())</span>
+<span id="cb2-11">    }</span>
+<span id="cb2-12">  })</span>
+<span id="cb2-13">  <span class="fu">set.seed</span>(seed)</span>
+<span id="cb2-14">  expr</span>
+<span id="cb2-15">}</span></code></pre></div>
+<p>R stores its random number generator state in a hidden global variable called <code>.Random.seed</code>. Because R evaluates function arguments lazily (only when first used), <code>expr</code> is evaluated after <code>set.seed()</code>, inside the protected window. <code>on.exit()</code> registers cleanup code that runs even if <code>expr</code> throws an error.</p>
+<p><strong>The fitter pattern.</strong> Every model is written as a "fitter": a function that takes training data and returns a prediction function. This is a closure, which means a function that remembers the variables that existed when it was created.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1">fit_linear <span class="ot">&lt;-</span> <span class="cf">function</span>(formula, <span class="at">inverse =</span> identity) {</span>
+<span id="cb3-2">  <span class="cf">function</span>(train) {</span>
+<span id="cb3-3">    model <span class="ot">&lt;-</span> stats<span class="sc">::</span><span class="fu">lm</span>(formula, <span class="at">data =</span> train)</span>
+<span id="cb3-4">    <span class="cf">function</span>(newdata) {</span>
+<span id="cb3-5">      <span class="fu">inverse</span>(<span class="fu">unname</span>(stats<span class="sc">::</span><span class="fu">predict</span>(model, newdata)))</span>
+<span id="cb3-6">    }</span>
+<span id="cb3-7">  }</span>
+<span id="cb3-8">}</span></code></pre></div>
+<p>Because every model has the same shape, one function (<code>cv_rmse</code>) can cross-validate any of them, and one function (<code>compare_models</code>) can build the results table. The <code>inverse</code> argument handles transformed responses: the Auto model predicts <code>log(mpg)</code>, so <code>inverse = exp</code> maps predictions back to miles per gallon before they are scored.</p>
+<p><strong>Statistics from first principles.</strong></p>
+<ul>
+<li><em>Ordinary least squares (OLS)</em> fits a straight-line relationship <code>y = b0 + b1*x1 + ... + bp*xp</code> by choosing the coefficients that minimise the sum of squared residuals (a residual is actual minus predicted). In matrix form the solution is <code>b = (X'X)^-1 X'y</code>, which <code>lm()</code> computes with a QR decomposition for numerical stability.</li>
+<li><em>Multicollinearity</em> happens when predictors are strongly correlated with each other. In the Auto data, displacement, cylinders, horsepower and weight all measure "how big is the engine and car". The model can still predict well, but it cannot tell which of them deserves credit, so individual coefficients swing wildly. The project measures this with the <em>variance inflation factor</em>: regress predictor j on all the others, take that R squared, and compute <code>VIF = 1 / (1 - R2)</code>. A VIF of 19.3 means the variance of that coefficient is 19 times larger than it would be with uncorrelated predictors. The code comment rightly notes that VIF is not a measure of importance.</li>
+<li><em>Lasso</em> adds a penalty <code>lambda * sum(|b_j|)</code> to the least-squares objective. The absolute value has a sharp corner at zero, so as lambda grows some coefficients become exactly zero, which performs variable selection. <code>fit_lasso</code> picks lambda with <code>cv.glmnet</code> using <code>lambda.1se</code>: the largest penalty whose cross-validated error is within one standard error of the best. That is the "one standard error rule", a deliberate preference for a simpler model when the evidence cannot separate two choices.</li>
+<li><em>Regression trees</em> (<code>rpart</code>) split the data repeatedly on the predictor and threshold that most reduce squared error, producing a flowchart whose leaves predict the mean of their rows. A tree grown with a tiny complexity parameter (<code>cp = 0.001</code>) overfits, so <code>fit_tree</code> reads rpart's built-in cross-validation table and prunes back to the <code>cp</code> with the lowest cross-validated error. Trees capture nonlinearity and interactions that a linear model misses, which is why the tree won on Boston housing values.</li>
+<li><em>Metrics.</em> RMSE (root mean squared error) punishes large errors heavily; MAE (mean absolute error) treats all errors linearly. Out-of-sample R squared is <code>1 - SSE/SST</code> on the test set. It can be negative, which simply means the model did worse than predicting the mean.</li>
+</ul>
+<p><strong>Nested cross-validation.</strong> The lasso and the tree tune themselves with their own inner folds (<code>tune_seed = 7</code>). When <code>cv_rmse</code> evaluates them with the outer folds (<code>cv_seed = 2025</code>), each outer fold re-runs that tuning on only its training rows. That is nested cross-validation, and it prevents the tuning step from secretly seeing the fold it is scored on. All models share the same outer folds, so their CV scores are directly comparable.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1">cv_rmse <span class="ot">&lt;-</span> <span class="cf">function</span>(fitter, train, response, folds) {</span>
+<span id="cb4-2">  <span class="fu">stopifnot</span>(<span class="fu">length</span>(folds) <span class="sc">==</span> <span class="fu">nrow</span>(train))</span>
+<span id="cb4-3">  sq_err <span class="ot">&lt;-</span> <span class="fu">numeric</span>(<span class="fu">nrow</span>(train))</span>
+<span id="cb4-4">  <span class="cf">for</span> (k <span class="cf">in</span> <span class="fu">sort</span>(<span class="fu">unique</span>(folds))) {</span>
+<span id="cb4-5">    hold <span class="ot">&lt;-</span> folds <span class="sc">==</span> k</span>
+<span id="cb4-6">    predict_fn <span class="ot">&lt;-</span> <span class="fu">fitter</span>(train[<span class="sc">!</span>hold, , <span class="at">drop =</span> <span class="cn">FALSE</span>])</span>
+<span id="cb4-7">    sq_err[hold] <span class="ot">&lt;-</span> (train[[response]][hold] <span class="sc">-</span></span>
+<span id="cb4-8">                       <span class="fu">predict_fn</span>(train[hold, , <span class="at">drop =</span> <span class="cn">FALSE</span>]))<span class="sc">^</span><span class="dv">2</span></span>
+<span id="cb4-9">  }</span>
+<span id="cb4-10">  <span class="fu">sqrt</span>(<span class="fu">mean</span>(sq_err))</span>
+<span id="cb4-11">}</span></code></pre></div>
+<p>Note that the squared errors from all folds are pooled before the square root, rather than averaging ten per-fold RMSE values. Pooling weights every row equally even when folds differ in size by one row.</p>
+<p><strong>Response transformations and diagnostics.</strong> Boston per capita crime is extremely right skewed (most suburbs near zero, a few very high). A linear model on raw <code>crim</code> produces residuals that are far from normal, which breaks the assumptions behind p-values. Modelling <code>log1p(crim)</code>, which is <code>log(1 + crim)</code> and safe at zero, raised the Shapiro-Wilk W statistic of the residuals from 0.51 to 0.91 (W is 1 for perfectly normal data). The <code>diagnostic_data()</code> helper draws the standard three panels: residuals versus fitted (curvature means a missed nonlinearity), a normal Q-Q plot (points off the diagonal mean non-normal residuals) and scale-location (a funnel shape means variance changes with the fitted value).</p>
+<p><strong>Self-checking prose.</strong> The report contains a <code>claims-check</code> chunk that turns sentences into assertions:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1">claim <span class="ot">&lt;-</span> <span class="cf">function</span>(ok, what) {</span>
+<span id="cb5-2">  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">isTRUE</span>(ok)) <span class="fu">stop</span>(<span class="st">"Report claim no longer holds: "</span>, what)</span>
+<span id="cb5-3">}</span>
+<span id="cb5-4"><span class="fu">claim</span>(<span class="fu">shapiro_w</span>(res<span class="sc">$</span>boston<span class="sc">$</span>crime_log) <span class="sc">&gt;</span></span>
+<span id="cb5-5">        <span class="fu">shapiro_w</span>(res<span class="sc">$</span>boston<span class="sc">$</span>crime_raw),</span>
+<span id="cb5-6">      <span class="st">"log1p crime residuals closer to normal"</span>)</span>
+<span id="cb5-7"><span class="fu">claim</span>(<span class="fu">grepl</span>(<span class="st">"^Regression tree"</span>, bos_best<span class="sc">$</span>Model),</span>
+<span id="cb5-8">      <span class="st">"tree has the lowest Boston test RMSE"</span>)</span></code></pre></div>
+<p>If a future data or code change makes a written claim false, the render fails. <code>tests/testthat/test-readme.R</code> does the same for the README: it parses the results table out of <code>README.md</code> and checks every cell against a fresh run, formatted to two decimals.</p>
+<p><strong>Results.</strong> The headline numbers, all from one held-out split:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Dataset</th>
+<th>Best model</th>
+<th>Test RMSE</th>
+<th>Baseline RMSE</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Auto (<code>mpg</code>)</td>
+<td>OLS, log(mpg) ~ weight + year + origin</td>
+<td>3.04</td>
+<td>8.09</td>
+</tr>
+<tr>
+<td>Boston (<code>medv</code>)</td>
+<td>Pruned regression tree</td>
+<td>3.94</td>
+<td>9.47</td>
+</tr>
+<tr>
+<td>College (<code>Grad.Rate</code>)</td>
+<td>OLS, all 17 predictors</td>
+<td>12.28</td>
+<td>16.66</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="key-design-decisions-and-trade-offs-46" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>A small model search.</strong> Only linear, lasso and a single tree are compared. Random forests or boosting would likely score better, but the goal was interpretable comparisons on teaching data, not a leaderboard.</li>
+<li><strong>One train/test split.</strong> With 79 to 155 test rows, small differences are noise. The README says so explicitly and points readers to the CV column as the more stable comparison. Repeated splits would be more robust, at the cost of a less simple story.</li>
+<li><strong>Back-transforming with <code>exp</code>.</strong> Predicting <code>log(mpg)</code> and applying <code>exp()</code> gives an estimate of the median, not the mean, of mpg (because the log is not linear). A smearing correction would remove that small bias. The simpler choice still won clearly here.</li>
+<li><strong>Fixed seeds in one settings list.</strong> All seeds live in <code>analysis_settings</code>, so a reader can change one value to test how sensitive the results are to the split.</li>
+<li><strong>Crime model fitted on all rows.</strong> The crime question is about association, not prediction, so it uses all 506 rows and reports p-values instead of test error.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-46" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li><strong>Impossible values.</strong> The percentage range check surfaced the 118 and 103 values. Excluding them in code (not by editing the CSV) keeps the data provenance clean.</li>
+<li><strong>Stale numbers.</strong> Early README edits ("Update README.md" appears four times in the history) risked text drifting from results. The claims check and README test made drift a build failure.</li>
+<li><strong>CI on Linux.</strong> The workflow comment notes that the <code>fs</code> package used by rmarkdown links against <code>libuv</code> on Linux, so the job installs <code>libuv1-dev</code> first. The workflow also fails if the rendered HTML contains any <code>## Warning</code> lines, so silent R warnings cannot reach the published report.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-46" class="level3">
+<h3>Security and Performance Notes</h3>
+<p>GitHub Actions steps are pinned to full commit SHAs (for example <code>actions/checkout@3d3c42e...</code>), which protects against a moved or compromised tag. The workflow runs with <code>contents: read</code> by default and grants <code>pages: write</code> and <code>id-token: write</code> only to the deploy job. <code>renv.lock</code> pins every package version so the report renders identically on a clean runner.</p>
+</section>
+<section id="how-to-run-it-46" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb6"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb6-1"><span class="va">REPO</span><span class="op">=</span>VijaysinghPuwar/CS601C-Computational-Statistics-Project</span>
+<span id="cb6-2"><span class="fu">git</span> clone <span class="st">"https://github.com/</span><span class="va">$REPO</span><span class="st">.git"</span></span>
+<span id="cb6-3"><span class="bu">cd</span> CS601C-Computational-Statistics-Project</span>
+<span id="cb6-4"><span class="ex">Rscript</span> <span class="at">-e</span> <span class="st">"renv::restore()"</span></span>
+<span id="cb6-5"><span class="ex">Rscript</span> tests/run-tests.R</span>
+<span id="cb6-6"><span class="ex">Rscript</span> render.R      <span class="co"># writes _site/index.html</span></span></code></pre></div>
+</section>
+<section id="learn-more-46" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://www.statlearning.com/" target="_blank" rel="noopener noreferrer">An Introduction to Statistical Learning (book site)</a></li>
+<li><a href="https://glmnet.stanford.edu/articles/glmnet.html" target="_blank" rel="noopener noreferrer">glmnet: An Introduction</a></li>
+<li><a href="https://cran.r-project.org/web/packages/rpart/vignettes/longintro.pdf" target="_blank" rel="noopener noreferrer">An Introduction to Recursive Partitioning Using the rpart Routines</a></li>
+<li><a href="https://rstudio.github.io/renv/" target="_blank" rel="noopener noreferrer">renv: Project Environments for R</a></li>
+<li><a href="https://testthat.r-lib.org/" target="_blank" rel="noopener noreferrer">testthat documentation</a></li>
+<li><a href="https://rmarkdown.rstudio.com/" target="_blank" rel="noopener noreferrer">R Markdown documentation</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=7ArmBVF2dCs" target="_blank" rel="noopener noreferrer">Linear Regression, Clearly Explained!!!</a></li>
+<li><a href="https://www.youtube.com/watch?v=fSytzGwwBVw" target="_blank" rel="noopener noreferrer">Machine Learning Fundamentals: Cross Validation</a></li>
+<li><a href="https://www.youtube.com/watch?v=NGf0voTMlcs" target="_blank" rel="noopener noreferrer">Regularization Part 2: Lasso (L1) Regression</a></li>
+<li><a href="https://www.youtube.com/watch?v=g9c66TUylZ4" target="_blank" rel="noopener noreferrer">Regression Trees, Clearly Explained!!!</a></li>
+</ul>
+</section>
+</section>
+<section id="cs601c-final-project" class="level2">
+<h2>CS601C Final Project</h2>
+<section id="at-a-glance-47" class="level3">
+<h3>At a Glance</h3>
+<p>This is the capstone for the same course: a single 1,638-line R Markdown document answering three exam questions on three datasets. Question 1 models the monthly cybersecurity cost of 1,217 organisations, Question 2 explores hypertension risk in about 4,240 patients, and Question 3 analyses the SMS Spam Collection of 5,574 text messages. Unlike the midterm project, this repository was not reworked after grading, so it is a faithful snapshot of a student analysis, including a few statistical mistakes that are worth studying.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>R, R Markdown</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>tidyverse, knitr</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>dplyr, ggplot2, skimr, corrplot, GGally, car, janitor, tidytext</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>RStudio on Windows (hard-coded <code>setwd</code> path)</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/cs601c-final-project</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Submitted coursework, three commits</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-47" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Think of it as three separate detective cases. In each case the detective first looks at the evidence (summaries, histograms, correlation heatmaps), then forms a hypothesis ("small companies pay more per user", "spam messages are longer"), then runs a formal test that says how surprising the evidence would be if the hypothesis were false. The cybersecurity case adds a twist: because all 1,217 organisations are available, the detective can pretend to see only a sample of 100 and then check whether the sample-based estimate actually caught the true answer.</p>
+</section>
+<section id="architecture-47" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> CS601C Final Project.Rmd (knit to HTML / PDF)
+   |
+   +-- Q1 Cybercost.csv ------------------------------+
+   |     EDA -&gt; lm(cost ~ .) -&gt; vif() -&gt; step()       |
+   |     z-CI, bootstrap CI, coverage simulation      |
+   |     CI width vs sample size, Welch t-test        |
+   |                                                  |
+   +-- Q2 Hypertension-risk-model-main.csv            |
+   |     benchmarks vs medical ranges, lm(risk ~ ..)  |
+   |     single-predictor ranking, chisq.test, t.test |
+   |                                                  |
+   +-- Q3 SMSSpamCollection (tab separated)           |
+         lengths, tidytext tokens, one-sided t-test   |
+         Wald CI for spam proportion, spam/ham ratio  |</code></pre>
+</section>
+<section id="deep-dive-47" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Question 1: regression and variable selection.</strong> The cost data has five predictors (security staff, attacks, databases, privileged users, users) and the response <code>Cost P/M</code>. <code>janitor::clean_names()</code> turns awkward headers like <code>Cost P/M</code> into <code>cost_p_m</code>. The analysis fits <code>lm(cost_p_m ~ ., data)</code>, where the dot means "all other columns", checks VIF with <code>car::vif</code>, and then runs <code>step(full_model, direction = "both")</code>. Stepwise selection adds or drops one predictor at a time, keeping the change that lowers AIC (the Akaike Information Criterion, a score that rewards fit but charges a penalty of 2 per parameter). It is quick but greedy, and p-values from the final model are optimistic because the same data chose the variables.</p>
+<p><strong>Question 1: confidence intervals three ways.</strong> This is the statistical heart of the project.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><span class="fu">set.seed</span>(<span class="dv">99</span>)</span>
+<span id="cb8-2">iterations <span class="ot">&lt;-</span> <span class="dv">1000</span></span>
+<span id="cb8-3">z <span class="ot">&lt;-</span> <span class="fu">qnorm</span>(<span class="fl">0.975</span>)</span>
+<span id="cb8-4">coverage_rate <span class="ot">&lt;-</span> <span class="fu">replicate</span>(iterations, {</span>
+<span id="cb8-5">  samp <span class="ot">&lt;-</span> dplyr<span class="sc">::</span><span class="fu">sample_n</span>(cyber_data_clean, sample_size)</span>
+<span id="cb8-6">  mean_val <span class="ot">&lt;-</span> <span class="fu">mean</span>(samp<span class="sc">$</span>cost_p_m)</span>
+<span id="cb8-7">  se_val <span class="ot">&lt;-</span> <span class="fu">sd</span>(samp<span class="sc">$</span>cost_p_m) <span class="sc">/</span> <span class="fu">sqrt</span>(sample_size)</span>
+<span id="cb8-8">  ci <span class="ot">&lt;-</span> <span class="fu">c</span>(mean_val <span class="sc">-</span> z <span class="sc">*</span> se_val, mean_val <span class="sc">+</span> z <span class="sc">*</span> se_val)</span>
+<span id="cb8-9">  true_mean <span class="sc">&gt;=</span> ci[<span class="dv">1</span>] <span class="sc">&amp;&amp;</span> true_mean <span class="sc">&lt;=</span> ci[<span class="dv">2</span>]</span>
+<span id="cb8-10">})</span>
+<span id="cb8-11"><span class="fu">mean</span>(coverage_rate)  <span class="co"># Expected about 0.95</span></span></code></pre></div>
+<p>A 95% confidence interval is a recipe that, if repeated on many samples, captures the true value 95% of the time. It does not mean "95% chance the truth is in this one interval". The <em>standard error</em> <code>s / sqrt(n)</code> measures how much a sample mean would wobble from sample to sample, and the Central Limit Theorem says that wobble is roughly normal for large n, which justifies <code>mean +/- 1.96 * SE</code> (1.96 is <code>qnorm(0.975)</code>). The simulation above checks that promise empirically: draw 1,000 samples of 100, build an interval from each, and count how many contain the real population mean. This is the best way to understand what "95% confidence" really means.</p>
+<p>The <em>bootstrap</em> is the second method. It resamples the one observed sample with replacement 1,000 times, computes the mean each time, and takes the 2.5th and 97.5th percentiles. It needs no normality assumption; the sample stands in for the population. Part G then repeats intervals across several sample sizes to show that width shrinks with <code>1/sqrt(n)</code>: to halve the width you need four times as many observations.</p>
+<p><strong>Question 1: Welch's t-test.</strong> The project creates <code>Cost_Per_User</code> and labels companies with fewer than 1,000 users as "Small". <code>t.test(..., var.equal = FALSE)</code> runs Welch's test, which compares two means without assuming the groups have equal variance. It adjusts the degrees of freedom with the Welch-Satterthwaite formula. This is the right default, since small and large companies almost certainly differ in spread.</p>
+<p><strong>Question 2: hypertension.</strong> The data has binary predictors (male, smoker, BP medication, diabetes) and continuous ones (age, cholesterol, systolic and diastolic BP, BMI, heart rate, glucose), with a 0/1 <code>Risk</code> response. Two tests stand out:</p>
+<ul>
+<li><code>chisq.test(table(bpmeds, risk))</code> is a chi-square test of independence. It compares observed counts in each cell of the 2 by 2 table with the counts expected if medication and risk were unrelated (row total times column total divided by grand total). For 2 by 2 tables R applies Yates' continuity correction by default, which makes the test slightly conservative.</li>
+<li><code>t.test(glucose ~ risk)</code> compares mean glucose between risk groups.</li>
+</ul>
+<p>The project also fits <code>lm(risk ~ age + sysbp + bmi + heartrate + glucose)</code>. A linear model on a 0/1 outcome is called a <em>linear probability model</em>. It is easy to read, but it can predict probabilities below 0 or above 1 and its residuals cannot be normal. Logistic regression (<code>glm(..., family = binomial)</code>) is the standard tool here. The "top 3 predictors" ranking fits one simple regression per variable and sorts by adjusted R squared, which finds the strongest single correlates but ignores overlap between them (systolic and diastolic pressure carry much of the same information).</p>
+<p><strong>Question 3: SMS spam.</strong> Messages are read with <code>read.delim(..., sep = "\t", header = FALSE)</code> and tokenised with <code>tidytext::unnest_tokens</code>, which splits text into one word per row; stop words such as "the" are removed with an anti-join. The most interesting analysis is a smoothed spam-to-ham ratio:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1">spam_ham_ratio <span class="ot">&lt;-</span> sms_words <span class="sc">%&gt;%</span></span>
+<span id="cb9-2">  <span class="fu">count</span>(type, word) <span class="sc">%&gt;%</span></span>
+<span id="cb9-3">  <span class="fu">pivot_wider</span>(<span class="at">names_from =</span> type, <span class="at">values_from =</span> n,</span>
+<span id="cb9-4">              <span class="at">values_fill =</span> <span class="fu">list</span>(<span class="at">n =</span> <span class="dv">0</span>)) <span class="sc">%&gt;%</span></span>
+<span id="cb9-5">  <span class="fu">mutate</span>(<span class="at">ratio =</span> (spam <span class="sc">+</span> <span class="dv">1</span>) <span class="sc">/</span> (ham <span class="sc">+</span> <span class="dv">1</span>),</span>
+<span id="cb9-6">         <span class="at">total_occurrence =</span> spam <span class="sc">+</span> ham) <span class="sc">%&gt;%</span></span>
+<span id="cb9-7">  <span class="fu">filter</span>(total_occurrence <span class="sc">&gt;</span> <span class="dv">5</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb9-8">  <span class="fu">arrange</span>(<span class="fu">desc</span>(ratio)) <span class="sc">%&gt;%</span></span>
+<span id="cb9-9">  <span class="fu">head</span>(<span class="dv">10</span>)</span></code></pre></div>
+<p>Adding 1 to both counts is <em>Laplace (add-one) smoothing</em>. Without it a word seen only in spam would have an infinite ratio. This ratio is the core intuition of a Naive Bayes spam filter, which multiplies such per-word likelihood ratios together (in practice, adds their logs) to score a whole message.</p>
+<p>The spam proportion is estimated from a random sample of 300 with the <em>Wald interval</em> <code>p +/- 1.96 * sqrt(p(1-p)/n)</code>. With p near 0.13 and n = 300 that is acceptable, but for small samples or proportions near 0 or 1 the Wilson interval (<code>prop.test</code>) has much better coverage.</p>
+<p><strong>A real bug worth learning from.</strong> The one-sided length test reads:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><span class="fu">t.test</span>(length <span class="sc">~</span> type, <span class="at">data =</span> sms_data,</span>
+<span id="cb10-2">       <span class="at">alternative =</span> <span class="st">"greater"</span>)</span></code></pre></div>
+<p>With a formula, R orders groups by factor level, and <code>factor()</code> sorts levels alphabetically: <code>ham</code> then <code>spam</code>. <code>alternative = "greater"</code> therefore tests "mean of ham is greater than mean of spam", the opposite of the stated hypothesis. Because spam is in fact longer, this test returns a p-value near 1, and the write-up's interpretation ("a low p-value confirms spam is longer") does not match the code. The fix is <code>alternative = "less"</code>, or relevelling with <code>factor(type, levels = c("spam", "ham"))</code>. It is a common trap with one-sided tests in R.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-47" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>One long document.</strong> Everything lives in a single Rmd, matching the exam format. Libraries are loaded again in many chunks, which is harmless but noisy. The midterm project's later refactor into <code>helpers.R</code> plus a report shows the alternative.</li>
+<li><strong>Classical and resampling side by side.</strong> Showing a z-interval, a bootstrap interval and an empirical coverage check together is a strong teaching choice, because it validates theory against simulation.</li>
+<li><strong>Population available.</strong> Because the "population" is just the full file, coverage could be verified directly. In real work the truth is unknown, which is exactly why the coverage simulation is valuable as a lesson.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-47" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li><strong>Messy headers.</strong> <code>janitor::clean_names()</code> standardised <code>Cost P/M</code> and similar names.</li>
+<li><strong>Missing values in health data.</strong> Regression chunks use <code>na.omit()</code> on the selected columns; this silently drops rows, so different analyses in Question 2 can use different subsets.</li>
+<li><strong>Reproducibility.</strong> Seeds are set before each sampling step (<code>42</code>, <code>99</code>, <code>100</code>). However, <code>setwd("D:/Computational Statistic/Final Project")</code> hard-codes a Windows path, so the document will not knit on another machine without edits. The later midterm rework solved this with a project-root finder.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-47" class="level3">
+<h3>Security and Performance Notes</h3>
+<p>The SMS corpus includes real phone numbers inside spam messages; it is public research data, but it should not be republished in new contexts. The datasets are small, so performance is not a concern; the 1,000-iteration simulations finish in seconds.</p>
+</section>
+<section id="how-to-run-it-47" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb11"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb11-1"><span class="fu">git</span> clone https://github.com/VijaysinghPuwar/cs601c-final-project.git</span>
+<span id="cb11-2"><span class="bu">cd</span> cs601c-final-project</span>
+<span id="cb11-3"><span class="co"># Remove or edit the setwd(...) lines first, then:</span></span>
+<span id="cb11-4"><span class="ex">Rscript</span> <span class="at">-e</span> <span class="st">'rmarkdown::render("CS601C Final Project.Rmd")'</span></span></code></pre></div>
+</section>
+<section id="learn-more-47" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://en.wikipedia.org/wiki/Bootstrapping_(statistics)" target="_blank" rel="noopener noreferrer">Bootstrapping (statistics)</a></li>
+<li><a href="https://en.wikipedia.org/wiki/Welch%27s_t-test" target="_blank" rel="noopener noreferrer">Welch's t-test</a></li>
+<li><a href="https://en.wikipedia.org/wiki/Binomial_proportion_confidence_interval" target="_blank" rel="noopener noreferrer">Binomial proportion confidence interval</a></li>
+<li><a href="https://stat.ethz.ch/R-manual/R-devel/library/stats/html/chisq.test.html" target="_blank" rel="noopener noreferrer">R documentation: chisq.test</a></li>
+<li><a href="https://www.tidytextmining.com/" target="_blank" rel="noopener noreferrer">Text Mining with R (tidytext book)</a></li>
+<li><a href="https://archive.ics.uci.edu/dataset/228/sms+spam+collection" target="_blank" rel="noopener noreferrer">SMS Spam Collection (UCI Machine Learning Repository)</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=TqOeMYtOc1w" target="_blank" rel="noopener noreferrer">Confidence Intervals, Clearly Explained!!!</a></li>
+<li><a href="https://www.youtube.com/watch?v=Xz0x-8-cgaQ" target="_blank" rel="noopener noreferrer">Bootstrapping Main Ideas!!!</a></li>
+<li><a href="https://www.youtube.com/watch?v=vemZtEM63GY" target="_blank" rel="noopener noreferrer">p-values: What they are and how to interpret them</a></li>
+<li><a href="https://www.youtube.com/watch?v=7_cs1YlZoug" target="_blank" rel="noopener noreferrer">Chi-Square Tests: Crash Course Statistics #29</a></li>
+<li><a href="https://www.youtube.com/watch?v=O2L2Uv9pdDA" target="_blank" rel="noopener noreferrer">Naive Bayes, Clearly Explained!!!</a></li>
+</ul>
+</section>
+</section>
+<section id="distance-conversion-tool-pacelab" class="level2">
+<h2>Distance Conversion Tool (PaceLab)</h2>
+<section id="at-a-glance-48" class="level3">
+<h3>At a Glance</h3>
+<p>This repository started as a 78-line interactive R script that converted kilometres to miles for a university course. It was then rebuilt into PaceLab, an R package that reads GPX files from running, cycling and hiking apps and reports accurate distance, kilometre and mile splits, pace, elevation gain and a GPS data quality report. It solves a real problem: GPS recordings contain spikes, clock glitches and jitter that inflate distance and climbing, and most apps never show why. PaceLab shows raw and cleaned numbers side by side and documents every rule, through an R API, a Shiny dashboard and a REST API.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>R</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Shiny, bslib, plumber, testthat, roxygen2, pkgdown</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>xml2, ggplot2, Leaflet (vendored 1.9.4), httr2, callr</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>R 4.1 or later; Docker image on rocker/r-ver 4.5.3</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/distance-conversion-tool</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>v1.0.0, 125 test blocks, 98% line coverage, not deployed publicly</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-48" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Picture a running coach with a notebook of GPS dots, one per second. Some dots are obviously wrong: one teleports a kilometre away and back, one has a timestamp from the future, two are exact copies. The coach crosses out each bad dot and writes why in the margin, but never moves a dot. Then the coach walks along the remaining dots with a measuring tape that understands the Earth is round, marks the exact moment each kilometre and mile was passed, and counts real hills while ignoring the tiny wobble of the altimeter. That is PaceLab: parse, clean, measure, split, summarise.</p>
+<p>The original converter still exists at tag <code>v0-coursework</code>. It used a <code>repeat</code> loop with <code>readline()</code> and the approximate factor 0.621371. The rebuilt <code>convert_distance()</code> is vectorised and uses exact definitions (1 mile = 1609.344 m by the 1959 international agreement).</p>
+</section>
+<section id="architecture-48" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> GPX bytes (upload, file, HTTP body)
+      |
+      v
+ parse_gpx()   size/point limits, reject DOCTYPE,
+      |        xml2 with NONET, namespace-agnostic XPath
+      v
+ clean_track() flags: missing_time, time_spike,
+      |        duplicate, time_order, speed_spike
+      v
+ kept_points() -&gt; step_distance() (haversine)
+      |              |
+      |              +-&gt; compute_splits() km / mi
+      |              +-&gt; split_trend(), pace_consistency()
+      +-&gt; elevation_stats() running median + hysteresis
+      v
+ analyze_activity()  -&gt; pacelab_activity object
+      |             |               |
+      v             v               v
+ Shiny app      plumber API     CSV export
+ (app.R)        (api.R)         (csv_safe)</code></pre>
+<p>Every stage is a small exported function with its own tests. The dashboard and API are thin layers over <code>analyze_activity()</code>.</p>
+</section>
+<section id="deep-dive-48" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>GPX parsing (<code>R/gpx.R</code>).</strong> GPX is an XML format: a <code>&lt;gpx&gt;</code> root holding <code>&lt;trk&gt;</code> tracks, each with <code>&lt;trkseg&gt;</code> segments of <code>&lt;trkpt lat=".." lon=".."&gt;</code> points that contain <code>&lt;ele&gt;</code> and <code>&lt;time&gt;</code>. Different apps use different XML namespaces, so the XPath queries use <code>local-name()</code> to match elements regardless of namespace prefix. Segments matter: a device starts a new segment after a pause or signal loss, and no distance should be counted across that gap.</p>
+<p><strong>Great-circle distance (<code>R/geo.R</code>).</strong> The shortest path between two points on a sphere is an arc of a great circle. The haversine formula computes it stably for small distances, where the older spherical law of cosines suffers from rounding error:</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1">haversine_m <span class="ot">&lt;-</span> <span class="cf">function</span>(lat1, lon1, lat2, lon2,</span>
+<span id="cb13-2">                        <span class="at">radius =</span> EARTH_RADIUS_M) {</span>
+<span id="cb13-3">  to_rad <span class="ot">&lt;-</span> pi <span class="sc">/</span> <span class="dv">180</span></span>
+<span id="cb13-4">  dlat <span class="ot">&lt;-</span> (lat2 <span class="sc">-</span> lat1) <span class="sc">*</span> to_rad</span>
+<span id="cb13-5">  dlon <span class="ot">&lt;-</span> (lon2 <span class="sc">-</span> lon1) <span class="sc">*</span> to_rad</span>
+<span id="cb13-6">  h <span class="ot">&lt;-</span> <span class="fu">sin</span>(dlat <span class="sc">/</span> <span class="dv">2</span>)<span class="sc">^</span><span class="dv">2</span> <span class="sc">+</span></span>
+<span id="cb13-7">    <span class="fu">cos</span>(lat1 <span class="sc">*</span> to_rad) <span class="sc">*</span> <span class="fu">cos</span>(lat2 <span class="sc">*</span> to_rad) <span class="sc">*</span> <span class="fu">sin</span>(dlon <span class="sc">/</span> <span class="dv">2</span>)<span class="sc">^</span><span class="dv">2</span></span>
+<span id="cb13-8">  h <span class="ot">&lt;-</span> <span class="fu">pmin</span>(<span class="fu">pmax</span>(h, <span class="dv">0</span>), <span class="dv">1</span>)</span>
+<span id="cb13-9">  <span class="dv">2</span> <span class="sc">*</span> radius <span class="sc">*</span> <span class="fu">asin</span>(<span class="fu">sqrt</span>(h))</span>
+<span id="cb13-10">}</span></code></pre></div>
+<p><code>h</code> is the haversine of the central angle (haversine(x) = sin squared of x/2). Clamping <code>h</code> to the range 0 to 1 matters for antipodal points, where floating-point rounding can push it to 1.0000000001 and make <code>asin</code> return <code>NaN</code>. The radius is the IUGG mean Earth radius, 6,371,008.8 m, computed as <code>(2a + b) / 3</code> from the WGS84 ellipsoid axes. The code comment notes that a sphere with this radius stays within about 0.5% of the true ellipsoidal distance, well below typical GPS error. Because the function uses vector arithmetic, <code>step_distance()</code> computes every step of a 100,000-point track in one call by pairing <code>lat[-n]</code> with <code>lat[-1]</code> (all points except the last, against all except the first).</p>
+<p><strong>GPS cleaning (<code>R/clean.R</code>).</strong> The cleaner applies five rules in a fixed order and records a reason for each rejection. Two are especially clever:</p>
+<ul>
+<li><code>time_spikes()</code> finds an isolated clock glitch: a timestamp later than its next neighbour while the previous neighbour is earlier than that next one. "The neighbours agree, the point does not." Detecting this before the ordering check means one bad stamp cannot invalidate everything after it.</li>
+<li><code>flag_speed_spikes()</code> is a small state machine. It keeps an <em>anchor</em> (the last good point) and rejects any point that would require a speed above the sport limit (run 12 m/s, ride 30 m/s, hike 7 m/s; generous on purpose). But a real relocation, for example after a tunnel, also looks like a spike. So rejected points are held in <code>pending</code>, and if <code>relock_points</code> (default 3) of them agree with each other at a plausible speed, the receiver has genuinely moved: they are restored and a new segment starts at the jump, so the jump adds no distance. If the run of good points before the jump was shorter than 3, the earlier run is treated as the glitch instead, which handles the classic bad first fix at latitude 0, longitude 0.</li>
+</ul>
+<p>If more than a quarter of the time steps go backwards, the file was probably exported in reverse, so it is sorted by time first. The stress tests found that a reversed GPX file originally lost all of its points; this rule is the fix.</p>
+<p><strong>Splits with interpolation (<code>R/splits.R</code>).</strong> A one-second GPS step rarely lands exactly on the 1 km mark. Assigning the whole step to one split would make split times jitter. Instead the code builds cumulative distance and interpolates the time at which each boundary was crossed:</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1">crossing_times <span class="ot">&lt;-</span> <span class="cf">function</span>(cum_m, t, targets) {</span>
+<span id="cb14-2">  first <span class="ot">&lt;-</span> <span class="sc">!</span><span class="fu">duplicated</span>(cum_m)</span>
+<span id="cb14-3">  stats<span class="sc">::</span><span class="fu">approx</span>(cum_m[first], t[first], <span class="at">xout =</span> targets,</span>
+<span id="cb14-4">                <span class="at">rule =</span> <span class="dv">2</span>, <span class="at">ties =</span> <span class="st">"ordered"</span>)<span class="sc">$</span>y</span>
+<span id="cb14-5">}</span></code></pre></div>
+<p><code>approx()</code> is linear interpolation. Removing duplicated cumulative distances (standing still) makes the boundary time the first moment the runner reached it. The last, shorter split is kept and marked <code>partial</code>, and it ends at the final timestamp, so split times always add up to elapsed time. Pace is seconds per unit; <code>pace_consistency()</code> reports the coefficient of variation (standard deviation divided by mean, in percent) of the full splits, and <code>split_trend()</code> interpolates the time at exactly half the distance to label a run as negative split (faster second half), positive or even within a 1% band.</p>
+<p><strong>Elevation (<code>R/metrics.R</code>).</strong> Summing every positive elevation difference wildly overstates climbing, because barometric and GPS altitude jitter by a metre or two each second. On the synthetic sample the naive sum gives 2,214 m of climbing against a true 48 m. PaceLab applies an 11-point running median (<code>stats::runmed</code>), which removes spikes without blurring real slopes as a moving average would, and then a hysteresis counter: climbing is only committed once the trace has reversed by at least 3 m from its extreme. Hysteresis is the same idea as a thermostat that switches on at 19 degrees and off at 21 so it does not flicker. The result on the sample is 55 m.</p>
+<p><strong>Untrusted input everywhere.</strong> GPX files reveal where people live and train, and XML parsers are a classic attack surface. <code>parse_gpx()</code> enforces a byte limit and a point limit, rejects any document containing <code>&lt;!DOCTYPE</code> (scanning the whole buffer, because a DOCTYPE can follow a very long comment), and parses with libxml2's <code>NONET</code> option so the parser can never fetch a URL. Rejecting DOCTYPE blocks both XXE (XML External Entity attacks, where an entity reads a local file or a URL) and "billion laughs" entity expansion, where nested entities explode into gigabytes of text.</p>
+<p><strong>The REST API (<code>R/api.R</code>).</strong> Endpoints are <code>GET /health</code>, <code>GET /convert</code> and <code>POST /analyze</code>. Two hardening details stand out. First, every endpoint sets <code>parsers = "octet"</code> so the body is read as raw bytes. The code comment explains why: plumber's default parser set includes <code>rds</code>, which would call R's <code>unserialize</code> on attacker-supplied bytes, a deserialisation vulnerability. Second, a stress test found that a <code>%00</code> (NUL byte) in a query string crashed plumber before any handler ran. The fix is a pre-route hook:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1">neutralise_nul <span class="ot">&lt;-</span> <span class="cf">function</span>(req) {</span>
+<span id="cb15-2">  qs <span class="ot">&lt;-</span> req<span class="sc">$</span>QUERY_STRING</span>
+<span id="cb15-3">  <span class="cf">if</span> (<span class="fu">length</span>(qs) <span class="sc">==</span> <span class="dv">1</span><span class="dt">L</span> <span class="sc">&amp;&amp;</span> <span class="fu">grepl</span>(<span class="st">"%00"</span>, qs, <span class="at">ignore.case =</span> <span class="cn">TRUE</span>)) {</span>
+<span id="cb15-4">    req<span class="sc">$</span>QUERY_STRING <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"%00"</span>, <span class="st">"%EF%BF%BD"</span>, qs,</span>
+<span id="cb15-5">                             <span class="at">ignore.case =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb15-6">  }</span>
+<span id="cb15-7">  <span class="fu">invisible</span>(<span class="cn">NULL</span>)</span>
+<span id="cb15-8">}</span></code></pre></div>
+<p>It swaps the NUL for U+FFFD, the Unicode replacement character, so the value stays invalid and validation returns a clean 400. It never silently turns <code>1%002</code> into <code>12</code>. Status codes are deliberate: 413 for oversized bodies, 415 for the wrong content type, 422 for well-formed requests whose GPX is unusable, and a generic 500 that never echoes internal details.</p>
+<p><strong>Dashboard and export.</strong> The Shiny app deletes the temporary upload file right after reading it, and the CSV export runs <code>csv_safe()</code>, which prefixes a quote to any text cell starting with <code>=</code>, <code>+</code>, <code>-</code>, <code>@</code>, tab or carriage return. That blocks CSV formula injection, where a spreadsheet would execute a cell like <code>=HYPERLINK(...)</code>. Leaflet is vendored, so no CDN is contacted.</p>
+<p><strong>Packaging.</strong> The <code>Dockerfile</code> is two-stage: the build stage restores <code>renv.lock</code> from Posit Package Manager binaries and installs the package, then the runtime stage copies only the installed library, runs as a non-root <code>pacelab</code> user, and uses <code>tini</code> as PID 1. In Linux, PID 1 does not get default signal handlers, so without <code>tini</code> a <code>docker stop</code> waits 10 seconds and then kills R; the stress tests found exactly that delay. A <code>HEALTHCHECK</code> probes whichever service is running.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-48" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Remove, never move.</strong> Cleaning only deletes points with a reason. Smoothing coordinates would reduce jitter (the cleaned sample is still 2% long), but it would make results harder to audit. The README lists optional smoothing on the roadmap, reported separately.</li>
+<li><strong>Sphere, not ellipsoid.</strong> Vincenty's ellipsoidal formula is more exact but iterative and slower; 0.5% is below GPS noise.</li>
+<li><strong>Only <code>xml2</code> as a hard dependency.</strong> Shiny, plumber and ggplot2 are in <code>Suggests</code>, so the analysis core installs light.</li>
+<li><strong>Generous speed limits.</strong> Conservative thresholds risk keeping some bad points, but they never delete a real sprint.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-48" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>The commit history tells the rebuild story: refactor the coursework converter into a package core, add GPX parsing and cleaning, add Shiny and plumber, then add Docker and CI, then adversarial stress tests. The README reports that two rounds of stress testing (<code>bench/stress.R</code>, <code>bench/stress-services.R</code>) found five defects the normal suite missed, including the NUL byte crash, the reversed file losing all points and the 10-second container shutdown. Each fix has a regression test.</p>
+</section>
+<section id="security-and-performance-notes-48" class="level3">
+<h3>Security and Performance Notes</h3>
+<p>Benchmarks from <code>bench/benchmark.R</code> on Apple Silicon: a 10,000-point track (about one 3-hour activity at 1 Hz) takes 175 ms end to end with 36 MB allocated; 100,000 points take 1.8 s. The dashboard caps uploads at 25 MB and 250,000 points, the API at 10 MB. Not included: authentication, rate limiting and TLS, which the README says belong in a reverse proxy. The API is single threaded, so one large analysis delays other requests.</p>
+</section>
+<section id="how-to-run-it-48" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb16"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb16-1"><span class="ex">docker</span> build <span class="at">-t</span> pacelab .</span>
+<span id="cb16-2"><span class="ex">docker</span> run <span class="at">--rm</span> <span class="at">-p</span> 3838:3838 pacelab        <span class="co"># dashboard</span></span>
+<span id="cb16-3"><span class="ex">docker</span> run <span class="at">--rm</span> <span class="at">-p</span> 8000:8000 pacelab api    <span class="co"># API, docs at /__docs__/</span></span>
+<span id="cb16-4"><span class="ex">curl</span> <span class="st">"http://localhost:8000/convert?x=5&amp;from=km&amp;to=mi"</span></span></code></pre></div>
+<p>From R: <code>pak::pak("VijaysinghPuwar/distance-conversion-tool", dependencies = TRUE)</code>, then <code>pacelab::run_app()</code>.</p>
+</section>
+<section id="learn-more-48" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://www.topografix.com/GPX/1/1/" target="_blank" rel="noopener noreferrer">GPX 1.1 Schema Documentation</a></li>
+<li><a href="https://www.movable-type.co.uk/scripts/latlong.html" target="_blank" rel="noopener noreferrer">Calculate distance, bearing and more between latitude/longitude points</a></li>
+<li><a href="https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing" target="_blank" rel="noopener noreferrer">OWASP: XML External Entity (XXE) Processing</a></li>
+<li><a href="https://owasp.org/www-community/attacks/CSV_Injection" target="_blank" rel="noopener noreferrer">OWASP: CSV Injection</a></li>
+<li><a href="https://r-pkgs.org/" target="_blank" rel="noopener noreferrer">R Packages (2e)</a></li>
+<li><a href="https://www.rplumber.io/" target="_blank" rel="noopener noreferrer">plumber documentation</a></li>
+<li><a href="https://shiny.posit.co/" target="_blank" rel="noopener noreferrer">Shiny for R</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=9uFQECk30kA" target="_blank" rel="noopener noreferrer">R Shiny for Data Science Tutorial: Build Interactive Data-Driven Web Apps</a></li>
+<li><a href="https://www.youtube.com/watch?v=gjm6VHZa_8s" target="_blank" rel="noopener noreferrer">XML External Entities (XXE) Explained</a></li>
+<li><a href="https://www.youtube.com/watch?v=Gjnup-PuquQ" target="_blank" rel="noopener noreferrer">Docker in 100 Seconds</a></li>
+</ul>
+</section>
+</section>
+<section id="python-projects" class="level2">
+<h2>Python Projects</h2>
+<section id="at-a-glance-49" class="level3">
+<h3>At a Glance</h3>
+<p><code>Python_Projects</code> is a container repository meant to collect small Python exercises. It currently holds one sub-project, <code>Project_01</code>, a Streamlit web app that rates password strength by counting character classes. It is a first step into building a browser UI in pure Python and a gentle introduction to why "composition rules" are a weak measure of password quality.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Python 3</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Streamlit</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td><code>string</code> (standard library)</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Browser via Streamlit; README targets GitHub Codespaces</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/Python_Projects</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>One sub-project, four commits</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="project_01-password-strength-checker" class="level3">
+<h3>Project_01: Password Strength Checker</h3>
+<section id="how-it-works-simple-version-49" class="level4">
+<h4>How It Works (Simple Version)</h4>
+<p>You type a password into a masked box. The app sorts each character into one of five bins (lowercase, uppercase, digits, spaces, everything else), counts how many bins are non-empty, and turns that 0 to 5 score into a progress bar, a verdict and a list of tips. It is like a checklist at a gym: "did you do legs, arms, back, core, cardio?" It counts variety, not effort.</p>
+</section>
+<section id="architecture-49" class="level4">
+<h4>Architecture</h4>
+<pre class="text"><code> Browser  &lt;-- websocket --&gt;  Streamlit server
+                                 |
+                   reruns password_checker.py
+                   top to bottom on every input
+                                 |
+            st.text_input(type="password") -&gt; pw
+                                 |
+                          analyze(pw)
+               counts, score 0..5, remark text
+                                 |
+     st.progress, st.metric columns, tips list</code></pre>
+<p>Streamlit's execution model is unusual: there are no callbacks. Every time a widget changes, the whole script reruns from the top, and the widget calls return their current values.</p>
+</section>
+<section id="deep-dive-49" class="level4">
+<h4>Deep Dive</h4>
+<p>The whole program is one file, <code>Project_01/password_checker.py</code>. The core function:</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb18-1"><span class="kw">def</span> analyze(pw: <span class="bu">str</span>):</span>
+<span id="cb18-2">    lower <span class="op">=</span> <span class="bu">sum</span>(c <span class="kw">in</span> string.ascii_lowercase <span class="cf">for</span> c <span class="kw">in</span> pw)</span>
+<span id="cb18-3">    upper <span class="op">=</span> <span class="bu">sum</span>(c <span class="kw">in</span> string.ascii_uppercase <span class="cf">for</span> c <span class="kw">in</span> pw)</span>
+<span id="cb18-4">    digits <span class="op">=</span> <span class="bu">sum</span>(c <span class="kw">in</span> string.digits <span class="cf">for</span> c <span class="kw">in</span> pw)</span>
+<span id="cb18-5">    spaces <span class="op">=</span> pw.count(<span class="st">" "</span>)</span>
+<span id="cb18-6">    special <span class="op">=</span> <span class="bu">len</span>(pw) <span class="op">-</span> lower <span class="op">-</span> upper <span class="op">-</span> digits <span class="op">-</span> spaces</span>
+<span id="cb18-7">    strength <span class="op">=</span> <span class="bu">sum</span>([lower<span class="op">&gt;</span><span class="dv">0</span>, upper<span class="op">&gt;</span><span class="dv">0</span>, digits<span class="op">&gt;</span><span class="dv">0</span>,</span>
+<span id="cb18-8">                    spaces<span class="op">&gt;</span><span class="dv">0</span>, special<span class="op">&gt;</span><span class="dv">0</span>])</span>
+<span id="cb18-9">    ...</span>
+<span id="cb18-10">    <span class="cf">return</span> lower, upper, digits, spaces, special, strength, remark</span></code></pre></div>
+<p><code>sum()</code> over a generator of booleans works because Python's <code>bool</code> is a subclass of <code>int</code> (<code>True == 1</code>). The "special" count is computed by subtraction, so it is "everything else". A side effect worth knowing: <code>string.ascii_lowercase</code> only covers a to z, so accented letters such as <code>e</code> with an acute accent, or any non-Latin script, are counted as special characters.</p>
+<p>The UI calls <code>st.progress(strength/5)</code>, shows verdicts from "Very bad" to "Very strong", and lists tips such as "Use at least 12 to 16 characters". Note that length only appears as a tip; it does not affect the score. A 4-character password like <code>aA1!</code> scores 4/5, while a 30-character lowercase passphrase scores 1/5.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-49" class="level4">
+<h4>Key Design Decisions and Trade-offs</h4>
+<p>The honest footer, "Checks composition only; does not validate against breached-password lists", shows awareness of the limits. Modern guidance (NIST SP 800-63B) actually discourages composition rules and recommends length plus screening against known breached passwords. Password strength is better estimated as <em>entropy</em>, the number of guesses an attacker needs. A naive estimate is <code>length * log2(alphabet size)</code>, but real attackers use dictionaries and patterns, which is why tools such as zxcvbn model common words, keyboard walks and substitutions.</p>
+</section>
+<section id="challenges-and-how-they-were-solved-49" class="level4">
+<h4>Challenges and How They Were Solved</h4>
+<p>The README references a <code>requirements.txt</code> and a repository name (<code>Password_Strength_Checker</code>) that do not exist in this repo, so a fresh clone needs <code>pip install streamlit</code> by hand. The README's roadmap lists the natural next steps: an entropy estimate, a Have I Been Pwned k-anonymity check (send only the first 5 characters of the SHA-1 hash, compare suffixes locally), pytest tests and CI.</p>
+</section>
+<section id="security-and-performance-notes-49" class="level4">
+<h4>Security and Performance Notes</h4>
+<p>The input uses <code>type="password"</code> so it is masked on screen, but it is still sent to the Streamlit server over its websocket. The README correctly warns not to type real passwords into the public Codespaces demo. Performance is trivial: four linear passes over a short string.</p>
+</section>
+<section id="how-to-run-it-49" class="level4">
+<h4>How to Run It</h4>
+<div class="sourceCode" id="cb19"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb19-1"><span class="fu">git</span> clone https://github.com/VijaysinghPuwar/Python_Projects.git</span>
+<span id="cb19-2"><span class="bu">cd</span> Python_Projects</span>
+<span id="cb19-3"><span class="ex">python</span> <span class="at">-m</span> venv .venv <span class="kw">&amp;&amp;</span> <span class="bu">source</span> .venv/bin/activate</span>
+<span id="cb19-4"><span class="ex">pip</span> install streamlit</span>
+<span id="cb19-5"><span class="ex">streamlit</span> run Project_01/password_checker.py</span></code></pre></div>
+</section>
+</section>
+<section id="learn-more-49" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://docs.streamlit.io/" target="_blank" rel="noopener noreferrer">Streamlit documentation</a></li>
+<li><a href="https://docs.python.org/3/library/string.html" target="_blank" rel="noopener noreferrer">Python <code>string</code> module</a></li>
+<li><a href="https://pages.nist.gov/800-63-3/sp800-63b.html" target="_blank" rel="noopener noreferrer">NIST SP 800-63B Digital Identity Guidelines</a></li>
+<li><a href="https://github.com/dropbox/zxcvbn" target="_blank" rel="noopener noreferrer">zxcvbn: realistic password strength estimation</a></li>
+<li><a href="https://haveibeenpwned.com/API/v3#PwnedPasswords" target="_blank" rel="noopener noreferrer">Have I Been Pwned: Pwned Passwords API</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=3NjQ9b3pgIg" target="_blank" rel="noopener noreferrer">How to Choose a Password - Computerphile</a></li>
+<li><a href="https://www.youtube.com/watch?v=7U-RbOKanYs" target="_blank" rel="noopener noreferrer">Password Cracking - Computerphile</a></li>
+<li><a href="https://www.youtube.com/watch?v=ZZ4B0QUHuNc" target="_blank" rel="noopener noreferrer">How to Build Your First Data Science Web App in Python - Streamlit Tutorial #1</a></li>
+</ul>
+</section>
+</section>
+<section id="x86-64-assembly-intro-lab" class="level2">
+<h2>x86-64 Assembly Intro Lab</h2>
+<section id="at-a-glance-50" class="level3">
+<h3>At a Glance</h3>
+<p>This began as a July 2025 lab report: install NASM on Ubuntu under WSL 2 and build three tiny programs (<code>hello</code>, <code>add</code>, <code>star</code>). Rebuilding them exactly as written exposed an executable stack, a calling convention violation, an oversized memory load and programs that exited successfully even when output failed. The repository is that lab rebuilt as a reproducible systems and binary hardening project, plus <code>asm-hexdump</code>, a roughly 300-line syscall-only clone of <code>hexdump -C -v</code> tested byte for byte against reference implementations.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>x86-64 assembly (NASM), Python (tests), Bash, C (comparison)</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>GNU Make, Python <code>unittest</code></td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>glibc (only for <code>add</code>), binutils (<code>ld</code>, <code>readelf</code>)</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Linux x86-64; Docker for macOS</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/x86-64-assembly-intro-lab</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Complete; 57 tests, about 2,900 stress cases, CI on native x86-64</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-50" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>A CPU only understands numbered instructions that move numbers between a few tiny storage slots (registers) and memory. Assembly is the human-readable spelling of those instructions. A program that wants to print text cannot touch the screen itself; it fills specific registers with "I want service number 1 (write), on file 1 (the terminal), from this address, for this many bytes" and then executes <code>syscall</code>, which is like ringing a bell for the operating system kernel. The kernel does the work and leaves a result in a register.</p>
+<p>When assembly calls a library function like <code>printf</code>, both sides must follow a contract (the calling convention) about which registers carry arguments and how the stack must be arranged. Break the contract and things may still work by luck, which is exactly what happened in the original lab.</p>
+</section>
+<section id="architecture-50" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> src/hello.asm  src/star.asm  src/hexdump.asm   src/add.asm
+      \             |              /                 |
+       +--- src/io.asm (write_all, put_hex)          |
+       |    include/linux.inc (syscalls, errno)      |
+       v                                             v
+ nasm -f elf64 -w+all -Werror               nasm -f elf64
+       |                                             |
+ ld -pie --no-dynamic-linker            gcc -pie -z relro -z now
+    (static PIE, no libc)                  (links glibc printf)
+       |                                             |
+       +-------------&gt; build/* &lt;---------------------+
+                          |
+       scripts/check-elf.sh (readelf gate)
+       tests/*.py (golden output, strace, ASLR)
+       tests/abi_probe.asm (ld --wrap alignment check)</code></pre>
+</section>
+<section id="deep-dive-50" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Registers.</strong> x86-64 has sixteen 64-bit general-purpose registers: <code>rax, rbx, rcx, rdx, rsi, rdi, rbp, rsp, r8</code> to <code>r15</code>. Each has smaller views: <code>eax</code> is the low 32 bits of <code>rax</code>, <code>ax</code> the low 16, <code>al</code> the low 8. A rule used constantly in this code: writing a 32-bit register such as <code>mov edi, 1</code> zeroes the upper 32 bits of <code>rdi</code>. That is why the programs write <code>mov eax, SYS_exit</code> instead of <code>mov rax, ...</code>; the encoding is shorter and the result is identical. <code>rsp</code> is the stack pointer, <code>rip</code> the instruction pointer.</p>
+<p><strong>Linux system calls.</strong> On x86-64 Linux, the syscall number goes in <code>rax</code> and up to six arguments go in <code>rdi, rsi, rdx, r10, r8, r9</code>. The <code>syscall</code> instruction switches to the kernel. On return, <code>rax</code> holds the result, or a negative error code from -4095 to -1 (the negated <code>errno</code>). The CPU itself overwrites <code>rcx</code> (with the return address) and <code>r11</code> (with the saved flags), so those two are always clobbered. <code>include/linux.inc</code> defines the numbers: <code>read</code> 0, <code>write</code> 1, <code>open</code> 2, <code>close</code> 3, <code>exit</code> 60. The file notes these are x86-64 specific; i386 and arm64 use different numbers.</p>
+<p><code>hello.asm</code> shows the whole pattern in a few lines:</p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode nasm"><code class="sourceCode nasm"><span id="cb21-1"><span class="kw">default</span> <span class="kw">rel</span></span>
+<span id="cb21-2"><span class="kw">section</span> <span class="fu">.rodata</span></span>
+<span id="cb21-3"><span class="fu">msg:</span>        <span class="dt">db</span> <span class="st">"Hello, World!"</span><span class="op">,</span> <span class="dv">10</span></span>
+<span id="cb21-4">msg_len     <span class="dt">equ</span> <span class="op">$</span> <span class="op">-</span> msg</span>
+<span id="cb21-5"></span>
+<span id="cb21-6"><span class="kw">section</span> <span class="fu">.text</span></span>
+<span id="cb21-7"><span class="kw">global</span> _start</span>
+<span id="cb21-8"><span class="kw">extern</span> write_all</span>
+<span id="cb21-9"><span class="fu">_start:</span></span>
+<span id="cb21-10">    <span class="kw">mov</span>     <span class="kw">edi</span><span class="op">,</span> STDOUT_FILENO</span>
+<span id="cb21-11">    <span class="kw">lea</span>     <span class="kw">rsi</span><span class="op">,</span> <span class="op">[</span>msg<span class="op">]</span></span>
+<span id="cb21-12">    <span class="kw">mov</span>     <span class="kw">edx</span><span class="op">,</span> msg_len</span>
+<span id="cb21-13">    <span class="cf">call</span>    write_all</span>
+<span id="cb21-14">    <span class="kw">mov</span>     <span class="kw">edi</span><span class="op">,</span> EXIT_OK</span>
+<span id="cb21-15">    <span class="kw">test</span>    <span class="kw">rax</span><span class="op">,</span> <span class="kw">rax</span></span>
+<span id="cb21-16">    <span class="cf">jz</span>      <span class="fu">.exit</span></span>
+<span id="cb21-17">    <span class="kw">mov</span>     <span class="kw">edi</span><span class="op">,</span> EXIT_FAILURE</span>
+<span id="cb21-18"><span class="fu">.exit:</span></span>
+<span id="cb21-19">    <span class="kw">mov</span>     <span class="kw">eax</span><span class="op">,</span> SYS_exit</span>
+<span id="cb21-20">    <span class="kw">syscall</span></span></code></pre></div>
+<p><code>db</code> emits bytes and <code>10</code> is the newline. <code>$ - msg</code> is the current address minus the label, so the assembler computes the length. <code>_start</code> is the real entry point the kernel jumps to; there is no <code>main</code> because there is no C runtime. <code>default rel</code> makes <code>[msg]</code> a RIP-relative address, which matters for position independence (below).</p>
+<p><strong>Short writes and error handling (<code>src/io.asm</code>).</strong> <code>write(2)</code> is allowed to write fewer bytes than requested, for example to a pipe or when a signal arrives. The original lab ignored the return value. <code>write_all</code> loops until everything is written, retries <code>EINTR</code> (interrupted by a signal), and reports a zero-byte result as <code>-EIO</code> instead of spinning forever:</p>
+<div class="sourceCode" id="cb22"><pre class="sourceCode nasm"><code class="sourceCode nasm"><span id="cb22-1"><span class="fu">write_all:</span></span>
+<span id="cb22-2"><span class="fu">.loop:</span></span>
+<span id="cb22-3">    <span class="kw">test</span>    <span class="kw">rdx</span><span class="op">,</span> <span class="kw">rdx</span></span>
+<span id="cb22-4">    <span class="cf">jz</span>      <span class="fu">.done</span></span>
+<span id="cb22-5">    <span class="kw">mov</span>     <span class="kw">eax</span><span class="op">,</span> SYS_write</span>
+<span id="cb22-6">    <span class="kw">syscall</span>             <span class="co">; kernel preserves rdi/rsi/rdx</span></span>
+<span id="cb22-7">    <span class="kw">test</span>    <span class="kw">rax</span><span class="op">,</span> <span class="kw">rax</span></span>
+<span id="cb22-8">    <span class="cf">js</span>      <span class="fu">.failed</span></span>
+<span id="cb22-9">    <span class="cf">jz</span>      <span class="fu">.no_progress</span></span>
+<span id="cb22-10">    <span class="kw">add</span>     <span class="kw">rsi</span><span class="op">,</span> <span class="kw">rax</span>    <span class="co">; skip what was written</span></span>
+<span id="cb22-11">    <span class="kw">sub</span>     <span class="kw">rdx</span><span class="op">,</span> <span class="kw">rax</span></span>
+<span id="cb22-12">    <span class="cf">jmp</span>     <span class="fu">.loop</span></span>
+<span id="cb22-13"><span class="fu">.failed:</span></span>
+<span id="cb22-14">    <span class="kw">cmp</span>     <span class="kw">rax</span><span class="op">,</span> <span class="op">-</span>EINTR</span>
+<span id="cb22-15">    <span class="cf">je</span>      <span class="fu">.loop</span></span>
+<span id="cb22-16">    <span class="cf">ret</span>                 <span class="co">; rax = -errno</span></span></code></pre></div>
+<p><code>test rax, rax</code> ANDs the register with itself to set flags without storing anything; <code>js</code> jumps if the sign flag is set (negative result, an error) and <code>jz</code> jumps on zero. The programs now exit 1 when stdout is full (<code>&gt;/dev/full</code>) or closed; the originals exited 0.</p>
+<p><strong>The System V AMD64 calling convention.</strong> When one function calls another, Linux follows the System V ABI (Application Binary Interface):</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Role</th>
+<th>Registers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Integer/pointer arguments 1 to 6</td>
+<td><code>rdi, rsi, rdx, rcx, r8, r9</code></td>
+</tr>
+<tr>
+<td>Return value</td>
+<td><code>rax</code> (and <code>rdx</code> for 128-bit)</td>
+</tr>
+<tr>
+<td>Callee-saved (must be preserved)</td>
+<td><code>rbx, rbp, r12, r13, r14, r15, rsp</code></td>
+</tr>
+<tr>
+<td>Caller-saved (may be clobbered)</td>
+<td><code>rax, rcx, rdx, rsi, rdi, r8</code> to <code>r11</code></td>
+</tr>
+<tr>
+<td>Variadic calls</td>
+<td><code>al</code> = number of vector registers used</td>
+</tr>
+<tr>
+<td>Stack</td>
+<td><code>rsp</code> must be a multiple of 16 at each <code>call</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>Note the fourth argument differs: <code>rcx</code> for functions but <code>r10</code> for syscalls, because <code>syscall</code> destroys <code>rcx</code>. <code>asm-hexdump</code> uses the callee-saved registers on purpose: <code>rbx</code> is the read cursor, <code>rbp</code> the bytes left, <code>r12</code> the input file descriptor, <code>r13</code> the file offset, <code>r14</code> the bytes collected in the current line and <code>r15</code> the bytes pending in the output buffer, so they survive calls to the helpers.</p>
+<p><strong>The alignment bug.</strong> <code>call</code> pushes an 8-byte return address. So if <code>rsp</code> is 16-aligned at the call, it is <code>16k + 8</code> when the callee starts. The original <code>add.asm</code> called <code>printf</code> straight from <code>main</code> without adjusting, so <code>rsp % 16 == 8</code> at the call. That is a violation; it only crashes if the callee uses an instruction that requires alignment (such as <code>movaps</code> on SSE registers), and this glibc path did not. The fixed <code>main</code>:</p>
+<div class="sourceCode" id="cb23"><pre class="sourceCode nasm"><code class="sourceCode nasm"><span id="cb23-1"><span class="fu">main:</span></span>
+<span id="cb23-2">    <span class="kw">sub</span>     <span class="kw">rsp</span><span class="op">,</span> <span class="dv">8</span>          <span class="co">; rsp % 16: 8 -&gt; 0</span></span>
+<span id="cb23-3">    <span class="kw">mov</span>     <span class="kw">esi</span><span class="op">,</span> <span class="op">[</span>num1<span class="op">]</span>     <span class="co">; 32-bit load of a dd value</span></span>
+<span id="cb23-4">    <span class="kw">mov</span>     <span class="kw">edx</span><span class="op">,</span> <span class="op">[</span>num2<span class="op">]</span></span>
+<span id="cb23-5">    <span class="kw">mov</span>     <span class="kw">ecx</span><span class="op">,</span> <span class="kw">esi</span></span>
+<span id="cb23-6">    <span class="kw">add</span>     <span class="kw">ecx</span><span class="op">,</span> <span class="kw">edx</span></span>
+<span id="cb23-7">    <span class="kw">lea</span>     <span class="kw">rdi</span><span class="op">,</span> <span class="op">[</span>fmt<span class="op">]</span></span>
+<span id="cb23-8">    <span class="kw">xor</span>     <span class="kw">eax</span><span class="op">,</span> <span class="kw">eax</span>        <span class="co">; al = 0 vector regs (variadic)</span></span>
+<span id="cb23-9">    <span class="cf">call</span>    printf <span class="kw">wrt</span> <span class="fu">..plt</span></span>
+<span id="cb23-10">    <span class="kw">test</span>    <span class="kw">eax</span><span class="op">,</span> <span class="kw">eax</span></span>
+<span id="cb23-11">    <span class="cf">js</span>      <span class="fu">.failed</span></span>
+<span id="cb23-12">    <span class="kw">xor</span>     <span class="kw">edi</span><span class="op">,</span> <span class="kw">edi</span>        <span class="co">; fflush(NULL)</span></span>
+<span id="cb23-13">    <span class="cf">call</span>    fflush <span class="kw">wrt</span> <span class="fu">..plt</span></span></code></pre></div>
+<p>The same fix also corrects an operand-size bug: <code>num1</code> is declared with <code>dd</code> (4 bytes), but the original did <code>mov rax, [rel num1]</code>, an 8-byte load that also read <code>num2</code>. And <code>fflush(NULL)</code> is called before returning, because when stdout is a file or pipe it is fully buffered, so a write error would otherwise happen silently inside <code>exit()</code>.</p>
+<p>Rather than hoping a misaligned call crashes, <code>tests/abi_probe.asm</code> proves alignment. The test binary is linked with <code>-Wl,--wrap=printf</code>, which redirects calls to <code>printf</code> into <code>__wrap_printf</code> and makes the real one available as <code>__real_printf</code>:</p>
+<div class="sourceCode" id="cb24"><pre class="sourceCode nasm"><code class="sourceCode nasm"><span id="cb24-1">__wrap_<span class="op">%</span><span class="dv">1</span><span class="op">:</span></span>
+<span id="cb24-2">    <span class="kw">lea</span>     <span class="kw">r11</span><span class="op">,</span> <span class="op">[</span><span class="kw">rsp</span> <span class="op">+</span> <span class="dv">8</span><span class="op">]</span>  <span class="co">; r11: caller-saved, never an argument</span></span>
+<span id="cb24-3">    <span class="kw">test</span>    <span class="kw">r11b</span><span class="op">,</span> <span class="dv">15</span></span>
+<span id="cb24-4">    <span class="cf">jnz</span>     misaligned</span>
+<span id="cb24-5">    <span class="cf">jmp</span>     __real_<span class="op">%</span><span class="dv">1</span> <span class="kw">wrt</span> <span class="fu">..plt</span></span></code></pre></div>
+<p>On entry <code>rsp + 8</code> should be 16-aligned. <code>r11</code> is chosen because it is scratch and never carries an argument, so jumping on to the real function leaves every argument register (including <code>al</code>) untouched. A known-bad copy of the original code, <code>security/misaligned_call.asm</code>, must make this probe exit 70.</p>
+<p><strong>Process entry and the stack.</strong> At <code>_start</code> the kernel has laid out <code>argc</code> at <code>[rsp]</code>, then the <code>argv</code> pointers. So <code>asm-hexdump</code> reads <code>argc</code> from <code>[rsp]</code> and <code>argv[1]</code> from <code>[rsp + 16]</code>. It detects the argument <code>-</code> with <code>cmp word [rdi], '-'</code>: a 2-byte compare of the dash and its NUL terminator. The <code>die</code> routine can be reached by <code>jmp</code> from any call depth, so it starts with <code>and rsp, -16</code> to force alignment before calling helpers.</p>
+<p><strong><code>put_hex</code> and bit tricks.</strong> To print a number in hex, you need the digit count. <code>bsr rax, rdi</code> (bit scan reverse) returns the index of the highest set bit; shifting it right by 2 (divide by 4, since each hex digit holds 4 bits) and adding 1 gives the digit count. <code>cmovb</code> (conditional move if below) raises it to the minimum width without a branch. Digits are then filled from the right by masking the low nibble (<code>and r9d, 0x0f</code>) and indexing the <code>"0123456789abcdef"</code> table.</p>
+<p><strong><code>asm-hexdump</code> buffering.</strong> Reading and writing one byte at a time would cost two syscalls per byte. The tool reads 4 KiB chunks into <code>inbuf</code>, copies bytes into a 16-byte <code>line</code> accumulator (a hexdump line can span two reads, or many short reads from a pipe), formats a line when 16 bytes are collected, and appends it to a 4 KiB <code>outbuf</code>. <code>reserve_line</code> flushes only when fewer than 96 bytes remain, the longest possible line. Error messages come from a packed table of records (errno byte, length byte, text) instead of a pointer table. The comment explains why: a static PIE has no dynamic loader to apply relocations, and pointers in <code>.rodata</code> would need them.</p>
+<p><strong>ELF hardening.</strong> ELF is the Linux executable format. Its <em>program headers</em> tell the kernel how to map the file into memory with what permissions.</p>
+<ul>
+<li><em>NX / non-executable stack.</em> <code>PT_GNU_STACK</code> declares whether the stack may be executed. Every object needs a <code>.note.GNU-stack</code> section, or GNU <code>ld</code> assumes the worst. The original <code>add</code> linked with the warning "missing .note.GNU-stack section implies executable stack" and got <code>RWE</code>. The repo adds a <code>NONEXEC_STACK</code> macro to every file, and the linker flag <code>--error-execstack</code> makes a missing note a build failure.</li>
+<li><em>PIE and ASLR.</em> A Position Independent Executable can be loaded at any address, so ASLR (address space layout randomisation) can move it each run, making memory addresses unpredictable to an attacker. That requires RIP-relative addressing (<code>lea rsi, [msg]</code> with <code>default rel</code>) instead of absolute addresses, and calling library functions through the PLT (<code>call printf wrt ..plt</code>). The PLT (procedure linkage table) is a small stub table that jumps through the GOT (global offset table), which the dynamic loader fills with real library addresses. The original used <code>-no-pie</code> to silence the link error, which gave up ASLR.</li>
+<li><em>RELRO.</em> With <code>-z relro -z now</code>, the loader resolves every symbol at startup (<code>BIND_NOW</code>) and then makes the GOT read-only, so an attacker with a write primitive cannot overwrite a function pointer there.</li>
+<li><em>Static PIE.</em> <code>hello</code>, <code>star</code> and <code>asm-hexdump</code> use <code>ld -pie --no-dynamic-linker</code>: position independent, but with no interpreter. The Makefile passes <code>-z norelro</code> for them, with the reasoning that RELRO is applied by the dynamic loader they do not have, so the header would only make checkers report protection that never happens.</li>
+</ul>
+<p><code>scripts/check-elf.sh</code> enforces all of this with <code>readelf</code>: ELF64 x86-64, <code>ET_DYN</code> with <code>DF_1_PIE</code>, <code>GNU_STACK</code> exactly <code>RW</code>, no writable and executable <code>LOAD</code> segment, no <code>TEXTREL</code>, plus per-policy checks for interpreter and RELRO. The gate is itself tested against binaries that must fail it. The Python tests go further at run time: they read the kernel's real <code>[stack]</code> permissions from <code>/proc</code>, confirm the PIE load address changes across runs, and assert each program's exact syscall set with <code>strace</code>.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-50" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>No libc for three programs.</strong> Raw syscalls make every instruction visible and the binaries tiny, at the cost of writing <code>write_all</code> and an errno table by hand. <code>add</code> keeps libc on purpose, to teach the calling convention.</li>
+<li><strong>Make warnings errors at every layer.</strong> <code>nasm -w+all -Werror</code>, <code>ld --fatal-warnings --error-rwx-segments -z text</code>: insecure code cannot be built quietly.</li>
+<li><strong>Preserve history.</strong> The first commits transcribe the original programs verbatim, so <code>git log -p src/</code> shows each fix. The original PDF is kept unchanged with an errata table.</li>
+<li><strong>Compare against a compiler.</strong> <code>docs/compiler-output.md</code> shows that GCC <code>-O2</code> emits the same <code>sub rsp, 8</code> at the top of <code>main</code>, and uses a tail call (<code>jmp __printf_chk@PLT</code>) in a helper so no alignment adjustment is needed there.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-50" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>The errata in <code>report/README.md</code> list what re-testing found. Two documentation claims were wrong: <code>star</code> prints three lines (<code>*</code>, <code>**</code>, <code>***</code>), not <code>******</code>, and garbage output is never caused by a "missing NUL terminator", because <code>write(2)</code> takes an explicit length. Four code issues were real: the executable stack, the missing stack header on <code>hello</code> (kernels before 5.8 treat that as "everything readable is executable"), the misaligned <code>printf</code> call and the 8-byte load. Running on macOS was another challenge: Apple Silicon cannot run Linux x86-64 binaries natively, so a Dockerfile builds under <code>linux/amd64</code> emulation, where tests that need a real kernel (stack permissions, ASLR, strace, gdb) are skipped; CI runs them all natively and treats skips as failures.</p>
+</section>
+<section id="security-and-performance-notes-50" class="level3">
+<h3>Security and Performance Notes</h3>
+<p>The security demos (<code>make security-demo</code>) build each insecure variant next to its hardened twin: <code>execstack-bad</code> gets an <code>rwxp</code> stack mapping, <code>execstack-good</code> gets <code>rw-p</code>; <code>whereami-nopie</code> loads at <code>0x401000</code> every run while the PIE moves. <code>make stress</code> runs about 2,900 seeded cases (2,067 input sizes, six byte patterns, 300 piped inputs, a 16 MiB file) against a Python reference and the system <code>hexdump -C -v</code>.</p>
+</section>
+<section id="how-to-run-it-50" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb25"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb25-1"><span class="fu">sudo</span> apt install nasm build-essential python3 bsdextrautils</span>
+<span id="cb25-2"><span class="fu">make</span> test</span>
+<span id="cb25-3"><span class="fu">make</span> check-hardening</span>
+<span id="cb25-4"><span class="ex">./build/asm-hexdump</span> README.md <span class="kw">|</span> <span class="fu">head</span> <span class="at">-3</span></span>
+<span id="cb25-5"><span class="co"># macOS:</span></span>
+<span id="cb25-6"><span class="ex">docker</span> build <span class="at">--platform</span> linux/amd64 <span class="at">-t</span> asm-lab .</span>
+<span id="cb25-7"><span class="ex">docker</span> run <span class="at">--rm</span> <span class="at">--platform</span> linux/amd64 <span class="at">-v</span> <span class="st">"</span><span class="va">$PWD</span><span class="st">"</span>:/src asm-lab make test</span></code></pre></div>
+</section>
+<section id="learn-more-50" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://gitlab.com/x86-psABIs/x86-64-ABI" target="_blank" rel="noopener noreferrer">System V AMD64 psABI (x86-64 ABI)</a></li>
+<li><a href="https://man7.org/linux/man-pages/man2/syscall.2.html" target="_blank" rel="noopener noreferrer">syscall(2) Linux manual page</a></li>
+<li><a href="https://filippo.io/linux-syscall-table/" target="_blank" rel="noopener noreferrer">Searchable Linux Syscall Table for x86-64</a></li>
+<li><a href="https://www.nasm.us/doc/" target="_blank" rel="noopener noreferrer">NASM documentation</a></li>
+<li><a href="https://man7.org/linux/man-pages/man5/elf.5.html" target="_blank" rel="noopener noreferrer">elf(5) Linux manual page</a></li>
+<li><a href="https://www.redhat.com/en/blog/hardening-elf-binaries-using-relocation-read-only-relro" target="_blank" rel="noopener noreferrer">Hardening ELF binaries using Relocation Read-Only (RELRO)</a></li>
+<li><a href="https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html" target="_blank" rel="noopener noreferrer">Intel 64 and IA-32 Architectures Software Developer Manuals</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=4gwYkEK0gOk" target="_blank" rel="noopener noreferrer">Assembly Language in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=6S5KRJv-7RU" target="_blank" rel="noopener noreferrer">you can learn assembly in 10 minutes (try it RIGHT NOW)</a></li>
+<li><a href="https://www.youtube.com/watch?v=HgEGAaYdABA" target="_blank" rel="noopener noreferrer">x86 Assembly: Hello World!</a></li>
+<li><a href="https://www.youtube.com/watch?v=nC1U1LJQL8o" target="_blank" rel="noopener noreferrer">In-depth: ELF - The Extensible &amp; Linkable Format</a></li>
+<li><a href="https://www.youtube.com/watch?v=1S0aBV-Waeo" target="_blank" rel="noopener noreferrer">Running a Buffer Overflow Attack - Computerphile</a></li>
+</ul>
+</section>
+</section>
+<section id="a-note-on-the-jellyfin-clone" class="level2">
+<h2>A Note on the Jellyfin Clone</h2>
+<p>The <code>OpenSource/jellyfin</code> folder is a plain clone of the upstream Jellyfin media server (<code>origin</code> is <code>github.com/jellyfin/jellyfin</code>), on <code>master</code>, up to date with <code>origin/master</code> and with a clean working tree. A search of the history found no authored commits and no local branches; the only commits under the author's identity are three automated "Agent host session" checkpoint refs, and their trees are identical to upstream with no file changes. It serves as a reference codebase for reading a large C# and .NET project, not as a contribution.</p>
+</section>
+</section>

@@ -1,0 +1,1693 @@
+<section id="chapter-6-ai-video-manga-recap-and-story-tools" class="level1">
+<h1><span class="header-section-number">6</span> AI Video, Manga Recap, and Story Tools</h1>
+<p>This chapter covers eight projects that share one goal: turning static material (a manga chapter, a still painting, a narration track, a raw video) into watchable, narrated, or subtitled media with the help of AI models. They span local-first browser apps, Python desktop tools, hosted SaaS on Supabase, and a live commercial product, and many of them are successive attempts at the same problem, so the design lessons build on each other. A web novel platform and the light novel collection that inspired its genre close out the story-content side.</p>
+<section id="cutmox-local-first-ai-subtitles-in-the-browser" class="level2">
+<h2>Cutmox: Local-First AI Subtitles in the Browser</h2>
+<section id="at-a-glance-7" class="level3">
+<h3>At a Glance</h3>
+<p>Cutmox is a browser-based subtitle generator for short-form video creators. You drop a video onto the page, and the app transcribes the speech with OpenAI's Whisper model and shows a word-by-word transcript you can edit, all without uploading the video to any server. The pitch is privacy and zero cost: the heavy lifting (audio extraction and speech recognition) happens inside the user's own browser tab using WebAssembly and, when available, the GPU. The UI shell was generated with Lovable, and the real engine was then built by hand in numbered phases.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>TypeScript</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>TanStack Start (React 19 SSR), TanStack Router, Tailwind v4, shadcn/ui</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td><span class="citation">@huggingface/transformers</span>, <span class="citation">@ffmpeg/ffmpeg</span> (core-mt), idb, framer-motion</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Web, deployed to Cloudflare Workers</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/cutmox" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/cutmox</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Phase 3 of 5 complete (upload, storage, transcription, transcript editing); styling and export still planned</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-7" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Imagine a tiny recording studio that lives inside your web browser. When you hand it a video:</p>
+<ol type="1">
+<li>The studio puts the video in a private locker (IndexedDB, the browser's built-in database), so a page refresh does not lose it.</li>
+<li>A sound engineer (ffmpeg compiled to WebAssembly) strips the picture away and keeps only the voice, converted to the exact format a speech model likes: one channel, 16,000 samples per second.</li>
+<li>A stenographer (Whisper, running in a background thread) listens and writes down every word with a start and end time.</li>
+<li>The words are grouped into sentences and shown next to the video. As the video plays, the word being spoken lights up. Click a word to fix a typo, and the fix is saved to the locker.</li>
+</ol>
+<p>Nothing leaves the computer except the one-time download of the model and the ffmpeg engine.</p>
+</section>
+<section id="architecture-7" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>+----------------------- Browser tab -----------------------+
+|                                                           |
+|  /  landing (SSR)     /editor (client)    /settings       |
+|        |                   |                   |          |
+|     DropZone -----&gt; video-store.ts (IndexedDB) &lt;--+       |
+|        |                   |                              |
+|   thumbnail.ts      transcribe-pipeline.ts                |
+|  (&lt;video&gt;+canvas)     |              |                    |
+|                ffmpeg-client.ts   whisper-client.ts       |
+|                (ffmpeg.wasm MT)       | postMessage       |
+|                       |          whisper.worker.ts        |
+|                  Float32 PCM ---&gt; transformers.js         |
+|                                   (WebGPU or WASM)        |
++-----------------------------------------------------------+
+            ^ HTML shell + COOP/COEP headers
++---------------------------+   +------------------------+
+| Cloudflare Worker         |   | jsdelivr CDN           |
+| src/server.ts (SSR only)  |   | ffmpeg core, wasm      |
++---------------------------+   | HF Hub: whisper-base   |
+                                +------------------------+</code></pre>
+<p>The Cloudflare Worker only renders the HTML shell and error pages. It never sees a video byte. Everything to do with media lives in the client.</p>
+</section>
+<section id="deep-dive-7" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Framework and routing.</strong> TanStack Start is a full-stack React framework that renders pages on the server (SSR, server-side rendering: the server sends ready-made HTML so the first paint is fast and crawlable). Routes are files in <code>src/routes/</code>: <code>index.tsx</code> (landing), <code>editor.tsx</code> (577 lines, the main app), <code>settings.tsx</code> (stored videos and storage usage), and a <code>test.tsx</code> viability page from Phase 1. Because Whisper, ffmpeg, and IndexedDB only exist in browsers, every media module guards itself with checks such as <code>typeof indexedDB === "undefined"</code> and is imported only inside client code.</p>
+<p><strong>Cross-origin isolation.</strong> Multi-threaded ffmpeg.wasm needs <code>SharedArrayBuffer</code> (memory that several threads can read and write at once). Browsers only allow that on pages that are "cross-origin isolated", which requires two response headers: COOP (Cross-Origin-Opener-Policy) and COEP (Cross-Origin-Embedder-Policy). Cutmox sets them in three places: a custom Vite middleware for dev, <code>public/_headers</code> for static assets on Cloudflare, and the Worker for SSR responses. The comment in <code>vite.config.ts</code> explains why plain <code>server.headers</code> was not enough:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb2-1"><span class="co">// Vite's `server.headers` doesn't reliably land on module-worker</span></span>
+<span id="cb2-2"><span class="co">// responses (`?worker_file&amp;type=module`), which Chrome then blocks</span></span>
+<span id="cb2-3"><span class="co">// under COEP. Setting headers via middleware guarantees every</span></span>
+<span id="cb2-4"><span class="co">// response gets them, including the worker chunk that boots Whisper.</span></span>
+<span id="cb2-5"><span class="kw">function</span> <span class="fu">crossOriginIsolationDev</span>()<span class="op">:</span> <span class="bu">Plugin</span> {</span>
+<span id="cb2-6">  <span class="kw">const</span> apply <span class="op">=</span> (_req<span class="op">:</span> <span class="dt">unknown</span><span class="op">,</span> res<span class="op">:</span> <span class="op">...,</span> next<span class="op">:</span> () <span class="kw">=&gt;</span> <span class="dt">void</span>) <span class="kw">=&gt;</span> {</span>
+<span id="cb2-7">    <span class="cf">for</span> (<span class="kw">const</span> [name<span class="op">,</span> value] <span class="kw">of</span> <span class="bu">Object</span><span class="op">.</span><span class="fu">entries</span>(CROSS_ORIGIN_HEADERS)) {</span>
+<span id="cb2-8">      res<span class="op">.</span><span class="fu">setHeader</span>(name<span class="op">,</span> value)<span class="op">;</span></span>
+<span id="cb2-9">    }</span>
+<span id="cb2-10">    <span class="fu">next</span>()<span class="op">;</span></span>
+<span id="cb2-11">  }<span class="op">;</span></span>
+<span id="cb2-12">  <span class="cf">return</span> {</span>
+<span id="cb2-13">    name<span class="op">:</span> <span class="st">"cutmox:cross-origin-isolation-dev"</span><span class="op">,</span></span>
+<span id="cb2-14">    <span class="fu">configureServer</span>(server) { server<span class="op">.</span><span class="at">middlewares</span><span class="op">.</span><span class="fu">use</span>(apply)<span class="op">;</span> }<span class="op">,</span></span>
+<span id="cb2-15">    <span class="fu">configurePreviewServer</span>(server) { server<span class="op">.</span><span class="at">middlewares</span><span class="op">.</span><span class="fu">use</span>(apply)<span class="op">;</span> }<span class="op">,</span></span>
+<span id="cb2-16">  }<span class="op">;</span></span>
+<span id="cb2-17">}</span></code></pre></div>
+<p><strong>Storage (<code>src/lib/storage/video-store.ts</code>).</strong> The app uses the <code>idb</code> wrapper around IndexedDB. There is one database, <code>cutmox-videos</code>, with one object store <code>videos</code> keyed by <code>id</code> and an index <code>by-createdAt</code>. A <code>VideoRecord</code> holds the raw <code>videoBlob</code>, filename, MIME type, size, duration, a JPEG thumbnail as a data URL, and an optional <code>transcript</code>. The schema is at version 2: v1 created the store, and v2 added <code>transcript</code> without a data migration because a missing field is read back as <code>null</code>. IDs are "ULID-ish": eight base-36 characters of timestamp (so they sort by time) followed by eight random characters. <code>isQuotaExceededError</code> detects when the browser refuses to store a large Blob so the UI can show a friendly message.</p>
+<p><strong>Thumbnails (<code>src/lib/video/thumbnail.ts</code>).</strong> A hidden <code>&lt;video&gt;</code> element loads the file through an object URL, seeks to about one second, draws that frame to a canvas capped at 640 px wide, and exports a JPEG at quality 0.7. Failures return nulls instead of throwing, so an exotic codec still saves, just without a preview.</p>
+<p><strong>Audio extraction (<code>src/lib/ffmpeg-client.ts</code>).</strong> The ffmpeg core (about 32 MiB of wasm) is fetched from jsdelivr and turned into same-origin <code>blob:</code> URLs with <code>toBlobURL</code>. That trick solves two problems at once: COEP would block a cross-origin worker script, and Cloudflare Workers refuses static assets larger than 25 MiB. The load is memoised in a module-level promise and reset on failure so the user can retry. The extraction itself is a single ffmpeg command:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb3-1"><span class="cf">await</span> ff<span class="op">.</span><span class="fu">writeFile</span>(inputName<span class="op">,</span> <span class="cf">await</span> <span class="fu">fetchFile</span>(blob))<span class="op">;</span></span>
+<span id="cb3-2"><span class="co">// -vn: drop video. -ac 1: mono. -ar 16000: 16 kHz.</span></span>
+<span id="cb3-3"><span class="co">// -f f32le: raw 32-bit float little-endian (Whisper's input).</span></span>
+<span id="cb3-4"><span class="cf">await</span> ff<span class="op">.</span><span class="fu">exec</span>([<span class="st">"-i"</span><span class="op">,</span> inputName<span class="op">,</span> <span class="st">"-vn"</span><span class="op">,</span> <span class="st">"-ac"</span><span class="op">,</span> <span class="st">"1"</span><span class="op">,</span> <span class="st">"-ar"</span><span class="op">,</span></span>
+<span id="cb3-5">  <span class="st">"16000"</span><span class="op">,</span> <span class="st">"-f"</span><span class="op">,</span> <span class="st">"f32le"</span><span class="op">,</span> <span class="st">"-y"</span><span class="op">,</span> outputName])<span class="op">;</span></span>
+<span id="cb3-6"><span class="kw">const</span> data <span class="op">=</span> <span class="cf">await</span> ff<span class="op">.</span><span class="fu">readFile</span>(outputName)<span class="op">;</span></span>
+<span id="cb3-7"><span class="kw">const</span> bytes <span class="op">=</span> data <span class="kw">instanceof</span> <span class="bu">Uint8Array</span> <span class="op">?</span> data <span class="op">:</span> <span class="op">...;</span></span>
+<span id="cb3-8"><span class="co">// Float32Array needs a 4-byte-aligned buffer; copy to be safe.</span></span>
+<span id="cb3-9"><span class="kw">const</span> aligned <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayBuffer</span>(bytes<span class="op">.</span><span class="at">byteLength</span>)<span class="op">;</span></span>
+<span id="cb3-10"><span class="kw">new</span> <span class="bu">Uint8Array</span>(aligned)<span class="op">.</span><span class="fu">set</span>(bytes)<span class="op">;</span></span>
+<span id="cb3-11"><span class="kw">const</span> samples <span class="op">=</span> <span class="kw">new</span> <span class="bu">Float32Array</span>(aligned)<span class="op">;</span></span>
+<span id="cb3-12"><span class="cf">if</span> (samples<span class="op">.</span><span class="at">length</span> <span class="op">&lt;</span> MIN_AUDIO_SAMPLES) {</span>
+<span id="cb3-13">  <span class="cf">throw</span> <span class="kw">new</span> <span class="fu">NoAudioTrackError</span>()<span class="op">;</span></span>
+<span id="cb3-14">}</span></code></pre></div>
+<p>Writing raw <code>f32le</code> (no WAV header) means the bytes can be reinterpreted directly as a <code>Float32Array</code> with zero decoding. The alignment copy matters because a typed array view over a buffer must start at a multiple of its element size (4 bytes for floats). <code>MIN_AUDIO_SAMPLES</code> is about 60 ms; anything shorter is treated as "no audio" and gets its own UI state.</p>
+<p><strong>Speech recognition (<code>src/workers/whisper.worker.ts</code>).</strong> A Web Worker is a background JavaScript thread; running Whisper there keeps the page from freezing. The worker loads <code>Xenova/whisper-base</code> through transformers.js (Hugging Face's JavaScript port of their model library, which runs ONNX models in the browser). It tries WebGPU first and falls back to WASM:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb4-1"><span class="cf">try</span> {</span>
+<span id="cb4-2">  <span class="kw">const</span> p <span class="op">=</span> <span class="cf">await</span> <span class="fu">pipeline</span>(<span class="st">"automatic-speech-recognition"</span><span class="op">,</span></span>
+<span id="cb4-3">    <span class="st">"Xenova/whisper-base"</span><span class="op">,</span> {</span>
+<span id="cb4-4">      device<span class="op">:</span> <span class="st">"webgpu"</span><span class="op">,</span></span>
+<span id="cb4-5">      progress_callback<span class="op">:</span> <span class="fu">progressCallback</span>(id)<span class="op">,</span></span>
+<span id="cb4-6">    })<span class="op">;</span></span>
+<span id="cb4-7">  <span class="cf">return</span> { pipeline<span class="op">:</span> p<span class="op">,</span> device<span class="op">:</span> <span class="st">"webgpu"</span> }<span class="op">;</span></span>
+<span id="cb4-8">} <span class="cf">catch</span> (err) {</span>
+<span id="cb4-9">  <span class="bu">console</span><span class="op">.</span><span class="fu">warn</span>(<span class="st">"[whisper.worker] WebGPU init failed, ..."</span><span class="op">,</span> err)<span class="op">;</span></span>
+<span id="cb4-10">  <span class="kw">const</span> p <span class="op">=</span> <span class="cf">await</span> <span class="fu">pipeline</span>(<span class="st">"automatic-speech-recognition"</span><span class="op">,</span></span>
+<span id="cb4-11">    <span class="st">"Xenova/whisper-base"</span><span class="op">,</span></span>
+<span id="cb4-12">    { progress_callback<span class="op">:</span> <span class="fu">progressCallback</span>(id) })<span class="op">;</span></span>
+<span id="cb4-13">  <span class="cf">return</span> { pipeline<span class="op">:</span> p<span class="op">,</span> device<span class="op">:</span> <span class="st">"wasm"</span> }<span class="op">;</span></span>
+<span id="cb4-14">}</span></code></pre></div>
+<p>The pipeline is called with <code>return_timestamps: "word"</code>, <code>chunk_length_s: 30</code>, and <code>stride_length_s: 5</code>. Whisper only sees 30 seconds at a time, so long audio is cut into overlapping 30 s windows (5 s overlap on each side) and the results are stitched. The worker speaks a small typed protocol: <code>progress</code>, <code>device-info</code>, <code>result</code>, or <code>error</code> messages, each tagged with a request <code>id</code> (a <code>crypto.randomUUID()</code>) so concurrent calls cannot be confused. <code>env.useBrowserCache = true</code> makes transformers.js cache the model files in the browser's Cache Storage after the first download.</p>
+<p><strong>Segmentation (<code>src/lib/whisper/segment.ts</code>).</strong> Whisper returns a flat list of words. <code>groupWordsIntoSegments</code> walks the list and closes a segment when a word ends in <code>.</code>, <code>!</code>, or <code>?</code>, or when the bucket hits 30 words, which prevents a run-on monologue from becoming one giant paragraph.</p>
+<p><strong>Orchestration and cancellation.</strong> <code>transcribe-pipeline.ts</code> chains extract, transcribe, and group, reporting a <code>stage</code> plus <code>progress</code> value. It accepts an <code>AbortSignal</code>. Cancellation is "soft": the worker cannot be interrupted mid-inference, so the pipeline simply stops forwarding progress and throws an <code>AbortError</code> between stages. The model stays warm for the next attempt. In <code>editor.tsx</code> the transcription UI is a discriminated union state machine: <code>awaiting-confirmation</code>, <code>running</code>, <code>ready</code>, <code>error</code>, or <code>no-audio</code>. Videos over five minutes (<code>LONG_VIDEO_THRESHOLD_SEC = 300</code>) wait for the user to opt in, because local transcription can take several minutes.</p>
+<p><strong>Active-word highlighting.</strong> Instead of the coarse <code>timeupdate</code> event (about 4 times a second), the editor polls <code>video.currentTime</code> on every animation frame while playing, and does a linear scan over a flattened word list. It only calls <code>setActive</code> when the active word changes, so React re-renders once per word rather than 60 times a second:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb5-1"><span class="kw">function</span> <span class="fu">tick</span>() {</span>
+<span id="cb5-2">  <span class="cf">if</span> (<span class="op">!</span>running) <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb5-3">  <span class="kw">const</span> t <span class="op">=</span> video<span class="op">!.</span><span class="at">currentTime</span><span class="op">;</span></span>
+<span id="cb5-4">  <span class="kw">let</span> hit<span class="op">:</span> ActiveWord <span class="op">|</span> <span class="dt">null</span> <span class="op">=</span> <span class="kw">null</span><span class="op">;</span></span>
+<span id="cb5-5">  <span class="cf">for</span> (<span class="kw">const</span> w <span class="kw">of</span> flat) {</span>
+<span id="cb5-6">    <span class="cf">if</span> (w<span class="op">.</span><span class="at">startSec</span> <span class="op">&lt;=</span> t <span class="op">&amp;&amp;</span> t <span class="op">&lt;</span> w<span class="op">.</span><span class="at">endSec</span>) {</span>
+<span id="cb5-7">      hit <span class="op">=</span> { segmentId<span class="op">:</span> w<span class="op">.</span><span class="at">segmentId</span><span class="op">,</span> wordIndex<span class="op">:</span> w<span class="op">.</span><span class="at">wordIndex</span> }<span class="op">;</span></span>
+<span id="cb5-8">      <span class="cf">break</span><span class="op">;</span></span>
+<span id="cb5-9">    }</span>
+<span id="cb5-10">    <span class="cf">if</span> (w<span class="op">.</span><span class="at">startSec</span> <span class="op">&gt;</span> t) <span class="cf">break</span><span class="op">;</span></span>
+<span id="cb5-11">  }</span>
+<span id="cb5-12">  <span class="kw">const</span> key <span class="op">=</span> hit <span class="op">?</span> <span class="vs">`</span><span class="sc">${</span>hit<span class="op">.</span><span class="at">segmentId</span><span class="sc">}</span><span class="vs">:</span><span class="sc">${</span>hit<span class="op">.</span><span class="at">wordIndex</span><span class="sc">}</span><span class="vs">`</span> <span class="op">:</span> <span class="dt">null</span><span class="op">;</span></span>
+<span id="cb5-13">  <span class="cf">if</span> (key <span class="op">!==</span> lastKey) { lastKey <span class="op">=</span> key<span class="op">;</span> <span class="fu">setActive</span>(hit)<span class="op">;</span> }</span>
+<span id="cb5-14">  raf <span class="op">=</span> <span class="fu">requestAnimationFrame</span>(tick)<span class="op">;</span></span>
+<span id="cb5-15">}</span></code></pre></div>
+<p>A separate <code>seeked</code> listener runs the same lookup once while paused, so scrubbing still moves the highlight. Word edits call <code>updateTranscriptWord</code>, which rewrites one word and the segment's text, then puts the whole record back (IndexedDB stores values whole).</p>
+<p><strong>Deploy pruning.</strong> <code>scripts/prune-server-bundle.mjs</code> deletes the Whisper worker chunk, ONNX runtime wasm, and client-only chunks from <code>dist/server/assets</code> before <code>wrangler deploy</code>. Vite emits them into both client and server bundles, and the server copies pushed the Worker past Cloudflare's 3 MiB free-tier limit.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-7" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Local-first over cloud APIs.</strong> Running Whisper in the browser means no server cost and no privacy risk, but transcription is slower than a hosted API and quality is capped by the small <code>whisper-base</code> model that fits in a browser.</li>
+<li><strong>Keep Cloudflare Workers instead of Vercel.</strong> <code>BUILD_PLAN.md</code> notes that the original brief said "static deploy on Vercel", but the Lovable scaffold targeted Workers. Since the Worker only renders HTML and adds headers, switching would have been a rewrite for no gain.</li>
+<li><strong>React Context, not Zustand.</strong> <code>project-context.tsx</code> shares the current project via Context. The plan judged about five consumers too few to justify a store library.</li>
+<li><strong>Build the editor in vertical slices (option C in the plan).</strong> Each engine phase ships its own UI slice (upload, then transcript panel), avoiding "dead UI" that would be reworked once real data arrived.</li>
+<li><strong>ffmpeg for audio instead of WebAudio.</strong> The plan discussed <code>decodeAudioData</code> as a faster path, but ffmpeg handles every container uniformly and is needed later for burning subtitles anyway.</li>
+<li><strong>Export rendering is still open.</strong> The plan flags that ffmpeg's <code>subtitles</code> filter cannot do per-word highlight styles (Word-pop, Hormozi). Options are per-frame <code>drawtext</code> filter graphs or compositing frames on a canvas and piping raw video back into ffmpeg. <code>burnSingleSubtitle</code> is a Phase 1 proof using <code>drawtext</code>.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-7" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li><strong>COEP blocking the worker in dev.</strong> Solved with the middleware plugin shown above.</li>
+<li><strong>Assets bypassing the Worker in production.</strong> Static JS and wasm are served by Cloudflare's asset binding, not <code>src/server.ts</code>, so they shipped without COEP and broke Whisper. The <code>_headers</code> file fixes this at the asset layer.</li>
+<li><strong>Vite pre-bundling transformers.js.</strong> The dep optimizer tried to pre-bundle the library's internal worker into a file that never existed, causing a 404 on every load. The fix is <code>optimizeDeps.exclude: ["@huggingface/transformers"]</code>.</li>
+<li><strong>The 25 MiB asset cap and 3 MiB Worker cap.</strong> Solved by loading ffmpeg core from a CDN as blob URLs and by the prune script.</li>
+<li><strong>Unaligned PCM buffers.</strong> Solved by copying into a fresh <code>ArrayBuffer</code>.</li>
+<li>The git history shows the work in three merged pull requests: <code>phase-1-viability</code> (test page, headers, clients), <code>phase-2-upload</code> (IndexedDB, DropZone, settings), and Phase 3 commits (audio extraction, worker pipeline, TranscriptPanel, long-video gate).</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-7" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>No user media is uploaded. The only network traffic is fetching the ffmpeg core and model weights.</li>
+<li><code>Cross-Origin-Resource-Policy: same-origin</code> plus COEP means the page cannot embed arbitrary third-party resources, which also narrows the attack surface.</li>
+<li>ffmpeg.wasm is 32-bit, so its heap tops out around 2 GB. The DropZone caps files at 500 MB and accepts MP4, MOV, and WebM only.</li>
+<li>WebGPU is described in the code as roughly 5 to 10 times faster for long videos than the WASM backend.</li>
+</ul>
+</section>
+<section id="how-to-run-it-7" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb6"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><span class="ex">npm</span> install          <span class="co"># or: bun install (bun.lock is canonical)</span></span>
+<span id="cb6-2"><span class="ex">npm</span> run dev          <span class="co"># http://localhost:8080, headers applied</span></span>
+<span id="cb6-3"><span class="ex">npm</span> run build</span>
+<span id="cb6-4"><span class="ex">npm</span> run deploy       <span class="co"># vite build + prune + wrangler deploy</span></span></code></pre></div>
+<p>Open <code>/test</code> to check WebGPU, cross-origin isolation, SharedArrayBuffer, IndexedDB, and Worker support before trying the editor.</p>
+</section>
+<section id="learn-more-7" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://huggingface.co/docs/transformers.js" target="_blank" rel="noopener noreferrer">Transformers.js documentation</a></li>
+<li><a href="https://ffmpegwasm.netlify.app/docs/overview" target="_blank" rel="noopener noreferrer">ffmpeg.wasm documentation</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cross-Origin-Embedder-Policy" target="_blank" rel="noopener noreferrer">MDN: Cross-Origin-Embedder-Policy</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers" target="_blank" rel="noopener noreferrer">MDN: Using Web Workers</a></li>
+<li><a href="https://arxiv.org/abs/2212.04356" target="_blank" rel="noopener noreferrer">Whisper paper: Robust Speech Recognition via Large-Scale Weak Supervision</a></li>
+<li><a href="https://tanstack.com/start/latest/docs/framework/react/overview" target="_blank" rel="noopener noreferrer">TanStack Start overview</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=cbB3QEwWMlA" target="_blank" rel="noopener noreferrer">Web Assembly (WASM) in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=26Mayv5JPz0" target="_blank" rel="noopener noreferrer">FFmpeg in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=9LwDEiPCTmg" target="_blank" rel="noopener noreferrer">Web Workers Tutorial - Introduction to JavaScript Web Workers</a></li>
+<li><a href="https://www.youtube.com/watch?v=YYd6nMY72jo" target="_blank" rel="noopener noreferrer">OpenAI Whisper: Open Source Speech Recognition Explained</a></li>
+<li><a href="https://www.youtube.com/watch?v=6fK1K28eoUA" target="_blank" rel="noopener noreferrer">Simple Introduction to IndexedDB with the idb-keyval Library</a></li>
+</ul>
+</section>
+</section>
+<section id="recap-verse-the-production-manga-recap-platform" class="level2">
+<h2>Recap Verse: The Production Manga Recap Platform</h2>
+<section id="at-a-glance-8" class="level3">
+<h3>At a Glance</h3>
+<p>Recap Verse (repository <code>manga-recap-app</code>, local folder <code>V12.0</code>) is the flagship of this chapter: a live, commercial web app that turns a folder of manga or manhwa page images into a narrated recap video. It targets YouTube and Shorts creators who make "manga recap" channels, where a narrator retells a chapter over its panels. The app cuts pages into panels, uses a vision model to find the recurring characters, lets the human confirm the cast, writes narration that is only allowed to name that confirmed cast, speaks it with text-to-speech, and renders the final video inside the user's browser. It began life as a Tkinter desktop app and grew, over 413 commits, into a FastAPI and Next.js product with billing, an admin console, and about 2,000 automated tests.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Python 3.12, TypeScript</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>FastAPI, Next.js 16 (App Router), React 19, next-auth</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>pymongo, OpenCV, Pillow, numpy, edge-tts, httpx, boto3 (R2), rq, cryptography, Stripe</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Google Cloud Run (API), Vercel (web), MongoDB Atlas, Cloudflare R2</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/manga-recap-app" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/manga-recap-app</a> (private)</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Live in production, version 12.1.0</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-8" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Picture a small film crew working on a comic book:</p>
+<ol type="1">
+<li><strong>The cutter</strong> lays every page end to end on one long table and slices out each panel, in reading order.</li>
+<li><strong>The casting director</strong> looks at every panel and makes a list of faces that keep showing up. You, the producer, review the list: "that is Naruto, that is Sasuke, that blob is just a sword."</li>
+<li><strong>The writer</strong> goes panel by panel and writes one or two spoken sentences, remembering what happened in the last few panels. The writer is forbidden from inventing names that are not on your approved cast list.</li>
+<li><strong>The voice actor</strong> reads each line aloud, and a stopwatch measures exactly how long each line takes.</li>
+<li><strong>The editor</strong> (your own browser) shows each panel for exactly as long as its line lasts, slowly zooming toward the character's face, adds captions, and records the result as a video file.</li>
+</ol>
+<p>The AI suggests at every step, and a human confirms. That rule is the product's core idea.</p>
+</section>
+<section id="architecture-8" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> Browser (Next.js app, recapverse.com)
+   |  same-origin /api/v1/*        presigned PUT
+   v                                     |
+ Next.js proxy route  ----------------&gt;  |  Cloudflare R2
+ [...path]/route.ts                      v  (panel images)
+   | swaps session cookie for bearer token, CSRF check
+   v
+ FastAPI on Cloud Run (17 routers)
+   |-- panel_cutter (OpenCV)
+   |-- cast (vision AI + dHash cast bank)
+   |-- generation (narration loop)
+   |      '-- panel_cast_resolver (deterministic)
+   |-- tts_engine (Edge TTS / ElevenLabs)
+   |-- video (render plan), billing, admin
+   |
+   +--&gt; MongoDB Atlas   +--&gt; OpenAI / Gemini / Anthropic REST
+   +--&gt; Redis + RQ (optional queue mode)
+
+ Browser renderer: canvas + MediaRecorder -&gt; MP4/WebM</code></pre>
+</section>
+<section id="deep-dive-8" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>The proxy and auth model.</strong> Every browser request goes to <code>/api/v1/...</code> on the same origin as the web app. <code>web/app/api/v1/[...path]/route.ts</code> looks up the NextAuth session, swaps the session cookie for a backend bearer "bridge token" that never reaches JavaScript in the page, enforces a same-origin CSRF check on writes, and strips hop-by-hop headers. CSRF (cross-site request forgery) is an attack where another site tricks your browser into sending an authenticated request; checking the <code>Origin</code> header blocks it. Only login, register, and Google OAuth are public paths.</p>
+<p><strong>Uploads and image safety.</strong> Panels go straight from the browser to Cloudflare R2 (an S3-compatible object store) with presigned PUT URLs, short-lived signed links that let the browser upload one object without holding storage credentials. <code>core/image_security.py</code> decodes the actual bytes with Pillow rather than trusting the declared MIME type and rejects decompression bombs (tiny files that expand to billions of pixels) with limits of 80 million pixels and a 60,000 px long edge.</p>
+<p><strong>Panel Cutter (<code>services/panel_cutter.py</code>, about 1,400 lines).</strong> All uploaded pages are stitched into one vertical strip at a canonical width of 1000 px, with a <code>_PanelLayout</code> NamedTuple mapping strip Y ranges back to source images so manual crops are cut from the full-resolution originals. Auto-cutting is classical computer vision, not machine learning:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb8-1">gray <span class="op">=</span> img <span class="cf">if</span> <span class="bu">len</span>(img.shape) <span class="op">==</span> <span class="dv">2</span> <span class="cf">else</span> cv2.cvtColor(</span>
+<span id="cb8-2">    img, cv2.COLOR_BGR2GRAY)</span>
+<span id="cb8-3">blurred <span class="op">=</span> cv2.GaussianBlur(gray, (<span class="dv">5</span>, <span class="dv">5</span>), <span class="dv">0</span>)</span>
+<span id="cb8-4">_, binary <span class="op">=</span> cv2.threshold(blurred, cfg.bg_threshold, <span class="dv">255</span>,</span>
+<span id="cb8-5">                          cv2.THRESH_BINARY_INV)</span>
+<span id="cb8-6">kernel <span class="op">=</span> cv2.getStructuringElement(</span>
+<span id="cb8-7">    cv2.MORPH_RECT, (kernel_size, kernel_size))</span>
+<span id="cb8-8">dilated <span class="op">=</span> cv2.dilate(binary, kernel, ...)</span>
+<span id="cb8-9">closed <span class="op">=</span> cv2.morphologyEx(dilated, cv2.MORPH_CLOSE, kernel)</span>
+<span id="cb8-10">num_labels, _, stats, _ <span class="op">=</span> cv2.connectedComponentsWithStats(</span>
+<span id="cb8-11">    closed, connectivity<span class="op">=</span><span class="dv">8</span>)</span>
+<span id="cb8-12">...</span>
+<span id="cb8-13">boxes <span class="op">=</span> _remove_nearly_nested_boxes(boxes)</span>
+<span id="cb8-14"><span class="cf">if</span> cfg.merge_distance <span class="op">&gt;</span> <span class="dv">0</span>:</span>
+<span id="cb8-15">    boxes <span class="op">=</span> _merge_nearby_boxes(boxes, cfg.merge_distance)</span>
+<span id="cb8-16"><span class="cf">return</span> _sort_reading_order(boxes, cfg.same_row_threshold)</span></code></pre></div>
+<p>The idea: manga gutters are white, so an inverted threshold turns ink into white blobs on black. Dilation and morphological closing (grow then shrink) glue the strokes inside one panel into a single blob. Connected-components labelling then returns one bounding box per blob. Boxes that are at least 92% inside another are dropped, close neighbours are merged, and the remainder is sorted into reading order by grouping boxes into rows. Detection runs on a copy downscaled to at most 12 megapixels and the boxes are scaled back, which bounds memory. Previews are capped at 65,500 px tall because that is the JPEG format's maximum dimension (bug BUG-025 in the project's tracker).</p>
+<p><strong>Cast scan and the cast bank (<code>services/cast.py</code>, <code>cast_crops.py</code>, <code>cast_bank.py</code>).</strong> A vision model observes each panel in parallel chunks on a <code>ThreadPoolExecutor</code>. Each character crop gets a perceptual fingerprint, a 64-bit difference hash (dHash):</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><span class="kw">def</span> _difference_hash(image: Image.Image) <span class="op">-&gt;</span> <span class="bu">str</span>:</span>
+<span id="cb9-2">    tiny <span class="op">=</span> image.convert(<span class="st">"L"</span>).resize((<span class="dv">9</span>, <span class="dv">8</span>))</span>
+<span id="cb9-3">    pixels <span class="op">=</span> <span class="bu">list</span>(tiny.tobytes())</span>
+<span id="cb9-4">    bits <span class="op">=</span> []</span>
+<span id="cb9-5">    <span class="cf">for</span> row <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">8</span>):</span>
+<span id="cb9-6">        <span class="cf">for</span> col <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">8</span>):</span>
+<span id="cb9-7">            left <span class="op">=</span> pixels[(row <span class="op">*</span> <span class="dv">9</span>) <span class="op">+</span> col]</span>
+<span id="cb9-8">            right <span class="op">=</span> pixels[(row <span class="op">*</span> <span class="dv">9</span>) <span class="op">+</span> col <span class="op">+</span> <span class="dv">1</span>]</span>
+<span id="cb9-9">            bits.append(<span class="st">"1"</span> <span class="cf">if</span> left <span class="op">&gt;</span> right <span class="cf">else</span> <span class="st">"0"</span>)</span>
+<span id="cb9-10">    value <span class="op">=</span> <span class="bu">int</span>(<span class="st">""</span>.join(bits), <span class="dv">2</span>)</span>
+<span id="cb9-11">    <span class="cf">return</span> <span class="ss">f"</span><span class="sc">{</span>value<span class="sc">:016x}</span><span class="ss">"</span></span></code></pre></div>
+<p>Shrinking to 9 by 8 grayscale throws away detail, and comparing each pixel to its right neighbour records only the brightness gradient. Two crops of the same character in similar poses tend to produce similar bit patterns even at different sizes. The cast bank is versioned with a blake2b hash of its fields so stale matches can be detected. The user then reviews the proposed cast in a group-first builder and confirms names.</p>
+<p><strong>Narration (<code>services/generation.py</code>, <code>ai.py</code>).</strong> <code>process_generation_job</code> loads the job and processes panels in chunks of 32. Observations (what the vision model sees in each panel, including speech-bubble text, since there is no separate OCR stage) run four at a time in parallel. Narration then proceeds strictly in order, carrying chapter context: a deque of the last six narrations, a running compressed summary, and a window of recent scene references. AI providers are called over raw REST with httpx (OpenAI Responses API, Gemini <code>generateContent</code>, Anthropic Messages), using the user's own encrypted key.</p>
+<p><strong>The deterministic resolver (<code>services/panel_cast_resolver.py</code>, about 1,500 lines).</strong> This is the answer to the hardest problem: each vision call has no memory of other panels, so the same character might be "a spiky-haired boy" in one panel and "the hero" in the next. The resolver decides identity with code, not another LLM call, in five stages:</p>
+<ol type="1">
+<li>A prop safety net with 118 known prop labels (a sword is never a cast member).</li>
+<li>Matching to the cast bank by traits plus visual hash.</li>
+<li>Scene continuity, carrying identity across recent panels.</li>
+<li>Distinct identity, so one character cannot fill two slots in one panel.</li>
+<li>Geometric speaker association: the tail of a speech bubble is matched to the nearest character's "head anchor", with fallbacks for edge distance and centre distance, and a right-to-left or left-to-right tiebreak depending on the comic's reading direction.</li>
+</ol>
+<p>Each assignment is labelled clear, ambiguous, or none, and uncertain matches stay separate rather than being force-merged. The narration prompt then combines a tone preset (cinematic, Gen Z, serious, dark, funny, neutral), a word budget clamped to 20 to 200, one of 15 output languages, and guardrails against contamination. Post-processing rejects near-duplicates (similarity over 0.82 against the last four lines), wrong-script output (for example Latin text when Hindi was requested), verbal tics, and leaked prompt context.</p>
+<p><strong>Optimistic concurrency.</strong> If the user edits a panel while a generation job runs, the user's edit must win. Each write is conditional on the <code>updated_at</code> value read earlier:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><span class="kw">def</span> build_panel_write(snapshot, update) <span class="op">-&gt;</span> UpdateOne:</span>
+<span id="cb10-2">    <span class="co">"""Build a panel write that only lands if the panel</span></span>
+<span id="cb10-3"><span class="co">    has not moved since *snapshot*.</span></span>
+<span id="cb10-4"><span class="co">    ...</span></span>
+<span id="cb10-5"><span class="co">    """</span></span>
+<span id="cb10-6">    predicate <span class="op">=</span> {<span class="st">"_id"</span>: snapshot[<span class="st">"_id"</span>]}</span>
+<span id="cb10-7">    snapshot_version <span class="op">=</span> snapshot.get(<span class="st">"updated_at"</span>)</span>
+<span id="cb10-8">    <span class="cf">if</span> snapshot_version <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb10-9">        predicate[<span class="st">"updated_at"</span>] <span class="op">=</span> snapshot_version</span>
+<span id="cb10-10">    <span class="cf">return</span> UpdateOne(predicate, update, upsert<span class="op">=</span><span class="va">False</span>)</span></code></pre></div>
+<p>If the timestamp changed, the filter matches nothing, the AI's text is silently dropped, and the job log says it "kept your edit made while this run was in progress". This is optimistic concurrency control: assume no conflict, but verify at write time.</p>
+<p><strong>Text-to-speech and timing (<code>services/tts_engine.py</code>).</strong> Edge TTS (free) is the default, with ElevenLabs <code>eleven_multilingual_v2</code> for users who bring a key. Calls run under <code>asyncio.Semaphore(4)</code> with a 30 second timeout and one retry. Durations are measured by walking the MP3's own frame headers:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><span class="kw">def</span> measure_mp3_duration(data: <span class="bu">bytes</span>) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb11-2">    <span class="cf">if</span> <span class="kw">not</span> data:</span>
+<span id="cb11-3">        <span class="cf">return</span> <span class="fl">0.0</span></span>
+<span id="cb11-4">    offset <span class="op">=</span> _skip_id3v2(data)</span>
+<span id="cb11-5">    total_seconds <span class="op">=</span> <span class="fl">0.0</span></span>
+<span id="cb11-6">    limit <span class="op">=</span> <span class="bu">len</span>(data)</span>
+<span id="cb11-7">    <span class="cf">while</span> offset <span class="op">&lt;</span> limit <span class="op">-</span> <span class="dv">3</span>:</span>
+<span id="cb11-8">        frame <span class="op">=</span> _parse_mp3_frame(data, offset)</span>
+<span id="cb11-9">        <span class="cf">if</span> frame <span class="kw">is</span> <span class="va">None</span>:</span>
+<span id="cb11-10">            offset <span class="op">+=</span> <span class="dv">1</span>  <span class="co"># resync: step a byte ...</span></span>
+<span id="cb11-11">            <span class="cf">continue</span></span>
+<span id="cb11-12">        frame_length, seconds <span class="op">=</span> frame</span>
+<span id="cb11-13">        total_seconds <span class="op">+=</span> seconds</span>
+<span id="cb11-14">        offset <span class="op">+=</span> frame_length</span>
+<span id="cb11-15">    <span class="cf">return</span> total_seconds</span></code></pre></div>
+<p>An MP3 file is a sequence of independent frames, each with a 4-byte header giving bitrate and sample rate, which fixes the frame's length and play time. Summing frames gives the true duration. This replaced trusting edge-tts metadata after the library silently switched from word to sentence boundary events (BUG-018) and every duration became an estimate. Silence padding is a hand-built 417-byte all-zero MPEG-1 Layer III frame. A SHA-256 fingerprint over voice, provider, rate, pitch, and every panel's narration lets a re-render reuse an existing audio job instead of paying for TTS again.</p>
+<p><strong>Rendering in the browser.</strong> The server only builds a render plan (<code>timeline_builder.py</code>, <code>animation_engine.py</code>, <code>video_generator.py</code>): panel types, presets such as <code>cinematic</code>, <code>fast_recap</code>, <code>dramatic_focus</code>, and <code>shorts</code>, transitions, and a focus point equal to the average centre of the characters' bounding boxes. The browser (<code>web/lib/video/video-generator.ts</code>) draws each frame on a canvas with a Ken Burns move (a slow zoom and pan, named after the documentary maker) eased with <code>easeInOutCubic</code> toward that focus point, then records <code>canvas.captureStream(fps)</code> plus a Web Audio stream with <code>MediaRecorder</code>:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb12-1"><span class="im">export</span> <span class="kw">function</span> <span class="fu">chooseRecorderMimeType</span>()<span class="op">:</span> <span class="dt">string</span> {</span>
+<span id="cb12-2">  <span class="kw">const</span> candidates <span class="op">=</span> [</span>
+<span id="cb12-3">    <span class="st">"video/mp4;codecs=avc1.42E01E,mp4a.40.2"</span><span class="op">,</span></span>
+<span id="cb12-4">    <span class="st">"video/mp4"</span><span class="op">,</span></span>
+<span id="cb12-5">    <span class="st">"video/webm;codecs=vp9,opus"</span><span class="op">,</span></span>
+<span id="cb12-6">    <span class="st">"video/webm;codecs=vp8,opus"</span><span class="op">,</span></span>
+<span id="cb12-7">    <span class="st">"video/webm"</span><span class="op">,</span></span>
+<span id="cb12-8">  ]<span class="op">;</span></span>
+<span id="cb12-9">  <span class="cf">for</span> (<span class="kw">const</span> candidate <span class="kw">of</span> candidates) {</span>
+<span id="cb12-10">    <span class="cf">if</span> (<span class="kw">typeof</span> <span class="bu">MediaRecorder</span> <span class="op">!==</span> <span class="st">"undefined"</span> <span class="op">&amp;&amp;</span></span>
+<span id="cb12-11">        <span class="bu">MediaRecorder</span><span class="op">.</span><span class="fu">isTypeSupported</span>(candidate)) {</span>
+<span id="cb12-12">      <span class="cf">return</span> candidate<span class="op">;</span></span>
+<span id="cb12-13">    }</span>
+<span id="cb12-14">  }</span>
+<span id="cb12-15">  <span class="cf">return</span> <span class="st">"video/webm"</span><span class="op">;</span></span>
+<span id="cb12-16">}</span></code></pre></div>
+<p>The decoded audio is the ground truth for timing; the server's duration is only a cross-check with a 0.35 s tolerance, because capping by it used to cut off speech. There is no ffmpeg anywhere in the product.</p>
+<p><strong>Jobs and the database.</strong> Production runs jobs inline in the API process (<code>INLINE_JOB_EXECUTION=true</code>), while an optional mode uses Redis and RQ (a simple Python job queue) with <code>worker/worker.py</code>. MongoDB collections include users, api_keys, projects, panels, characters, jobs, narrations, and billing_events. Races are prevented with database constraints rather than check-then-act code:</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb13-1">db[<span class="st">"jobs"</span>].create_index(</span>
+<span id="cb13-2">    [(<span class="st">"project_id"</span>, ASCENDING), (<span class="st">"type"</span>, ASCENDING)],</span>
+<span id="cb13-3">    unique<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb13-4">    partialFilterExpression<span class="op">=</span>{</span>
+<span id="cb13-5">        <span class="st">"status"</span>: {<span class="st">"$in"</span>: <span class="bu">sorted</span>(ACTIVE_JOB_STATUSES)}},</span>
+<span id="cb13-6">    name<span class="op">=</span><span class="st">"active_job_per_project"</span>,</span>
+<span id="cb13-7">)</span></code></pre></div>
+<p>A partial unique index only enforces uniqueness on documents matching the filter, so a project can have any number of finished jobs but at most one queued or running job of each type. This fixed BUG-022, where a double click started two jobs and billed the AI provider twice. The same trick, a <code>project_quota_slot</code> index, turns the free plan's project limit into reserved ordinal slots.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-8" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Deterministic identity over LLM judgement.</strong> Reproducible and unit-testable, at the cost of a 1,500-line resolver full of heuristics.</li>
+<li><strong>Browser rendering instead of a render farm.</strong> Zero server CPU and storage per video, and the output never leaves the user's machine. The trade-off is dependence on browser codec support (iOS Safari before 17 lacks <code>captureStream</code>, which the app reports explicitly).</li>
+<li><strong>Inline jobs in production.</strong> No Redis to operate, accepting longer requests within Cloud Run's 300 s timeout.</li>
+<li><strong>Bring your own AI key.</strong> Users pay their own model costs; keys are encrypted with AES-GCM.</li>
+<li><strong>Feature flags for big rewrites.</strong> <code>USE_UNIFIED_OBSERVATION_PROMPT</code> and <code>USE_PANEL_CAST_RESOLVER</code> let the "Phase 4" pipeline replace the old one gradually, with explicit overrides to roll back.</li>
+<li><strong>Exact dependency pinning plus a constraints file</strong>, after a transitive upgrade broke production (BUG-003).</li>
+<li><strong>Fail closed on config.</strong> A missing base URL makes <code>/health</code> return 503 rather than assuming localhost.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-8" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li><strong>Identity drift and "monster contamination"</strong> (a monster's traits leaking onto a human character): solved with the resolver's distinct-identity and continuity stages.</li>
+<li><strong>Audio running ahead of the picture</strong>: solved by frame-accurate duration, retiming from decoded audio, and <code>narration_compactor.py</code>, which trims descriptive narration to one spoken beat per panel.</li>
+<li><strong>Hindi text losing its consonants</strong> (only floating diacritics survived a cleanup step): fixed with script-aware guards.</li>
+<li><strong>Gzip truncation in the proxy</strong>: it forwarded the compressed <code>content-length</code> after <code>fetch</code> had already decompressed the body. Fixed in 12.1.0.</li>
+<li><strong>A leaked key in the legacy desktop folder</strong>: the key was revoked, history was rewritten with <code>git filter-repo</code>, and gitleaks now runs in CI.</li>
+<li><strong>A broken queue path that still built cleanly</strong>: a CI job now enqueues a real job into Redis and checks that a real worker runs it.</li>
+<li>The developer used AI coding agents heavily for planning and audits; the history includes five "stress-test rounds" and a 52-step remediation PR.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-8" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>Same-origin proxy, server-held bearer tokens, SameSite strict cookies, CSRF origin checks, CSP and HSTS headers, request body limits, and API docs disabled by default.</li>
+<li>SSRF (server-side request forgery, tricking the server into fetching internal URLs) fixed in cast-crop fetching; an IDOR (insecure direct object reference, reading another user's data by guessing an ID) fixed by scoping panel-cutter writes to <code>user_id</code>.</li>
+<li>Rate limits in Redis with an in-memory fallback, for example 15 login attempts per minute per IP. Billing webhooks are deduplicated by a unique <code>(provider, event_id)</code> index. Secrets are compared with <code>hmac.compare_digest</code> to avoid timing leaks.</li>
+<li>Performance: parallel observations, chunked bulk writes, a four-entry source image cache, indexes added to stay under MongoDB's 32 MB in-memory sort limit, and TTS reuse by fingerprint.</li>
+</ul>
+</section>
+<section id="how-to-run-it-8" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb14"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><span class="fu">cp</span> api/.env.example       api/.env</span>
+<span id="cb14-2"><span class="fu">cp</span> web/.env.local.example web/.env.local</span>
+<span id="cb14-3"><span class="fu">cp</span> worker/.env.example    worker/.env</span>
+<span id="cb14-4"><span class="ex">./scripts/dev.sh</span>     <span class="co"># venv, deps, Redis, API :8000, worker, web :3000</span></span>
+<span id="cb14-5"><span class="ex">./scripts/stop.sh</span></span>
+<span id="cb14-6"></span>
+<span id="cb14-7"><span class="bu">cd</span> api <span class="kw">&amp;&amp;</span> <span class="ex">../.venv/bin/python</span> <span class="at">-m</span> pytest app/tests <span class="at">-q</span></span>
+<span id="cb14-8"><span class="bu">cd</span> web <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> test <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> run typecheck <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> run build</span></code></pre></div>
+<p>Use <code>localhost</code>, not <code>127.0.0.1</code>, in the browser, because the CSRF check compares origins exactly.</p>
+</section>
+<section id="learn-more-8" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://fastapi.tiangolo.com/" target="_blank" rel="noopener noreferrer">FastAPI documentation</a></li>
+<li><a href="https://docs.opencv.org/4.x/d9/d61/tutorial_py_morphological_ops.html" target="_blank" rel="noopener noreferrer">OpenCV: Morphological transformations</a></li>
+<li><a href="https://www.hackerfactor.com/blog/index.php?/archives/529-Kind-of-Like-That.html" target="_blank" rel="noopener noreferrer">Neal Krawetz: Kind of Like That (dHash)</a></li>
+<li><a href="https://www.mongodb.com/docs/manual/core/index-partial/" target="_blank" rel="noopener noreferrer">MongoDB: Partial indexes</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder" target="_blank" rel="noopener noreferrer">MDN: MediaRecorder</a></li>
+<li><a href="http://www.mp3-tech.org/programmer/frame_header.html" target="_blank" rel="noopener noreferrer">MP3 frame header format</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=oXlwWbU8l2o" target="_blank" rel="noopener noreferrer">OpenCV Course - Full Tutorial with Python</a></li>
+<li><a href="https://www.youtube.com/watch?v=BPRKBQwEHe0" target="_blank" rel="noopener noreferrer">FastAPI in 15 Minutes: The Ultimate Crash Course for Beginners</a></li>
+<li><a href="https://www.youtube.com/watch?v=wjZofJX0v4M" target="_blank" rel="noopener noreferrer">Transformers, the tech behind LLMs | Deep Learning Chapter 5</a></li>
+<li><a href="https://www.youtube.com/watch?v=Sklc_fQBmcs" target="_blank" rel="noopener noreferrer">Next.js in 100 Seconds // Plus Full Beginner's Tutorial</a></li>
+</ul>
+</section>
+</section>
+<section id="manga-recap-studio-from-batch-pipeline-to-panel-studio" class="level2">
+<h2>Manga Recap Studio: From Batch Pipeline to Panel Studio</h2>
+<section id="at-a-glance-9" class="level3">
+<h3>At a Glance</h3>
+<p>Manga Recap Studio is a fork of an open-source 2024 project that turned a whole manga volume PDF into a narrated recap video using GPT vision, classical computer vision, and ElevenLabs voices. Vijay's contribution (one large commit adding about 2,000 lines) reshaped it into a local, interactive, per-panel narration studio built on Streamlit: upload panel images, generate one to three narration lines per panel in English or Hindi, edit them, mark them done, and export a script for TTS or a video editor. It is the ancestor of the ideas that became Recap Verse: per-panel narration, a cast list, and human review. Double-click launchers make it usable by non-programmers on Windows and macOS.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Python 3.10+</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Streamlit (studio); MoviePy (batch pipeline)</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>openai, Pillow, tenacity; optional PyMuPDF, OpenCV, torch (CRAFT), elevenlabs</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Local desktop (Windows, macOS, Linux)</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/manga-recap-studio" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/manga-recap-studio</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Working prototype; the Streamlit studio is the maintained path</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-9" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>The original pipeline is like a student writing a book report with footnotes. The student (GPT-4o) reads the volume in seven chunks and writes a 200-word summary in which every sentence ends with a footnote pointing at a page. A clerk then goes to each footnoted page, cuts out the panels, asks the student which panels best illustrate the sentence, has a voice actor read the sentence, and shows those panels while the sentence plays.</p>
+<p>The newer studio is simpler: you hand it panels one at a time, it suggests a line for each, and you fix it before moving on.</p>
+</section>
+<section id="architecture-9" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> Studio path (Vijay)
+   launcher.py -&gt; .venv (pip only if requirements hash changed)
+     -&gt; streamlit run gui_panels.py
+   gui_panels.py -&gt; gui_storage.py (project.json)
+                 -&gt; gui_styles.py (CSS)
+                 -&gt; panel_narrate.narrate_panels() -&gt; OpenAI
+   disk: panel_runs/&lt;project&gt;/{panels/, narration.json/.txt}
+
+ Batch path (original fork)
+   app.py
+    1 manga_extraction  (PyMuPDF: 512px + full-res base64)
+    2 vision_analysis   (find profile and chapter pages)
+    3 split into 7 jobs on chapter boundaries
+    4 GPT-4o summary per job with [^{n}] citations
+    5 citation_processing -&gt; movie_script
+    6 panel_extractor (OpenCV gutters + CRAFT text)
+    7 pick important panels per sentence (threads)
+    8 movie_director: ElevenLabs + MoviePy -&gt; recap.mp4</code></pre>
+</section>
+<section id="deep-dive-9" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Two resolutions per page.</strong> <code>manga_extraction.py</code> renders each PDF page with PyMuPDF and keeps two base64 arrays: a copy scaled into a 512 by 512 box (sent to GPT in "low detail" mode, which is cheap) and the full-resolution page (used for cropping panels and video). <code>split_volume_into_parts</code> divides the volume into seven jobs and snaps each boundary to the nearest chapter-start page so no chapter is split.</p>
+<p><strong>Few-shot page classification.</strong> <code>vision_analysis.detect_important_pages</code> shows the model example character-profile pages and chapter-start pages from two reference PDFs the user provides, then 20 unknown pages, and asks for JSON listing which are which. Few-shot prompting means teaching by example inside the prompt instead of training a model. If <code>json.loads</code> fails, the raw text is sent to <code>gpt-3.5-turbo</code> in JSON mode to be repaired, a common 2024 pattern before strict structured outputs existed.</p>
+<p><strong>Citations as the bridge between text and pictures.</strong> The summary prompt demands an inline citation <code>[^{image_index}]</code> after every claim. Models often mangle the format, so <code>citation_processing.py</code> normalizes it first:</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><span class="kw">def</span> clean_and_relocate_citations_sequence(text):</span>
+<span id="cb16-2">    cleaned_text <span class="op">=</span> (</span>
+<span id="cb16-3">        text.replace(<span class="st">" ^["</span>, <span class="st">"[^"</span>)</span>
+<span id="cb16-4">        .replace(<span class="st">"^["</span>, <span class="st">"[^"</span>)</span>
+<span id="cb16-5">        .replace(<span class="st">" [^"</span>, <span class="st">"[^"</span>)</span>
+<span id="cb16-6">        .replace(<span class="st">"[^^"</span>, <span class="st">"[^"</span>)</span>
+<span id="cb16-7">    )</span>
+<span id="cb16-8">    pattern <span class="op">=</span> re.<span class="bu">compile</span>(<span class="vs">r"</span><span class="kw">(</span>(?:<span class="ch">\[\^\{</span><span class="dv">\d</span><span class="op">+</span><span class="ch">\}\]</span>)<span class="op">+</span><span class="kw">)(</span><span class="ch">\.</span><span class="kw">)</span><span class="vs">"</span>)</span>
+<span id="cb16-9">    relocated_text <span class="op">=</span> re.sub(pattern, <span class="vs">r"</span><span class="ch">\2\1</span><span class="vs">"</span>, cleaned_text)</span>
+<span id="cb16-10">    <span class="cf">return</span> relocated_text</span></code></pre></div>
+<p>The regex finds a run of citations immediately before a period and swaps them so the period comes first. The text is then split on citation markers into blocks of <code>{text, citations}</code>, out-of-range indices are dropped, and uncited blocks are merged into a neighbour so every narration segment has an image.</p>
+<p><strong>Panel extraction by gutters.</strong> The vendored <code>panel_extractor</code> assumes panels are separated by white gutters:</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><span class="kw">def</span> _generate_panel_blocks(<span class="va">self</span>, img):</span>
+<span id="cb17-2">    img <span class="op">=</span> img <span class="cf">if</span> <span class="bu">len</span>(img.shape) <span class="op">==</span> <span class="dv">2</span> <span class="cf">else</span> img[:, :, <span class="dv">0</span>]</span>
+<span id="cb17-3">    blur <span class="op">=</span> cv2.GaussianBlur(img, (<span class="dv">5</span>, <span class="dv">5</span>), <span class="dv">0</span>)</span>
+<span id="cb17-4">    thresh <span class="op">=</span> cv2.threshold(blur, <span class="dv">230</span>, <span class="dv">255</span>,</span>
+<span id="cb17-5">                           cv2.THRESH_BINARY)[<span class="dv">1</span>]</span>
+<span id="cb17-6">    cv2.rectangle(thresh, (<span class="dv">0</span>, <span class="dv">0</span>), <span class="bu">tuple</span>(img.shape[::<span class="op">-</span><span class="dv">1</span>]),</span>
+<span id="cb17-7">                  (<span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">0</span>), <span class="dv">10</span>)</span>
+<span id="cb17-8">    num_labels, labels, stats, centroids <span class="op">=</span> <span class="op">\</span></span>
+<span id="cb17-9">        cv2.connectedComponentsWithStats(thresh, <span class="dv">4</span>, cv2.CV_32S)</span>
+<span id="cb17-10">    ...</span>
+<span id="cb17-11">    ind <span class="op">=</span> np.argsort(stats[:, <span class="dv">4</span>])[::<span class="op">-</span><span class="dv">1</span>][<span class="dv">1</span>]</span>
+<span id="cb17-12">    panel_block_mask <span class="op">=</span> ((labels <span class="op">==</span> ind) <span class="op">*</span> <span class="dv">255</span>).astype(<span class="st">"uint8"</span>)</span>
+<span id="cb17-13">    <span class="cf">return</span> panel_block_mask</span></code></pre></div>
+<p>Thresholding at 230 makes near-white pixels foreground. A black border is drawn so the outer margin does not connect everything. The connected components are sorted by area; the largest is the background, so the second largest is the gutter network. Contours of the remaining holes become panels, filtered to between 2% and 90% of the page area. A histogram check first skips "paper-texture" pages (at least 35% mid-tones) that have no clean gutters. CRAFT, a neural text detector with a VGG16 backbone that predicts per-pixel "character region" and "link" scores, can optionally erase text from panels.</p>
+<p><strong>Video assembly.</strong> <code>movie_director.py</code> calls ElevenLabs asynchronously under <code>asyncio.Semaphore(5)</code> (at most five requests in flight), divides each sentence's audio duration evenly across its chosen panels, letterboxes them on a 1280 by 720 canvas, and writes H.264 and AAC at 24 fps with MoviePy.</p>
+<p><strong>Per-panel narration with a language lock (<code>panel_narrate.py</code>).</strong> Each image becomes one OpenAI Responses API call (default <code>gpt-4.1-mini</code>). Vision models tend to drift back to English, so the code states an "OUTPUT LANGUAGE LOCK" in both the system instructions and the user prompt, then verifies the script:</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb18-1">DEVANAGARI_RE <span class="op">=</span> re.<span class="bu">compile</span>(<span class="vs">r"</span><span class="pp">[ऀ-ॿ]</span><span class="vs">"</span>)</span>
+<span id="cb18-2"></span>
+<span id="cb18-3"><span class="kw">def</span> _output_in_target_language(text, language):</span>
+<span id="cb18-4">    <span class="cf">if</span> <span class="kw">not</span> text:</span>
+<span id="cb18-5">        <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb18-6">    low <span class="op">=</span> (language <span class="kw">or</span> <span class="st">""</span>).strip().lower()</span>
+<span id="cb18-7">    <span class="cf">if</span> low <span class="op">==</span> <span class="st">"hindi"</span>:</span>
+<span id="cb18-8">        <span class="cf">return</span> <span class="bu">bool</span>(DEVANAGARI_RE.search(text))</span>
+<span id="cb18-9">    <span class="cf">if</span> low <span class="op">==</span> <span class="st">"english"</span>:</span>
+<span id="cb18-10">        <span class="cf">return</span> <span class="kw">not</span> DEVANAGARI_RE.search(text)</span>
+<span id="cb18-11">    <span class="cf">return</span> <span class="va">True</span></span>
+<span id="cb18-12">...</span>
+<span id="cb18-13">narration <span class="op">=</span> _call()</span>
+<span id="cb18-14"><span class="cf">if</span> <span class="kw">not</span> _output_in_target_language(narration, language):</span>
+<span id="cb18-15">    narration <span class="op">=</span> _call(retry_hint)</span></code></pre></div>
+<p>Devanagari, the Hindi script, occupies the Unicode block U+0900 to U+097F, so one regex is a cheap validator. A failure triggers a single "STRICT RETRY".</p>
+<p><strong>Casting (<code>cast_builder.py</code>).</strong> Five to fifteen clear-face panels go to the model with a strict JSON schema: <code>cast[{id, name, appearance[], notes[], aliases[], confidence}]</code>. Unknown characters become <code>Unknown_1</code>, <code>Unknown_2</code>. IDs are deterministic so casts merge across runs without a database:</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb19-1"><span class="kw">def</span> _stable_id(name, appearance):</span>
+<span id="cb19-2">    seed <span class="op">=</span> (name <span class="kw">or</span> <span class="st">""</span>).strip().lower() <span class="op">+</span> <span class="st">"||"</span> <span class="op">+</span> <span class="st">" "</span>.join(</span>
+<span id="cb19-3">        [a.strip().lower() <span class="cf">for</span> a <span class="kw">in</span> (appearance <span class="kw">or</span> [])])</span>
+<span id="cb19-4">    h <span class="op">=</span> hashlib.sha1(seed.encode(<span class="st">"utf-8"</span>)).hexdigest()[:<span class="dv">10</span>]</span>
+<span id="cb19-5">    <span class="cf">return</span> <span class="ss">f"char_</span><span class="sc">{</span>h<span class="sc">}</span><span class="ss">"</span></span></code></pre></div>
+<p><code>_merge_cast</code> prefers a real name over "Unknown", unions appearance lists case-insensitively, turns a conflicting new name into an alias, and keeps the higher confidence. <code>panel_narrate_casted.py</code> injects the cast into the prompt with the rule "never create a brand-new name", and writes <code>narration.json</code> after every panel so a crash loses nothing. These casting modules are CLI tools for now; the GUI uses the plain narrator.</p>
+<p><strong>Streamlit state.</strong> Streamlit reruns the whole script on every click, so durable state lives on disk in <code>panel_runs/&lt;project&gt;/project.json</code> (<code>panels[{filename, status}]</code>, selected panel, auto-advance flag), reconciled against the panels folder on every run. Status flows <code>new</code>, <code>narrated</code>, <code>done</code>. <code>launcher.py</code> creates <code>.venv</code> and reinstalls requirements only when their SHA-256 hash changes.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-9" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Low-detail images for the model, full-res for output</strong>: cheap tokens, but small dialogue text can be misread.</li>
+<li><strong>Classical gutter detection</strong>: fast and training-free, but dark or borderless pages fall back to whole pages.</li>
+<li><strong>The pivot to per-panel narration</strong>: drops PDF parsing, ElevenLabs, and video from the default install, and puts a human in the loop for every line.</li>
+<li><strong>JSON files instead of a database</strong>: zero setup, but no locking.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-9" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li>History shows the original author moving from full pages to panels in the video ("showing panels in video instead of full pages"), then <code>gpt-4-vision-preview</code> to <code>gpt-4o</code>, then community fixes for MoviePy v2 (<code>with_duration</code>, <code>with_audio</code>) and the citation format change from <code>[^n]</code> to <code>[^{n}]</code>.</li>
+<li>Vijay's additions solved installation pain (hash-cached venv launchers), language drift (lock plus regex check plus retry), and identity consistency (stable cast IDs and merging).</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-9" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>Keys come from <code>.env</code> via python-dotenv; the GUI refuses to start without <code>OPENAI_API_KEY</code> and maps 401, rate-limit, and connection errors to friendly banners.</li>
+<li>Panel images leave the machine as base64 data URLs to OpenAI. Project names are not sanitized for path separators, a minor local path-traversal risk.</li>
+<li>Per-panel calls in the GUI are sequential; the batch path keeps a volume in memory twice as base64; CRAFT weights are about 83 MB and need PyTorch.</li>
+</ul>
+</section>
+<section id="how-to-run-it-9" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb20"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb20-1"><span class="ex">./run_mac.command</span>            <span class="co"># or double-click run_windows.bat</span></span>
+<span id="cb20-2"><span class="co"># manual:</span></span>
+<span id="cb20-3"><span class="ex">python</span> <span class="at">-m</span> venv .venv</span>
+<span id="cb20-4"><span class="ex">.venv/bin/python</span> <span class="at">-m</span> pip install <span class="at">-r</span> requirements.txt</span>
+<span id="cb20-5"><span class="ex">.venv/bin/python</span> <span class="at">-m</span> streamlit run gui_panels.py   <span class="co"># :8501</span></span>
+<span id="cb20-6"><span class="co"># CLIs and the original pipeline:</span></span>
+<span id="cb20-7"><span class="ex">python</span> cast_builder.py <span class="at">--in-dir</span> panels <span class="at">--out</span> cast.json</span>
+<span id="cb20-8"><span class="ex">python</span> panel_narrate.py <span class="at">--in-dir</span> panels <span class="at">--out-dir</span> out <span class="dt">\</span></span>
+<span id="cb20-9">  <span class="at">--language</span> Hindi</span>
+<span id="cb20-10"><span class="ex">pip</span> install <span class="at">-r</span> requirements-full.txt</span>
+<span id="cb20-11"><span class="ex">python</span> app.py <span class="at">--manga</span> naruto <span class="at">--volume-number</span> 10</span></code></pre></div>
+</section>
+<section id="learn-more-9" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://docs.streamlit.io/" target="_blank" rel="noopener noreferrer">Streamlit documentation</a></li>
+<li><a href="https://docs.opencv.org/4.x/d3/dc0/group__imgproc__shape.html" target="_blank" rel="noopener noreferrer">OpenCV: Connected components</a></li>
+<li><a href="https://arxiv.org/abs/1904.01941" target="_blank" rel="noopener noreferrer">CRAFT: Character Region Awareness for Text Detection (paper)</a></li>
+<li><a href="https://platform.openai.com/docs/guides/images-vision" target="_blank" rel="noopener noreferrer">OpenAI: Images and vision guide</a></li>
+<li><a href="https://zulko.github.io/moviepy/" target="_blank" rel="noopener noreferrer">MoviePy documentation</a></li>
+<li><a href="https://www.unicode.org/charts/PDF/U0900.pdf" target="_blank" rel="noopener noreferrer">Unicode Devanagari block chart</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=D0D4Pa22iG0" target="_blank" rel="noopener noreferrer">Streamlit: The Fastest Way To Build Python Apps?</a></li>
+<li><a href="https://www.youtube.com/watch?v=oXlwWbU8l2o" target="_blank" rel="noopener noreferrer">OpenCV Course - Full Tutorial with Python</a></li>
+<li><a href="https://www.youtube.com/watch?v=ZNrteLp_SvY" target="_blank" rel="noopener noreferrer">Optical Character Recognition (OCR) - Computerphile</a></li>
+<li><a href="https://www.youtube.com/watch?v=aircAruvnKk" target="_blank" rel="noopener noreferrer">But what is a neural network? | Deep learning chapter 1</a></li>
+</ul>
+</section>
+</section>
+<section id="panel-narrate-ai-the-same-idea-as-hosted-saas" class="level2">
+<h2>Panel Narrate AI: The Same Idea as Hosted SaaS</h2>
+<section id="at-a-glance-10" class="level3">
+<h3>At a Glance</h3>
+<p>Panel Narrate AI (branded "Manga Recap" in the UI) re-implements per-panel narration as a multi-user web service. Users sign up, store their own OpenAI or Gemini API key (encrypted on the server), create projects, upload panel images, and get narration with continuity across panels. It was built almost entirely through Lovable, an AI app builder whose bot authored most of the 17 commits, on top of Supabase for the database, auth, storage, realtime updates, and serverless edge functions. It sits between Manga Recap Studio (local and single user) and Recap Verse (production) in the evolution of the idea.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>TypeScript (React, Deno), SQL</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>React 18, Vite 5, React Router 6, shadcn/ui, Tailwind 3</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>supabase-js, framer-motion, sonner, Vitest</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Web; Supabase (Postgres, Auth, Storage, Realtime, Edge Functions)</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/panel-narrate-ai" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/panel-narrate-ai</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Early; panels, auth, keys, admin work; a UI rebuild left Cast, Processing, and Export as placeholders</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-10" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>You give the app a stack of panels. For each panel it asks the AI twice. First: "Describe exactly what you see. Do not tell a story." Second, without the picture: "Here are those facts and the last six lines you wrote; now write the next line of the story in our house style." Splitting looking from writing is like having a witness give a statement before a novelist dramatizes it, which reduces made-up details.</p>
+</section>
+<section id="architecture-10" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> Browser (React SPA, Vite)
+   |-- supabase-js: table CRUD under RLS
+   |-- Storage: panel-images/&lt;uid&gt;/&lt;project&gt;/...
+   |      signed URLs (1 hour) for previews
+   '-- functions.invoke(...)
+          |
+          v
+ Supabase Edge Functions (Deno)
+   manage-api-key     save (AES-GCM encrypt) / test
+   generate-narration 2-pass vision narration loop
+   admin-actions      update-plan (admin only)
+          |                      |
+     Postgres + RLS        OpenAI gpt-4o / Gemini 2.0 Flash
+     (jobs on Realtime)    (user's own decrypted key)</code></pre>
+</section>
+<section id="deep-dive-10" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Schema.</strong> The first migration defines enums (<code>app_role</code>, <code>plan_type</code>, <code>api_provider</code>, <code>job_status</code>) and tables <code>user_roles</code>, <code>profiles</code>, <code>user_plans</code>, <code>api_keys</code> (<code>encrypted_key</code>, <code>masked_key</code>, unique per user and provider), <code>projects</code> (with a <code>style_settings</code> JSONB default such as <code>tone: "gen_z"</code>, <code>max_words: 55</code>, <code>history_panels: 6</code>, and flags to ban filler and camera language), <code>panels</code>, <code>jobs</code> (progress counters, <code>error_log</code>), and <code>narrations</code> (one per panel, with the raw <code>observation_data</code>). A trigger on <code>auth.users</code> creates the profile, the <code>user</code> role, and a <code>free</code> plan for each signup. The second migration adds <code>characters</code> and <code>character_samples</code> for a planned cast feature.</p>
+<p>Ownership is enforced by RLS policies that walk a chain of joins, plus a <code>SECURITY DEFINER</code> role helper that avoids recursive policy checks:</p>
+<div class="sourceCode" id="cb22"><pre class="sourceCode sql"><code class="sourceCode sql"><span id="cb22-1"><span class="kw">CREATE</span> <span class="kw">OR</span> <span class="kw">REPLACE</span> <span class="kw">FUNCTION</span> <span class="kw">public</span>.has_role(</span>
+<span id="cb22-2">  _user_id UUID, _role app_role)</span>
+<span id="cb22-3">RETURNS <span class="dt">BOOLEAN</span> LANGUAGE sql STABLE</span>
+<span id="cb22-4">SECURITY <span class="kw">DEFINER</span> <span class="kw">SET</span> search_path <span class="op">=</span> <span class="kw">public</span></span>
+<span id="cb22-5"><span class="kw">AS</span> $$</span>
+<span id="cb22-6">  <span class="kw">SELECT</span> <span class="kw">EXISTS</span> (<span class="kw">SELECT</span> <span class="dv">1</span> <span class="kw">FROM</span> <span class="kw">public</span>.user_roles</span>
+<span id="cb22-7">    <span class="kw">WHERE</span> user_id <span class="op">=</span> _user_id <span class="kw">AND</span> <span class="kw">role</span> <span class="op">=</span> _role)</span>
+<span id="cb22-8">$$;</span>
+<span id="cb22-9"><span class="op">..</span>.</span>
+<span id="cb22-10"><span class="kw">CREATE</span> POLICY <span class="ot">"Users can CRUD own narrations"</span></span>
+<span id="cb22-11">  <span class="kw">ON</span> <span class="kw">public</span>.narrations <span class="cf">FOR</span> <span class="kw">ALL</span> <span class="kw">TO</span> <span class="kw">authenticated</span></span>
+<span id="cb22-12">  <span class="kw">USING</span> (<span class="kw">EXISTS</span> (</span>
+<span id="cb22-13">    <span class="kw">SELECT</span> <span class="dv">1</span> <span class="kw">FROM</span> <span class="kw">public</span>.panels</span>
+<span id="cb22-14">    <span class="kw">JOIN</span> <span class="kw">public</span>.projects <span class="kw">ON</span> projects.<span class="kw">id</span> <span class="op">=</span> panels.project_id</span>
+<span id="cb22-15">    <span class="kw">WHERE</span> panels.<span class="kw">id</span> <span class="op">=</span> narrations.panel_id</span>
+<span id="cb22-16">      <span class="kw">AND</span> projects.user_id <span class="op">=</span> auth.<span class="fu">uid</span>()));</span></code></pre></div>
+<p>A narration is visible only if its panel belongs to a project owned by the caller. Storage uses the same per-user folder rule as Novelsin: the first path segment must equal <code>auth.uid()</code>.</p>
+<p><strong>Bring-your-own-key encryption.</strong> <code>manage-api-key</code> encrypts keys with AES-GCM via the WebCrypto API built into Deno:</p>
+<div class="sourceCode" id="cb23"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb23-1"><span class="kw">async</span> <span class="kw">function</span> <span class="fu">encryptKey</span>(key<span class="op">:</span> <span class="dt">string</span><span class="op">,</span> secret<span class="op">:</span> <span class="dt">string</span>) {</span>
+<span id="cb23-2">  <span class="kw">const</span> enc <span class="op">=</span> <span class="kw">new</span> <span class="fu">TextEncoder</span>()<span class="op">;</span></span>
+<span id="cb23-3">  <span class="kw">const</span> keyMaterial <span class="op">=</span> <span class="cf">await</span> crypto<span class="op">.</span><span class="at">subtle</span><span class="op">.</span><span class="fu">importKey</span>(<span class="st">"raw"</span><span class="op">,</span></span>
+<span id="cb23-4">    enc<span class="op">.</span><span class="fu">encode</span>(secret<span class="op">.</span><span class="fu">padEnd</span>(<span class="dv">32</span>)<span class="op">.</span><span class="fu">slice</span>(<span class="dv">0</span><span class="op">,</span> <span class="dv">32</span>))<span class="op">,</span></span>
+<span id="cb23-5">    <span class="st">"AES-GCM"</span><span class="op">,</span> <span class="kw">false</span><span class="op">,</span> [<span class="st">"encrypt"</span>])<span class="op">;</span></span>
+<span id="cb23-6">  <span class="kw">const</span> iv <span class="op">=</span> crypto<span class="op">.</span><span class="fu">getRandomValues</span>(<span class="kw">new</span> <span class="bu">Uint8Array</span>(<span class="dv">12</span>))<span class="op">;</span></span>
+<span id="cb23-7">  <span class="kw">const</span> encrypted <span class="op">=</span> <span class="cf">await</span> crypto<span class="op">.</span><span class="at">subtle</span><span class="op">.</span><span class="fu">encrypt</span>(</span>
+<span id="cb23-8">    { name<span class="op">:</span> <span class="st">"AES-GCM"</span><span class="op">,</span> iv }<span class="op">,</span> keyMaterial<span class="op">,</span> enc<span class="op">.</span><span class="fu">encode</span>(key))<span class="op">;</span></span>
+<span id="cb23-9">  <span class="kw">const</span> combined <span class="op">=</span> <span class="kw">new</span> <span class="bu">Uint8Array</span>(</span>
+<span id="cb23-10">    iv<span class="op">.</span><span class="at">length</span> <span class="op">+</span> <span class="kw">new</span> <span class="bu">Uint8Array</span>(encrypted)<span class="op">.</span><span class="at">length</span>)<span class="op">;</span></span>
+<span id="cb23-11">  combined<span class="op">.</span><span class="fu">set</span>(iv)<span class="op">;</span></span>
+<span id="cb23-12">  combined<span class="op">.</span><span class="fu">set</span>(<span class="kw">new</span> <span class="bu">Uint8Array</span>(encrypted)<span class="op">,</span> iv<span class="op">.</span><span class="at">length</span>)<span class="op">;</span></span>
+<span id="cb23-13">  <span class="cf">return</span> <span class="fu">btoa</span>(<span class="bu">String</span><span class="op">.</span><span class="fu">fromCharCode</span>(<span class="op">...</span>combined))<span class="op">;</span></span>
+<span id="cb23-14">}</span></code></pre></div>
+<p>AES-GCM is authenticated encryption: it hides the data and detects tampering. A fresh random 12-byte IV (initialization vector) per encryption is required for GCM's security, and storing it in front of the ciphertext is the standard layout. The weak spot is key derivation: the server secret is padded or sliced to 32 bytes instead of going through a KDF (key derivation function) such as HKDF or PBKDF2. Only <code>masked_key</code> (first four and last four characters) ever returns to the browser. The <code>test</code> action decrypts the key and calls the provider's model list endpoint to prove it works.</p>
+<p><strong>Two-pass narration (<code>generate-narration</code>).</strong> The function authenticates the caller, loads the project, decrypts the user's key, picks <code>callOpenAI</code> or <code>callGemini</code>, inserts a <code>jobs</code> row, and loops through panels in order:</p>
+<div class="sourceCode" id="cb24"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb24-1"><span class="kw">const</span> prevPanelIds <span class="op">=</span> allPanelIds</span>
+<span id="cb24-2">  <span class="op">.</span><span class="fu">slice</span>(<span class="bu">Math</span><span class="op">.</span><span class="fu">max</span>(<span class="dv">0</span><span class="op">,</span> panel<span class="op">.</span><span class="at">panel_index</span> <span class="op">-</span> historySize)<span class="op">,</span></span>
+<span id="cb24-3">         panel<span class="op">.</span><span class="at">panel_index</span>)</span>
+<span id="cb24-4">  <span class="op">.</span><span class="fu">map</span>((p<span class="op">:</span> <span class="dt">any</span>) <span class="kw">=&gt;</span> p<span class="op">.</span><span class="at">id</span>)<span class="op">;</span></span>
+<span id="cb24-5"><span class="cf">for</span> (<span class="kw">const</span> pid <span class="kw">of</span> prevPanelIds) {</span>
+<span id="cb24-6">  <span class="cf">if</span> (narrationMap[pid]) {</span>
+<span id="cb24-7">    contextText <span class="op">+=</span> <span class="vs">`Previous panel: </span><span class="sc">${</span>narrationMap[pid]<span class="sc">}\n</span><span class="vs">`</span><span class="op">;</span></span>
+<span id="cb24-8">  }</span>
+<span id="cb24-9">}</span>
+<span id="cb24-10"><span class="co">// Pass 1: Observation (vision)</span></span>
+<span id="cb24-11"><span class="kw">const</span> observation <span class="op">=</span> <span class="cf">await</span> <span class="fu">callAI</span>(decryptedKey<span class="op">,</span> messages1<span class="op">,</span></span>
+<span id="cb24-12">                                 base64)<span class="op">;</span></span>
+<span id="cb24-13"><span class="co">// Pass 2: Narration (text only)</span></span>
+<span id="cb24-14"><span class="kw">const</span> narrationText <span class="op">=</span> <span class="cf">await</span> <span class="fu">callAI</span>(decryptedKey<span class="op">,</span> messages2)<span class="op">;</span></span>
+<span id="cb24-15"><span class="cf">await</span> supabase<span class="op">.</span><span class="fu">from</span>(<span class="st">"narrations"</span>)<span class="op">.</span><span class="fu">upsert</span>({</span>
+<span id="cb24-16">  panel_id<span class="op">:</span> panel<span class="op">.</span><span class="at">id</span><span class="op">,</span> narration_text<span class="op">:</span> narrationText<span class="op">,</span></span>
+<span id="cb24-17">  observation_data<span class="op">:</span> { raw<span class="op">:</span> observation }<span class="op">,</span> is_edited<span class="op">:</span> <span class="kw">false</span><span class="op">,</span></span>
+<span id="cb24-18">}<span class="op">,</span> { onConflict<span class="op">:</span> <span class="st">"panel_id"</span> })<span class="op">;</span></span></code></pre></div>
+<p>A sliding window of the previous six narrations gives continuity without sending the whole chapter. Pass 2 is text only, so it is cheaper than a second vision call. The system prompt is assembled from <code>style_settings</code>: tone, sentence and word limits, connected flow ("Then", "Meanwhile"), banned scene-setting intros and camera words, and an anti-hallucination rule ("If you're unsure, say 'It looks like...'"). Each panel's failure is logged and the loop continues; progress counters on the <code>jobs</code> row were streamed to the old UI through Supabase Realtime (Postgres change events pushed over a WebSocket).</p>
+<p><strong>Frontend.</strong> <code>AuthContext.tsx</code> holds session, user, admin flag, plan, and whether a key exists. Role and plan lookups are deferred with <code>setTimeout(..., 0)</code> to avoid a known deadlock when querying inside Supabase's auth callback. <code>PanelsTab.tsx</code> sorts uploads with <code>localeCompare(..., { numeric: true })</code> so <code>2.png</code> comes before <code>10.png</code>, uploads to <code>uid/projectId/timestamp-name</code>, and inserts a panel row per file. Free plans allow 3 projects and 30 panels; Pro allows 300 panels.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-10" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Bring your own key</strong>: the platform pays nothing for AI, at the cost of holding a server secret that can decrypt every stored key.</li>
+<li><strong>Observe, then narrate</strong>: fewer hallucinations and an audit trail in <code>observation_data</code>, but two calls per panel.</li>
+<li><strong>Style as JSONB</strong>: prompt rules evolve without migrations.</li>
+<li><strong>Edge functions use the service role</strong> for cross-table work and filter by <code>user_id</code> manually, which bypasses RLS and therefore needs care.</li>
+<li><strong>AI-built with Lovable</strong>: very fast iteration, with <code>.lovable/plan.md</code> serving as spec and changelog, but the "dark UI" rebuild removed working generation and export screens.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-10" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li><strong>Silent key-save failures</strong>: edge functions read <code>SUPABASE_PUBLISHABLE_KEY</code>, which Supabase does not inject. Switching to the auto-provided <code>SUPABASE_ANON_KEY</code> fixed <code>manage-api-key</code> and <code>generate-narration</code>; <code>admin-actions</code> still has the old name.</li>
+<li><strong>Users without a key were bounced from the dashboard</strong> to settings. The gate was removed, since a key is only needed to generate.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-10" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>Good: RLS on every table and on storage, a private bucket with short-lived signed URLs, encrypted and masked keys, and server-side admin checks.</li>
+<li>Risks: <code>.env</code> is committed (it contains public Supabase identifiers, but this is poor hygiene); admin emails are hard-coded in a migration; the <code>singlePanelId</code> path in <code>generate-narration</code> is not scoped to the caller's project, an IDOR that could let one user overwrite another user's narration; CORS is <code>*</code>; quotas are enforced only in the browser; no rate limiting; the Gemini key travels in a URL query string.</li>
+<li>Performance: the whole chapter runs sequentially inside one edge-function invocation, which can hit wall-clock limits; <code>btoa(String.fromCharCode(...bytes))</code> can overflow the call stack for large images; signed URLs are requested one by one instead of with <code>createSignedUrls</code>.</li>
+</ul>
+</section>
+<section id="how-to-run-it-10" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb25"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb25-1"><span class="ex">npm</span> i                <span class="co"># or bun install</span></span>
+<span id="cb25-2"><span class="ex">npm</span> run dev          <span class="co"># Vite on http://localhost:8080</span></span>
+<span id="cb25-3"><span class="ex">npm</span> test             <span class="co"># vitest</span></span>
+<span id="cb25-4"><span class="ex">supabase</span> db push</span>
+<span id="cb25-5"><span class="ex">supabase</span> functions deploy manage-api-key generate-narration <span class="dt">\</span></span>
+<span id="cb25-6">  admin-actions</span>
+<span id="cb25-7"><span class="co"># function secret needed: ENCRYPTION_SECRET</span></span></code></pre></div>
+</section>
+<section id="learn-more-10" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://supabase.com/docs/guides/functions" target="_blank" rel="noopener noreferrer">Supabase Edge Functions</a></li>
+<li><a href="https://supabase.com/docs/guides/realtime/postgres-changes" target="_blank" rel="noopener noreferrer">Supabase Realtime: Postgres changes</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/encrypt" target="_blank" rel="noopener noreferrer">MDN: SubtleCrypto.encrypt (AES-GCM)</a></li>
+<li><a href="https://supabase.com/docs/guides/storage/security/access-control" target="_blank" rel="noopener noreferrer">Supabase Storage access control</a></li>
+<li><a href="https://vite.dev/guide/" target="_blank" rel="noopener noreferrer">Vite guide</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=zBZgdTb-dns" target="_blank" rel="noopener noreferrer">Supabase in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=tKMN7AelIZs" target="_blank" rel="noopener noreferrer">Supabase Row Level Security (RLS) 101</a></li>
+<li><a href="https://www.youtube.com/watch?v=Tn6-PIqc4UM" target="_blank" rel="noopener noreferrer">React in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=mr15Xzb1Ook" target="_blank" rel="noopener noreferrer">Tailwind in 100 Seconds</a></li>
+</ul>
+</section>
+</section>
+<section id="novelsin-a-serialized-fiction-platform" class="level2">
+<h2>Novelsin: A Serialized Fiction Platform</h2>
+<section id="at-a-glance-11" class="level3">
+<h3>At a Glance</h3>
+<p>Novelsin is a web platform for reading and writing serialized fiction, in the same family as Royal Road, Wattpad, and WebNovel. Readers browse a catalog, read chapters in a customizable reader, bookmark, like, rate, react, and comment. Authors manage novels and chapters (including scheduled release and volumes) from a creator dashboard, and admins moderate content and edit site branding. It is designed to stay fast for novels with thousands of chapters, and it pushes nearly all authorization down into the database.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>TypeScript, SQL (PL/pgSQL)</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Next.js 16 (App Router, Turbopack), React 19, Tailwind CSS 4</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td><span class="citation">@supabase/ssr</span>, supabase-js, zod 4, Radix UI, lucide-react</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Web, Vercel + Supabase (Postgres, Auth, Storage)</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/novelsin" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/novelsin</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>v0.1.0, feature-rich early build; no automated tests</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-11" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Think of a public library with a very strict front desk built into the shelves themselves. Anyone can walk in and read published books. Only the author of a book can see their drafts or add a chapter. Only a librarian (admin) can hide a rude note or put a book on the "featured" table. Novelsin enforces these rules inside the database with Row Level Security, so even if the web code had a bug, the shelves would still refuse the wrong person.</p>
+<p>When a reader opens a chapter, the server asks the database for that one chapter's text, the reader's saved font and theme are applied before the page even appears, the view counter ticks up in the background, and any chapter scheduled for "now or earlier" quietly gets published on the way.</p>
+</section>
+<section id="architecture-11" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> Browser
+   |  cookies (Supabase session)
+   v
+ proxy.ts  -- refresh session, gate /dashboard /creator /admin
+   |
+ Next.js App Router (Vercel)
+   (public)  home, browse, novel, chapter, author
+   (auth)    login, signup
+   (dashboard) dashboard, creator
+   admin/    moderation, users, audit, settings
+   |                         |
+ lib/dal/* (reads,        lib/actions/* (Server Actions,
+ cache() per request)     zod-validated writes)
+   |                         |
+   +-----------+-------------+
+               v
+   Supabase: Postgres + RLS + RPCs, Auth, Storage buckets
+   (covers, avatars, branding)</code></pre>
+</section>
+<section id="deep-dive-11" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Routing and the proxy.</strong> Next.js 16 renamed <code>middleware.ts</code> to <code>proxy.ts</code>. Novelsin's proxy builds a cookie-bridging Supabase server client, calls <code>auth.getUser()</code> to refresh the session token, redirects anonymous visitors away from <code>/dashboard</code>, <code>/creator</code>, and <code>/admin</code> to <code>/login?next=...</code>, and bounces signed-in users away from the login and signup pages. Route groups (folders in parentheses) organize layouts without changing URLs: <code>(public)</code>, <code>(auth)</code>, <code>(dashboard)</code>, plus <code>admin/</code>. The admin layout calls <code>verifySession({ role: "admin" })</code>.</p>
+<p><strong>Four Supabase clients.</strong> <code>lib/supabase/server.ts</code> uses the user's cookies, so every query runs under that user's RLS identity. <code>public.ts</code> uses the anon key with no session for catalog reads, the sitemap, and RPCs. <code>browser.ts</code> serves client components. <code>admin.ts</code> holds a service-role client, but grep shows it is never imported, so the app never bypasses RLS at runtime. <code>env.ts</code> validates environment variables lazily and even detects the common mistake of pasting a Supabase dashboard URL instead of the API URL.</p>
+<p><strong>Reads and writes.</strong> Server Components read through a data-access layer (<code>lib/dal/*</code>), wrapped in React's <code>cache()</code> so the same query in one request runs once. Writes are Server Actions (functions that run on the server but are called like local functions from forms) in <code>lib/actions/*</code>, validated with zod schemas, followed by <code>revalidatePath</code> to refresh cached pages.</p>
+<p>The session gate shows a nice security habit: non-admins get a 404 instead of a 403, so the admin area does not even admit it exists.</p>
+<div class="sourceCode" id="cb27"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb27-1"><span class="im">export</span> <span class="kw">async</span> <span class="kw">function</span> <span class="fu">verifySession</span>(options<span class="op">:</span> RequireOptions <span class="op">=</span> {}) {</span>
+<span id="cb27-2">  <span class="kw">const</span> profile <span class="op">=</span> <span class="cf">await</span> <span class="fu">getCurrentUser</span>()<span class="op">;</span></span>
+<span id="cb27-3">  <span class="cf">if</span> (<span class="op">!</span>profile) <span class="fu">redirect</span>(<span class="st">"/login"</span>)<span class="op">;</span></span>
+<span id="cb27-4"></span>
+<span id="cb27-5">  <span class="cf">if</span> (options<span class="op">.</span><span class="at">role</span>) {</span>
+<span id="cb27-6">    <span class="kw">const</span> allowed <span class="op">=</span></span>
+<span id="cb27-7">      options<span class="op">.</span><span class="at">role</span> <span class="op">===</span> <span class="st">"admin"</span></span>
+<span id="cb27-8">        <span class="op">?</span> profile<span class="op">.</span><span class="at">role</span> <span class="op">===</span> <span class="st">"admin"</span></span>
+<span id="cb27-9">        <span class="op">:</span> profile<span class="op">.</span><span class="at">role</span> <span class="op">===</span> options<span class="op">.</span><span class="at">role</span> <span class="op">||</span> profile<span class="op">.</span><span class="at">role</span> <span class="op">===</span> <span class="st">"admin"</span><span class="op">;</span></span>
+<span id="cb27-10">    <span class="cf">if</span> (<span class="op">!</span>allowed) <span class="fu">notFound</span>()<span class="op">;</span></span>
+<span id="cb27-11">  }</span>
+<span id="cb27-12"></span>
+<span id="cb27-13">  <span class="cf">return</span> profile<span class="op">;</span></span>
+<span id="cb27-14">}</span></code></pre></div>
+<p><strong>The schema, phase by phase.</strong> Thirteen migrations in <code>supabase/migrations/</code> tell the evolution better than the six-commit git history:</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Migration</th>
+<th>What it adds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>init_profiles</td>
+<td><code>profiles</code> (citext handle, role reader/creator/admin), signup trigger, <code>is_admin()</code></td>
+</tr>
+<tr>
+<td>phase2_dashboard</td>
+<td><code>novels</code>, author <code>follows</code>, <code>bookmarks</code>, <code>activity_events</code></td>
+</tr>
+<tr>
+<td>phase3_publishing</td>
+<td><code>categories</code>, <code>chapters</code>, <code>novel_tags</code>, threaded <code>comments</code>, <code>ratings</code>, <code>novel_follows</code>, <code>reading_history</code>, <code>covers</code> bucket</td>
+</tr>
+<tr>
+<td>profiles_self_insert</td>
+<td>lets a user create their own missing profile row</td>
+</tr>
+<tr>
+<td>phase4_chapter_system</td>
+<td>scheduled chapters, <code>chapter_reactions</code>, <code>chapter_progress</code>, <code>publish_due_chapters()</code></td>
+</tr>
+<tr>
+<td>phase5_author_profiles</td>
+<td>reconciles drifted <code>profiles</code>, banner and socials, <code>avatars</code> bucket</td>
+</tr>
+<tr>
+<td>phase6_novel_likes</td>
+<td><code>novel_likes</code></td>
+</tr>
+<tr>
+<td>phase7_admin_moderation</td>
+<td><code>featured</code>, hidden comments, <code>reports</code>, <code>audit_logs</code>, admin override policies</td>
+</tr>
+<tr>
+<td>phase8_large_chapter_library</td>
+<td>volumes, views, composite index, <code>increment_chapter_views()</code></td>
+</tr>
+<tr>
+<td>phase9_site_settings</td>
+<td>singleton settings row, <code>branding</code> bucket</td>
+</tr>
+<tr>
+<td>phase9b_reconcile_profiles_role</td>
+<td>renames a drifted <code>"Role"</code> column</td>
+</tr>
+<tr>
+<td>phase10_comment_likes</td>
+<td><code>comment_likes</code></td>
+</tr>
+<tr>
+<td>fix_signup_profile_trigger</td>
+<td>rewrites <code>handle_new_user()</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>RLS (Row Level Security) is a Postgres feature where each table has policies, small boolean SQL expressions evaluated per row, that decide who may select, insert, update, or delete. Every admin policy reuses one helper:</p>
+<div class="sourceCode" id="cb28"><pre class="sourceCode sql"><code class="sourceCode sql"><span id="cb28-1"><span class="kw">create</span> <span class="kw">or</span> <span class="kw">replace</span> <span class="kw">function</span> <span class="kw">public</span>.is_admin()</span>
+<span id="cb28-2">returns <span class="dt">boolean</span></span>
+<span id="cb28-3">language sql</span>
+<span id="cb28-4">security <span class="kw">definer</span></span>
+<span id="cb28-5"><span class="kw">set</span> search_path <span class="op">=</span> <span class="kw">public</span></span>
+<span id="cb28-6">stable</span>
+<span id="cb28-7"><span class="kw">as</span> $$</span>
+<span id="cb28-8">  <span class="kw">select</span> <span class="kw">exists</span> (</span>
+<span id="cb28-9">    <span class="kw">select</span> <span class="dv">1</span> <span class="kw">from</span> <span class="kw">public</span>.profiles</span>
+<span id="cb28-10">    <span class="kw">where</span> <span class="kw">id</span> <span class="op">=</span> auth.<span class="fu">uid</span>() <span class="kw">and</span> <span class="kw">role</span> <span class="op">=</span> <span class="st">'admin'</span></span>
+<span id="cb28-11">  );</span>
+<span id="cb28-12">$$;</span></code></pre></div>
+<p><code>security definer</code> means the function runs with the owner's rights, so it can read <code>profiles</code> even inside a policy on <code>profiles</code> without recursion problems. Pinning <code>search_path</code> prevents a classic hijack where a user creates a same-named object in another schema. Storage buckets use folder-scoped policies: a user may only write files under a path whose first folder equals their own user id, e.g. <code>{author_id}/{novel_id}/cover.webp</code>.</p>
+<p><strong>The large chapter library.</strong> A long web novel can have thousands of chapters, so <code>listChapterPage</code> never selects the <code>content</code> column, uses page sizes of 25, 50, or 100, runs a <code>head: true</code> count then <code>.range()</code> for the slice, and clamps out-of-range page numbers. Search is a title <code>ILIKE</code> with LIKE-escaping, or an exact chapter-number match when the query is numeric. Phase 8 added the index that matches this query shape and a safe view counter:</p>
+<div class="sourceCode" id="cb29"><pre class="sourceCode sql"><code class="sourceCode sql"><span id="cb29-1"><span class="kw">create</span> <span class="kw">index</span> <span class="cf">if</span> <span class="kw">not</span> <span class="kw">exists</span> chapters_novel_status_number_idx</span>
+<span id="cb29-2">  <span class="kw">on</span> <span class="kw">public</span>.chapters (novel_id, status, <span class="dt">number</span>);</span>
+<span id="cb29-3"></span>
+<span id="cb29-4"><span class="kw">create</span> <span class="kw">or</span> <span class="kw">replace</span> <span class="kw">function</span> <span class="kw">public</span>.increment_chapter_views(</span>
+<span id="cb29-5">  p_chapter_id uuid)</span>
+<span id="cb29-6">returns void</span>
+<span id="cb29-7">language sql</span>
+<span id="cb29-8">security <span class="kw">definer</span></span>
+<span id="cb29-9"><span class="kw">set</span> search_path <span class="op">=</span> <span class="kw">public</span></span>
+<span id="cb29-10"><span class="kw">as</span> $$</span>
+<span id="cb29-11">  <span class="kw">update</span> <span class="kw">public</span>.chapters</span>
+<span id="cb29-12">     <span class="kw">set</span> views <span class="op">=</span> views <span class="op">+</span> <span class="dv">1</span></span>
+<span id="cb29-13">   <span class="kw">where</span> <span class="kw">id</span> <span class="op">=</span> p_chapter_id</span>
+<span id="cb29-14">     <span class="kw">and</span> status <span class="op">=</span> <span class="st">'published'</span>;</span>
+<span id="cb29-15">$$;</span></code></pre></div>
+<p>A composite index on <code>(novel_id, status, number)</code> lets Postgres jump straight to "published chapters of novel X in number order" without sorting.</p>
+<p><strong>Lazy cron for scheduled chapters.</strong> Instead of a scheduled job, the novel and chapter pages call <code>publish_due_chapters()</code> on each request, which flips every <code>scheduled</code> chapter whose <code>scheduled_at</code> has passed to <code>published</code>. It needs no infrastructure, at the cost that promotion happens only when someone visits.</p>
+<p><strong>Reader preferences.</strong> <code>lib/reader-prefs.ts</code> stores font size (14 to 28), serif or sans, light, sepia, or dark theme, line height, and column width in <code>localStorage</code> under <code>reader-prefs/v1</code>. To avoid a "flash" of the wrong theme, <code>readerInitScript()</code> emits a tiny inline script placed first inside <code>#reader-root</code> that applies the preferences before the browser paints. The script is generated from the same constants as the module, so the two cannot drift. Scroll position is stored server-side in <code>chapter_progress</code> as a 0 to 1 fraction.</p>
+<p><strong>Roles.</strong> <code>lib/roles.ts</code> derives badges rather than storing one label: everyone is a Reader, owning novels makes you a Creator, and the admin role adds Admin. Public profiles only show the Creator badge. <code>setUserRole</code> refuses to demote the last admin and writes an audit row.</p>
+<p><strong>Rate limiting.</strong> A fixed-window limiter in memory (8 comments per minute per user, 5 reports per 5 minutes):</p>
+<div class="sourceCode" id="cb30"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb30-1"><span class="im">export</span> <span class="kw">function</span> <span class="fu">rateLimit</span>(key<span class="op">:</span> <span class="dt">string</span><span class="op">,</span> limit<span class="op">:</span> <span class="dt">number</span><span class="op">,</span></span>
+<span id="cb30-2">                          windowMs<span class="op">:</span> <span class="dt">number</span>)<span class="op">:</span> RateResult {</span>
+<span id="cb30-3">  <span class="kw">const</span> now <span class="op">=</span> <span class="bu">Date</span><span class="op">.</span><span class="fu">now</span>()<span class="op">;</span></span>
+<span id="cb30-4">  <span class="cf">if</span> (buckets<span class="op">.</span><span class="at">size</span> <span class="op">&gt;</span> <span class="dv">5000</span>) {</span>
+<span id="cb30-5">    <span class="cf">for</span> (<span class="kw">const</span> [k<span class="op">,</span> b] <span class="kw">of</span> buckets) {</span>
+<span id="cb30-6">      <span class="cf">if</span> (b<span class="op">.</span><span class="at">resetAt</span> <span class="op">&lt;=</span> now) buckets<span class="op">.</span><span class="fu">delete</span>(k)<span class="op">;</span></span>
+<span id="cb30-7">    }</span>
+<span id="cb30-8">  }</span>
+<span id="cb30-9">  <span class="kw">const</span> b <span class="op">=</span> buckets<span class="op">.</span><span class="fu">get</span>(key)<span class="op">;</span></span>
+<span id="cb30-10">  <span class="cf">if</span> (<span class="op">!</span>b <span class="op">||</span> b<span class="op">.</span><span class="at">resetAt</span> <span class="op">&lt;=</span> now) {</span>
+<span id="cb30-11">    buckets<span class="op">.</span><span class="fu">set</span>(key<span class="op">,</span> { count<span class="op">:</span> <span class="dv">1</span><span class="op">,</span> resetAt<span class="op">:</span> now <span class="op">+</span> windowMs })<span class="op">;</span></span>
+<span id="cb30-12">    <span class="cf">return</span> { ok<span class="op">:</span> <span class="kw">true</span><span class="op">,</span> retryAfterMs<span class="op">:</span> <span class="dv">0</span> }<span class="op">;</span></span>
+<span id="cb30-13">  }</span>
+<span id="cb30-14">  <span class="cf">if</span> (b<span class="op">.</span><span class="at">count</span> <span class="op">&gt;=</span> limit) {</span>
+<span id="cb30-15">    <span class="cf">return</span> { ok<span class="op">:</span> <span class="kw">false</span><span class="op">,</span> retryAfterMs<span class="op">:</span> b<span class="op">.</span><span class="at">resetAt</span> <span class="op">-</span> now }<span class="op">;</span></span>
+<span id="cb30-16">  }</span>
+<span id="cb30-17">  b<span class="op">.</span><span class="at">count</span> <span class="op">+=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb30-18">  <span class="cf">return</span> { ok<span class="op">:</span> <span class="kw">true</span><span class="op">,</span> retryAfterMs<span class="op">:</span> <span class="dv">0</span> }<span class="op">;</span></span>
+<span id="cb30-19">}</span></code></pre></div>
+<p>Its own comment admits the limitation: on serverless, each instance has its own map, so the limit is per instance rather than global.</p>
+<p><strong>SEO and settings.</strong> <code>sitemap.ts</code> revalidates hourly and lists up to 5000 public novels plus author pages. <code>robots.ts</code> disallows private areas. Site settings live in a singleton row (<code>id text primary key default 'global' check (id = 'global')</code>), so the app only ever runs <code>UPDATE</code>, and <code>getSiteSettings()</code> falls back field by field to a static config so metadata generation never fails a build.</p>
+<p><strong>Agent guidance.</strong> <code>CLAUDE.md</code> just includes <code>AGENTS.md</code>, which warns that "This is NOT the Next.js you know" and tells an AI assistant to read the docs bundled in <code>node_modules/next/dist/docs/</code> first. It is a guardrail against a model's outdated knowledge of Next.js 16 changes such as <code>proxy.ts</code>.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-11" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>RLS-first authorization.</strong> The database is the real security boundary; server checks are defence in depth. The price is a lot of policy SQL, including <code>EXISTS</code> joins that check novel ownership for chapters and tags.</li>
+<li><strong>Idempotent, additive migrations.</strong> Every migration uses <code>if not exists</code> and <code>drop policy if exists</code>, so it can be re-applied to a live database that drifted.</li>
+<li><strong><code>force-dynamic</code> route groups.</strong> This fixed Vercel prerender crashes when Supabase env vars were missing at build time, but it gives up static caching for public pages (except the hourly sitemap).</li>
+<li><strong>Separate tables for separate intents.</strong> Likes, bookmarks, author follows, and novel subscriptions are four tables, which keeps each feature's semantics and policies simple.</li>
+<li><strong><code>cacheComponents</code> disabled.</strong> The config comment says the auth-plus-data dashboard pattern kept triggering "Server could not finish this Suspense boundary" errors.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-11" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li><strong>Case-sensitive column drift.</strong> The live <code>profiles</code> table had been created with a quoted <code>"Role"</code> column, which made <code>is_admin()</code> fail with Postgres error 42703 and silently broke every admin policy. Migration 9b repairs it with a guarded, idempotent block, and <code>lib/profile-row.ts</code> tolerates both spellings:</li>
+</ul>
+<div class="sourceCode" id="cb31"><pre class="sourceCode sql"><code class="sourceCode sql"><span id="cb31-1">do $$</span>
+<span id="cb31-2"><span class="cf">begin</span></span>
+<span id="cb31-3">  <span class="cf">if</span> <span class="kw">exists</span> (</span>
+<span id="cb31-4">        <span class="kw">select</span> <span class="dv">1</span> <span class="kw">from</span> information_schema.<span class="kw">columns</span></span>
+<span id="cb31-5">        <span class="kw">where</span> table_schema <span class="op">=</span> <span class="st">'public'</span></span>
+<span id="cb31-6">          <span class="kw">and</span> table_name <span class="op">=</span> <span class="st">'profiles'</span></span>
+<span id="cb31-7">          <span class="kw">and</span> column_name <span class="op">=</span> <span class="st">'Role'</span></span>
+<span id="cb31-8">      )</span>
+<span id="cb31-9">     <span class="kw">and</span> <span class="kw">not</span> <span class="kw">exists</span> (</span>
+<span id="cb31-10">        <span class="kw">select</span> <span class="dv">1</span> <span class="kw">from</span> information_schema.<span class="kw">columns</span></span>
+<span id="cb31-11">        <span class="kw">where</span> <span class="op">..</span>. <span class="kw">and</span> column_name <span class="op">=</span> <span class="st">'role'</span></span>
+<span id="cb31-12">      )</span>
+<span id="cb31-13">  <span class="cf">then</span></span>
+<span id="cb31-14">    <span class="kw">alter</span> <span class="kw">table</span> <span class="kw">public</span>.profiles <span class="kw">rename</span> <span class="kw">column</span> <span class="ot">"Role"</span> <span class="kw">to</span> <span class="kw">role</span>;</span>
+<span id="cb31-15">  <span class="cf">end</span> <span class="cf">if</span>;</span>
+<span id="cb31-16"><span class="cf">end</span> $$;</span></code></pre></div>
+<ul>
+<li><strong>Failing signups.</strong> After schema drift the signup trigger could not produce a valid handle. The final migration rewrites <code>handle_new_user()</code> to try several seeds (metadata handle, username, display name, email prefix), normalize to <code>[a-z0-9_]</code> capped at 24 characters, add a random six-character suffix on collision, and insert with <code>ON CONFLICT (id) DO NOTHING</code>. The app also self-heals: <code>getCurrentUser()</code> creates a missing profile once, or returns a synthesized one so navigation never breaks.</li>
+<li><strong>Theme flash in the reader</strong> solved by the pre-paint script.</li>
+<li><strong>Vercel build failures</strong> solved by <code>force-dynamic</code> (commit "Fix Vercel build: force-dynamic on auth-gated/data route groups").</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-11" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>Strong points: <code>server-only</code> imports, zod on every input, folder-scoped storage policies, 404 for hidden admin routes, a last-admin guard, an audit log, and DB-level length checks (comments up to 4000 characters).</li>
+<li>Risks visible in the migrations (the live database may differ): <code>profiles_update_own</code> does not restrict which columns a user may change, so a signed-in user could plausibly set their own <code>role</code> through the public API; the <code>email</code> column added in the last migration sits in a table whose select policy is <code>using (true)</code>; authors can toggle <code>featured</code> on their own novels; <code>increment_chapter_views</code> is callable by anonymous users, so views can be inflated. Column-level <code>REVOKE UPDATE</code> or a trigger guarding <code>role</code> and <code>featured</code> would close the first and third.</li>
+<li>Performance: indexes match query shapes, chapter lists never load bodies, <code>cache()</code> dedupes reads, and view counting is fire-and-forget.</li>
+</ul>
+</section>
+<section id="how-to-run-it-11" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb32"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb32-1"><span class="ex">npm</span> install                       <span class="co"># Node 22</span></span>
+<span id="cb32-2"><span class="fu">cp</span> .env.example .env.local        <span class="co"># fill in Supabase URL and keys</span></span>
+<span id="cb32-3"><span class="ex">npx</span> supabase link <span class="at">--project-ref</span> <span class="op">&lt;</span>your-ref<span class="op">&gt;</span></span>
+<span id="cb32-4"><span class="ex">npx</span> supabase db push              <span class="co"># apply migrations in order</span></span>
+<span id="cb32-5"><span class="ex">npm</span> run dev                       <span class="co"># http://localhost:3000</span></span>
+<span id="cb32-6"><span class="ex">npm</span> run lint <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> run typecheck</span></code></pre></div>
+</section>
+<section id="learn-more-11" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://supabase.com/docs/guides/database/postgres/row-level-security" target="_blank" rel="noopener noreferrer">Supabase: Row Level Security</a></li>
+<li><a href="https://supabase.com/docs/guides/auth/server-side/nextjs" target="_blank" rel="noopener noreferrer">Supabase: Server-side auth for Next.js</a></li>
+<li><a href="https://nextjs.org/docs/app" target="_blank" rel="noopener noreferrer">Next.js App Router documentation</a></li>
+<li><a href="https://www.postgresql.org/docs/current/sql-createpolicy.html" target="_blank" rel="noopener noreferrer">PostgreSQL: CREATE POLICY</a></li>
+<li><a href="https://www.postgresql.org/docs/current/indexes-multicolumn.html" target="_blank" rel="noopener noreferrer">PostgreSQL: Multicolumn indexes</a></li>
+<li><a href="https://zod.dev" target="_blank" rel="noopener noreferrer">Zod documentation</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=Sklc_fQBmcs" target="_blank" rel="noopener noreferrer">Next.js in 100 Seconds // Plus Full Beginner's Tutorial</a></li>
+<li><a href="https://www.youtube.com/watch?v=zBZgdTb-dns" target="_blank" rel="noopener noreferrer">Supabase in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=Ow_Uzedfohk" target="_blank" rel="noopener noreferrer">Implement Authorization using Row Level Security (RLS) with Supabase (Step By Step Guide)</a></li>
+<li><a href="https://www.youtube.com/watch?v=zQnBQ4tB3ZA" target="_blank" rel="noopener noreferrer">TypeScript in 100 Seconds</a></li>
+</ul>
+</section>
+</section>
+<section id="the-novel-folder-source-material-not-an-input" class="level2">
+<h2>The Novel Folder: Source Material, Not an Input</h2>
+<p>The folder <code>Projects/Novel</code> holds 22 PDFs named <code>V1.pdf</code> through <code>V22.pdf</code>, about 270 MB in total (most volumes are 10 to 16 MB, V19 is about 4.5 MB). The first page of V1 is the colour cover of the English edition of <em>That Time I Got Reincarnated as a Slime</em>, Volume 1, by Fuse with illustrations by Mitz Vah, a commercially published Japanese isekai fantasy light novel. The files appear to be the series' volumes as illustrated ebooks kept for personal reading and reference.</p>
+<p>A search of the Novelsin code for the series name, its characters, or any PDF import path finds nothing. Novelsin has no ingestion code at all; chapters are typed or pasted by authors into its editor. So the folder is best understood as genre inspiration (Novelsin targets exactly this style of long, serialized fantasy with volumes and many chapters, which is why its schema has a <code>volume</code> column and is tuned for thousand-chapter novels), not as data for the platform. Because these are copyrighted commercial works, they should not be uploaded to a public platform.</p>
+</section>
+<section id="image-to-video-fal.ai-one-picture-one-hour-of-video" class="level2">
+<h2>Image to Video (fal.ai): One Picture, One Hour of Video</h2>
+<section id="at-a-glance-12" class="level3">
+<h3>At a Glance</h3>
+<p>This is a cross-platform Python desktop app that animates a single still image with fal.ai's WAN 2.5 image-to-video model and turns the short result into a YouTube-ready file. It downloads the 5 or 10 second clip, normalizes it to 1920 by 1080 H.264, makes it loop seamlessly, and extends it to anywhere from 10 to 180 minutes (60 by default). It is aimed at creators of long ambient videos (lofi streams, animated wallpapers, "one hour of rain" scenery) who start from one piece of artwork. An untracked <code>ImageToVideoFalApp_SHARE</code> folder holds a copy with launch scripts for sharing with non-technical users.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Python 3.10+</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Tkinter with ttk</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>fal-client, requests, python-dotenv, keyring; ffmpeg and ffprobe binaries</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Desktop (macOS, Windows, Linux)</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/image_to_video_fal_app" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/image_to_video_fal_app</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Main path works; several richer services (cache, job queue, crossfade) written but not wired in</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-12" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>You pick a painting and type "gentle wind, drifting clouds". The app sends both to an AI animator in the cloud, which returns a few seconds of movement. To make an hour from five seconds, it plays the clip forward and then backward (a "boomerang"), so the last frame flows straight into the first. Then it tells ffmpeg to repeat that loop until an hour has passed, copying the compressed data rather than re-encoding it, which takes seconds instead of hours.</p>
+</section>
+<section id="architecture-12" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> app/main.py  (dotenv, logging, settings, ffmpeg check)
+     |
+ ui/root.py AppRoot: Notebook [Generate | Jobs | Settings]
+     |  (tabs lazy-imported; failures become an error tab)
+ GenerateView --thread--&gt; services/pipeline_service.run_pipeline
+     ^  after(0, ...)            |
+     |  status updates           |-- fal_client.upload_file
+     +---------------------------|-- fal_client.subscribe(WAN 2.5)
+                                 |-- download (.part -&gt; rename)
+                                 |-- ffmpeg scale/crop/fps
+                                 |-- boomerang loop
+                                 '-- -stream_loop extend (copy)
+ core/: ffmpeg_tools, job_queue, cache, secret_store, paths</code></pre>
+</section>
+<section id="deep-dive-12" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>The fal.ai call.</strong> fal.ai hosts generative models behind a queue API. <code>fal_client.upload_file(path)</code> returns a hosted URL for the image, then <code>fal_client.subscribe("fal-ai/wan-25-preview/image-to-video", arguments={...})</code> submits the job and blocks until it finishes, passing the prompt, negative prompt (things to avoid, defaulting to "flicker, jitter, warping"), duration "5" or "10", and resolution "480p" or "1080p" (a constants comment notes 720p is often unsupported). The result's video URL is parsed from <code>video.url</code>, with fallbacks for other response shapes. A negative prompt is a second text input that steers the diffusion model away from listed features.</p>
+<p><strong>Job folders and selective work.</strong> Each job gets a timestamped folder containing a copy of the source image, <code>request.json</code> for reproducibility, and a <code>_work/</code> folder for intermediates. The user picks export targets (<code>raw</code>, <code>post</code>, <code>loop</code>, <code>combined</code>), and the pipeline computes <code>needs_post</code>, <code>needs_loop</code>, and <code>needs_extend</code> so a raw-only export never touches ffmpeg. At the end <code>_export_selected</code> moves the requested outputs up and deletes the rest.</p>
+<p><strong>ffmpeg processing.</strong> All calls use argument lists via <code>subprocess.run</code>, never a shell string, so file names cannot inject commands. Post-processing scales with <code>force_original_aspect_ratio=increase</code> and then crops to exactly 1920 by 1080 (fill the frame, trim the overflow), sets the frame rate, and encodes <code>libx264 -crf 18 -preset medium -movflags +faststart</code>. CRF (constant rate factor) is x264's quality knob, where lower is better and 18 is visually near lossless; <code>faststart</code> moves the index to the front of the file so playback can start before the download finishes. The loop and extension:</p>
+<div class="sourceCode" id="cb34"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb34-1"><span class="kw">def</span> _boomerang_loop(in_mp4: Path, out_mp4: Path) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb34-2">    ...</span>
+<span id="cb34-3">    cmd <span class="op">=</span> [</span>
+<span id="cb34-4">        <span class="st">"ffmpeg"</span>, <span class="st">"-y"</span>, <span class="st">"-i"</span>, <span class="bu">str</span>(in_mp4),</span>
+<span id="cb34-5">        <span class="st">"-filter_complex"</span>,</span>
+<span id="cb34-6">        <span class="st">"[0:v]reverse[r];[0:v][r]concat=n=2:v=1:a=0,"</span></span>
+<span id="cb34-7">        <span class="st">"format=yuv420p"</span>,</span>
+<span id="cb34-8">        <span class="st">"-an"</span>, <span class="st">"-c:v"</span>, <span class="st">"libx264"</span>, <span class="st">"-crf"</span>, <span class="st">"18"</span>, ...</span>
+<span id="cb34-9">    ]</span>
+<span id="cb34-10">    _run(cmd)</span>
+<span id="cb34-11"></span>
+<span id="cb34-12"><span class="kw">def</span> _extend_by_repeat(in_mp4, out_mp4, <span class="op">*</span>, total_seconds: <span class="bu">int</span>):</span>
+<span id="cb34-13">    ...</span>
+<span id="cb34-14">    cmd <span class="op">=</span> [<span class="st">"ffmpeg"</span>, <span class="st">"-y"</span>, <span class="st">"-stream_loop"</span>, <span class="st">"-1"</span>,</span>
+<span id="cb34-15">           <span class="st">"-i"</span>, <span class="bu">str</span>(in_mp4), <span class="st">"-t"</span>, <span class="bu">str</span>(<span class="bu">int</span>(total_seconds)),</span>
+<span id="cb34-16">           <span class="st">"-c"</span>, <span class="st">"copy"</span>, <span class="bu">str</span>(out_mp4)]</span>
+<span id="cb34-17">    _run(cmd)</span></code></pre></div>
+<p>The filter graph splits the input, reverses one copy, and concatenates forward plus reverse, so the loop point is seamless by construction. <code>-stream_loop -1</code> repeats the input forever, <code>-t</code> cuts it at the target length, and <code>-c copy</code> copies packets without decoding, so an hour of output takes seconds and loses no quality. <code>LoopExtendService</code> also implements a crossfade loop with ffmpeg's <code>xfade</code> filter and a re-encode fallback when timestamp issues break stream copy, but the live pipeline maps crossfade to boomerang "for now".</p>
+<p><strong>Keeping Tkinter responsive.</strong> Tkinter is single-threaded: only the main thread may touch widgets. The pipeline runs on a daemon thread, and progress is marshalled back with <code>self.after(0, ...)</code>, which schedules a callback on the UI thread's event loop. A more complete <code>JobQueue</code> exists with one worker thread draining a <code>queue.Queue</code>, <code>JobEvent</code> pub/sub (<code>job_started</code>, <code>job_progress</code>, <code>job_done</code>, <code>job_error</code>), capped logs, and a cancel token:</p>
+<div class="sourceCode" id="cb35"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb35-1"><span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb35-2">    <span class="va">self</span>._jobs: Dict[<span class="bu">str</span>, JobRecord] <span class="op">=</span> {}</span>
+<span id="cb35-3">    <span class="va">self</span>._subscribers: List[Callable[[Any], <span class="va">None</span>]] <span class="op">=</span> []</span>
+<span id="cb35-4">    <span class="va">self</span>._q <span class="op">=</span> queue.Queue()</span>
+<span id="cb35-5">    <span class="va">self</span>._stop_evt <span class="op">=</span> threading.Event()</span>
+<span id="cb35-6">    <span class="va">self</span>._worker <span class="op">=</span> threading.Thread(</span>
+<span id="cb35-7">        target<span class="op">=</span><span class="va">self</span>._worker_loop, daemon<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb35-8">    <span class="va">self</span>._worker.start()</span>
+<span id="cb35-9">...</span>
+<span id="cb35-10"><span class="kw">def</span> _worker_loop(<span class="va">self</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb35-11">    <span class="cf">while</span> <span class="kw">not</span> <span class="va">self</span>._stop_evt.is_set():</span>
+<span id="cb35-12">        jid, runner, req, kwargs <span class="op">=</span> <span class="va">self</span>._q.get()</span>
+<span id="cb35-13">        ...</span>
+<span id="cb35-14">        <span class="va">self</span>._run_job(jid, runner, req, kwargs)</span></code></pre></div>
+<p><code>main.py</code> does not pass a queue to <code>AppRoot</code>, though, so the Generate tab uses its raw-thread fallback and the Jobs tab stays empty.</p>
+<p><strong>Secrets.</strong> The fal key is resolved in priority order:</p>
+<div class="sourceCode" id="cb36"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb36-1"><span class="kw">def</span> _resolve_key(<span class="va">self</span>) <span class="op">-&gt;</span> <span class="bu">str</span>:</span>
+<span id="cb36-2">    <span class="co"># Priority: override -&gt; keyring -&gt; settings -&gt; env</span></span>
+<span id="cb36-3">    candidates <span class="op">=</span> []</span>
+<span id="cb36-4">    <span class="cf">if</span> <span class="va">self</span>._fal_key_override:</span>
+<span id="cb36-5">        candidates.append(<span class="va">self</span>._fal_key_override)</span>
+<span id="cb36-6">    <span class="cf">if</span> <span class="va">self</span>._use_keyring:</span>
+<span id="cb36-7">        candidates.append(_try_keyring_get(</span>
+<span id="cb36-8">            <span class="va">self</span>._keyring_service, <span class="va">self</span>._keyring_username))</span>
+<span id="cb36-9">    candidates.append(<span class="va">self</span>._get_key_from_settings())</span>
+<span id="cb36-10">    candidates.append(_safe_str(os.environ.get(FAL_ENV_KEY)))</span>
+<span id="cb36-11">    <span class="cf">for</span> c <span class="kw">in</span> candidates:</span>
+<span id="cb36-12">        c <span class="op">=</span> _strip_wrapping_quotes(_safe_str(c))</span>
+<span id="cb36-13">        <span class="cf">if</span> c:</span>
+<span id="cb36-14">            <span class="cf">return</span> c</span>
+<span id="cb36-15">    <span class="cf">return</span> <span class="st">""</span></span></code></pre></div>
+<p><code>keyring</code> stores secrets in the operating system's vault (macOS Keychain, Windows Credential Manager). When it is unavailable, the key falls back to plaintext in <code>~/.image_to_video_fal_app/settings.json</code>. Quotes that users paste around values in <code>.env</code> files are stripped.</p>
+<p><strong>Cache (unused).</strong> <code>core/cache.py</code> defines a content-addressed cache: a SHA-256 over canonical JSON of the image's hash, normalized prompts, duration, model, and resolution, so the same request could reuse a previous result URL instead of paying again. It has a 7-day TTL and 500-entry cap, but nothing imports it yet.</p>
+<p><strong>Tests.</strong> Three pytest files cover safe names, unique directories, request validation, and real ffmpeg operations on synthesized video (scale, probe, fps, boomerang doubling duration, extend, concat). The ffmpeg tests skip when ffmpeg is missing.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-12" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Stream-copy extension</strong>: hours of output almost instantly, at the cost of only being able to repeat an already-encoded loop.</li>
+<li><strong>Defensive lazy imports</strong>: the window always opens even if a module or settings file is broken, at the cost of swallowed errors and verbose code.</li>
+<li><strong>Two architectures side by side</strong>: <code>pipeline_service</code> inlines a "make it work" path, while the richer services (retries, cache, crossfade, data-URI upload fallback) wait to be wired in.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-12" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li>A Tk <code>-textvariable</code> portability issue on <code>LabelFrame</code> (fixed in the "v2.1" release commit).</li>
+<li>Running as <code>python app/main.py</code> versus <code>python -m app.main</code>, solved by fixing <code>sys.path</code> in <code>main.py</code>.</li>
+<li>Finding <code>.env</code> when frozen with PyInstaller, solved by also searching the executable's folder.</li>
+<li>Known gaps: the Cancel button passes a <code>threading.Event</code> but the pipeline checks <code>is_cancelled()</code>, so cancel does not stop work; the startup check ignores keyring, so a key saved only in the Keychain reports "Missing FAL_KEY"; <code>keyring</code> is not declared as a dependency and the README's <code>requirements.txt</code> does not exist.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-12" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>The git history shows the key-handling journey: commits titled "keychain secrets" and "remove FAL_KEY from templates; ignore .env" were needed because a real key had been committed in an early <code>.env.example</code>. Any key that ever reached a public repo should be treated as compromised and revoked, and the shareable folder must never be distributed with a filled <code>.env</code>.</li>
+<li>The key is placed in <code>os.environ</code>, which child ffmpeg processes inherit; harmless here but worth knowing.</li>
+<li>Downloads stream in 256 KB chunks to a <code>.part</code> file and are atomically renamed, so a crash never leaves a half-written file with the final name.</li>
+</ul>
+</section>
+<section id="how-to-run-it-12" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb37"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb37-1"><span class="ex">python</span> <span class="at">-m</span> venv .venv <span class="kw">&amp;&amp;</span> <span class="bu">source</span> .venv/bin/activate</span>
+<span id="cb37-2"><span class="ex">pip</span> install <span class="at">-e</span> <span class="st">".[dev]"</span> keyring</span>
+<span id="cb37-3"><span class="ex">brew</span> install ffmpeg            <span class="co"># or your OS package manager</span></span>
+<span id="cb37-4"><span class="fu">cp</span> .env.example .env           <span class="co"># then set FAL_KEY</span></span>
+<span id="cb37-5"><span class="ex">python</span> <span class="at">-m</span> app.main</span>
+<span id="cb37-6"><span class="ex">pytest</span></span></code></pre></div>
+</section>
+<section id="learn-more-12" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://docs.fal.ai/clients/python" target="_blank" rel="noopener noreferrer">fal.ai Python client documentation</a></li>
+<li><a href="https://ffmpeg.org/ffmpeg-filters.html" target="_blank" rel="noopener noreferrer">FFmpeg filters documentation</a></li>
+<li><a href="https://trac.ffmpeg.org/wiki/Encode/H.264" target="_blank" rel="noopener noreferrer">FFmpeg H.264 encoding guide (CRF)</a></li>
+<li><a href="https://docs.python.org/3/library/tkinter.html" target="_blank" rel="noopener noreferrer">Python tkinter documentation</a></li>
+<li><a href="https://pypi.org/project/keyring/" target="_blank" rel="noopener noreferrer">keyring on PyPI</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=26Mayv5JPz0" target="_blank" rel="noopener noreferrer">FFmpeg in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=YXPyB4XeYLA" target="_blank" rel="noopener noreferrer">Tkinter Course - Create Graphic User Interfaces in Python Tutorial</a></li>
+<li><a href="https://www.youtube.com/watch?v=w1C0sGeLK5Y" target="_blank" rel="noopener noreferrer">How AI Video Generation Works | Veo 3, Sora, Nano Banana, Seedance 2.0 Explained</a></li>
+<li><a href="https://www.youtube.com/watch?v=x7X9w_GIm1s" target="_blank" rel="noopener noreferrer">Python in 100 Seconds</a></li>
+</ul>
+</section>
+</section>
+<section id="motion-scene-studio-living-artwork-with-veo" class="level2">
+<h2>Motion Scene Studio: Living Artwork with Veo</h2>
+<section id="at-a-glance-13" class="level3">
+<h3>At a Glance</h3>
+<p>Motion Scene Studio (in <code>scratch/ImagetoVidoeloop</code>) is a local web studio for "fixed-frame" image animation. You upload one still, usually anime art or an illustration, and get subtle motion inside the frame: breathing, blinking, hair and cloth fluttering, fog, embers, an aura. It deliberately forbids camera moves such as pan, zoom, and dolly; its README says it is "not for DepthFlow-style wallpaper motion". It is a FastAPI backend with a SQLite job history and a React frontend, and it is mid-migration from fal.ai (MiniMax Hailuo) to Google's Gemini Veo models.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Python 3.11, TypeScript</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>FastAPI, SQLModel, React 18, Vite 5, Tailwind 3</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>google-genai, Pillow, aiofiles, python-dotenv</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Local (127.0.0.1), single user</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>local only (not a git repository)</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Prototype mid-migration; backend runs, frontend source is incomplete</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-13" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Imagine directing an actor who must stand perfectly still in a picture frame while only their hair moves in the wind. You have to say "do not move the camera" in many different ways, or the animator will get creative. Motion Scene Studio is a form full of sliders (how much motion, blink frequency, hair motion, atmosphere) that it translates into a long, very careful instruction, adding a list of forbidden things. It sends that instruction and your picture to Veo, then checks back every few seconds until the clip is ready.</p>
+</section>
+<section id="architecture-13" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> React SPA (Vite :3000)  --/api, /media proxied--&gt;
+   usePolling (every few s)
+          |
+ FastAPI create_app()  (127.0.0.1:8000)
+   routes: health, config, uploads, renders, history, files
+   RenderService
+     |-- prompt_builder (guard words + presets + sliders)
+     |-- costing (placeholder per-second rates)
+     '-- providers/base.BaseVideoProvider
+            '-- gemini_veo.GeminiVeoProvider
+                   generate_videos -&gt; operation name
+                   operations.get  -&gt; status
+                   files.download  -&gt; outputs/
+   SQLModel + SQLite: UploadAsset, RenderJob</code></pre>
+</section>
+<section id="deep-dive-13" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>App factory and config.</strong> <code>backend/app/main.py</code> builds the app: loads a frozen <code>Settings</code> dataclass (cached with <code>lru_cache</code>), creates directories and tables with <code>SQLModel.metadata.create_all</code>, attaches a <code>RenderService</code>, adds CORS for the frontend origin, mounts routers under <code>/api</code>, serves uploads and outputs as static files, and serves a built SPA at <code>/</code> if present. SQLModel combines SQLAlchemy (the database toolkit) and Pydantic (validation) so one class is both a table and a schema.</p>
+<p><strong>Data model.</strong> <code>RenderJob</code> records every input control (preset, motion amount, face motion, blink frequency, hair and clothing motion, atmosphere, loop feel, background stability, style adherence, duration, aspect ratio, resolution, model), both the user prompt and the final assembled prompt, provider job id and raw response, estimated cost, progress, and a JSON log. Storing the final prompt makes each render reproducible and auditable.</p>
+<p><strong>Validation as product rules.</strong> <code>schemas/renders.py</code> defines enums for every control, ten animation presets ("Subtle Breathing", "Anime Idle", "Hair &amp; Cloth Wind", "Fire / Ember Drift", "Rain / Fog Mood" and others), durations of 4, 6, or 8 seconds, and a Pydantic <code>model_validator</code> that enforces two rules: composition must stay fixed, and 1080p is only allowed for 8-second renders, mirroring a Veo constraint. The <code>/config</code> endpoint returns these option lists so the UI never hard-codes them.</p>
+<p><strong>Prompt construction.</strong> The core idea of the project lives in <code>prompt_builder.py</code>:</p>
+<div class="sourceCode" id="cb39"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb39-1"><span class="kw">def</span> build_prompts(request: RenderCreateRequest):</span>
+<span id="cb39-2">    user_prompt <span class="op">=</span> request.prompt.strip()</span>
+<span id="cb39-3">    preset_fragment <span class="op">=</span> (PRESET_FRAGMENTS[request.preset]</span>
+<span id="cb39-4">                       <span class="cf">if</span> request.auto_prompt <span class="cf">else</span> <span class="st">""</span>)</span>
+<span id="cb39-5">    fragments <span class="op">=</span> [</span>
+<span id="cb39-6">        <span class="st">"Static composition"</span>,</span>
+<span id="cb39-7">        <span class="st">"preserve original framing"</span>,</span>
+<span id="cb39-8">        <span class="st">"no camera movement"</span>, <span class="st">"no zoom"</span>, <span class="st">"no pan"</span>,</span>
+<span id="cb39-9">        ...</span>
+<span id="cb39-10">        <span class="st">"internal motion only"</span>,</span>
+<span id="cb39-11">        preset_fragment,</span>
+<span id="cb39-12">        _motion_amount_fragment(request.motion_amount),</span>
+<span id="cb39-13">        ...</span>
+<span id="cb39-14">        <span class="st">"high coherence"</span>,</span>
+<span id="cb39-15">    ]</span>
+<span id="cb39-16">    <span class="cf">if</span> user_prompt:</span>
+<span id="cb39-17">        fragments.append(user_prompt)</span>
+<span id="cb39-18">    final_prompt <span class="op">=</span> <span class="st">", "</span>.join(f <span class="cf">for</span> f <span class="kw">in</span> fragments <span class="cf">if</span> f)</span></code></pre></div>
+<p>Guard phrases always come first, then the preset, then one fragment per slider, then the user's text. A default negative prompt lists "camera movement, zoom, pan, dolly, orbit, reframing ... warping". The provider is called with <code>enhance_prompt=False</code> so Veo does not rewrite this carefully constrained prompt into something more cinematic.</p>
+<p><strong>Calling Veo.</strong> Video generation takes minutes, so Veo exposes it as a long-running operation: you submit and get an operation name, then poll it.</p>
+<div class="sourceCode" id="cb40"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb40-1">image <span class="op">=</span> types.Image.from_file(location<span class="op">=</span><span class="bu">str</span>(source_image_path))</span>
+<span id="cb40-2">operation <span class="op">=</span> client.models.generate_videos(</span>
+<span id="cb40-3">    model<span class="op">=</span>request.model_name.value,</span>
+<span id="cb40-4">    prompt<span class="op">=</span>prompt,</span>
+<span id="cb40-5">    image<span class="op">=</span>image,</span>
+<span id="cb40-6">    config<span class="op">=</span>types.GenerateVideosConfig(</span>
+<span id="cb40-7">        duration_seconds<span class="op">=</span><span class="bu">int</span>(request.duration.value),</span>
+<span id="cb40-8">        aspect_ratio<span class="op">=</span>request.aspect_ratio.value,</span>
+<span id="cb40-9">        resolution<span class="op">=</span>request.resolution.value,</span>
+<span id="cb40-10">        negative_prompt<span class="op">=</span>negative_prompt,</span>
+<span id="cb40-11">        enhance_prompt<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb40-12">    ),</span>
+<span id="cb40-13">)</span>
+<span id="cb40-14">...</span>
+<span id="cb40-15"><span class="cf">return</span> ProviderSubmission(</span>
+<span id="cb40-16">    provider_job_id<span class="op">=</span>operation.name <span class="kw">or</span> <span class="st">""</span>, ...)</span></code></pre></div>
+<p>Supported models default to <code>veo-2.0-generate-001</code> and <code>veo-3.1-generate-preview</code>. Polling uses <code>client.operations.get(...)</code> and the finished clip is fetched with <code>client.files.download(...)</code>.</p>
+<p><strong>Poll-driven state machine.</strong> There is no background worker. The job advances only when the client asks for its status:</p>
+<div class="sourceCode" id="cb41"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb41-1"><span class="cf">if</span> job.status <span class="kw">in</span> {...} <span class="kw">and</span> job.provider_job_id:</span>
+<span id="cb41-2">    provider_status <span class="op">=</span> <span class="va">self</span>.provider.get_status(</span>
+<span id="cb41-3">        provider_job_id<span class="op">=</span>job.provider_job_id)</span>
+<span id="cb41-4">    job.progress <span class="op">=</span> provider_status.progress</span>
+<span id="cb41-5">    ...</span>
+<span id="cb41-6">    <span class="cf">if</span> provider_status.error_message:</span>
+<span id="cb41-7">        job.status <span class="op">=</span> RenderStatus.failed.value</span>
+<span id="cb41-8">        ...</span>
+<span id="cb41-9">    <span class="cf">elif</span> provider_status.output_url:</span>
+<span id="cb41-10">        output_path <span class="op">=</span> <span class="va">self</span>._output_destination(</span>
+<span id="cb41-11">            job, provider_status.output_mime_type)</span>
+<span id="cb41-12">        <span class="va">self</span>.provider.download_result(</span>
+<span id="cb41-13">            output_url<span class="op">=</span>provider_status.output_url,</span>
+<span id="cb41-14">            destination<span class="op">=</span>output_path, ...)</span>
+<span id="cb41-15">        job.status <span class="op">=</span> RenderStatus.complete.value</span>
+<span id="cb41-16">        job.progress <span class="op">=</span> <span class="fl">1.0</span></span></code></pre></div>
+<p>Status values run <code>queued</code>, <code>uploading</code>, <code>generating</code>, <code>processing</code>, <code>downloading</code>, <code>complete</code>, <code>failed</code>. Progress is a heuristic: the code searches the operation JSON for keys containing "progress", "percent", or "ratio", and otherwise uses staged defaults (0.18 after submit, 0.9 while downloading). On the frontend, <code>usePolling</code> keeps the latest callback in a ref so a new callback does not reset the interval timer:</p>
+<div class="sourceCode" id="cb42"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb42-1"><span class="im">export</span> <span class="kw">function</span> <span class="fu">usePolling</span>(cb<span class="op">:</span> () <span class="kw">=&gt;</span> <span class="dt">void</span> <span class="op">|</span> <span class="bu">Promise</span><span class="op">&lt;</span><span class="dt">void</span><span class="op">&gt;,</span></span>
+<span id="cb42-2">                           intervalMs<span class="op">:</span> <span class="dt">number</span><span class="op">,</span> enabled <span class="op">=</span> <span class="kw">true</span>) {</span>
+<span id="cb42-3">  <span class="kw">const</span> callbackRef <span class="op">=</span> <span class="fu">useRef</span>(cb)<span class="op">;</span></span>
+<span id="cb42-4">  <span class="fu">useEffect</span>(() <span class="kw">=&gt;</span> { callbackRef<span class="op">.</span><span class="at">current</span> <span class="op">=</span> cb<span class="op">;</span> }<span class="op">,</span> [cb])<span class="op">;</span></span>
+<span id="cb42-5">  <span class="fu">useEffect</span>(() <span class="kw">=&gt;</span> {</span>
+<span id="cb42-6">    <span class="cf">if</span> (<span class="op">!</span>enabled) { <span class="cf">return</span><span class="op">;</span> }</span>
+<span id="cb42-7">    <span class="kw">const</span> invoke <span class="op">=</span> () <span class="kw">=&gt;</span> <span class="kw">void</span> callbackRef<span class="op">.</span><span class="fu">current</span>()<span class="op">;</span></span>
+<span id="cb42-8">    <span class="fu">invoke</span>()<span class="op">;</span></span>
+<span id="cb42-9">    <span class="kw">const</span> timer <span class="op">=</span> <span class="bu">window</span><span class="op">.</span><span class="fu">setInterval</span>(invoke<span class="op">,</span> intervalMs)<span class="op">;</span></span>
+<span id="cb42-10">    <span class="cf">return</span> () <span class="kw">=&gt;</span> <span class="bu">window</span><span class="op">.</span><span class="fu">clearInterval</span>(timer)<span class="op">;</span></span>
+<span id="cb42-11">  }<span class="op">,</span> [enabled<span class="op">,</span> intervalMs])<span class="op">;</span></span>
+<span id="cb42-12">}</span></code></pre></div>
+<p><strong>Costing.</strong> <code>utils/costing.py</code> and <code>frontend/src/utils/estimateCost.ts</code> share identical placeholder rates (per second, multiplied by 1.75 for 1080p) and store a disclaimer note with each estimate.</p>
+<p><strong>Uploads.</strong> The async upload route enforces a size cap (20 MB default), an extension allowlist, and Pillow <code>verify()</code>, then writes the file as <code>&lt;uuid&gt;.&lt;ext&gt;</code> with aiofiles so the original filename never touches the filesystem.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-13" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>A provider interface (<code>BaseVideoProvider</code>)</strong> with <code>health</code>, <code>estimate_cost</code>, <code>submit_render</code>, <code>get_status</code>, and download methods is what made swapping fal.ai for Veo possible. Orphaned bytecode shows earlier <code>fal_hailuo.py</code> and <code>fal_kling.py</code> providers.</li>
+<li><strong>Polling instead of a worker</strong>: no queue infrastructure and restart-safe (state lives in SQLite plus the remote operation name). The costs: progress stops when nobody is watching, a GET request has side effects and blocks on the download, and two tabs polling at once could both download.</li>
+<li><strong>Constraints in the prompt</strong> (guard words, negatives, no enhancement) instead of post-processing stabilization.</li>
+<li><strong><code>create_all</code> without migrations</strong>: easy, but an older <code>studio.sqlite3</code> with a different schema shows the drift.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-13" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li>The fal-to-Veo migration is half done: <code>requirements.txt</code> still lists <code>fal-client</code> and lacks <code>google-genai</code> and <code>aiofiles</code>, the README still describes Hailuo tiers, and <code>.env.example</code> still names <code>FAL_KEY</code> while config reads <code>GEMINI_API_KEY</code>.</li>
+<li>The frontend's <code>pages/</code> and <code>components/</code> directories are missing, so <code>npm run build</code> fails; the backend can only serve an older prebuilt <code>dist/</code> that still shows the fal-era UI. Recovering or rewriting <code>StudioPage</code> is the next step.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-13" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>Binds to 127.0.0.1, with no auth, by design. The API key stays server-side.</li>
+<li>Upload validation is solid. The output download route joins a filename onto the outputs folder without an explicit <code>resolve()</code> containment check; Starlette path parameters cannot contain <code>/</code>, which mitigates traversal, but an explicit check is safer.</li>
+<li>Synchronous provider calls inside request handlers tie up FastAPI's threadpool; <code>list_renders</code> has no pagination.</li>
+</ul>
+</section>
+<section id="how-to-run-it-13" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb43"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb43-1"><span class="co"># from scratch/ImagetoVidoeloop (imports use the package path)</span></span>
+<span id="cb43-2"><span class="ex">python3.11</span> <span class="at">-m</span> venv .venv <span class="kw">&amp;&amp;</span> <span class="bu">source</span> .venv/bin/activate</span>
+<span id="cb43-3"><span class="ex">pip</span> install <span class="at">-r</span> motion_scene_studio/requirements.txt <span class="dt">\</span></span>
+<span id="cb43-4">  google-genai aiofiles</span>
+<span id="cb43-5"><span class="bu">echo</span> <span class="st">"GEMINI_API_KEY=&lt;your key&gt;"</span> <span class="op">&gt;</span> <span class="dt">\</span></span>
+<span id="cb43-6">  motion_scene_studio/backend/.env</span>
+<span id="cb43-7"><span class="ex">python</span> motion_scene_studio/scripts/setup.py</span>
+<span id="cb43-8"><span class="ex">python</span> <span class="at">-m</span> motion_scene_studio.backend.app.main  <span class="co"># :8000/docs</span></span>
+<span id="cb43-9"><span class="ex">python</span> motion_scene_studio/scripts/dev.py        <span class="co"># both servers</span></span></code></pre></div>
+</section>
+<section id="learn-more-13" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://ai.google.dev/gemini-api/docs/video" target="_blank" rel="noopener noreferrer">Gemini API: Generate videos with Veo</a></li>
+<li><a href="https://googleapis.github.io/python-genai/" target="_blank" rel="noopener noreferrer">Google Gen AI Python SDK</a></li>
+<li><a href="https://sqlmodel.tiangolo.com/" target="_blank" rel="noopener noreferrer">SQLModel documentation</a></li>
+<li><a href="https://fastapi.tiangolo.com/tutorial/request-files/" target="_blank" rel="noopener noreferrer">FastAPI: Request files</a></li>
+<li><a href="https://docs.pydantic.dev/latest/concepts/validators/" target="_blank" rel="noopener noreferrer">Pydantic validators</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=6iJcevn757g" target="_blank" rel="noopener noreferrer">Brief Overview of Video Diffusion Models | Foundations of SORA</a></li>
+<li><a href="https://www.youtube.com/watch?v=fG3IE9dkyKY" target="_blank" rel="noopener noreferrer">How does OpenAI's Sora work?</a></li>
+<li><a href="https://www.youtube.com/watch?v=iWS9ogMPOI0" target="_blank" rel="noopener noreferrer">Python FastAPI Tutorial: Build a REST API in 15 Minutes</a></li>
+<li><a href="https://www.youtube.com/watch?v=Tn6-PIqc4UM" target="_blank" rel="noopener noreferrer">React in 100 Seconds</a></li>
+</ul>
+</section>
+</section>
+<section id="audio-video-studio-narration-to-story-video" class="level2">
+<h2>Audio-Video-Studio: Narration to Story Video</h2>
+<section id="at-a-glance-14" class="level3">
+<h3>At a Glance</h3>
+<p>Audio-Video-Studio turns narration audio, pasted text, or an uploaded document into a narrated slideshow video with burned-in subtitles. It is meant for "faceless" YouTube, Shorts, and TikTok creators who make story videos (anime-style narrations, horror stories, explainers). The pipeline transcribes the audio with word timings, cuts it into timed scenes, writes an image prompt per scene while keeping recurring characters, places, and props consistent through a "Visual Bible", collects one image per scene, and renders an MP4. It started as "Forge Story Video Studio" around a local Stable Diffusion Forge engine and was later pivoted to API providers plus in-browser rendering.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Python 3, TypeScript</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>FastAPI, Pydantic, Next.js 16, React 19, Tailwind 4</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>faster-whisper, Pillow, pydub, framer-motion; ffmpeg and ffprobe binaries</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Local or private backend; frontend on Vercel</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/Audio-Video-Studio" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/Audio-Video-Studio</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>MVP; manual image upload works end to end, remote image providers are stubs</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-14" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Think of making a picture book for an audiobook. First you write down every word the narrator says and when they say it. Then you cut the recording into ten-second pages. For each page you write a short description for an illustrator, always reminding them "the hero has short black hair and a red scarf" so the hero looks the same on every page. When the pictures are ready, you flip through them in time with the audio and print the words along the bottom, highlighting each word as it is spoken.</p>
+</section>
+<section id="architecture-14" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> Next.js frontend (Vercel or local)
+   story-studio, visual-bible, jobs, assets, settings ...
+   lib/api.ts --(x-session-id header)--+
+   lib/browserRender.ts (canvas+MediaRecorder, optional)
+                                       |
+                                       v
+ FastAPI backend/main.py (about 11,600 lines, 102 routes)
+   |-- faster-whisper "small" (CPU int8)
+   |-- scene splitter (time windows / paragraphs)
+   |-- prompt pipeline + Visual Bible
+   |      '-- Gemini / OpenAI JSON extraction (optional)
+   |-- providers/ (PromptProvider, ImageProvider ABCs)
+   |-- render: Pillow frames -&gt; ffmpeg segments -&gt; concat
+   |          -&gt; mux narration + ASS subtitles
+   |-- daemon threads, JSON files per job on disk</code></pre>
+</section>
+<section id="deep-dive-14" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Layout reality.</strong> The repository has files named <code>transcriber.py</code>, <code>scene_splitter.py</code>, <code>prompt_engine.py</code>, <code>renderer.py</code>, <code>subtitle_manager.py</code>, and <code>job_manager.py</code>, but they are empty. Nearly all backend logic lives in <code>backend/main.py</code>, with real code only in <code>providers/</code> and <code>system_detector.py</code>. The root <code>main.py</code> re-exports the app and runs Uvicorn on port 8000.</p>
+<p><strong>Transcription.</strong> faster-whisper is a reimplementation of Whisper on CTranslate2, a fast inference engine. The model is loaded lazily into a module-level singleton:</p>
+<div class="sourceCode" id="cb45"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb45-1"><span class="kw">def</span> _load_faster_whisper_model():</span>
+<span id="cb45-2">    <span class="kw">global</span> _FASTER_WHISPER_MODEL</span>
+<span id="cb45-3">    <span class="cf">if</span> _FASTER_WHISPER_MODEL <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb45-4">        <span class="cf">return</span> _FASTER_WHISPER_MODEL</span>
+<span id="cb45-5">    <span class="cf">try</span>:</span>
+<span id="cb45-6">        <span class="im">from</span> faster_whisper <span class="im">import</span> WhisperModel</span>
+<span id="cb45-7">    <span class="cf">except</span> <span class="pp">ImportError</span> <span class="im">as</span> exc:</span>
+<span id="cb45-8">        <span class="cf">raise</span> ProviderError(</span>
+<span id="cb45-9">            <span class="st">"faster_whisper is not installed. ..."</span>) <span class="im">from</span> exc</span>
+<span id="cb45-10">    _FASTER_WHISPER_MODEL <span class="op">=</span> WhisperModel(</span>
+<span id="cb45-11">        <span class="st">"small"</span>, device<span class="op">=</span><span class="st">"cpu"</span>, compute_type<span class="op">=</span><span class="st">"int8"</span>)</span>
+<span id="cb45-12">    <span class="cf">return</span> _FASTER_WHISPER_MODEL</span></code></pre></div>
+<p><code>int8</code> quantization stores weights as 8-bit integers, which is roughly four times smaller than 32-bit floats and fast on CPUs. Transcription uses <code>vad_filter=True</code> (voice activity detection skips silence), <code>beam_size=5</code>, and <code>word_timestamps=True</code>. Audio length is checked with ffprobe (falling back to pydub) against a default two-hour limit. It always runs on CPU, even when <code>system_detector.py</code> (which parses <code>system_profiler</code> on macOS and <code>nvidia-smi</code> on NVIDIA machines) finds a GPU, favouring portability over speed.</p>
+<p><strong>Scene splitting.</strong> Two deliberately simple algorithms. For audio, the timeline is cut into fixed windows (default 10 s) and each window collects every Whisper segment that overlaps it:</p>
+<div class="sourceCode" id="cb46"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb46-1">target_scene_count <span class="op">=</span> <span class="bu">max</span>(<span class="dv">1</span>, math.ceil(</span>
+<span id="cb46-2">    duration <span class="op">/</span> <span class="bu">max</span>(scene_interval, <span class="dv">1</span>)))</span>
+<span id="cb46-3">target_scene_count <span class="op">=</span> <span class="bu">min</span>(target_scene_count,</span>
+<span id="cb46-4">                         <span class="bu">max</span>(scene_count_limit, <span class="dv">1</span>))</span>
+<span id="cb46-5"><span class="cf">for</span> index <span class="kw">in</span> <span class="bu">range</span>(target_scene_count):</span>
+<span id="cb46-6">    start <span class="op">=</span> <span class="bu">round</span>(index <span class="op">*</span> scene_interval, <span class="dv">3</span>)</span>
+<span id="cb46-7">    end <span class="op">=</span> <span class="bu">round</span>(<span class="bu">min</span>((index <span class="op">+</span> <span class="dv">1</span>) <span class="op">*</span> scene_interval, duration), <span class="dv">3</span>)</span>
+<span id="cb46-8">    window_segments <span class="op">=</span> [</span>
+<span id="cb46-9">        segment</span>
+<span id="cb46-10">        <span class="cf">for</span> segment <span class="kw">in</span> cleaned_segments</span>
+<span id="cb46-11">        <span class="cf">if</span> segment[<span class="st">"end"</span>] <span class="op">&gt;</span> start <span class="kw">and</span> segment[<span class="st">"start"</span>] <span class="op">&lt;</span> end</span>
+<span id="cb46-12">    ]</span>
+<span id="cb46-13">    text <span class="op">=</span> <span class="st">" "</span>.join(segment[<span class="st">"text"</span>] <span class="cf">for</span> segment <span class="kw">in</span> window_segments)</span>
+<span id="cb46-14">    ...</span></code></pre></div>
+<p>The overlap test <code>end &gt; start and start &lt; end</code> is the standard interval intersection check. An empty window borrows its nearest segment's text so no scene is blank. For text input, the story is split on blank-line paragraphs, or on sentences if there are too few paragraphs, and each chunk gets synthetic 10 s timings.</p>
+<p><strong>Prompt pipeline and the Visual Bible.</strong> Each scene prompt passes through layers: strip old character text, apply a style preset, apply image-type rules (character scene versus <code>background_only</code>, with "auto" inferred from the scene), insert a character block, then apply quality wording. <code>build_character_consistency_block</code> writes each character's appearance, hair, eyes, and outfit into the prompt, with stronger or softer wording depending on a 0 to 100 strength slider, and adds "keep X visually distinct" when several characters share a scene. A settings hash stamped on each scene lets the UI mark prompts fresh, outdated, or missing.</p>
+<p>The Visual Bible auto-build extracts characters, locations, and props as JSON, trying Gemini (<code>responseMimeType: application/json</code>, temperature 0.2), then OpenAI, then a keyword heuristic when no keys exist. <code>detect_scene_assets</code> matches names and aliases in each scene's text, and <code>build_world_memory_block</code> adds location and prop "memory" to the prompt. These extraction calls are the only live LLM network calls in the codebase.</p>
+<p><strong>Providers.</strong> <code>providers/base.py</code> defines two abstract base classes (ABCs, Python's way to declare an interface): <code>PromptProvider.generate_scene_prompt(...)</code> and <code>ImageProvider.generate_image(prompt, negative_prompt, output_path, settings)</code>, each with <code>test_connection()</code>. A registry maps names (gemini, openai, claude, custom; manual, openai, gemini, stability, leonardo) to classes. Today every prompt provider uses the same deterministic template, and every remote image provider raises a clear "not available in this MVP" error. The working path is "manual": the user uploads an image per scene.</p>
+<p><strong>Rendering.</strong> For each scene, <code>_compose_render_frame</code> uses Pillow to build a "blurred-fill letterbox": a cover-fit copy of the image is Gaussian-blurred (radius 28) and dimmed as the background, and a contain-fit copy sits on top. This avoids black bars when a 1:1 image goes into a 9:16 video. Each frame becomes a still-image clip (<code>ffmpeg -loop 1 -t &lt;dur&gt; ... libx264 yuv420p</code>), the clips are joined with the concat demuxer using <code>-c copy</code> (no re-encode), and a final pass adds narration as AAC 192k with <code>-shortest</code> and burns subtitles with the <code>ass=</code> filter. Motion presets (slow zoom, pan, parallax) and transitions are stored and logged per scene but not yet applied as filters.</p>
+<p><strong>Subtitles.</strong> ASS (Advanced SubStation Alpha) is a subtitle format with styles, positions, and per-event colours. The backend writes an ASS file whose <code>PlayResX/Y</code> equal the output size and whose font size is <code>clamp(height * 0.056, 42, 72)</code>. Three modes exist: one line per scene, word by word (one event per word in yellow), and karaoke. Karaoke chunks words into readable lines:</p>
+<div class="sourceCode" id="cb47"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb47-1"><span class="kw">def</span> _subtitle_word_chunks(words, max_words<span class="op">=</span><span class="dv">8</span>, max_chars<span class="op">=</span><span class="dv">42</span>):</span>
+<span id="cb47-2">    chunks, current, char_count <span class="op">=</span> [], [], <span class="dv">0</span></span>
+<span id="cb47-3">    <span class="cf">for</span> word <span class="kw">in</span> words:</span>
+<span id="cb47-4">        word_text <span class="op">=</span> <span class="bu">str</span>(word.get(<span class="st">"word"</span>) <span class="kw">or</span> <span class="st">""</span>)</span>
+<span id="cb47-5">        next_chars <span class="op">=</span> (char_count <span class="op">+</span> <span class="bu">len</span>(word_text)</span>
+<span id="cb47-6">                      <span class="op">+</span> (<span class="dv">1</span> <span class="cf">if</span> current <span class="cf">else</span> <span class="dv">0</span>))</span>
+<span id="cb47-7">        gap <span class="op">=</span> (_safe_float(word.get(<span class="st">"start"</span>), <span class="dv">0</span>)</span>
+<span id="cb47-8">               <span class="op">-</span> _safe_float(current[<span class="op">-</span><span class="dv">1</span>].get(<span class="st">"end"</span>), <span class="dv">0</span>)</span>
+<span id="cb47-9">               ) <span class="cf">if</span> current <span class="cf">else</span> <span class="dv">0</span></span>
+<span id="cb47-10">        <span class="cf">if</span> current <span class="kw">and</span> (<span class="bu">len</span>(current) <span class="op">&gt;=</span> max_words</span>
+<span id="cb47-11">                        <span class="kw">or</span> next_chars <span class="op">&gt;</span> max_chars</span>
+<span id="cb47-12">                        <span class="kw">or</span> gap <span class="op">&gt;</span> <span class="fl">0.75</span>):</span>
+<span id="cb47-13">            chunks.append(current)</span>
+<span id="cb47-14">            current, char_count <span class="op">=</span> [], <span class="dv">0</span></span>
+<span id="cb47-15">        current.append(word)</span>
+<span id="cb47-16">        char_count <span class="op">+=</span> <span class="bu">len</span>(word_text) <span class="op">+</span> (<span class="dv">1</span> <span class="cf">if</span> char_count <span class="cf">else</span> <span class="dv">0</span>)</span>
+<span id="cb47-17">    ...</span></code></pre></div>
+<p>A line breaks at 8 words, 42 characters, or a pause longer than 0.75 s, and is then re-emitted once per word with the active word highlighted. If the local ffmpeg lacks the <code>ass</code> filter, a fallback draws subtitles into frames with Pillow.</p>
+<p><strong>Jobs and concurrency.</strong> There is no database. Each job is a folder under <code>OUTPUT_DIR/users/&lt;session&gt;/</code> holding <code>meta.json</code>, <code>status.json</code>, scenes, transcript, prompts, images, logs, subtitle files, and the final MP4. Long tasks run on daemon threads that copy request context variables (<code>contextvars</code>) into the thread. Cancellation is cooperative: a stop file is checked between steps and live ffmpeg processes are terminated. Renders are guarded by a lock:</p>
+<div class="sourceCode" id="cb48"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb48-1"><span class="kw">def</span> acquire_render_slot(job_id: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb48-2">    <span class="kw">global</span> ACTIVE_RENDER_COUNT</span>
+<span id="cb48-3">    render_key <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>current_user_id()<span class="sc">}</span><span class="ss">:</span><span class="sc">{</span>job_id<span class="sc">}</span><span class="ss">"</span></span>
+<span id="cb48-4">    <span class="cf">with</span> RENDER_LOCK:</span>
+<span id="cb48-5">        <span class="cf">if</span> render_key <span class="kw">in</span> ACTIVE_RENDER_JOBS:</span>
+<span id="cb48-6">            <span class="cf">raise</span> ProviderError(</span>
+<span id="cb48-7">                <span class="st">"Render already in progress for this job"</span>)</span>
+<span id="cb48-8">        <span class="cf">if</span> ACTIVE_RENDER_COUNT <span class="op">&gt;=</span> MAX_CONCURRENT_RENDERS:</span>
+<span id="cb48-9">            <span class="cf">raise</span> ProviderError(<span class="st">"Render queue is full. ..."</span>)</span>
+<span id="cb48-10">        ACTIVE_RENDER_JOBS.add(render_key)</span>
+<span id="cb48-11">        ACTIVE_RENDER_COUNT <span class="op">+=</span> <span class="dv">1</span></span></code></pre></div>
+<p>With the default limit of 1, a second render is rejected rather than queued, which protects a laptop from running two heavy ffmpeg encodes at once.</p>
+<p><strong>Frontend.</strong> <code>story-studio/page.tsx</code> (about 6,000 lines) is the main workspace. <code>TimelineEditor.tsx</code> edits scene order, duration overrides, motion, transition, subtitle overrides, and approval, saving through <code>/api/story/save-timeline</code>. The backend "AI Director" is rule-based: it scores mood keywords (action, horror, romance and others), picks motion along a ladder, rotates shot types, and scales durations for pacing. <code>frontend/lib/browserRender.ts</code> offers a backend-free export: canvas frames, <code>canvas.captureStream(fps)</code>, Web Audio routed into the stream, and <code>MediaRecorder</code> producing WebM in real time.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-14" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Split deployment.</strong> Vercel cannot run ffmpeg, Whisper, or long jobs, so the backend runs locally while the UI can live on Vercel.</li>
+<li><strong>Filesystem as database.</strong> Easy to inspect, duplicate, and zip-export, but no transactions.</li>
+<li><strong>Threads, not a queue.</strong> No Celery or Redis to install; tasks are lost on restart, partly repaired by <code>reconcile_story_job_runtime_state</code>.</li>
+<li><strong>Deterministic heuristics first.</strong> Time-window scenes, template prompts, and a keyword director work offline without keys; AI is an optional layer.</li>
+<li><strong>Text-based character consistency</strong> rather than IP-Adapter or LoRA, which became necessary after the local Forge engine was removed.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-14" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li><strong>ffmpeg filtergraph parsing of absolute paths</strong> (Windows drive colons broke <code>ass=</code>): ffmpeg now runs with <code>cwd=job_dir</code> and relative paths.</li>
+<li><strong>A previous <code>final_video.mp4</code> picked up as narration input</strong>: an explicit input/output collision guard.</li>
+<li><strong>"Face leakage"</strong> into manual prompts: reusing the previous scene's reference image is allowed only for fully automatic character scenes.</li>
+<li><strong>Reordered timelines breaking <code>scene_NNN.png</code> lookups</strong>: the stored <code>image_path</code> is now preferred.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-14" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li><code>/api/media</code> and <code>/api/system/open-path</code> resolve paths and refuse anything outside allowed roots (403). Session ids are sanitized to <code>[a-zA-Z0-9_-]</code> up to 80 characters. API keys are masked when returned to the browser, and masked values are preserved on save so they are never overwritten with asterisks.</li>
+<li>There is no real authentication: the session id is chosen by the client. CORS allows credentials and any <code>*.vercel.app</code> origin, which is broad. Uploads are read into memory before the size check. These are acceptable for a local tool but not for a public server.</li>
+<li><code>backend/image_settings.py</code> imports a <code>model_manager</code> module that no longer exists, likely a leftover of the Forge removal.</li>
+<li>Performance: one libx264 encode per scene, a stream-copy concat, then one final encode. Browser rendering runs at exactly real time.</li>
+</ul>
+</section>
+<section id="how-to-run-it-14" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb49"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb49-1"><span class="bu">cd</span> backend</span>
+<span id="cb49-2"><span class="ex">python</span> <span class="at">-m</span> venv .venv <span class="kw">&amp;&amp;</span> <span class="bu">source</span> .venv/bin/activate</span>
+<span id="cb49-3"><span class="ex">pip</span> install fastapi uvicorn pydantic pillow python-multipart <span class="dt">\</span></span>
+<span id="cb49-4">  faster-whisper pydub          <span class="co"># no requirements.txt in repo</span></span>
+<span id="cb49-5"><span class="ex">python</span> <span class="at">-m</span> uvicorn main:app <span class="at">--host</span> 127.0.0.1 <span class="at">--port</span> 8000</span>
+<span id="cb49-6"></span>
+<span id="cb49-7"><span class="bu">cd</span> ../frontend <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> install <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> run dev</span>
+<span id="cb49-8"><span class="co"># or both at once from the repo root:</span></span>
+<span id="cb49-9"><span class="ex">./run-dev.sh</span></span>
+<span id="cb49-10"><span class="ex">./scripts/check-health.sh</span></span></code></pre></div>
+<p>Set <code>NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000</code> for the frontend (the README mentions a different variable name). ffmpeg must be on <code>PATH</code>.</p>
+</section>
+<section id="learn-more-14" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://github.com/SYSTRAN/faster-whisper" target="_blank" rel="noopener noreferrer">faster-whisper on GitHub</a></li>
+<li><a href="https://trac.ffmpeg.org/wiki/Concatenate" target="_blank" rel="noopener noreferrer">FFmpeg concat demuxer</a></li>
+<li><a href="https://aegisub.org/docs/latest/ass_tags/" target="_blank" rel="noopener noreferrer">Aegisub: ASS tags reference</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/captureStream" target="_blank" rel="noopener noreferrer">MDN: HTMLCanvasElement.captureStream</a></li>
+<li><a href="https://docs.python.org/3/library/abc.html" target="_blank" rel="noopener noreferrer">Python abc module</a></li>
+<li><a href="https://fastapi.tiangolo.com/tutorial/background-tasks/" target="_blank" rel="noopener noreferrer">FastAPI background tasks</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=26Mayv5JPz0" target="_blank" rel="noopener noreferrer">FFmpeg in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=YYd6nMY72jo" target="_blank" rel="noopener noreferrer">OpenAI Whisper: Open Source Speech Recognition Explained</a></li>
+<li><a href="https://www.youtube.com/watch?v=iWS9ogMPOI0" target="_blank" rel="noopener noreferrer">Python FastAPI Tutorial: Build a REST API in 15 Minutes</a></li>
+<li><a href="https://www.youtube.com/watch?v=1CIpzeNxIhU" target="_blank" rel="noopener noreferrer">How AI Image Generators Work (Stable Diffusion / Dall-E) - Computerphile</a></li>
+</ul>
+</section>
+</section>
+</section>

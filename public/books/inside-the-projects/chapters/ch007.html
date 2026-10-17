@@ -1,0 +1,1129 @@
+<section id="chapter-7-websites-front-ends-data-and-3d" class="level1">
+<h1><span class="header-section-number">7</span> Websites, Front-Ends, Data and 3D</h1>
+<p>This chapter covers the projects that live in a browser, in a spreadsheet, or in a 3D scene. They range from a production portfolio site with its own authentication model and book reader, through a hardened static corporate site and a full-stack electronics store, down to a single-file lesson on JavaScript modules. The common thread is presentation: each project has to show information to a person clearly, quickly and safely, and most of the interesting engineering is in the constraints the author set himself (low-power laptops, no secrets in the bundle, deterministic builds).</p>
+<section id="portfolio-website-vijaysinghpuwar.com" class="level2">
+<h2>Portfolio Website (vijaysinghpuwar.com)</h2>
+<section id="at-a-glance-15" class="level3">
+<h3>At a Glance</h3>
+<p>This is the author's personal portfolio: a single scrolling page themed as a security terminal, with sections for the hero, skills, projects, experience and contact. It is aimed first at security hiring managers who will spend under a minute on it, then at engineers who will actually read a project write-up. Behind the public page sit a Google sign-in, an admin console, a resume page, a GitHub activity strip, an MCP server that exposes the portfolio as tools for AI assistants, and a paginated e-book reader. The folder also holds <code>CLAUDE-DESIGN-MASTER-PROMPT.md</code>, a long brief for a visual redesign pass, and a <code>reference/</code> directory that acts as the source of truth for which projects belong on the site.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>TypeScript, SQL, Python (import script), Deno TypeScript (edge functions)</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>React 18, Vite 5, Tailwind CSS 3, shadcn/ui (Radix)</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>TanStack Query, Framer Motion, React Router 7, Zod, Supabase JS, Drizzle ORM, cmdk</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Static SPA on Lovable hosting, Supabase (Postgres, Auth, Edge Functions)</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/About</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Live, actively maintained (about 550 commits)</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-15" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Picture a shop window with a locked back room. Anyone walking past can see every item in the window: the hero terminal, the skills, every project card and the work history. A few things are kept in the back room: the real contact email address, links to source code, the resume download and the full text of the books. To get into the back room you show an ID card (sign in with Google). The shop owner has a separate key to the office (the admin console), and that key is never handed out just because someone showed an ID; it comes from a list kept in the database.</p>
+<p>The terminal at the top is a small toy shell. It types a short introduction, then lets you type commands like <code>whoami</code>, <code>ls</code>, or <code>skills aws</code>. Each command does something you could otherwise do by scrolling and clicking, such as jumping to a section or filtering the projects.</p>
+</section>
+<section id="architecture-15" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> Browser (React SPA, Vite build)
+  |
+  |-- Index page: TerminalHero, SkillMatrix, ProjectShowcase,
+  |               ExperienceTimeline, contact card
+  |-- Lazy routes: /login /admin /resume /books/* /environment
+  |
+  |  supabase-js (publishable key, user JWT)
+  v
+ Supabase
+  |-- Postgres + Row Level Security
+  |     profiles, user_roles, projects, project_access,
+  |     auth_events, admin_notifications, reading_progress
+  |-- Auth (Google primary, GitHub, magic link)
+  |-- Edge Functions (Deno)
+        github-activity   GitHub GraphQL -&gt; daily counts
+        mcp               MCP tools over portfolio data
+        auth-email-hook   custom auth email templates
+        log-auth-event    audit trail
+        send-contact-email (no current caller)
+
+ Static files: public/books/&lt;slug&gt;/chapters/*.html
+   produced offline by scripts/import-epub.py</code></pre>
+</section>
+<section id="deep-dive-15" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Routing and code splitting.</strong> <code>src/App.tsx</code> mounts providers (Helmet for page metadata, TanStack Query for server state, a theme provider and an auth provider) and declares routes. Only the home page is imported eagerly. Every other page is wrapped in <code>React.lazy</code>, which means Vite emits it as a separate JavaScript chunk that the browser downloads only when the route is visited. A comment in the file explains the reason: the admin console used to ship in the entry bundle, so first-time visitors parsed hundreds of kilobytes they would never run.</p>
+<p><strong>The terminal.</strong> <code>src/lib/terminal-commands.ts</code> (550 lines) defines a <code>CommandSpec</code> for each command with a name, aliases, usage text and a <code>run</code> function. The <code>CommandContext</code> passed in gives commands access to the project list, whether the visitor is signed in, a <code>goToLogin</code> callback and a toggle for the red "pentest" theme. Output is a list of lines, each with a tone (<code>muted</code>, <code>accent</code>, <code>error</code>) that maps to a colour token. The renderer never re-wraps output, so every command writes against a fixed width budget:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb2-1"><span class="co">/** Characters a row may use before the log has to scroll. */</span></span>
+<span id="cb2-2"><span class="kw">const</span> COLUMNS <span class="op">=</span> <span class="dv">56</span><span class="op">;</span></span>
+<span id="cb2-3"></span>
+<span id="cb2-4"><span class="kw">const</span> pad <span class="op">=</span> (text<span class="op">:</span> <span class="dt">string</span><span class="op">,</span> width<span class="op">:</span> <span class="dt">number</span>) <span class="kw">=&gt;</span></span>
+<span id="cb2-5">  text<span class="op">.</span><span class="at">length</span> <span class="op">&gt;=</span> width</span>
+<span id="cb2-6">    <span class="op">?</span> text<span class="op">.</span><span class="fu">slice</span>(<span class="dv">0</span><span class="op">,</span> width <span class="op">-</span> <span class="dv">2</span>)<span class="op">.</span><span class="fu">trimEnd</span>() <span class="op">+</span> <span class="st">'… '</span></span>
+<span id="cb2-7">    <span class="op">:</span> text <span class="op">+</span> <span class="st">' '</span><span class="op">.</span><span class="fu">repeat</span>(width <span class="op">-</span> text<span class="op">.</span><span class="at">length</span>)<span class="op">;</span></span></code></pre></div>
+<p><code>pad</code> builds fixed-width table columns and marks truncation with an ellipsis, so a cut title reads as a column doing its job rather than a rendering bug. A companion <code>wrap</code> function does greedy word wrapping for prose. <code>TerminalHero.tsx</code> (826 lines) handles tab completion to the longest shared prefix, history with arrow keys, a "did you mean" for unknown words, and mobile keyboards. On phones it pins the prompt above the on-screen keyboard using the <code>visualViewport</code> API, which reports how much of the screen the keyboard covers.</p>
+<p><strong>Motion policy.</strong> <code>src/lib/motion.ts</code> decides once whether the site animates and writes the answer to <code>&lt;html data-motion="reduce"&gt;</code>. The decision order is: an explicit choice stored in <code>localStorage</code> wins; otherwise Windows animates; otherwise the OS <code>prefers-reduced-motion</code> setting is followed. The Windows rule exists because Chrome on Windows reports "reduce" whenever the OS "Animation effects" switch is off, which is common on corporate images and VMs, so capable machines were getting a static site.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb3-1"><span class="kw">function</span> <span class="fu">decide</span>()<span class="op">:</span> <span class="dt">boolean</span> {</span>
+<span id="cb3-2">  <span class="kw">const</span> pref <span class="op">=</span> <span class="fu">storedPref</span>()<span class="op">;</span></span>
+<span id="cb3-3">  <span class="cf">if</span> (pref) <span class="cf">return</span> pref <span class="op">===</span> <span class="st">'reduce'</span><span class="op">;</span></span>
+<span id="cb3-4">  <span class="cf">if</span> (<span class="fu">isWindows</span>()) <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb3-5">  <span class="cf">return</span> <span class="bu">window</span><span class="op">.</span><span class="fu">matchMedia</span>(</span>
+<span id="cb3-6">    <span class="st">'(prefers-reduced-motion: reduce)'</span>)<span class="op">.</span><span class="at">matches</span><span class="op">;</span></span>
+<span id="cb3-7">}</span></code></pre></div>
+<p>React components read the result through <code>useSyncExternalStore</code>, a React hook that subscribes a component to an outside data source so it re-renders when that source changes. The same logic is duplicated as an inline script in <code>index.html</code> so the attribute exists before the first paint.</p>
+<p><strong>Pausing off-screen animation.</strong> <code>src/hooks/usePauseOffscreen.ts</code> uses an <code>IntersectionObserver</code> (a browser API that tells you when an element enters or leaves the viewport). When an element scrolls away it gets a <code>data-offscreen</code> attribute, which CSS turns into <code>animation-play-state: paused</code>, and any SVG inside has its SMIL timeline paused with <code>pauseAnimations()</code>. SMIL is the older SVG animation system (<code>&lt;animateMotion&gt;</code>) that ignores CSS, so it needs the separate call.</p>
+<p><strong>Theme shutter.</strong> <code>src/lib/theme-transition.ts</code> (429 lines) replaces a cross-fade with a "shutter": six or nine vertical plates slide across the viewport with a 40 ms stagger, the theme class is swapped while the screen is fully covered, the new mode name "resolves" out of random characters, and the plates open again. A synthesized WebAudio cue plays on the same timeline. The file computes timing marks (<code>sealed</code>, <code>commit</code>, <code>resolved</code>, <code>opening</code>) from a 3,200 ms duration so other components, such as the terminal replay, can wait out the shutter by calling a single <code>sweepHold()</code> function instead of hardcoding a delay.</p>
+<p><strong>Data and access control.</strong> The Supabase migrations create <code>profiles</code>, <code>user_roles</code>, <code>projects</code>, <code>project_access</code>, <code>contact_messages</code>, <code>auth_events</code> and <code>admin_notifications</code>. Row Level Security (RLS) is a Postgres feature where each table carries policies that decide, per row, whether the current user may read or write it. Admin checks go through a <code>has_role(user_id, role)</code> SQL function. A trigger, <code>validate_profile_status</code>, stops a user from changing their own <code>status</code> column. Projects merge two sources: database rows take precedence, and <code>src/data/projects.json</code> fills gaps.</p>
+<p><strong>GitHub activity.</strong> The <code>github-activity</code> edge function queries GitHub's GraphQL API for <code>contributionsCollection</code>, which includes private contribution counts that the public REST feed omits. The token lives only as a function secret, needs only <code>read:user</code>, and responses are cached for six hours so many visitors share one API call.</p>
+<p><strong>MCP server.</strong> MCP (Model Context Protocol) is a standard way for AI assistants to call tools on a server. <code>src/lib/mcp/</code> defines tools such as <code>list_projects</code>, <code>get_project</code> and <code>get_my_access</code>, and a Vite plugin bundles them into the <code>mcp</code> edge function. Each tool refuses unauthenticated calls and creates a Supabase client that forwards the caller's OAuth token, so RLS still applies to whatever the assistant asks for.</p>
+<p><strong>Books.</strong> <code>/books</code> is a library of long-form guides. <code>scripts/import-epub.py</code> unpacks a pandoc EPUB, sanitises each chapter to an allow-list of tags and attributes, re-encodes figures to WebP and writes one HTML fragment per chapter plus a catalogue entry in <code>src/data/books.json</code>:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb4-1">ALLOWED <span class="op">=</span> {</span>
+<span id="cb4-2">    <span class="st">"section"</span>: {<span class="st">"id"</span>, <span class="st">"class"</span>}, <span class="st">"div"</span>: {<span class="st">"id"</span>, <span class="st">"class"</span>},</span>
+<span id="cb4-3">    <span class="st">"p"</span>: {<span class="st">"id"</span>, <span class="st">"class"</span>}, <span class="st">"a"</span>: {<span class="st">"id"</span>, <span class="st">"class"</span>, <span class="st">"href"</span>},</span>
+<span id="cb4-4">    <span class="st">"pre"</span>: {<span class="st">"class"</span>}, <span class="st">"code"</span>: {<span class="st">"class"</span>},</span>
+<span id="cb4-5">    <span class="st">"img"</span>: {<span class="st">"src"</span>, <span class="st">"alt"</span>},</span>
+<span id="cb4-6">    <span class="co"># ... tables, lists, headings, figures</span></span>
+<span id="cb4-7">}</span>
+<span id="cb4-8">VOID <span class="op">=</span> {<span class="st">"br"</span>, <span class="st">"hr"</span>, <span class="st">"img"</span>, <span class="st">"col"</span>}</span></code></pre></div>
+<p>The reader renders fragments with <code>dangerouslySetInnerHTML</code>, so this script is the security boundary: anything not in <code>ALLOWED</code> is dropped before it reaches the browser. The reader itself paginates with CSS columns sized to the measured page, stores the reading position as a fraction of the chapter (so it survives a rotation or font change), and syncs progress to a <code>reading_progress</code> table defined with Drizzle ORM, debounced to at most one write every few seconds.</p>
+<p><strong>The reference folder and design prompt.</strong> <code>reference/</code> is a read-only backup of 82 Obsidian project notes and metadata for 49 repositories. <code>INDEX.md</code> marks which repos already appear in <code>projects.json</code> and which do not, giving a Claude Code session a work queue for updating the site. <code>CLAUDE-DESIGN-MASTER-PROMPT.md</code> (about 1,700 words) briefs a design tool on a redesign: audience in priority order, every section, the exact HSL colour tokens for the default blue theme and the red pentest theme, and the site's best idea (clicking a skill filters the projects).</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-15" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>One accent colour, no gradients, glows or backdrop blur.</strong> <code>CLAUDE.md</code> treats the flat palette as the design. Every surface comes from a token in <code>src/index.css</code>, so the pentest theme only overrides <code>--primary</code>.</li>
+<li><strong>Ambient motion capped at two effects.</strong> A comment in <code>App.tsx</code> records that the site once had a cursor spotlight, cursor trail, reactive canvas grid, preloader and a Konami rainbow mode. All were removed rather than tuned down.</li>
+<li><strong>Single page with scroll-spy instead of routes.</strong> Hiring managers scan; anchors (<code>#skills</code>, <code>#projects</code>) keep everything one scroll away.</li>
+<li><strong>No approval queue.</strong> Signing in grants normal access immediately; admin is a separate row in <code>user_roles</code>. This trades a little exposure (any Google account can see repo links) for zero friction.</li>
+<li><strong>Books gated by route, not by storage.</strong> The fragments are static files that could be fetched directly. <code>CLAUDE.md</code> states this openly: the gate protects the reading experience, not the text.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-15" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li><strong>Production pointed at a dead backend.</strong> Vite inlines <code>VITE_*</code> variables at build time, so a stale <code>.env</code> value was baked into the bundle. <code>src/integrations/supabase/client.ts</code> now throws at startup if the URL contains a retired project reference.</li>
+<li><strong>Email leaked by constant folding.</strong> esbuild folded a template literal into one plaintext string, shipping the real address in the Command Palette chunk. <code>src/lib/contact-email.ts</code> now joins an array at call time, which the bundler does not fold.</li>
+<li><strong>Terminal felt broken.</strong> The intro typed commands that then answered "command not found". Every demonstrated command now works, <code>clear</code> reports itself as <code>silent</code> so aliases behave, and rows are never re-wrapped.</li>
+<li><strong>Idle page cost on weak GPUs.</strong> The old grid animated <code>background-position</code>, which repaints every frame. The rule now is: animate only <code>transform</code> and <code>opacity</code>, and keep any loop under <code>usePauseOffscreen</code>. The site is tested on an Intel UHD 630 laptop.</li>
+<li><strong>Accuracy of claims.</strong> Many recent commits ("Drop unverified BGP claim", "Restore MTA as Emerging Talent Intern") keep the resume page, PDF and terminal consistent with one title of record.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-15" class="level3">
+<h3>Security and Performance Notes</h3>
+<p><code>SECURITY_AUDIT.md</code> (May 2026) lists 32 findings, none critical. The two high findings were an unauthenticated <code>log-auth-event</code> function that accepted any <code>user_id</code> from the request body while using the service-role key, and a tracked <code>.env</code> file. The audit notes that the publishable key in that file is public by design, but the pattern invites a future secret leak. The suspected privilege escalation (a user approving themselves) was already blocked by both an RLS <code>WITH CHECK</code> and a trigger. A later migration, <code>20260513164018_drop_permissive_contact_insert.sql</code>, removed the "anyone can insert" policy on contact messages. On performance: lazy routes, a book chunk separate from the home page, and paused off-screen loops.</p>
+</section>
+<section id="how-to-run-it-15" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb5"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb5-1"><span class="bu">cd</span> PortfolioWebsite/About</span>
+<span id="cb5-2"><span class="ex">npm</span> install</span>
+<span id="cb5-3"><span class="fu">cp</span> .env.example .env   <span class="co"># VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY</span></span>
+<span id="cb5-4"><span class="ex">npm</span> run dev            <span class="co"># http://localhost:8080</span></span>
+<span id="cb5-5"><span class="ex">npm</span> run build <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> run preview</span>
+<span id="cb5-6"></span>
+<span id="cb5-7"><span class="co"># import a book into the reader</span></span>
+<span id="cb5-8"><span class="ex">python3</span> <span class="at">-I</span> scripts/import-epub.py <span class="op">&lt;</span>slug<span class="op">&gt;</span> path/to/book.epub</span></code></pre></div>
+</section>
+<section id="learn-more-15" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://react.dev/reference/react/lazy" target="_blank" rel="noopener noreferrer">React documentation: lazy</a></li>
+<li><a href="https://vite.dev/guide/env-and-mode" target="_blank" rel="noopener noreferrer">Vite: Env Variables and Modes</a></li>
+<li><a href="https://supabase.com/docs/guides/database/postgres/row-level-security" target="_blank" rel="noopener noreferrer">Supabase: Row Level Security</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/IntersectionObserver" target="_blank" rel="noopener noreferrer">MDN: IntersectionObserver</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion" target="_blank" rel="noopener noreferrer">MDN: prefers-reduced-motion</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/VisualViewport" target="_blank" rel="noopener noreferrer">MDN: VisualViewport</a></li>
+<li><a href="https://modelcontextprotocol.io/" target="_blank" rel="noopener noreferrer">Model Context Protocol specification</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=Tn6-PIqc4UM" target="_blank" rel="noopener noreferrer">React in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=KCrXgy8qtjM" target="_blank" rel="noopener noreferrer">Vite in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=zBZgdTb-dns" target="_blank" rel="noopener noreferrer">Supabase in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=Ow_Uzedfohk" target="_blank" rel="noopener noreferrer">Implement Authorization using Row Level Security (RLS) with Supabase (Step By Step Guide)</a></li>
+<li><a href="https://www.youtube.com/watch?v=mr15Xzb1Ook" target="_blank" rel="noopener noreferrer">Tailwind in 100 Seconds</a></li>
+</ul>
+</section>
+</section>
+<section id="zelqorix-corporate-website" class="level2">
+<h2>ZELQORIX Corporate Website</h2>
+<section id="at-a-glance-16" class="level3">
+<h3>At a Glance</h3>
+<p>Zelqorix is the author's company brand for AI product and software engineering, and this is its marketing site at zelqorix.com. It presents the company, five capability areas, its product (Recap Verse), a five-step approach and a contact form. The audience is prospective clients, and traffic is small (about 100 visits a month), so the site is deliberately simple: a static single-page app with no backend, no database, no login and no third-party requests. The <code>ZELQORIX/</code> folder also holds <code>Logo/logo.png</code> (a 1.5 MB, 2048 px phoenix crest) and an empty <code>website/</code> folder that only contains tool settings; the real code is in <code>repo/</code>.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>TypeScript, CSS</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>React 18, Vite 7, Tailwind CSS 3 (base reset only)</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>Zod (contact form), Vitest + Testing Library</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Vercel, auto-deploy on push to <code>main</code></td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/zelqorix-corporate-showcase</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Live (70 commits)</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-16" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Think of a printed brochure that happens to be interactive. Everything the visitor sees is already in the files Vercel serves; there is no server to ask. The only "action" is the contact form, and even that does not send anything itself. It checks the input, then opens the visitor's own email program with a message already written. The site cannot be abused to send spam because it never sends mail.</p>
+</section>
+<section id="architecture-16" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> Visitor browser
+   |  GET / (any path rewritten to index.html)
+   v
+ Vercel CDN  -- vercel.json: rewrite, cache, CSP headers
+   |
+   v
+ index.html (SEO meta, JSON-LD, preload crest + 2 fonts)
+   |
+ main.tsx -&gt; App.tsx  (path -&gt; page map, no router lib)
+   |-- Index: Navbar, Hero(HeroCrest), About, Services,
+   |          Products, Approach, Contact, Footer
+   |-- Privacy, Terms (LegalPage layout)
+   |-- NotFound
+   |
+ Contact form -&gt; contact-security.ts -&gt; mailto: link
+                                     -&gt; visitor's mail app</code></pre>
+</section>
+<section id="deep-dive-16" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>No router.</strong> <code>src/App.tsx</code> maps <code>window.location.pathname</code> straight to a component. Vercel rewrites every path to <code>/</code>, so the app reads the URL itself:</p>
+<pre class="tsx"><code>const PAGES: Record&lt;string, () =&gt; JSX.Element&gt; = {
+  "/": Index,
+  "/index.html": Index,
+  "/privacy": Privacy,
+  "/terms": Terms,
+};
+const path = window.location.pathname
+  .replace(/(.)\/$/, "$1");
+const Page = PAGES[path] ?? NotFound;</code></pre>
+<p>The regular expression strips one trailing slash (but not the root <code>/</code>), so <code>/privacy/</code> and <code>/privacy</code> resolve the same. With four pages, a router library would be dead weight.</p>
+<p><strong>Hero crest.</strong> <code>src/components/HeroCrest.tsx</code> layers a drafting-grid SVG, an orbiting gold arc and the logo image, and moves them at different rates with the mouse (parallax). The animation loop runs only while layers are still easing toward the pointer, then stops itself. Low-power devices get a still crest:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb8-1"><span class="kw">const</span> nav <span class="op">=</span> <span class="bu">navigator</span> <span class="im">as</span> <span class="bu">Navigator</span></span>
+<span id="cb8-2">  <span class="op">&amp;</span> { deviceMemory<span class="op">?:</span> <span class="dt">number</span> }<span class="op">;</span></span>
+<span id="cb8-3"><span class="kw">const</span> lowPower <span class="op">=</span></span>
+<span id="cb8-4">  (nav<span class="op">.</span><span class="at">hardwareConcurrency</span> <span class="op">??</span> <span class="dv">8</span>) <span class="op">&lt;=</span> <span class="dv">4</span> <span class="op">||</span></span>
+<span id="cb8-5">  (nav<span class="op">.</span><span class="at">deviceMemory</span> <span class="op">??</span> <span class="dv">8</span>) <span class="op">&lt;=</span> <span class="dv">4</span><span class="op">;</span></span>
+<span id="cb8-6"><span class="cf">if</span> (lowPower) wrap<span class="op">.</span><span class="at">classList</span><span class="op">.</span><span class="fu">add</span>(<span class="st">"is-lite"</span>)<span class="op">;</span></span>
+<span id="cb8-7"><span class="cf">if</span> (reduced <span class="op">||</span> <span class="op">!</span>hasMouse <span class="op">||</span> lowPower)</span>
+<span id="cb8-8">  <span class="cf">return</span> () <span class="kw">=&gt;</span> io<span class="op">.</span><span class="fu">disconnect</span>()<span class="op">;</span></span></code></pre></div>
+<p><code>hardwareConcurrency</code> is the number of logical CPU cores and <code>deviceMemory</code> is an approximate RAM figure in gigabytes. The easing step uses <code>k = min(1, delta * 4)</code>, a frame-rate independent exponential approach, so the motion feels the same at 60 Hz and 120 Hz.</p>
+<p><strong>Contact form security.</strong> <code>src/lib/contact-security.ts</code> validates with a Zod schema: name 2 to 80 characters, a valid email up to 254, optional company up to 120, and a message of 20 to 1,500 characters with at most two links. A hidden <code>website</code> field is a honeypot (a field humans never see, so a value means a bot filled it). The module also enforces a minimum of three seconds between the first keystroke and submit, and a one-minute cooldown stored in <code>localStorage</code>:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb9-1"><span class="cf">if</span> (normalizedValues<span class="op">.</span><span class="at">website</span>) {</span>
+<span id="cb9-2">  <span class="cf">return</span> <span class="st">"Unable to prepare the message right now..."</span><span class="op">;</span></span>
+<span id="cb9-3">}</span>
+<span id="cb9-4"><span class="cf">if</span> (now <span class="op">-</span> startedAt <span class="op">&lt;</span> CONTACT_FORM_MIN_COMPLETION_MS) {</span>
+<span id="cb9-5">  <span class="cf">return</span> <span class="st">"Please take a moment to review..."</span><span class="op">;</span></span>
+<span id="cb9-6">}</span>
+<span id="cb9-7"><span class="cf">if</span> (lastSubmissionAt <span class="op">&amp;&amp;</span></span>
+<span id="cb9-8">    now <span class="op">-</span> lastSubmissionAt <span class="op">&lt;</span> CONTACT_FORM_RATE_LIMIT_MS) {</span>
+<span id="cb9-9">  <span class="cf">return</span> <span class="st">"Please wait a minute before trying again."</span><span class="op">;</span></span>
+<span id="cb9-10">}</span></code></pre></div>
+<p><code>buildMailtoLink</code> URL-encodes the subject and body with <code>encodeURIComponent</code>, which also defeats mail-header injection (smuggling extra headers through newline characters).</p>
+<p><strong>Design system.</strong> <code>docs/WEBSITE-OVERVIEW.md</code> documents every token: white paper, navy <code>#14224a</code> ink, a gold <code>#b9913f</code> accent, EB Garamond serif headlines, Inter body, JetBrains Mono eyebrows, all self-hosted WOFF2. Motion tokens define easing curves and durations (160 ms micro, 420 ms expand, 700 ms reveal). The capabilities accordion animates real height with a CSS grid technique (transitioning <code>grid-template-rows</code> from <code>0fr</code> to <code>1fr</code>), which avoids measuring the content in JavaScript.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-16" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>mailto instead of a backend.</strong> No server means no secrets, no abuse surface and no bill. The cost is that visitors without a configured mail app see nothing open; the success message shows the address as a fallback.</li>
+<li><strong>Template stripped to the bone.</strong> The original Lovable/shadcn template's 47 unused components and about 40 packages were removed. Only <code>react</code>, <code>react-dom</code> and <code>zod</code> ship.</li>
+<li><strong>Client-side rendering kept.</strong> Mobile LCP (Largest Contentful Paint, the time until the main content is drawn) sits around 2.6 s on simulated slow 4G because the page renders with JavaScript. Prerendering was noted as the next step but not taken, since traffic is low.</li>
+<li><strong>Owner rules written down.</strong> No em dashes, no decorative numbering, no placeholders, always verify the live deploy. These are in the overview so any future assistant follows them.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-16" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>The git log shows a long fight with Vercel builds: a <code>packageManager</code> field broke Corepack, bun lockfiles confused the installer, and an early <code>vercel.json</code> plus Vite <code>manualChunks</code> broke the build ("fix: remove vercel.json and vite manualChunks, both broke Vercel build"). The resolution was to force npm, remove bun files and later reintroduce a minimal <code>vercel.json</code> with only a rewrite, cache headers and security headers. An accordion bug where content was invisible came from animating <code>opacity</code> and <code>max-height</code> together; it was rebuilt with a display toggle and then the grid technique. Performance work took mobile Lighthouse from 68 to 96 and page weight from 2,162 KB to about 280 KB, mostly by replacing a 1.5 MB favicon with a 1.6 KB one, a 416 KB PNG crest with a 46 KB WebP, Google Fonts with self-hosted files, and removing a full-screen grain overlay and navbar backdrop blur.</p>
+</section>
+<section id="security-and-performance-notes-16" class="level3">
+<h3>Security and Performance Notes</h3>
+<p><code>vercel.json</code> sends a strict Content Security Policy (CSP, a header that tells the browser which sources of script, style, font and image are allowed): <code>default-src 'self'</code>, no <code>unsafe-inline</code>, and two SHA-256 hashes that whitelist exactly the two inline JSON-LD blocks in <code>index.html</code>. Editing either block changes its hash and requires updating the header (commit 403ea77 documents this). Other headers: HSTS for two years with preload, <code>X-Frame-Options: DENY</code>, a restrictive <code>Permissions-Policy</code>, and Cross-Origin Opener and Resource policies that stop hotlinking. Hashed assets under <code>/assets/</code> get one-year immutable caching. There are 17 Vitest tests, 11 of them security tests covering script payloads, header injection, oversized input, honeypot, timing and 100-click races.</p>
+</section>
+<section id="how-to-run-it-16" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb10"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb10-1"><span class="bu">cd</span> ZELQORIX/repo</span>
+<span id="cb10-2"><span class="ex">npm</span> ci</span>
+<span id="cb10-3"><span class="ex">npm</span> run dev        <span class="co"># port 8080</span></span>
+<span id="cb10-4"><span class="ex">npm</span> test           <span class="co"># 17 tests</span></span>
+<span id="cb10-5"><span class="ex">npm</span> run build <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> run preview   <span class="co"># port 4173</span></span>
+<span id="cb10-6"><span class="ex">npx</span> tsc <span class="at">-p</span> tsconfig.app.json <span class="at">--noEmit</span></span></code></pre></div>
+</section>
+<section id="learn-more-16" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP" target="_blank" rel="noopener noreferrer">MDN: Content Security Policy</a></li>
+<li><a href="https://vercel.com/docs/project-configuration" target="_blank" rel="noopener noreferrer">Vercel: Project configuration (vercel.json)</a></li>
+<li><a href="https://zod.dev/" target="_blank" rel="noopener noreferrer">Zod documentation</a></li>
+<li><a href="https://web.dev/articles/lcp" target="_blank" rel="noopener noreferrer">web.dev: Largest Contentful Paint</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/Navigator/hardwareConcurrency" target="_blank" rel="noopener noreferrer">MDN: Navigator.hardwareConcurrency</a></li>
+<li><a href="https://schema.org/Organization" target="_blank" rel="noopener noreferrer">Schema.org: Organization</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=-LjPRzFR5f0" target="_blank" rel="noopener noreferrer">Content Security Policy Explained</a></li>
+<li><a href="https://www.youtube.com/watch?v=HopyTTRmCqI" target="_blank" rel="noopener noreferrer">Content Security Policy Explained - Practical</a></li>
+<li><a href="https://www.youtube.com/watch?v=zQnBQ4tB3ZA" target="_blank" rel="noopener noreferrer">TypeScript in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=KCrXgy8qtjM" target="_blank" rel="noopener noreferrer">Vite in 100 Seconds</a></li>
+</ul>
+</section>
+</section>
+<section id="cardiocommand-hackathon-6" class="level2">
+<h2>CardioCommand (Hackathon 6)</h2>
+<section id="at-a-glance-17" class="level3">
+<h3>At a Glance</h3>
+<p>CardioCommand was built for a Healthcare AI hackathon. It targets the gap between a cardiac surgery patient leaving hospital and recovering at home, when about one in five patients is readmitted within 30 days. It has two front-ends: a dark, data-dense dashboard for cardiologists (live vitals, an AI analysis pipeline, ambient visit notes, a population "War Room"), and a warm, mobile-first patient app with an AI companion called Cora. Both talk to a Python backend that simulates wearable data and runs a LangGraph agent. The repository belongs to a teammate's GitHub account and has four contributors; the author's commits are tagged <code>feat(vijay)</code> and focus on the patient app (rehab streaks, an elderly-friendly UI, voice-to-text in chat, medication toggles and an insurance card).</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Python, JavaScript (JSX)</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>FastAPI, LangGraph, React 18 + Vite, Tailwind, Framer Motion</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>LangChain OpenAI, FAISS, Recharts, react-leaflet, Vapi/Twilio (voice)</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Vercel (two front-ends), Railway (backend)</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/SurajBilgi/CardioCommand (team repo)</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Hackathon demo, 28 commits</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-17" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Imagine a nurse who never sleeps. A (simulated) smartwatch sends the patient's heart rate, oxygen level and step count every couple of seconds to a central desk. The desk shows the numbers to the doctor and also runs a checklist: look up the relevant medical guidelines, ask GPT-4o what the readings mean, add up a risk score with fixed rules, and depending on the score, either do nothing, write a script for a check-in call, or write an urgent brief for the doctor. At home, the patient chats with Cora in plain English; if Cora decides the patient sounds unwell, it flags the conversation and the doctor's dashboard lights up.</p>
+</section>
+<section id="architecture-17" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> Vitals simulator (scenario + Gaussian noise + GPS walk)
+        |  async generator
+        v
+ FastAPI backend (main.py)
+   /vitals   WS stream, alerts WS, history
+   /ai       SSE: analyze, chat, pre-visit brief, rehab
+   /demo     scenario control + WS broadcast
+   /voice /calls /integrations/whoop
+        |
+        +-- LangGraph agent
+        |    retrieve_guidelines (FAISS RAG)
+        |    -&gt; analyze_vitals (GPT-4o)
+        |    -&gt; score_risk (rules) -&gt; decide_alert
+        |       medium -&gt; outreach script
+        |       high/critical -&gt; urgent brief
+        |    -&gt; generate_summary
+        v
+ MD Dashboard :5173          Patient App :5174
+ (useVitalsWS, useSSE)       (Cora chat, rehab streak)</code></pre>
+</section>
+<section id="deep-dive-17" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Agent graph.</strong> <code>backend/agents/graph.py</code> builds a LangGraph <code>StateGraph</code>. LangGraph is a library for wiring LLM steps as nodes in a directed graph with a shared state object. The state is a <code>TypedDict</code> (<code>agents/state.py</code>) holding the patient profile, current vitals, retrieved guidelines, the risk analysis, alert level and final summary. The key piece is a conditional edge:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb12-1">g.add_conditional_edges(<span class="st">"score_risk"</span>, decide_alert, {</span>
+<span id="cb12-2">    <span class="st">"none"</span>:     <span class="st">"generate_summary"</span>,</span>
+<span id="cb12-3">    <span class="st">"low"</span>:      <span class="st">"generate_summary"</span>,</span>
+<span id="cb12-4">    <span class="st">"medium"</span>:   <span class="st">"generate_outreach_script"</span>,</span>
+<span id="cb12-5">    <span class="st">"high"</span>:     <span class="st">"generate_urgent_brief"</span>,</span>
+<span id="cb12-6">    <span class="st">"critical"</span>: <span class="st">"generate_urgent_brief"</span>,</span>
+<span id="cb12-7">})</span></code></pre></div>
+<p><code>decide_alert</code> returns a label, and the dictionary maps that label to the next node. Only the medium and higher paths spend extra GPT-4o calls.</p>
+<p><strong>Deterministic risk model.</strong> <code>risk_model/predictor.py</code> deliberately does not use the LLM for the score. It adds points for heart rate above 100, SpO2 below 95 (8 points per percent), HRV below 20 ms, atrial fibrillation on the ECG label (30 points), reduced ejection fraction, diabetes or heart failure, low step count, poor sleep and high stress, then caps at 100 and keeps the top four reasons. The docstring states why: "Deterministic for demo reliability." A live demo cannot afford a model that scores the same patient 71 one minute and 58 the next.</p>
+<p><strong>Retrieval (RAG).</strong> <code>rag/indexer.py</code> reads five guideline text files (CABG guidelines, AFib detection, medication interactions, discharge protocols, readmission risk factors), splits them into 500-character chunks with 50 characters of overlap, embeds them with OpenAI embeddings and saves a FAISS index. FAISS is a library for fast nearest-neighbour search over vectors. Loading uses <code>allow_dangerous_deserialization=True</code> because the index is a pickle; that is acceptable only because the file is generated locally.</p>
+<p><strong>Vitals simulator.</strong> <code>vitals_engine/simulator.py</code> produces readings per patient from a scenario (early warning, AFib detected, pre-visit, full recovery) plus Gaussian noise. It also simulates location as a random walk with an elastic pull toward home:</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb13-1">offs[<span class="st">"dlat"</span>] <span class="op">+=</span> random.gauss(<span class="dv">0</span>, speed)</span>
+<span id="cb13-2">offs[<span class="st">"dlng"</span>] <span class="op">+=</span> random.gauss(<span class="dv">0</span>, speed)</span>
+<span id="cb13-3"><span class="co"># Elastic pull back toward home</span></span>
+<span id="cb13-4">offs[<span class="st">"dlat"</span>] <span class="op">*=</span> <span class="fl">0.97</span></span>
+<span id="cb13-5">offs[<span class="st">"dlng"</span>] <span class="op">*=</span> <span class="fl">0.97</span></span>
+<span id="cb13-6">dist <span class="op">=</span> math.sqrt(offs[<span class="st">"dlat"</span>]<span class="op">**</span><span class="dv">2</span> <span class="op">+</span> offs[<span class="st">"dlng"</span>]<span class="op">**</span><span class="dv">2</span>)</span>
+<span id="cb13-7"><span class="cf">if</span> dist <span class="op">&gt;</span> max_drift:</span>
+<span id="cb13-8">    scale <span class="op">=</span> max_drift <span class="op">/</span> dist</span>
+<span id="cb13-9">    offs[<span class="st">"dlat"</span>] <span class="op">*=</span> scale</span>
+<span id="cb13-10">    offs[<span class="st">"dlng"</span>] <span class="op">*=</span> scale</span></code></pre></div>
+<p>Multiplying by 0.97 each tick is a mean-reverting walk: the patient wanders but drifts back. The clamp keeps them within about 200 m, or about 650 m in the critical scenario.</p>
+<p><strong>Streaming.</strong> Vitals go over WebSockets (a persistent two-way connection). The alert socket uses an <code>asyncio.Queue</code> per client and sends a <code>{"ping": true}</code> every 30 seconds to keep proxies from closing idle connections. AI output uses Server-Sent Events (SSE, a one-way HTTP stream of <code>data:</code> lines) via FastAPI's <code>StreamingResponse</code>, which lets the dashboard show the pipeline progressing node by node. Cora's chat stream ends with a <code>complete</code> event whose <code>escalate</code> flag is set when the model output contains the marker <code>ESCALATE_TO_MD: true</code>.</p>
+<p><strong>Front-end resilience.</strong> <code>apps/md-dashboard/src/hooks/useVitalsWS.js</code> holds hardcoded offline vitals for each demo patient, so the dashboard shows something sensible even if the backend is down. Incoming messages are buffered and flushed to React state at most every two seconds, and a closed socket reconnects after three seconds.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-17" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Rules for the score, LLM for the words.</strong> The number that drives alerts is reproducible; GPT-4o is used for reasoning text, scripts and SOAP notes.</li>
+<li><strong>Demo-first.</strong> Scenario control endpoints and <code>?demo=true</code> URLs exist so the presenter can trigger the exact story in an eight-minute slot. The README even includes a minute-by-minute script.</li>
+<li><strong>Two apps instead of one with roles.</strong> Different audiences (clinician vs elderly patient) got different design languages, at the cost of duplicated API code.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-17" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>Commits show the team untracking <code>node_modules</code> and <code>.env</code> files after the initial push, downgrading <code>react-leaflet</code> to 4.2.1 for React 18 compatibility, and several "unify patient demo data" fixes so the rehab progress bar showed the same numbers in both apps. One documentation gap worth noting: the README says vitals stream at 10 readings per second, but <code>simulator.stream</code> sleeps 2.0 seconds between readings, so the actual rate is one reading every two seconds, matching the dashboard's two-second flush.</p>
+</section>
+<section id="security-and-performance-notes-17" class="level3">
+<h3>Security and Performance Notes</h3>
+<p>This is hackathon code. CORS allows every origin with credentials, there is no authentication on any endpoint, and the patients are fictional. A real deployment handling health data would need HIPAA-grade access control, audit logging and encryption. The FAISS pickle must never be loaded from an untrusted source.</p>
+</section>
+<section id="how-to-run-it-17" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb14"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb14-1"><span class="bu">cd</span> Hackathon/Hackathon-6/Code/CardioCommand</span>
+<span id="cb14-2"><span class="ex">./start.sh</span>      <span class="co"># backend :8000, dashboard :5173, patient :5174</span></span>
+<span id="cb14-3"><span class="co"># or manually:</span></span>
+<span id="cb14-4"><span class="bu">cd</span> backend <span class="kw">&amp;&amp;</span> <span class="ex">pip</span> install <span class="at">-r</span> requirements.txt</span>
+<span id="cb14-5"><span class="ex">python</span> <span class="at">-c</span> <span class="st">"from rag.indexer import build_index; build_index()"</span></span>
+<span id="cb14-6"><span class="ex">uvicorn</span> main:app <span class="at">--reload</span> <span class="at">--port</span> 8000</span></code></pre></div>
+<p>An <code>OPENAI_API_KEY</code> must be set in <code>backend/.env</code>.</p>
+</section>
+<section id="learn-more-17" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://langchain-ai.github.io/langgraph/" target="_blank" rel="noopener noreferrer">LangGraph documentation</a></li>
+<li><a href="https://fastapi.tiangolo.com/advanced/websockets/" target="_blank" rel="noopener noreferrer">FastAPI: WebSockets</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events" target="_blank" rel="noopener noreferrer">MDN: Server-sent events</a></li>
+<li><a href="https://github.com/facebookresearch/faiss/wiki" target="_blank" rel="noopener noreferrer">FAISS wiki</a></li>
+<li><a href="https://python.langchain.com/docs/how_to/recursive_text_splitter/" target="_blank" rel="noopener noreferrer">LangChain: RecursiveCharacterTextSplitter</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=jGg_1h0qzaM" target="_blank" rel="noopener noreferrer">LangGraph Complete Course for Beginners: Complex AI Agents with Python</a></li>
+<li><a href="https://www.youtube.com/watch?v=sVcwVQRHIc8" target="_blank" rel="noopener noreferrer">Learn RAG From Scratch: Python AI Tutorial from a LangChain Engineer</a></li>
+<li><a href="https://www.youtube.com/watch?v=klTvEwg3oJ4" target="_blank" rel="noopener noreferrer">Vector databases are so hot right now. WTF are they?</a></li>
+<li><a href="https://www.youtube.com/watch?v=1BfCnjr_Vjg" target="_blank" rel="noopener noreferrer">WebSockets in 100 Seconds &amp; Beyond with Socket.io</a></li>
+<li><a href="https://www.youtube.com/watch?v=tLKKmouUams" target="_blank" rel="noopener noreferrer">FastAPI Course for Beginners</a></li>
+</ul>
+</section>
+</section>
+<section id="india-budget-workbooks" class="level2">
+<h2>India Budget Workbooks</h2>
+<section id="at-a-glance-18" class="level3">
+<h3>At a Glance</h3>
+<p>This folder is not code but a spreadsheet system: one workbook per month (December 2025 through October 2026) tracking income, expenses, staff salaries and investments for a small self-employed business that is paid in Indian rupees. Each workbook is a self-updating dashboard: you type transactions into a log and the KPI cards and breakdowns at the top recalculate. It is included in this chapter because it is data visualization built from formulas rather than JavaScript. Personal amounts and names are not reproduced here.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Spreadsheet formulas (OOXML <code>.xlsx</code>)</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>None; saved by LibreOffice 26.2</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>n/a</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>LibreOffice Calc / Excel</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>local only</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>In use; 11 monthly files plus <code>_backup_originals/</code></td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-18" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>It is like a paper ledger with a calculator glued to the top. You write each line (date, description, income type, amount, expense category) at the bottom. The top of the page always shows total income, total expenses, net savings, savings rate, staff cost and credit card spend, and side panels show how much went to each category and each income source.</p>
+</section>
+<section id="architecture-18" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> Workbook &lt;Month&gt;_&lt;Year&gt;_Budget_Record.xlsx
+ +-- Sheet "Monthly Budget"  (B1:M250)
+ |    rows 1-10  KPI cards: income, expenses, net,
+ |               savings rate, staff, credit cards
+ |    rows 12+   Transaction log (frozen header)
+ |                # | DATE | DESCRIPTION | TYPE |
+ |                INCOME | EXPENSE | CATEGORY
+ |    side panel Expense by category (% share, target)
+ |               Income sources (amount, count)
+ |               Staff salaries this month (status)
+ |               Quick guide
+ +-- Sheet "Salary Master"   expected monthly pay</code></pre>
+</section>
+<section id="deep-dive-18" class="level3">
+<h3>Deep Dive</h3>
+<p>I inspected the files with Python's standard <code>zipfile</code> module, because an <code>.xlsx</code> file is a ZIP archive of XML parts (<code>xl/workbook.xml</code>, <code>xl/worksheets/sheet1.xml</code>, <code>xl/sharedStrings.xml</code>). Each current workbook has two sheets and about 300 formulas on the main sheet. With row numbers abstracted, the formula families are:</p>
+<pre class="text"><code>SUM(F12:F250)                       total income
+SUM(G12:G250)                       total expenses
+SUM(F..)-SUM(G..)                   net savings
+IF(SUM(F..)=0,0,(SUM(F..)-SUM(G..))/SUM(F..))
+                                    savings rate
+SUMIF($H$12:$H$250,"Utilities",$G$12:$G$250)
+                                    spend per category
+SUMIF($E$12:$E$250,"PayPal",$F$12:$F$250)
+COUNTIF($E$12:$E$250,"PayPal")      income per source
+SUMIF($D$12:$D$250,"*&lt;name&gt;*",$G$12:$G$250)
+                                    salary paid per person
+IF(M=0,"Pending",IF(M&gt;='Salary Master'!D,
+   "Paid","Partial"))               salary status
+IF(D12="","",ROW()-11)              auto row number</code></pre>
+<p><code>SUMIF(range, criterion, sum_range)</code> adds the cells in <code>sum_range</code> whose matching cell in <code>range</code> meets the criterion. The <code>*name*</code> wildcard means "description contains this name", which is how staff salaries are auto-detected from free-text descriptions. The <code>IF(SUM(..)=0, 0, ..)</code> guard prevents a divide-by-zero error on an empty month. The cross-sheet reference to <code>'Salary Master'!D</code> compares what was paid with what was owed, giving a three-state status.</p>
+<p>Two data validation rules turn columns into dropdowns: the TYPE column offers Payoneer, PayPal, YouTube, Interest, Bank, Cash and Other; the CATEGORY column offers Salary, Credit Card, SIP / Invest, Subscription, Bank Charges, Utilities, Business, Personal and Other. A conditional formatting rule colours the category cell by value. The view freezes the first column and first eleven rows (<code>xSplit=1 ySplit=11</code>), so the KPI cards stay visible while scrolling the log. 27 merged ranges lay out the card grid.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-18" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<p>The backup copies in <code>_backup_originals/</code> show an earlier template titled "Monthly Finance Tracker" with only 44 formulas, relative (not absolute <code>$</code>) ranges, a simpler "Paid/Pending" status and embedded drawing parts. The current template uses absolute references so formulas can be copied safely, adds the count of payments per source and the three-state salary status, and standardises the title "MONTHLY BUDGET TRACKER". A spreadsheet was chosen over an app because data entry is fast, it works offline and the formulas are transparent. The trade-off is one file per month: there is no cross-month roll-up, and the template has to be copied by hand.</p>
+</section>
+<section id="challenges-and-how-they-were-solved-18" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>Description-based salary matching is fragile (a typo in a name drops the payment from the staff panel). Category dropdowns reduce that risk for categories but not for names. The <code>.~lock.*#</code> files beside each workbook are LibreOffice lock files that mark a document as open; they are harmless leftovers when a session ends uncleanly.</p>
+</section>
+<section id="security-and-performance-notes-18" class="level3">
+<h3>Security and Performance Notes</h3>
+<p>These files contain real financial and staff data, have <code>0600</code> permissions (owner read/write only), and should stay out of any git repository or cloud share.</p>
+</section>
+<section id="how-to-run-it-18" class="level3">
+<h3>How to Run It</h3>
+<p>Open a monthly workbook in LibreOffice Calc or Excel, add rows from row 12 down, and pick TYPE and CATEGORY from the dropdowns. To start a new month, copy the latest workbook, clear the log and update the title.</p>
+</section>
+<section id="learn-more-18" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://support.microsoft.com/en-us/office/sumif-function-169b8c99-c05c-4483-a712-1697a653039b" target="_blank" rel="noopener noreferrer">Microsoft Support: SUMIF function</a></li>
+<li><a href="https://support.microsoft.com/en-us/office/countif-function-e0de10c6-f885-4e71-abb4-1f464816df34" target="_blank" rel="noopener noreferrer">Microsoft Support: COUNTIF function</a></li>
+<li><a href="https://support.microsoft.com/en-us/office/apply-data-validation-to-cells-29fecbcc-d1b9-42c1-9d76-eff3ce5f7249" target="_blank" rel="noopener noreferrer">Microsoft Support: Apply data validation to cells</a></li>
+<li><a href="https://documentation.libreoffice.org/en/english-documentation/calc/" target="_blank" rel="noopener noreferrer">LibreOffice Calc Guide</a></li>
+<li><a href="https://ecma-international.org/publications-and-standards/standards/ecma-376/" target="_blank" rel="noopener noreferrer">ECMA-376 Office Open XML standard</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=dI8w0utjUc0" target="_blank" rel="noopener noreferrer">How to use the SUMIF and SUMIFS Functions in Microsoft Excel for Beginners</a></li>
+</ul>
+</section>
+</section>
+<section id="react-labs-lab-01-modules-without-a-build" class="level2">
+<h2>React Labs: Lab 01, Modules Without a Build</h2>
+<section id="at-a-glance-19" class="level3">
+<h3>At a Glance</h3>
+<p><code>react-labs</code> is a study workspace for a React course. So far it contains one lab, <code>lab-01-no-build</code>, covering chapters one to three: what React is, library versus framework, and JavaScript modules with <code>import</code> and <code>export</code>. It is written for the author as a beginner and doubles as teaching material. No React is used yet; the point is to understand the module system before a build tool hides it.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>JavaScript (ES modules), HTML</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>None</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>None</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Any browser + <code>python3 -m http.server</code></td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>local only</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Lab 01 complete</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-19" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>The README's analogy: a library is a box of LEGO bricks you pick from; a framework is a kit with a baseplate and instructions that tells you where pieces go. "Library: your code calls it. Framework: it calls your code." React is a library. A module is "a file with its own private room": nothing leaves unless you push it through the <code>export</code> door, and other files pick it up with <code>import</code>.</p>
+</section>
+<section id="architecture-19" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> index.html
+   &lt;script type="module" src="script.js"&gt;
+        |
+ script.js  -- import a          from app.js   (default)
+            -- import {PI,...}   from math.js  (named)
+            -- import greet,{..} from mixed.js (both)
+            -- import * as maths from math.js  (namespace)
+        |
+   console output (nine lines)</code></pre>
+</section>
+<section id="deep-dive-19" class="level3">
+<h3>Deep Dive</h3>
+<p>The five files demonstrate every import form. <code>app.js</code> has one default export, <code>math.js</code> has four named exports, and <code>mixed.js</code> has both:</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode js"><code class="sourceCode javascript"><span id="cb18-1"><span class="co">// mixed.js</span></span>
+<span id="cb18-2"><span class="im">export</span> <span class="kw">const</span> brand <span class="op">=</span> <span class="st">"Sheryians"</span><span class="op">;</span>   <span class="co">// named</span></span>
+<span id="cb18-3"><span class="im">export</span> <span class="kw">const</span> year <span class="op">=</span> <span class="dv">2026</span><span class="op">;</span>           <span class="co">// named</span></span>
+<span id="cb18-4"><span class="im">export</span> <span class="im">default</span> <span class="kw">function</span> <span class="fu">greet</span>(name) {</span>
+<span id="cb18-5">  <span class="cf">return</span> <span class="st">"Hello "</span> <span class="op">+</span> name<span class="op">;</span></span>
+<span id="cb18-6">}</span>
+<span id="cb18-7"></span>
+<span id="cb18-8"><span class="co">// script.js</span></span>
+<span id="cb18-9"><span class="im">import</span> greet<span class="op">,</span> { brand<span class="op">,</span> year } <span class="im">from</span> <span class="st">'./mixed.js'</span><span class="op">;</span></span>
+<span id="cb18-10"><span class="im">import</span> { double <span class="im">as</span> twice } <span class="im">from</span> <span class="st">'./math.js'</span><span class="op">;</span></span>
+<span id="cb18-11"><span class="im">import</span> <span class="op">*</span> <span class="im">as</span> maths <span class="im">from</span> <span class="st">'./math.js'</span><span class="op">;</span></span></code></pre></div>
+<p>The default comes first, then the braces. <code>as</code> renames to avoid a clash. <code>import * as</code> collects named exports into one object; the default hides under <code>maths.default</code>. The bottom of <code>script.js</code> has commented "break it on purpose" lines, and the README pairs each with the exact browser error, for example asking for a default by name gives "does not provide an export named 'a'", and dropping the <code>.js</code> extension gives a 404 because browsers do not guess extensions.</p>
+<p>The most useful lesson is why double-clicking <code>index.html</code> fails. A page opened from <code>file://</code> has an opaque origin, and browsers refuse to fetch modules for it under CORS (Cross-Origin Resource Sharing, the rules for which origins may load which resources). Serving the folder from <code>http://localhost</code> fixes it, which is why the next chapter of the course introduces Vite, described as "a server plus a translator".</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-19" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<p>Starting without a bundler is deliberate: the errors are the browser's own, not a tool's rewritten version. Python's built-in server avoids installing anything.</p>
+</section>
+<section id="challenges-and-how-they-were-solved-19" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>The README itself is the record: the CORS failure from <code>file://</code> is called out as "the one that wastes an hour".</p>
+</section>
+<section id="security-and-performance-notes-19" class="level3">
+<h3>Security and Performance Notes</h3>
+<p>Not applicable beyond noting that <code>http.server</code> is for local development only.</p>
+</section>
+<section id="how-to-run-it-19" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb19"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb19-1"><span class="bu">cd</span> react-labs/lab-01-no-build</span>
+<span id="cb19-2"><span class="ex">python3</span> <span class="at">-m</span> http.server 5500</span>
+<span id="cb19-3"><span class="co"># open http://localhost:5500 and the dev console</span></span></code></pre></div>
+</section>
+<section id="learn-more-19" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules" target="_blank" rel="noopener noreferrer">MDN: JavaScript modules</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/export" target="_blank" rel="noopener noreferrer">MDN: export</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS" target="_blank" rel="noopener noreferrer">MDN: CORS</a></li>
+<li><a href="https://react.dev/learn" target="_blank" rel="noopener noreferrer">React: Quick Start</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=qgRUr-YUk1Q" target="_blank" rel="noopener noreferrer">JavaScript Modules in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=Tn6-PIqc4UM" target="_blank" rel="noopener noreferrer">React in 100 Seconds</a></li>
+</ul>
+</section>
+</section>
+<section id="procedural-castle-in-blender-blenderhouse" class="level2">
+<h2>Procedural Castle in Blender (Blender/House)</h2>
+<section id="at-a-glance-20" class="level3">
+<h3>At a Glance</h3>
+<p>Despite the folder name, this project builds a Hogwarts-style castle, not a house (the project pivoted, and <code>CLAUDE.md</code> says so). Every stone is generated by Python scripts running inside Blender with no manual modelling: towers, spires, battlements, Gothic windows, a Great Hall, a gatehouse and a viaduct. Change a number in <code>config.py</code>, re-run, and you get a different castle. It is aimed at the author as a learning project in procedural 3D and agent-driven work, with phases planned in <code>PLAN.md</code> and tracked in <code>STATUS.md</code>.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Python (Blender <code>bpy</code>, <code>bmesh</code>, <code>mathutils</code>), Bash</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Blender 5.2.1 LTS (EEVEE and Cycles renderers)</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>Python standard library only</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>macOS Apple Silicon, headless Blender</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>local only</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Phases 0 to 2 done (kit, assembly); materials, terrain, lighting pending</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-20" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Think of a model railway kit. First you design a box of reusable pieces: a round tower of any height, a pointed roof, a strip of battlements, a Gothic window. That is <code>kit.py</code>. Then a second script reads a floor plan and places the pieces (<code>assemble.py</code>). A random number generator adds variety, but it always starts from the same seed, so the same seed always produces the same castle. Finally the script points cameras at the result and saves pictures, which the author (or an AI agent) looks at to judge the shape.</p>
+</section>
+<section id="architecture-20" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> build.sh [--fast|--final|--kit|--massing]
+   |
+   v
+ Blender --background --factory-startup --python X
+   |
+   +-- build.py (entry)
+   |     reset_scene() -&gt; read_factory_settings
+   |     stage materials   -&gt; materials.build_materials
+   |     stage kit smoke   -&gt; kit.self_test
+   |     stage assembly    -&gt; assemble.build_castle
+   |     stage terrain/lighting/cameras -&gt; scene.py
+   |     save output/castle.blend, print tri count
+   +-- contact_sheet.py  every kit piece rendered
+   +-- preview.py        4 elevations + hero/aerial/gate
+         uses render_util.py (framing, daylight rig)
+
+ config.py  CONFIG dict: seed, site, hall, towers,
+            keep, battlements, windows, kit, layout</code></pre>
+</section>
+<section id="deep-dive-20" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Files that exist.</strong> <code>src/</code> holds <code>config.py</code> (339 lines), <code>kit.py</code> (1,386), <code>materials.py</code> (348), <code>assemble.py</code> (276), <code>render_util.py</code> (213), <code>contact_sheet.py</code> (118), <code>build.py</code> (75), <code>preview.py</code> (68) and a one-line placeholder <code>scene.py</code>. <code>output/</code> holds <code>castle.blend</code> and <code>castle_massing.blend</code> (about 1.4 MB each) with Blender's automatic <code>.blend1</code> backups, and <code>output/renders/</code> holds 16 PNGs: a kit contact sheet, an elevation strip, detail renders of the drum tower, spire, square tower, gatehouse, Gothic window, viaduct and Great Hall block, and massing views from the north, south, east and west plus hero, aerial and gate angles. <code>reference/</code> holds 79 Wikimedia Commons photographs in seven folders (massing, towers, battlements, windows, roofs, gates and bridges, filming locations such as Alnwick and Durham), with authors and licences in <code>MANIFEST.md</code> and <code>manifest.json</code>.</p>
+<p><strong>Staged, idempotent entry point.</strong> <code>build.py</code> wipes the scene with <code>bpy.ops.wm.read_factory_settings(use_empty=True)</code> so re-running never duplicates objects. Each stage is called through a helper that reports <code>[pending]</code> if the module or function does not exist yet. That let the pipeline run from day one while later phases were still empty.</p>
+<p><strong>MeshBuilder and no booleans.</strong> Boolean modifiers (cutting one mesh with another) are the most fragile part of scripted architecture: they produce non-manifold geometry and slow down. <code>kit.py</code> avoids them. A <code>MeshBuilder</code> class accumulates vertices and faces through a transform stack and bakes one multi-material mesh per piece. Openings are made by "panelising" the wall around them:</p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><span class="kw">def</span> wall_quads(width, height, openings<span class="op">=</span>(),</span>
+<span id="cb21-2">               arch_segments<span class="op">=</span><span class="dv">14</span>, x0<span class="op">=</span><span class="fl">0.0</span>):</span>
+<span id="cb21-3">    <span class="co">"""Panelise a wall rectangle around its arched</span></span>
+<span id="cb21-4"><span class="co">    openings. Returns 2D quads in XZ covering the</span></span>
+<span id="cb21-5"><span class="co">    solid stone only; the openings are left empty.</span></span>
+<span id="cb21-6"><span class="co">    Feed the result to MeshBuilder.slab, which walls</span></span>
+<span id="cb21-7"><span class="co">    in every unshared edge, so jambs, sills and</span></span>
+<span id="cb21-8"><span class="co">    arch soffits come out for free."""</span></span></code></pre></div>
+<p>The function walks openings left to right. For each it adds vertical bands of solid wall beside it, split at the sill and springing heights so edges line up, a panel under the sill, and a quad from each segment of the arch curve up to the wall top. <code>slab</code> then extrudes the 2D quads to a thickness and closes every edge that is not shared by two quads; those edges are exactly the hole boundaries, so the window reveals appear automatically.</p>
+<p><strong>Seeded randomness and lit windows.</strong> One <code>random.Random(CONFIG["seed"])</code> stream drives every variation. Which windows glow is decided at build time: each window's vertices carry a seeded colour attribute that the glass material reads. STATUS notes that a texture-based version cut across individual panes, while the attribute gives one flat value per window.</p>
+<p><strong>Composition rules in code.</strong> <code>assemble._vary_heights</code> enforces two rules from <code>PLAN.md</code> instead of trusting the config: no two adjacent towers within 15% of each other's height, and nothing approaches the 75 m Astronomy Tower once spire height is included. Both repairs move a tower by a random amount. An earlier version snapped to fixed values and produced several towers of identical height, which looked worse than the near-misses it was fixing.</p>
+<p><strong>Config.</strong> <code>config.py</code> holds every number: seed <code>20260911</code>, a 180 by 140 m site, the Great Hall at 22 by 58 m with a 55 degree roof pitch and seven buttresses, eight drum towers with radii 3 to 8 m, battlement merlon width 1.1 m and gap 0.8 m. The project rule is "no magic numbers in kit.py or assemble.py".</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-20" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li>Scripted geometry over hand modelling: reproducible and tunable, but every detail must be expressed as maths.</li>
+<li>Render-to-verify: <code>CLAUDE.md</code> insists on rendering after each phase and looking at the PNG, because geometry bugs are invisible in code.</li>
+<li>Named collections (<code>Towers</code>, <code>Walls</code>, <code>Roofs</code>, <code>Bridge</code>) so the <code>.blend</code> is navigable by hand.</li>
+<li>Stone colour is not tuned under neutral daylight because it will look different under the planned dusk rig.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-20" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>Blender 5.2 renamed the EEVEE engine identifier back to <code>BLENDER_EEVEE</code>, which required a config fix. The viaduct's arches hang below ground until Phase 4 carves a gorge, so massing views frame the castle without it. The Phase 2 build reports 29 objects and about 122,000 triangles.</p>
+</section>
+<section id="security-and-performance-notes-20" class="level3">
+<h3>Security and Performance Notes</h3>
+<p><code>build.sh</code> runs Blender with <code>--factory-startup</code>, which ignores user add-ons and preferences, so builds are not affected by local Blender state. <code>--fast</code> uses EEVEE at 720p on one camera for quick iteration; <code>--final</code> uses Cycles at 1920 by 1080 with the Metal GPU.</p>
+</section>
+<section id="how-to-run-it-20" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb22"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb22-1"><span class="bu">cd</span> Blender/House</span>
+<span id="cb22-2"><span class="ex">./build.sh</span>            <span class="co"># build + save + render</span></span>
+<span id="cb22-3"><span class="ex">./build.sh</span> <span class="at">--fast</span>     <span class="co"># EEVEE, hero camera only</span></span>
+<span id="cb22-4"><span class="ex">./build.sh</span> <span class="at">--kit</span>      <span class="co"># contact sheet of every kit piece</span></span>
+<span id="cb22-5"><span class="ex">./build.sh</span> <span class="at">--massing</span>  <span class="co"># elevations + hero/aerial/gate</span></span></code></pre></div>
+</section>
+<section id="learn-more-20" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://docs.blender.org/api/current/" target="_blank" rel="noopener noreferrer">Blender Python API documentation</a></li>
+<li><a href="https://docs.blender.org/api/current/bmesh.html" target="_blank" rel="noopener noreferrer">Blender API: bmesh module</a></li>
+<li><a href="https://docs.blender.org/manual/en/latest/advanced/command_line/arguments.html" target="_blank" rel="noopener noreferrer">Blender Manual: Command Line Arguments</a></li>
+<li><a href="https://commons.wikimedia.org/wiki/Commons:Reusing_content_outside_Wikimedia" target="_blank" rel="noopener noreferrer">Wikimedia Commons: Reusing content</a></li>
+<li><a href="https://docs.python.org/3/library/random.html" target="_blank" rel="noopener noreferrer">Python docs: random.Random</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=cyt0O7saU4Q" target="_blank" rel="noopener noreferrer">Blender Python Tutorial : An Introduction to Scripting [how to learn python for beginners]</a></li>
+<li><a href="https://www.youtube.com/watch?v=rHzf3Dku_cE" target="_blank" rel="noopener noreferrer">3D Programming for Beginners Using Python and Blender 2.8, Tutorial</a></li>
+<li><a href="https://www.youtube.com/watch?v=KNa5kJd2Epo" target="_blank" rel="noopener noreferrer">Intro to Python Scripting in Blender - Workshop to automate tasks for artists</a></li>
+</ul>
+</section>
+</section>
+<section id="trustkart-and-trustkart-catalog" class="level2">
+<h2>TrustKart and TrustKart-catalog</h2>
+<section id="at-a-glance-21" class="level3">
+<h3>At a Glance</h3>
+<p>TrustKart is a full-stack electronics store that behaves like a real shop: search, product options, cart, a four-step checkout, order tracking, notifications, achievements and leaderboards. The twist is that every visitor gets a wallet with $100,000 of virtual money, so nothing is charged and nothing ships. It is a portfolio piece showing production-style e-commerce engineering: transactional checkout, idempotency, session security, caching and a researched catalog of real products with manufacturer images. <code>TrustKart-catalog</code> is a second working copy (a git worktree) on the <code>trustkart-catalog-expansion</code> branch, used to grow the catalog in parallel; its commits were merged into the main line.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Java 21, TypeScript, SQL, Python</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Spring Boot 4, Spring Security, Spring Data JPA, Flyway; React 19, Vite 8, Tailwind 4</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>TanStack Query, React Router, Bucket4j, Argon2, Testcontainers, Playwright, Pillow</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Vercel (web), Render (API + PostgreSQL 17), optional Redis</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/TrustKart</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Live demo; 118 commits on the rebuild branch</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-21" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>It is a toy shop with real price tags. You browse 1,260+ products (the audit counted 2,201 including accessories), put things in a cart, and pay with play money. When you click "Place order", the server does what a careful cashier does: it locks your wallet so you cannot pay twice at the same moment, re-reads every price from its own catalog (ignoring whatever the browser says), reserves stock, takes the money and writes the receipt, all in one step that either fully happens or does not happen at all. Delivery is a timeline computed from the order time, so after seven days the order simply "is" delivered.</p>
+</section>
+<section id="architecture-21" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> Browser
+   | pages, images              | /api/*
+   v                            v
+ Vercel CDN (React SPA) --rewrite--&gt; Render: Spring Boot API
+                                       |
+     SecurityConfig: JWT in HttpOnly cookies, CSRF,
+     RateLimitFilter (Bucket4j), Google OAuth
+                                       |
+   catalog  search  cart  wishlist  checkout(purchase)
+   wallet   orders/tracking  notifications
+   collection(achievements)  leaderboard  address
+                                       |
+                    PostgreSQL 17 (Flyway V1..V13)
+                    product.specs JSONB + GIN,
+                    tsvector full-text, pg_trgm
+                    Redis (optional): rate limits,
+                    OAuth request state
+
+ Offline: catalog-data/sources/*.json
+   -&gt; scripts/catalog/build.py (validate, images-&gt;WebP)
+   -&gt; backend/.../catalog/products/*.json (seed)
+   -&gt; DemoCatalogSeeder (idempotent by SKU)</code></pre>
+</section>
+<section id="deep-dive-21" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Module layout.</strong> The backend (about 10,300 lines of Java) is one Spring Boot application split by feature under <code>com.vijaysinghpuwar.trustkart</code>: <code>auth</code>, <code>security</code>, <code>catalog</code>, <code>search</code>, <code>cart</code>, <code>wishlist</code>, <code>wallet</code>, <code>purchase</code>, <code>notification</code>, <code>collection</code>, <code>leaderboard</code>, <code>address</code>, <code>shopper</code> and <code>common</code>. Each module owns its tables. Schema changes are Flyway migrations <code>V1__extensions.sql</code> to <code>V13__product_collection_product_idx.sql</code>; Flyway is a tool that applies numbered SQL files in order and records which ones ran.</p>
+<p><strong>Checkout transaction.</strong> <code>purchase/PurchaseService.place</code> is the heart of the system. Reformatted and trimmed:</p>
+<div class="sourceCode" id="cb24"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb24-1"><span class="at">@Transactional</span></span>
+<span id="cb24-2"><span class="kw">public</span> PurchaseView <span class="fu">place</span><span class="op">(</span><span class="dt">long</span> shopperId<span class="op">,</span></span>
+<span id="cb24-3">        PlaceRequest req<span class="op">,</span> <span class="bu">String</span> idemKey<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb24-4">  <span class="co">// reject missing/invalid Idempotency-Key ...</span></span>
+<span id="cb24-5">  <span class="dt">var</span> replay <span class="op">=</span> <span class="fu">replay</span><span class="op">(</span>shopperId<span class="op">,</span> idemKey<span class="op">,</span> hash<span class="op">);</span></span>
+<span id="cb24-6">  <span class="cf">if</span> <span class="op">(</span>replay <span class="op">!=</span> <span class="kw">null</span><span class="op">)</span> <span class="cf">return</span> replay<span class="op">;</span></span>
+<span id="cb24-7">  <span class="co">// 1. Serialise on the wallet row</span></span>
+<span id="cb24-8">  VirtualWallet wallet <span class="op">=</span> wallets<span class="op">.</span><span class="fu">lock</span><span class="op">(</span>shopperId<span class="op">);</span></span>
+<span id="cb24-9">  replay <span class="op">=</span> <span class="fu">replay</span><span class="op">(</span>shopperId<span class="op">,</span> idemKey<span class="op">,</span> hash<span class="op">);</span></span>
+<span id="cb24-10">  <span class="cf">if</span> <span class="op">(</span>replay <span class="op">!=</span> <span class="kw">null</span><span class="op">)</span> <span class="cf">return</span> replay<span class="op">;</span></span>
+<span id="cb24-11">  <span class="co">// 2. Reprice everything from the catalog</span></span>
+<span id="cb24-12">  <span class="co">// 3. Budget mode: funds check vs locked balance</span></span>
+<span id="cb24-13">  <span class="co">// 4. Commit stock in product-id order</span></span>
+<span id="cb24-14">  <span class="co">// 5. Save purchase, debit ledger, clear cart</span></span>
+<span id="cb24-15"><span class="op">}</span></span></code></pre></div>
+<p>An idempotency key is a random token the browser generates once per checkout attempt; if the same key arrives twice (a double click, a retry after a timeout), the server returns the first result instead of creating a second order. The replay check runs twice: once cheaply, and again after acquiring the wallet row lock (<code>SELECT ... FOR UPDATE</code>), because a concurrent duplicate may have finished while this request waited. The client's <code>expectedTotal</code> is only compared, never charged; a mismatch returns <code>PRICE_CHANGED</code> with a fresh quote. Inventory rows are locked in ascending product-id order, which prevents deadlock: two orders sharing products always request locks in the same order, so neither can hold one lock while waiting for the other's. Refunds use the same order for the same reason.</p>
+<p><strong>Order tracking as a pure function.</strong> <code>purchase/OrderTracking.java</code> computes the stage from <code>placedAt</code> and <code>now</code>; nothing is stored:</p>
+<div class="sourceCode" id="cb25"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb25-1"><span class="kw">public</span> <span class="dt">static</span> TrackingStage <span class="fu">stageAt</span><span class="op">(</span></span>
+<span id="cb25-2">        Instant placedAt<span class="op">,</span> Instant now<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-3">  TrackingStage reached <span class="op">=</span> TrackingStage<span class="op">.</span><span class="fu">PLACED</span><span class="op">;</span></span>
+<span id="cb25-4">  <span class="cf">for</span> <span class="op">(</span>TrackingStage s <span class="op">:</span> TrackingStage<span class="op">.</span><span class="fu">values</span><span class="op">())</span> <span class="op">{</span></span>
+<span id="cb25-5">    <span class="cf">if</span> <span class="op">(</span>s<span class="op">.</span><span class="fu">onTimeline</span><span class="op">()</span> <span class="op">&amp;&amp;</span></span>
+<span id="cb25-6">        <span class="op">!</span>now<span class="op">.</span><span class="fu">isBefore</span><span class="op">(</span>placedAt<span class="op">.</span><span class="fu">plus</span><span class="op">(</span>s<span class="op">.</span><span class="fu">offset</span><span class="op">())))</span> <span class="op">{</span></span>
+<span id="cb25-7">      reached <span class="op">=</span> s<span class="op">;</span></span>
+<span id="cb25-8">    <span class="op">}</span></span>
+<span id="cb25-9">  <span class="op">}</span></span>
+<span id="cb25-10">  <span class="cf">return</span> reached<span class="op">;</span></span>
+<span id="cb25-11"><span class="op">}</span></span></code></pre></div>
+<p>The tracking number is <code>TK1Z</code> plus 14 hex characters of a SHA-256 of the purchase id. Because the same inputs always give the same stage, notifications ("shipped", "out for delivery") can be generated idempotently on each poll.</p>
+<p><strong>Search.</strong> <code>search/application/QueryInterpreter.java</code> turns "gaming laptop under $2000" into <code>category=gaming-laptops, maxPrice=2000</code>. It uses regular expressions for <code>under</code>, <code>between ... and</code>, <code>at least</code> and similar, with a negative lookahead that rejects numbers followed by a unit, so "at least 24 GB" is not read as a price. Category phrases are matched longest-first so "graphics card" beats "card". The class comment says it is "deliberately not AI: it is exact, explainable and always available". In the database, <code>product.search_vector</code> is a weighted <code>tsvector</code> (name and SKU weight A, keywords B, summary C) with a GIN index; <code>pg_trgm</code> trigram indexes support fuzzy name matching; and per-category specs live in a JSONB column with a <code>jsonb_path_ops</code> GIN index for spec filters.</p>
+<p><strong>Session security.</strong> Access tokens are JWTs in HttpOnly cookies (cookies JavaScript cannot read), refresh tokens rotate, and passwords are hashed with Argon2id. CSRF protection uses Spring Security's SPA pattern: the browser fetches <code>/api/auth/csrf</code>, reads the <code>XSRF-TOKEN</code> cookie and echoes it in an <code>X-XSRF-TOKEN</code> header on writes (<code>frontend/src/lib/api.ts</code>). Revocation is checked against Postgres on every authenticated request:</p>
+<div class="sourceCode" id="cb26"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb26-1"><span class="kw">public</span> <span class="dt">boolean</span> <span class="fu">isRevoked</span><span class="op">(</span><span class="bu">UUID</span> sessionId<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb26-2">  <span class="cf">return</span> jdbc<span class="op">.</span><span class="fu">sql</span><span class="op">(</span><span class="st">"SELECT revoked_at IS NOT NULL"</span></span>
+<span id="cb26-3">      <span class="op">+</span> <span class="st">" OR expires_at &lt; now()"</span></span>
+<span id="cb26-4">      <span class="op">+</span> <span class="st">" FROM user_session WHERE id = :id"</span><span class="op">)</span></span>
+<span id="cb26-5">    <span class="op">.</span><span class="fu">param</span><span class="op">(</span><span class="st">"id"</span><span class="op">,</span> sessionId<span class="op">).</span><span class="fu">query</span><span class="op">(</span><span class="bu">Boolean</span><span class="op">.</span><span class="fu">class</span><span class="op">)</span></span>
+<span id="cb26-6">    <span class="op">.</span><span class="fu">optional</span><span class="op">().</span><span class="fu">orElse</span><span class="op">(</span><span class="kw">true</span><span class="op">);</span></span>
+<span id="cb26-7"><span class="op">}</span></span></code></pre></div>
+<p>An unknown session counts as revoked (<code>orElse(true)</code>), so the check fails closed.</p>
+<p><strong>Leaderboards.</strong> ADR 001 records the design. Rank is computed from completed orders only, with <code>RANK()</code> for ties and <code>ROW_NUMBER()</code> with tie-breakers for display order. Months are keys like <code>2026-09</code>, never reset. Everyone appears as "Anonymous collector" until they opt into a public name. The query takes about 0.04 ms with a partial index, so boards are cached in memory for 30 seconds and evicted on any purchase, cancellation or profile change, with no Redis needed.</p>
+<p><strong>Catalog pipeline (the TrustKart-catalog worktree).</strong> Product research lives in <code>catalog-data/sources/&lt;name&gt;.json</code>. Each record has a SKU (<code>TK-&lt;BRAND&gt;-&lt;MODEL&gt;</code>), a stable slug, a leaf category, a price with its basis (<code>msrp</code>, <code>starting-at</code>, <code>estimate</code>), a source URL and retrieval date, typed specs, variants, colours and an official image URL. <code>scripts/catalog/build.py</code> (1,066 lines) validates records against the category spec definitions, normalises facet values (resolution, panel type, socket, Wi-Fi standard), downloads images, trims and normalises them with Pillow into 400 and 800 px WebP, and emits seed JSON. <code>DemoCatalogSeeder</code> inserts only missing SKUs, so re-seeding never duplicates. The worktree's branch added categories such as Cisco networking, flash storage, monitors, keyboards and 365 Apple accessories before merging. Its <code>.git</code> file still points to an old path under <code>~/Desktop/Projects</code>, so git commands inside that folder fail until the worktree is repaired with <code>git worktree repair</code>.</p>
+<p><strong>Front-end.</strong> About 10,000 lines of TypeScript in <code>frontend/src</code>, organised into <code>app/</code> (router, layout, error boundary), <code>features/</code> (account, cart, checkout, compare, product, rankings, search, wallet and more), <code>data/</code> (TanStack Query hooks per domain) and <code>components/</code>. Fonts are self-hosted via Fontsource.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-21" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Same-origin API through a Vercel rewrite.</strong> <code>/api/*</code> is proxied to Render, so cookies stay first-party and CORS is unnecessary. The cost is an extra hop.</li>
+<li><strong>Server is the price authority.</strong> The browser can display prices but never set them.</li>
+<li><strong>Computed tracking over stored status.</strong> Cannot drift; cannot model real carrier delays (not needed).</li>
+<li><strong>Rule-based search over AI search.</strong> Exact and always available; semantic search was planned on top but not implemented.</li>
+<li><strong>Redis optional.</strong> The free hosting tier cannot guarantee it, so correctness never depends on it.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-21" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li><strong>Revoked tokens came back.</strong> An independent audit (<code>codex/AUDIT_SUMMARY.md</code>) found SEC-001: revocation used a Redis denylist that treated a missing key as "not revoked", so eviction or a restart re-enabled a signed-out token. Commit a517b94 moved the check to Postgres, as shown above.</li>
+<li><strong>Cold starts.</strong> Render's free plan sleeps. Commit 249e2c7 explains and rides out cold starts in the UI, and 20d18bf serves the public catalog from the CDN while the API sleeps.</li>
+<li><strong>Query waste.</strong> The audit measured 2,201 primary-image probes to return 24 products and 40 INSERTs per unchanged notification poll. Later commits made listing reads leaner and stopped re-creating trimmed milestones.</li>
+<li><strong>Concurrent cart writes.</strong> Commit 93e8069 serialises cart and wishlist writes.</li>
+<li><strong>Stale chunks after deploy.</strong> Commit ec73305 reloads once when a deploy removed a lazily loaded code chunk the open tab still referenced.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-21" class="level3">
+<h3>Security and Performance Notes</h3>
+<p><code>vercel.json</code> sets a CSP with <code>script-src 'self'</code>, HSTS, nosniff and a strict referrer policy. Rate limiting uses Bucket4j token buckets per policy (for example purchases per shopper). <code>.gitleaks.toml</code> configures secret scanning in CI. The audit ran 169 existing tests (136 backend, 11 Vitest, 22 Playwright), 54 axe accessibility scans and measured median home LCP at 568 ms desktop in the lab. <code>docs/STRESS_TEST_RESULTS.md</code> records local load tests on an M5 machine with a closed-loop Node load generator. Note that the working copy contains a real <code>.env</code> file; it is git-ignored, but care is needed when sharing the folder.</p>
+</section>
+<section id="how-to-run-it-21" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb27"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb27-1"><span class="bu">cd</span> <span class="st">"Random git/apps/TrustKart"</span></span>
+<span id="cb27-2"><span class="fu">cp</span> .env.example .env</span>
+<span id="cb27-3"><span class="ex">docker</span> compose up <span class="at">-d</span>          <span class="co"># PostgreSQL + Redis</span></span>
+<span id="cb27-4"><span class="bu">set</span> <span class="at">-a</span><span class="kw">;</span> <span class="bu">source</span> .env<span class="kw">;</span> <span class="bu">set</span> +a</span>
+<span id="cb27-5"><span class="bu">cd</span> backend <span class="kw">&amp;&amp;</span> <span class="ex">./mvnw</span> spring-boot:run   <span class="co"># seeds catalog</span></span>
+<span id="cb27-6"><span class="co"># second terminal</span></span>
+<span id="cb27-7"><span class="bu">cd</span> frontend <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> install <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> run dev  <span class="co"># :5173</span></span>
+<span id="cb27-8"><span class="ex">npm</span> test <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> run e2e       <span class="co"># Vitest, Playwright</span></span>
+<span id="cb27-9"></span>
+<span id="cb27-10"><span class="co"># catalog work</span></span>
+<span id="cb27-11"><span class="ex">python3</span> scripts/catalog/build.py <span class="at">--check</span> <span class="at">--only</span> apple</span>
+<span id="cb27-12"><span class="ex">python3</span> scripts/catalog/build.py <span class="at">--images</span> <span class="at">--only</span> apple</span></code></pre></div>
+</section>
+<section id="learn-more-21" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://docs.spring.io/spring-boot/index.html" target="_blank" rel="noopener noreferrer">Spring Boot reference documentation</a></li>
+<li><a href="https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html" target="_blank" rel="noopener noreferrer">Spring Security: CSRF for single-page applications</a></li>
+<li><a href="https://www.postgresql.org/docs/current/textsearch.html" target="_blank" rel="noopener noreferrer">PostgreSQL: Full Text Search</a></li>
+<li><a href="https://www.postgresql.org/docs/current/explicit-locking.html" target="_blank" rel="noopener noreferrer">PostgreSQL: Explicit Locking</a></li>
+<li><a href="https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/" target="_blank" rel="noopener noreferrer">IETF draft: The Idempotency-Key HTTP Header Field</a></li>
+<li><a href="https://documentation.red-gate.com/flyway" target="_blank" rel="noopener noreferrer">Flyway documentation</a></li>
+<li><a href="https://git-scm.com/docs/git-worktree" target="_blank" rel="noopener noreferrer">Git: git-worktree</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=vtPkZShrvXQ" target="_blank" rel="noopener noreferrer">Spring Boot Tutorial for Beginners (Java Framework)</a></li>
+<li><a href="https://www.youtube.com/watch?v=n2Fluyr3lbc" target="_blank" rel="noopener noreferrer">PostgreSQL in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=G1rOthIU-uo" target="_blank" rel="noopener noreferrer">Redis in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=UBUNrFtufWo" target="_blank" rel="noopener noreferrer">Session vs Token Authentication in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=Gjnup-PuquQ" target="_blank" rel="noopener noreferrer">Docker in 100 Seconds</a></li>
+</ul>
+</section>
+</section>
+<section id="small-front-end-pieces" class="level2">
+<h2>Small Front-End Pieces</h2>
+<section id="github-profile-readme-vijaysinghpuwarvijaysinghpuwar" class="level3">
+<h3>GitHub Profile README (VijaysinghPuwar/VijaysinghPuwar)</h3>
+<p><strong>At a Glance.</strong> A repository named exactly like the GitHub username is special: its <code>README.md</code> is shown on the profile page. This one presents the author as a software engineer finishing an M.S. in Cybersecurity, with an animated typing banner, badges linking to Recap Verse, the portfolio and LinkedIn, and a credentials section with Credly badge links for Security+, CySA+ and CCNA. It has 110 commits, almost all README edits. Repo: https://github.com/VijaysinghPuwar/VijaysinghPuwar. Status: live.</p>
+<p><strong>How it works.</strong> The README is Markdown with inline HTML for centring. The typing line is an image from <code>readme-typing-svg.demolab.com</code>; the URL parameters (<code>font</code>, <code>size</code>, <code>color</code>, <code>lines=Building+production+systems;...</code>) make the service render an animated SVG. Badges come from shields.io in the same way.</p>
+<p><strong>Automation.</strong> Two near-identical GitHub Actions workflows (<code>main.yml</code> and <code>output.yml</code>) run every six hours on a cron schedule:</p>
+<div class="sourceCode" id="cb28"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb28-1"><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb28-2"><span class="at">  </span><span class="fu">schedule</span><span class="kw">:</span></span>
+<span id="cb28-3"><span class="at">    </span><span class="kw">-</span><span class="at"> </span><span class="fu">cron</span><span class="kw">:</span><span class="at"> </span><span class="st">"0 */6 * * *"</span></span>
+<span id="cb28-4"><span class="at">  </span><span class="fu">workflow_dispatch</span><span class="kw">:</span></span>
+<span id="cb28-5"><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb28-6"><span class="at">  </span><span class="fu">build</span><span class="kw">:</span></span>
+<span id="cb28-7"><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb28-8"><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb28-9"><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> Platane/snk@v3</span></span>
+<span id="cb28-10"><span class="at">        </span><span class="fu">with</span><span class="kw">:</span></span>
+<span id="cb28-11"><span class="at">          </span><span class="fu">github_user_name</span><span class="kw">:</span><span class="at"> ${{ github.repository_owner }}</span></span>
+<span id="cb28-12"><span class="at">          </span><span class="fu">outputs</span><span class="kw">:</span><span class="at"> dist/snake.svg</span></span>
+<span id="cb28-13"><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> crazy-max/ghaction-github-pages@v4</span></span>
+<span id="cb28-14"><span class="at">        </span><span class="fu">with</span><span class="kw">:</span><span class="at"> </span><span class="kw">{</span><span class="at"> </span><span class="fu">target_branch</span><span class="kw">:</span><span class="at"> output</span><span class="kw">,</span><span class="at"> </span><span class="fu">build_dir</span><span class="kw">:</span><span class="at"> dist </span><span class="kw">}</span></span></code></pre></div>
+<p><code>Platane/snk</code> draws a snake eating the contribution graph as an SVG, and the second action pushes it to an <code>output</code> branch the README can embed. Having two copies means the job runs twice; one could be deleted. The commit "Replace GitHub stats images with new API sources" shows that third-party stats cards have been swapped when providers changed.</p>
+<p><strong>Learn more.</strong> <a href="https://docs.github.com/en/account-and-profile/setting-up-and-managing-your-github-profile/customizing-your-profile/managing-your-profile-readme" target="_blank" rel="noopener noreferrer">GitHub Docs: Managing your profile README</a>, <a href="https://github.com/Platane/snk" target="_blank" rel="noopener noreferrer">Platane/snk</a>, <a href="https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#schedule" target="_blank" rel="noopener noreferrer">GitHub Actions: schedule events</a>. Videos: <a href="https://www.youtube.com/watch?v=3GpVxXOXRlM" target="_blank" rel="noopener noreferrer">Ultimate GitHub Profile README Tutorial (2025): Animated Stats &amp; Custom Design</a>, <a href="https://www.youtube.com/watch?v=U-IVndCqXWc" target="_blank" rel="noopener noreferrer">Snake Game on GitHub Profile | Create A Snake Eating GitHub Contributions</a>.</p>
+</section>
+<section id="scientific-calculator-scratchcalculator" class="level3">
+<h3>Scientific Calculator (scratch/calculator)</h3>
+<section id="at-a-glance-22" class="level4">
+<h4>At a Glance</h4>
+<p>A dependency-free scientific calculator in plain HTML, CSS and JavaScript, with a separate, fully tested engine. It supports operator precedence, parentheses, powers, percent, sign toggle, constants (pi, e), unary functions (square, root, reciprocal, sin, cos, tan, ln, log), degree and radian modes, repeated equals and keyboard input. It lives in the <code>scratch/</code> area, meaning local experiments.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>JavaScript (ES modules), HTML, CSS</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>None</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td><code>node:test</code> (built-in test runner)</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Browser; Node for tests</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>local only</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Complete experiment (992-line engine, 81-line tests)</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-22" class="level4">
+<h4>How It Works (Simple Version)</h4>
+<p>Each button press is a "token" sent to an engine object. The engine keeps a list of what you have typed so far (numbers, operators, brackets) and the number currently being entered. When you press equals, it rearranges the list into an order a computer can evaluate easily and works out the answer. The page just asks the engine "what should the display say now?" after every press.</p>
+</section>
+<section id="architecture-22" class="level4">
+<h4>Architecture</h4>
+<pre class="text"><code> index.html  buttons with data-token="7", "+", "sin"...
+     |
+ app.js      click / keydown -&gt; engine.dispatch(token)
+     |       render(): primary, secondary, angle mode
+     v
+ calculator-engine.js
+   CalculatorEngine (state machine)
+     expressionTokens[], currentInput, flags
+   evaluateTokens()   shunting-yard -&gt; RPN -&gt; stack
+   computeBinary / computeUnary
+   numberToString / formatDisplayValue
+     ^
+ tests/calculator-engine.test.js (node --test)</code></pre>
+</section>
+<section id="deep-dive-22" class="level4">
+<h4>Deep Dive</h4>
+<p><strong>Shunting-yard.</strong> <code>evaluateTokens</code> implements Dijkstra's shunting-yard algorithm, which converts infix notation (<code>2 + 3 × 4</code>) into Reverse Polish Notation (<code>2 3 4 × +</code>), where operators follow their operands and a simple stack can evaluate it. The precedence table gives <code>+ -</code> 1, <code>* /</code> 2 and <code>^</code> 3, and <code>^</code> is right-associative (<code>2^3^2</code> is <code>2^(3^2)</code>):</p>
+<div class="sourceCode" id="cb30"><pre class="sourceCode js"><code class="sourceCode javascript"><span id="cb30-1"><span class="kw">const</span> hasHigher <span class="op">=</span> PRECEDENCE[top] <span class="op">&gt;</span> PRECEDENCE[token]<span class="op">;</span></span>
+<span id="cb30-2"><span class="kw">const</span> hasEqual <span class="op">=</span> PRECEDENCE[top] <span class="op">===</span> PRECEDENCE[token]<span class="op">;</span></span>
+<span id="cb30-3"><span class="kw">const</span> shouldPop <span class="op">=</span> hasHigher <span class="op">||</span> (</span>
+<span id="cb30-4">  hasEqual <span class="op">&amp;&amp;</span> <span class="op">!</span>RIGHT_ASSOCIATIVE<span class="op">.</span><span class="fu">has</span>(token)</span>
+<span id="cb30-5">)<span class="op">;</span></span>
+<span id="cb30-6"><span class="cf">if</span> (<span class="op">!</span>shouldPop) <span class="cf">break</span><span class="op">;</span></span>
+<span id="cb30-7">output<span class="op">.</span><span class="fu">push</span>(operators<span class="op">.</span><span class="fu">pop</span>())<span class="op">;</span></span></code></pre></div>
+<p>On equal precedence, a left-associative operator pops the one on the stack first; a right-associative one waits. The second loop pops two values per operator and applies it, returning structured errors ("Cannot divide by zero", "Missing closing parenthesis") instead of throwing.</p>
+<p><strong>Number display.</strong> <code>numberToString</code> rounds to 14 significant digits (10 for very large or tiny values) with <code>toPrecision</code>, then strips trailing zeros. That is why the first test, <code>0.1 + 0.2</code>, shows <code>0.3</code> rather than the floating-point artefact <code>0.30000000000000004</code>. Values below <code>1e-13</code> snap to 0, so <code>sin(180°)</code> reads 0. <code>groupInteger</code> inserts thousands separators with the regular expression <code>\B(?=(\d{3})+(?!\d))</code>, a lookahead that matches positions followed by groups of three digits.</p>
+<p><strong>Engine as a state machine.</strong> <code>CalculatorEngine</code> tracks flags such as <code>entryFresh</code> (the next digit starts a new number), <code>previewing</code> (a closing parenthesis just showed an intermediate result) and <code>justEvaluated</code>. These drive the behaviour real calculators have: implicit multiplication (<code>2(3)</code> becomes <code>2 × 3</code>), repeated equals reapplying the last operation (<code>2 + 3 = = =</code> gives 11), and calculator-style percent where <code>50 + 10%</code> means 50 plus 10% of 50. Tangent at 90 degrees returns "Tangent is undefined here" by checking <code>|cos| &lt; 1e-10</code>.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-22" class="level4">
+<h4>Key Design Decisions and Trade-offs</h4>
+<p>Separating the engine from the DOM made it testable with Node's built-in runner and no packages. Tokens are strings, so the same <code>dispatch</code> serves buttons and keys (<code>app.js</code> maps Enter to equals, <code>r</code> to the angle toggle, <code>x</code> to multiply). The trade-off of string-based numbers is extra parsing, in exchange for exact control of what the display shows while typing (for example <code>"-0"</code> and a trailing <code>"."</code>).</p>
+</section>
+<section id="challenges-and-how-they-were-solved-22" class="level4">
+<h4>Challenges and How They Were Solved</h4>
+<p>Floating-point display is the classic calculator bug; the precision-rounding formatter solves it for display without changing the underlying arithmetic. Error recovery is explicit: after an error, only a digit, decimal point, parenthesis or constant starts fresh; operators are ignored.</p>
+</section>
+<section id="security-and-performance-notes-22" class="level4">
+<h4>Security and Performance Notes</h4>
+<p>No <code>eval</code> is used anywhere; expressions are parsed by the engine, so there is no code-injection path. Input is capped at 16 digits.</p>
+</section>
+<section id="how-to-run-it-22" class="level4">
+<h4>How to Run It</h4>
+<div class="sourceCode" id="cb31"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb31-1"><span class="bu">cd</span> <span class="st">"Random git/scratch/calculator"</span></span>
+<span id="cb31-2"><span class="ex">npm</span> start     <span class="co"># python3 -m http.server 4173</span></span>
+<span id="cb31-3"><span class="ex">npm</span> test      <span class="co"># node --test</span></span></code></pre></div>
+</section>
+<section id="learn-more-22" class="level4">
+<h4>Learn More</h4>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://en.wikipedia.org/wiki/Shunting_yard_algorithm" target="_blank" rel="noopener noreferrer">Wikipedia: Shunting yard algorithm</a></li>
+<li><a href="https://nodejs.org/api/test.html" target="_blank" rel="noopener noreferrer">Node.js: Test runner</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/toPrecision" target="_blank" rel="noopener noreferrer">MDN: Number.prototype.toPrecision</a></li>
+<li><a href="https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html" target="_blank" rel="noopener noreferrer">What Every Computer Scientist Should Know About Floating-Point Arithmetic</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=7ha78yWRDlE" target="_blank" rel="noopener noreferrer">Reverse Polish Notation and The Stack - Computerphile</a></li>
+<li><a href="https://www.youtube.com/watch?v=qgRUr-YUk1Q" target="_blank" rel="noopener noreferrer">JavaScript Modules in 100 Seconds</a></li>
+</ul>
+</section>
+</section>
+</section>
+</section>

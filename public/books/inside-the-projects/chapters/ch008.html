@@ -1,0 +1,1800 @@
+<section id="chapter-8-productivity-apps-and-developer-tools" class="level1">
+<h1><span class="header-section-number">8</span> Productivity Apps and Developer Tools</h1>
+<p>This chapter covers the tools Vijaysingh built to save himself time: a translator, an exam simulator, a job finder, text splitters, a web novel saver, a security vault, a video renderer, and several smaller experiments. Most are web apps built on Next.js, some are desktop or local tools in Python and C#, and a few are early front-end exercises. Together they show the same habits again and again. He splits big inputs into safe chunks, keeps secrets on the server, and adds guard rails such as rate limits, clamps, and validation before letting anything expensive run.</p>
+<section id="toc-extractor" class="level2">
+<h2>TOC Extractor</h2>
+<section id="at-a-glance-23" class="level3">
+<h3>At a Glance</h3>
+<p>TOC Extractor is a desktop app for Mac and Windows that saves chapters of a web novel as one clean TXT or PDF file. You paste the novel's main page, the app scans it to find the chapter list and the story text, you pick a range such as chapters 350 to 400, and it saves just the story in reading order. It is for readers who want to read offline without ads and menus. It is also the largest project in this chapter: 91 commits, a Python reference implementation of about 4,000 lines, and a C# port plus desktop app of about 27,000 lines including tests.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>C# (.NET 10), Python 3.11 to 3.14</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Avalonia 12 (desktop UI), CommunityToolkit.Mvvm</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>Microsoft.Playwright, System.CommandLine, Tomlyn, pytest, ruff, mypy</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>macOS (.dmg) and Windows (setup .exe)</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/TOC_Extractor" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/TOC_Extractor</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Active, version 2.6.7 (October 2026), CI on Linux, Windows, macOS</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-23" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Think of a librarian sent to copy a book that is only available as a thousand separate loose pages, scattered across a noisy building full of adverts. First the librarian walks to the table of contents and writes down where each chapter lives. Then, for each chapter, the librarian goes to that page, copies only the story paragraphs, and skips the posters on the wall. If a guard at the door asks "are you a person?", the librarian does not try to sneak past. The librarian waits for you to answer the guard, and from then on walks slowly in that building. At the end, the copied pages are bound into one book, named only for the chapters actually inside.</p>
+</section>
+<section id="architecture-23" class="level3">
+<h3>Architecture</h3>
+<p>The C# solution is split into layers so that a command-line tool and the desktop window share one pipeline.</p>
+<pre class="text"><code>+------------------+     +------------------+
+| Desktop (Avalonia|     | Cli (System.     |
+|  MVVM, JobView-  |     |  CommandLine,    |
+|  Models)         |     |  TOML profiles)  |
++--------+---------+     +--------+---------+
+         |                        |
+         v                        v
++-------------------------------------------+
+| App: NovelScanner, RangePlanner,          |
+|  RangePipeline, ExtractionSession,        |
+|  SitePaces, BrowserHost, CsvLog           |
++---------------------+---------------------+
+                      |
+          +-----------+-----------+
+          v                       v
++-------------------+   +----------------------+
+| Core: Fetcher,    |   | Browser: Playwright  |
+|  RobotsPolicy,    |   |  BrowserPageSource,  |
+|  RateLimiter,     |   |  MachineBudget,      |
+|  UrlGuard,        |   |  PdfBook             |
+|  TextCleaner,     |   +----------+-----------+
+|  TextAudit,       |              |
+|  Checkpoint,      |              v
+|  Exporters        |        Chromium tabs
++-------------------+</code></pre>
+<p>The Python package in <code>src/toc_extractor</code> mirrors the Core layer (<code>politeness.py</code>, <code>fetcher.py</code>, <code>parser.py</code>, <code>checkpoint.py</code>, <code>text.py</code>, <code>browser.py</code>, <code>exporters/</code>) plus a Tk GUI. The scanner, range planner and desktop app exist only in C#.</p>
+</section>
+<section id="deep-dive-23" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Two implementations on purpose.</strong> <code>dotnet/README.md</code> explains that the two codebases exist to be compared. A shared "golden" corpus in <code>tests/golden/</code> (for example <code>v1_golden.json</code> and <code>robots_conformance.json</code>) is read by both test suites, so text cleaning, file naming and robots.txt decisions must agree. A golden corpus is a fixed set of inputs with known correct outputs. The README lists every deliberate difference. One example: Python gave the same 25 second timeout to navigation, to each selector wait and to the outer fetch wrapper, so the outer timer always fired first. The C# port turns one <code>PageBudget</code> into a single cancellation token that every layer must honour.</p>
+<p><strong>Politeness and URL safety.</strong> <code>politeness.py</code> holds three pieces: a robots.txt policy, a per-host rate limiter, and a URL guard. robots.txt is the file where a website says which paths crawlers may visit. The project implements RFC 9309 (the robots.txt standard) itself, with longest-match rules, <code>*</code> and <code>$</code> wildcards and Allow winning ties, because Python's <code>urllib.robotparser</code> answered differently across Python versions. The URL guard refuses anything that resolves to a private address, which prevents SSRF. SSRF (server-side request forgery) is when a tool is tricked into fetching internal addresses such as a cloud metadata endpoint.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><span class="kw">def</span> _is_private(address: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="bu">bool</span>:</span>
+<span id="cb2-2">    <span class="cf">try</span>:</span>
+<span id="cb2-3">        ip <span class="op">=</span> ipaddress.ip_address(address)</span>
+<span id="cb2-4">    <span class="cf">except</span> <span class="pp">ValueError</span>:</span>
+<span id="cb2-5">        <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb2-6"></span>
+<span id="cb2-7">    <span class="cf">if</span> (<span class="bu">isinstance</span>(ip, ipaddress.IPv6Address)</span>
+<span id="cb2-8">            <span class="kw">and</span> ip.ipv4_mapped <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>):</span>
+<span id="cb2-9">        ip <span class="op">=</span> ip.ipv4_mapped</span>
+<span id="cb2-10"></span>
+<span id="cb2-11">    <span class="cf">return</span> (</span>
+<span id="cb2-12">        ip.is_private</span>
+<span id="cb2-13">        <span class="kw">or</span> ip.is_loopback</span>
+<span id="cb2-14">        <span class="kw">or</span> ip.is_link_local</span>
+<span id="cb2-15">        <span class="kw">or</span> ip.is_reserved</span>
+<span id="cb2-16">        <span class="kw">or</span> ip.is_multicast</span>
+<span id="cb2-17">        <span class="kw">or</span> ip.is_unspecified</span>
+<span id="cb2-18">    )</span></code></pre></div>
+<p>The interesting line is the IPv4-mapped unwrap: without it, <code>::ffff:127.0.0.1</code> would look like a public IPv6 address while actually pointing at localhost. Every rejected link is recorded with a <code>RejectionReason</code> enum value such as <code>PRIVATE_ADDRESS</code> or <code>ROBOTS_DISALLOWED</code>, so nothing is dropped silently. The browser layer applies the same guard again at the request layer, because an allowed host can redirect to a forbidden one.</p>
+<p><strong>Scanning without per-site setup.</strong> <code>NovelScanner.cs</code> (835 lines) runs scripts inside the page to find the chapter list, the story box and the next and previous links. It infers address patterns such as "id = 3,254,000 + chapter number" and checks them on the live site before using them. <code>RangePlanner.cs</code> then plans the cheapest way to reach a chosen range. Chapters with known addresses are fetched directly. A stretch with no known address is "walked" from whichever neighbour costs fewer pages outside the range. Chapters saved earlier are used as cheap starting points: the comment notes that fetching 101 to 150 after 1 to 100 were saved costs no extra pages, while starting from chapter 1 would cost a hundred.</p>
+<p><strong>Adapting to the machine.</strong> <code>MachineBudget.cs</code> decides how many Chromium tabs the app may open.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode csharp"><code class="sourceCode cs"><span id="cb3-1"><span class="kw">public</span> <span class="kw">static</span> <span class="dt">int</span> <span class="fu">MostTabsFor</span><span class="op">(</span><span class="dt">long</span> memoryBytes<span class="op">,</span> <span class="dt">int</span> cores<span class="op">)</span></span>
+<span id="cb3-2"><span class="op">{</span></span>
+<span id="cb3-3">    <span class="kw">if</span> <span class="op">(</span>memoryBytes <span class="op">&lt;=</span> <span class="dv">0</span><span class="op">)</span></span>
+<span id="cb3-4">    <span class="op">{</span></span>
+<span id="cb3-5">        <span class="kw">return</span> Math<span class="op">.</span><span class="fu">Clamp</span><span class="op">(</span>cores <span class="op">*</span> TabsPerCore<span class="op">,</span></span>
+<span id="cb3-6">            FewestTabs<span class="op">,</span> MostTabsAnywhere<span class="op">);</span></span>
+<span id="cb3-7">    <span class="op">}</span></span>
+<span id="cb3-8"></span>
+<span id="cb3-9">    <span class="dt">var</span> gigabytes <span class="op">=</span> memoryBytes <span class="op">/</span> <span class="op">(</span><span class="fl">1024.0</span> <span class="op">*</span> <span class="dv">1024</span> <span class="op">*</span> <span class="dv">1024</span><span class="op">);</span></span>
+<span id="cb3-10">    <span class="dt">var</span> byMemory <span class="op">=</span> <span class="op">(</span><span class="dt">int</span><span class="op">)((</span>gigabytes <span class="op">-</span> ReservedGigabytes<span class="op">)</span></span>
+<span id="cb3-11">        <span class="op">*</span> TabsPerGigabyte<span class="op">);</span></span>
+<span id="cb3-12">    <span class="dt">var</span> byCores <span class="op">=</span> Math<span class="op">.</span><span class="fu">Max</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> cores<span class="op">)</span> <span class="op">*</span> TabsPerCore<span class="op">;</span></span>
+<span id="cb3-13">    <span class="kw">return</span> Math<span class="op">.</span><span class="fu">Clamp</span><span class="op">(</span>Math<span class="op">.</span><span class="fu">Min</span><span class="op">(</span>byMemory<span class="op">,</span> byCores<span class="op">),</span></span>
+<span id="cb3-14">        FewestTabs<span class="op">,</span> MostTabsAnywhere<span class="op">);</span></span>
+<span id="cb3-15"><span class="op">}</span></span></code></pre></div>
+<p>It reserves 4 GB for the system, allows 2 tabs per remaining gigabyte (a measured working tab is 150 to 400 MB), at most 4 per core, and clamps between 4 and 48. On top of the ceiling it reads free memory at runtime: below 20% free no new tab opens, below 8% work shares the tabs already open. An environment variable <code>TOC_SIMULATE_MEMORY_GB</code> lets tests pretend a large Mac is a small one.</p>
+<p><strong>Checking that nothing was skipped.</strong> <code>TextAudit.cs</code> compares the saved chapter with the whole story box as the page showed it. Removing ads is the one step that could silently drop a paragraph. Measured across 91 chapters on five sites, the longest legitimate removed line was 10 words, while story paragraphs run 20 to 60 words. So any removed line of 20 or more words flags the chapter, and any 40+ character line that appears more often in the saved text than on the page counts as doubled.</p>
+<p><strong>Site pace.</strong> <code>SitePaces.cs</code> remembers, per site, whether a "verify you are human" check has appeared. After a check, that site is read at one page every 12 seconds, shared by every book on that site, and the person clicks the check themselves. The README is explicit that the app never solves or bypasses a check.</p>
+<p><strong>Resume and checkpoints.</strong> <code>checkpoint.py</code> and <code>Checkpoint.cs</code> record each completed chapter with its output file name and a SHA-256 hash, keyed by a fingerprint of the table-of-contents URL and selectors. On restart the app verifies files against their recorded hash and skips what it already has. Two ranges of the same book can save at once because they share one progress record behind a lock.</p>
+<p><strong>Packaging.</strong> <code>packaging/macos/make-app.sh</code> builds an <code>.app</code> and <code>.dmg</code>; <code>packaging/windows/installer.iss</code> is an Inno Setup script for a per-user installer. <code>.github/workflows/release.yml</code> builds and self-tests both packages when a version is tagged. On first launch the app downloads its own private Chromium (about 150 MB) into its data folder.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-23" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>A real browser instead of HTTP requests.</strong> Many novel sites render chapter lists with JavaScript and sit behind bot checks, so Playwright driving Chromium is slower but far more reliable than a plain HTTP client.</li>
+<li><strong>Keeping Python as a reference.</strong> Maintaining two implementations costs time, but the port found bugs: commit <code>6775a4e</code> is titled "a second implementation in C#, and the 12 bugs it found".</li>
+<li><strong>Avalonia over a web UI.</strong> A native cross-platform window avoids shipping a server and gives direct file system access on both operating systems.</li>
+<li><strong>Politeness over speed.</strong> Shared per-site rate limiters mean ten books from one site never ask more of it than one book.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-23" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>The commit history reads like a field log. Stress tests of 12, 20 and then 40 books at once drove most fixes: "two chapter-losing bugs under load" (<code>031058d</code>), "a busy site no longer costs chapters" (<code>921aa2d</code>), and "one tab no longer serves forty books" (<code>eb5b22c</code>). A 40-book run showed a site occasionally serving a chapter page without its story box, so C# now retries such a page once if the selectors have already worked elsewhere in the run. A concurrency difference also surfaced: Python's single-threaded event loop made some shared counters safe by accident, while .NET continuations really run in parallel, so the tally became a concurrent dictionary and sink writes go through a gate. The README reports that against version 2.2.1 on the same 40 books, average CPU dropped from 272% to 142% and peak memory from 8.2 GB to 7.1 GB.</p>
+</section>
+<section id="security-and-performance-notes-23" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>The URL guard blocks private, loopback, link-local and metadata addresses, including on redirects mid-chain, and tests pin this.</li>
+<li>Idle tabs close after 30 seconds and images, video and web fonts are blocked while the app reads unattended.</li>
+<li>One CSV log records every page load, retry, check and unhandled exception for later diagnosis.</li>
+</ul>
+</section>
+<section id="how-to-run-it-23" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb4"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><span class="co"># Python reference implementation</span></span>
+<span id="cb4-2"><span class="ex">pip</span> install <span class="at">-e</span> <span class="st">".[dev]"</span></span>
+<span id="cb4-3"><span class="ex">python</span> <span class="at">-m</span> playwright install chromium</span>
+<span id="cb4-4"><span class="ex">python</span> <span class="at">-m</span> toc_extractor <span class="at">--profile</span> my-site.toml <span class="dt">\</span></span>
+<span id="cb4-5">  <span class="at">--toc</span> https://example.com/toc</span>
+<span id="cb4-6"></span>
+<span id="cb4-7"><span class="co"># C# desktop app</span></span>
+<span id="cb4-8"><span class="bu">cd</span> dotnet</span>
+<span id="cb4-9"><span class="ex">dotnet</span> run <span class="at">--project</span> src/TocExtractor.Desktop</span>
+<span id="cb4-10"></span>
+<span id="cb4-11"><span class="co"># Makefile helpers</span></span>
+<span id="cb4-12"><span class="fu">make</span> test-fast</span>
+<span id="cb4-13"><span class="fu">make</span> cs-test</span></code></pre></div>
+</section>
+<section id="learn-more-23" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://playwright.dev/dotnet/docs/intro" target="_blank" rel="noopener noreferrer">Playwright for .NET documentation</a></li>
+<li><a href="https://playwright.dev/python/docs/intro" target="_blank" rel="noopener noreferrer">Playwright for Python documentation</a></li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc9309" target="_blank" rel="noopener noreferrer">RFC 9309: Robots Exclusion Protocol</a></li>
+<li><a href="https://docs.avaloniaui.net/" target="_blank" rel="noopener noreferrer">Avalonia UI documentation</a></li>
+<li><a href="https://owasp.org/www-community/attacks/Server_Side_Request_Forgery" target="_blank" rel="noopener noreferrer">OWASP: Server Side Request Forgery</a></li>
+<li><a href="https://docs.python.org/3/library/asyncio.html" target="_blank" rel="noopener noreferrer">Python asyncio documentation</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=ravLFzIguCM" target="_blank" rel="noopener noreferrer">C# in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=GhQdlIFylQ8" target="_blank" rel="noopener noreferrer">C# Tutorial - Full Course for Beginners</a></li>
+<li><a href="https://www.youtube.com/watch?v=4-LwodVujTg" target="_blank" rel="noopener noreferrer">Get started with end-to-end testing: Playwright | Episode 1 - Introduction</a></li>
+<li><a href="https://www.youtube.com/watch?v=XVv6mJpFOb0" target="_blank" rel="noopener noreferrer">Web Scraping with Python - Beautiful Soup Crash Course</a></li>
+<li><a href="https://www.youtube.com/watch?v=MijmeoH9LT4" target="_blank" rel="noopener noreferrer">Characters, Symbols and the Unicode Miracle - Computerphile</a></li>
+</ul>
+</section>
+</section>
+<section id="txttranslation-google-api-translation" class="level2">
+<h2>txttranslation (Google API Translation)</h2>
+<section id="at-a-glance-24" class="level3">
+<h3>At a Glance</h3>
+<p>txttranslation is a Next.js web app for translating and narrating very large texts. Users sign in with Google, upload their own Google Cloud service-account credential, and translate up to a million characters through backend-only routes. It then turns text into speech with Google Cloud Text-to-Speech or Microsoft Edge voices. It solves a common problem with translation APIs: they reject large inputs, so the app splits text intelligently and stitches the results back together. During the current deployment phase, full access is limited to an admin allowlist.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>TypeScript</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Next.js 16 (App Router), React 19, Tailwind CSS 4</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td><span class="citation">@google-cloud/translate</span>, msedge-tts, Prisma 7, next-auth, Stripe, Zod</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Vercel + PostgreSQL</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/txttranslation" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/txttranslation</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Deployed, admin-only mode, billing scaffolded but disabled</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-24" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Imagine a translator who can only read one page at a time. You hand over a 300-page manuscript. A helper cuts it at paragraph breaks into page-sized stacks, never in the middle of a sentence if it can help it. The translator works through the stacks in order, and the helper tapes the translated pages back together, keeping the original blank lines between paragraphs. The app does exactly that, and the "key to the translator's office" is your own Google credential, kept in a locked safe that only the server can open.</p>
+</section>
+<section id="architecture-24" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> Browser (React)
+   |  TranslatorCard, JobsPanel, CredentialManager
+   v
+ Next.js route handlers (runtime = nodejs)
+   /api/translate   /api/tts/synthesize   /api/jobs
+   /api/settings/google-credential[/test|/delete]
+   |        |                 |
+   |        v                 v
+   |   lib/translate.ts   lib/tts/* (GCP, Edge)
+   |        |                 |
+   v        v                 v
+ lib/user-credentials -&gt; lib/crypto (AES-256-GCM)
+   |
+   v
+ Prisma -&gt; PostgreSQL (User, UserCredential,
+            UsageLog, MonthlyUsage, Job, ...)
+ proxy.ts adds security headers to every response</code></pre>
+</section>
+<section id="deep-dive-24" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Credential storage.</strong> A service-account JSON is Google's machine credential: a project id, a client email and a private key. <code>lib/google-credentials.ts</code> validates that the pasted JSON has <code>"type": "service_account"</code> and the three required fields, then runs a tiny live translation as a test. <code>lib/crypto.ts</code> encrypts the whole JSON with AES-256-GCM before it reaches the database. AES-GCM is a cipher mode that both hides the data and adds an authentication tag, so any tampering makes decryption fail.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb6-1"><span class="im">export</span> <span class="kw">function</span> <span class="fu">encryptString</span>(value<span class="op">:</span> <span class="dt">string</span>) {</span>
+<span id="cb6-2">  <span class="kw">const</span> iv <span class="op">=</span> <span class="fu">randomBytes</span>(IV_BYTES)<span class="op">;</span></span>
+<span id="cb6-3">  <span class="kw">const</span> cipher <span class="op">=</span> <span class="fu">createCipheriv</span>(</span>
+<span id="cb6-4">    CIPHER_ALGORITHM<span class="op">,</span> <span class="fu">getEncryptionKey</span>()<span class="op">,</span> iv)<span class="op">;</span></span>
+<span id="cb6-5">  <span class="kw">const</span> encrypted <span class="op">=</span> <span class="bu">Buffer</span><span class="op">.</span><span class="fu">concat</span>([</span>
+<span id="cb6-6">    cipher<span class="op">.</span><span class="fu">update</span>(value<span class="op">,</span> <span class="st">"utf8"</span>)<span class="op">,</span> cipher<span class="op">.</span><span class="fu">final</span>()])<span class="op">;</span></span>
+<span id="cb6-7">  <span class="kw">const</span> tag <span class="op">=</span> cipher<span class="op">.</span><span class="fu">getAuthTag</span>()<span class="op">;</span></span>
+<span id="cb6-8"></span>
+<span id="cb6-9">  <span class="cf">return</span> <span class="bu">JSON</span><span class="op">.</span><span class="fu">stringify</span>({</span>
+<span id="cb6-10">    version<span class="op">:</span> <span class="dv">1</span><span class="op">,</span></span>
+<span id="cb6-11">    iv<span class="op">:</span> iv<span class="op">.</span><span class="fu">toString</span>(<span class="st">"base64"</span>)<span class="op">,</span></span>
+<span id="cb6-12">    tag<span class="op">:</span> tag<span class="op">.</span><span class="fu">toString</span>(<span class="st">"base64"</span>)<span class="op">,</span></span>
+<span id="cb6-13">    ciphertext<span class="op">:</span> encrypted<span class="op">.</span><span class="fu">toString</span>(<span class="st">"base64"</span>)<span class="op">,</span></span>
+<span id="cb6-14">  } satisfies EncryptedPayload)<span class="op">;</span></span>
+<span id="cb6-15">}</span></code></pre></div>
+<p>A fresh 12-byte IV (initialisation vector, a random starter value) is used each time, and the payload carries a <code>version</code> field so the format can change later. The Prisma model <code>UserCredential</code> stores only <code>encryptedJson</code> plus safe metadata (<code>projectId</code>, <code>clientEmail</code>, <code>isValid</code>).</p>
+<p><strong>Recursive chunking.</strong> <code>lib/translate.ts</code> keeps each request under <code>GOOGLE_SAFE_CHUNK_SIZE = 4500</code> characters. It tries progressively finer split strategies.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb7-1"><span class="kw">const</span> splitStrategies <span class="op">=</span> [</span>
+<span id="cb7-2">  (segment<span class="op">:</span> <span class="dt">string</span>) <span class="kw">=&gt;</span></span>
+<span id="cb7-3">    <span class="fu">splitByCapturedDelimiter</span>(segment<span class="op">,</span> <span class="ss">/</span><span class="sc">((?</span><span class="ss">:</span><span class="sc">\r?\n){2,})</span><span class="ss">/</span>)<span class="op">,</span></span>
+<span id="cb7-4">  (segment<span class="op">:</span> <span class="dt">string</span>) <span class="kw">=&gt;</span></span>
+<span id="cb7-5">    <span class="fu">splitByCapturedDelimiter</span>(segment<span class="op">,</span> <span class="ss">/</span><span class="sc">(\r?\n)</span><span class="ss">/</span>)<span class="op">,</span></span>
+<span id="cb7-6">  splitBySentenceBoundary<span class="op">,</span></span>
+<span id="cb7-7">]<span class="op">;</span></span></code></pre></div>
+<p><code>splitSegmentRecursively</code> first splits by blank lines (paragraphs), then single newlines, then sentence ends (<code>.</code>, <code>!</code>, <code>?</code> followed by closing quotes or brackets). Pieces are greedily packed back into chunks up to the limit. Only if no strategy works does <code>hardSplitSegment</code> cut, and even then it prefers the last whitespace after 60% of the window. Because delimiters are captured in the regex, they are kept with the text, so joining translated chunks restores the original layout. <code>translateChunk</code> also strips leading and trailing whitespace before calling the API and puts it back afterwards, since the API tends to trim it.</p>
+<p><strong>Text-to-speech.</strong> <code>lib/tts/</code> has a provider interface. The Google provider uses Neural2 voices with the same service account. The Edge provider (<code>edge-synthesize.ts</code>) uses the <code>msedge-tts</code> package, which speaks the WebSocket protocol behind Microsoft Edge's read-aloud feature. It splits text into 1,000-character sentence groups, drains each audio stream with a 20 second timeout, and caps the whole call at 50 seconds to stay under Vercel's 60 second function limit.</p>
+<p><strong>Background jobs.</strong> The <code>Job</code> model stores progress, stage text and chunk counts. A comment in <code>schema.prisma</code> notes that processing is "client-orchestrated": <code>lib/jobs/context.tsx</code> loops over chunks in the browser, calls the synthesis route per chunk, and updates the job record. Progress only advances after a chunk finishes, which fixed a "stuck at 2%" bug.</p>
+<p><strong>Access control and rate limiting.</strong> <code>/api/translate</code> checks the session, then calls <code>assertRateLimit</code> with key <code>translate:&lt;userId&gt;</code>, 12 requests per 60 seconds. The limiter in <code>lib/rate-limit.ts</code> is a fixed-window counter in a <code>Map</code>. Errors map to precise HTTP codes: 401 not signed in, 402 subscription needed, 403 admin-only, 412 credential missing, 429 too many requests.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-24" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Bring your own key.</strong> Users pay Google directly, so the app carries no translation cost, at the price of a harder setup.</li>
+<li><strong>Fixed-window in-memory limiter.</strong> Simple and dependency-free, but each serverless instance has its own map, so limits are per instance.</li>
+<li><strong>Client-orchestrated jobs.</strong> Splitting long work into many short requests avoids serverless timeouts, but the browser tab must stay open.</li>
+<li><strong>Kokoro dropped.</strong> History shows several days spent on Kokoro, a browser-side TTS model, with WASM loading and bundle size problems, before it was replaced by server-side Google TTS (<code>be51a58</code>).</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-24" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>The log shows a run of deployment fixes: Prisma enum imports breaking Vercel builds, <code>bufferutil</code> and <code>utf-8-validate</code> needing to be webpack externals for Edge TTS, and "speech job creation failure" fixed by running <code>prisma db push</code> during build. The 200k character limit was raised to 1M once chunking proved stable. The most recent commit (<code>2e6bf21</code>) stops leaking internal error text to clients and drops IP addresses from rate-limit keys.</p>
+</section>
+<section id="security-and-performance-notes-24" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li><code>proxy.ts</code> (Next.js 16's renamed middleware) sets HSTS, <code>X-Frame-Options: DENY</code>, <code>nosniff</code>, a Permissions-Policy and a CSP, and redirects stray <code>*.vercel.app</code> hosts to the canonical domain.</li>
+<li><code>.gitignore</code> excludes <code>credentials/*.json</code> and <code>client_secret*.json</code>; the local copies of these files are not tracked by git.</li>
+<li>Stripe webhooks are signature-verified and PayPal approvals are re-checked server-side.</li>
+</ul>
+</section>
+<section id="how-to-run-it-24" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb8"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><span class="ex">npm</span> install</span>
+<span id="cb8-2"><span class="fu">cp</span> .env.example .env.local   <span class="co"># fill AUTH_*, DATABASE_URL, ENCRYPTION_KEY</span></span>
+<span id="cb8-3"><span class="ex">node</span> <span class="at">-e</span> <span class="st">"console.log(require('node:crypto')</span><span class="dt">\</span></span>
+<span id="cb8-4"><span class="st">.randomBytes(32).toString('base64'))"</span></span>
+<span id="cb8-5"><span class="ex">npm</span> run prisma:push</span>
+<span id="cb8-6"><span class="ex">npm</span> run dev</span></code></pre></div>
+</section>
+<section id="learn-more-24" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://cloud.google.com/translate/docs/advanced/translating-text-v3" target="_blank" rel="noopener noreferrer">Cloud Translation API (Advanced) documentation</a></li>
+<li><a href="https://cloud.google.com/text-to-speech/docs" target="_blank" rel="noopener noreferrer">Cloud Text-to-Speech documentation</a></li>
+<li><a href="https://nextjs.org/docs/app/building-your-application/routing/route-handlers" target="_blank" rel="noopener noreferrer">Next.js App Router route handlers</a></li>
+<li><a href="https://www.prisma.io/docs" target="_blank" rel="noopener noreferrer">Prisma ORM documentation</a></li>
+<li><a href="https://nodejs.org/api/crypto.html" target="_blank" rel="noopener noreferrer">Node.js crypto module</a></li>
+<li><a href="https://csrc.nist.gov/pubs/sp/800/38/d/final" target="_blank" rel="noopener noreferrer">NIST SP 800-38D: GCM mode</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=Sklc_fQBmcs" target="_blank" rel="noopener noreferrer">Next.js in 100 Seconds // Plus Full Beginner's Tutorial</a></li>
+<li><a href="https://www.youtube.com/watch?v=rLRIB6AF2Dg" target="_blank" rel="noopener noreferrer">Prisma in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=n2Fluyr3lbc" target="_blank" rel="noopener noreferrer">PostgreSQL in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=O4xNJsjtN6E" target="_blank" rel="noopener noreferrer">AES Explained (Advanced Encryption Standard) - Computerphile</a></li>
+<li><a href="https://www.youtube.com/watch?v=1BfCnjr_Vjg" target="_blank" rel="noopener noreferrer">WebSockets in 100 Seconds &amp; Beyond with Socket.io</a></li>
+</ul>
+</section>
+</section>
+<section id="jee-test-simulator-jee-cbt" class="level2">
+<h2>JEE Test Simulator (JEE CBT)</h2>
+<section id="at-a-glance-25" class="level3">
+<h3>At a Glance</h3>
+<p>JEE Test Simulator recreates the computer-based test (CBT) interface of India's JEE Main engineering entrance exam. A student uploads a question paper PDF and its answer key, a vision-capable AI model turns them into structured questions, and the student takes a timed three-hour, 75-question test with the real marking scheme of +4 for correct and -1 for wrong. It solves the gap between static PDF papers and the actual on-screen exam experience. Users bring their own OpenAI, Anthropic or Gemini key.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>TypeScript</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Next.js 15, React 19, Tailwind CSS 3</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>pdfjs-dist, Zustand, Recharts, KaTeX, Zod, openai, <span class="citation">@anthropic-ai/sdk</span>, <span class="citation">@google/generative-ai</span></td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Vercel</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/jee-test-simulator" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/jee-test-simulator</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Working, 10 commits in June 2026</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-25" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Picture three examiners, one for Mathematics, one for Physics, one for Chemistry, each given a photocopy of the paper and the answer key. Each reads only their own section and writes out 25 clean question cards with the right answer on the back. They work at the same time, and each hands in their stack as soon as they finish. The student then sits at a mock exam desk with a timer, a question palette and the same buttons as the real test. When time is up, a grader flips each card and adds up the marks.</p>
+</section>
+<section id="architecture-25" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>Browser
+ Dropzone -&gt; pdf-extract.ts (pdf.js text + page images)
+     |
+     v  POST /api/parse (text, page images, subjects)
+Next.js route (auth, rate limit, Zod)
+     |   loadKey() &lt;- encrypted httpOnly cookie
+     |
+     +--&gt; parseSubject(Math) --\
+     +--&gt; parseSubject(Phys) ----&gt; provider SDK
+     +--&gt; parseSubject(Chem) --/   (OpenAI/Claude/Gemini)
+     |
+     v  NDJSON stream: start, chunk, error, done
+Browser -&gt; Zustand store (sessionStorage)
+     -&gt; exam page (Timer, QuestionPalette, MathText)
+     -&gt; grading.ts -&gt; results page (Recharts)</code></pre>
+</section>
+<section id="deep-dive-25" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>PDF extraction in the browser.</strong> <code>lib/pdf-extract.ts</code> uses pdf.js to pull text and also renders compressed page images. Uploads are checked for MIME type, a 10 MB cap and the <code>%PDF-</code> magic bytes (the fixed first bytes every PDF file starts with). Text is capped at 180 KB.</p>
+<p><strong>Prompting.</strong> <code>lib/providers/prompt.ts</code> defines a strict system prompt: return only a JSON array, ids like <code>M1</code> to <code>M25</code>, 20 single-correct MCQs and 5 numerical answers per subject, LaTeX inside <code>$...$</code> for formulas, and use page images as the source of truth when PDF text is garbled. It even tells the model to ignore Symbol-font private-use glyphs that commonly corrupt math in extracted text.</p>
+<p><strong>Per-subject fan-out with streaming.</strong> Parsing all 75 questions in one call blew past the 60 second serverless limit (commit <code>ff35a0d</code>, "Fix /api/parse 504"). The fix runs one model call per subject in parallel and streams results back as newline-delimited JSON (NDJSON, one JSON object per line).</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb10-1"><span class="kw">const</span> tasks <span class="op">=</span> subjects<span class="op">.</span><span class="fu">map</span>(<span class="kw">async</span> (subject) <span class="kw">=&gt;</span> {</span>
+<span id="cb10-2">  <span class="cf">try</span> {</span>
+<span id="cb10-3">    <span class="kw">const</span> qImgs <span class="op">=</span> <span class="fu">pickSubjectPageImages</span>(qpImages<span class="op">,</span> subject)<span class="op">;</span></span>
+<span id="cb10-4">    <span class="kw">const</span> aImgs <span class="op">=</span> <span class="fu">pickSubjectPageImages</span>(akImages<span class="op">,</span> subject)<span class="op">;</span></span>
+<span id="cb10-5">    <span class="kw">const</span> questions <span class="op">=</span> <span class="cf">await</span> <span class="fu">parseSubject</span>(</span>
+<span id="cb10-6">      provider<span class="op">,</span> apiKey<span class="op">,</span> qp<span class="op">,</span> ak<span class="op">,</span> subject<span class="op">,</span> qImgs<span class="op">,</span> aImgs)<span class="op">;</span></span>
+<span id="cb10-7">    <span class="fu">send</span>({ type<span class="op">:</span> <span class="st">"chunk"</span><span class="op">,</span> subject<span class="op">,</span></span>
+<span id="cb10-8">           count<span class="op">:</span> questions<span class="op">.</span><span class="at">length</span><span class="op">,</span> questions })<span class="op">;</span></span>
+<span id="cb10-9">  } <span class="cf">catch</span> (e) {</span>
+<span id="cb10-10">    <span class="fu">send</span>({ type<span class="op">:</span> <span class="st">"error"</span><span class="op">,</span> subject<span class="op">,</span></span>
+<span id="cb10-11">           error<span class="op">:</span> <span class="fu">providerErrorMessage</span>(e<span class="op">,</span> subject) })<span class="op">;</span></span>
+<span id="cb10-12">  }</span>
+<span id="cb10-13">})<span class="op">;</span></span>
+<span id="cb10-14"></span>
+<span id="cb10-15"><span class="cf">await</span> <span class="bu">Promise</span><span class="op">.</span><span class="fu">allSettled</span>(tasks)<span class="op">;</span></span>
+<span id="cb10-16"><span class="fu">send</span>({ type<span class="op">:</span> <span class="st">"done"</span> })<span class="op">;</span></span></code></pre></div>
+<p><code>Promise.allSettled</code> waits for every subject even if one fails, so a Chemistry error does not throw away a good Physics result. <code>pickSubjectPageImages</code> in <code>image-input.ts</code> finds the page with the subject heading and stops before the next subject's heading, sending at most 12 pages per call.</p>
+<p><strong>Validation.</strong> Model output is parsed inside try/catch and checked against a Zod schema (Zod is a TypeScript library that validates data shapes at runtime). If a subject returns fewer than 25 usable questions, the route reports it as incomplete rather than starting a broken exam.</p>
+<p><strong>Grading.</strong> <code>lib/grading.ts</code> normalises answers (trim, lowercase, remove spaces) and compares numerical answers as numbers within <code>1e-6</code>.</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb11-1"><span class="kw">const</span> marks <span class="op">=</span> attempted</span>
+<span id="cb11-2">  <span class="op">?</span> correct</span>
+<span id="cb11-3">    <span class="op">?</span> config<span class="op">.</span><span class="at">positiveMark</span></span>
+<span id="cb11-4">    <span class="op">:</span> <span class="op">-</span>config<span class="op">.</span><span class="at">negativeMark</span></span>
+<span id="cb11-5">  <span class="op">:</span> <span class="dv">0</span><span class="op">;</span></span></code></pre></div>
+<p>Per subject it computes attempted, correct, wrong, unattempted, score and accuracy, which feed the Recharts charts on the results page.</p>
+<p><strong>BYOK key storage.</strong> <code>lib/key-store.ts</code> encrypts the API key with AES-256-GCM and stores it in an httpOnly, <code>sameSite=strict</code> cookie named <code>jee_byok</code>. The clever part is in <code>lib/crypto.ts</code>: the signed-in user's id is passed as AAD (additional authenticated data, extra input that must match at decryption time). A cookie copied to another account fails to decrypt.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-25" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Stateless key storage in a cookie</strong> needs no database and suits serverless, but keys live per browser.</li>
+<li><strong>Saved papers in localStorage</strong>, keyed by email, avoid re-parsing (which costs API money) but stay on one device.</li>
+<li><strong>Three providers</strong> give students a choice; each adapter (<code>openai.ts</code>, <code>anthropic.ts</code>, <code>gemini.ts</code>) maps the same prompt and images to its SDK.</li>
+<li><strong>The parse route is not an open proxy.</strong> It accepts only a fixed payload, so a stolen session cannot use someone's key for arbitrary prompts.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-25" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>The June 2026 history is a sequence of timeout fixes: first per-subject parallelism, then a "6-way fan-out" to fit OpenAI inside 60 seconds, then per-subject requests from the client. Math PDFs produced corrupt glyphs, which led to the vision fallback (<code>199aaf9</code>) and KaTeX rendering. A missing <code>NEXTAUTH_SECRET</code> caused opaque sign-in failures, so <code>/api/health</code> and <code>lib/env-check.ts</code> now list missing variables.</p>
+</section>
+<section id="security-and-performance-notes-25" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>Every API route requires a NextAuth session; middleware redirects protected pages to <code>/signin</code>.</li>
+<li><code>/api/parse</code> is limited to 10 requests per 60 seconds per user (in-memory, per instance; the README suggests Upstash Redis for production).</li>
+<li>CSP, HSTS and frame-blocking headers are set in <code>next.config.ts</code>.</li>
+</ul>
+</section>
+<section id="how-to-run-it-25" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb12"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><span class="ex">npm</span> install</span>
+<span id="cb12-2"><span class="fu">cp</span> .env.example .env.local</span>
+<span id="cb12-3"><span class="co"># set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, NEXTAUTH_URL,</span></span>
+<span id="cb12-4"><span class="co"># ENCRYPTION_KEY=$(openssl rand -hex 32)</span></span>
+<span id="cb12-5"><span class="ex">npm</span> run dev</span></code></pre></div>
+</section>
+<section id="learn-more-25" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://mozilla.github.io/pdf.js/" target="_blank" rel="noopener noreferrer">PDF.js documentation</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/ReadableStream" target="_blank" rel="noopener noreferrer">MDN: ReadableStream</a></li>
+<li><a href="https://github.com/ndjson/ndjson-spec" target="_blank" rel="noopener noreferrer">NDJSON specification</a></li>
+<li><a href="https://zod.dev/" target="_blank" rel="noopener noreferrer">Zod documentation</a></li>
+<li><a href="https://zustand.docs.pmnd.rs/" target="_blank" rel="noopener noreferrer">Zustand documentation</a></li>
+<li><a href="https://katex.org/docs/api" target="_blank" rel="noopener noreferrer">KaTeX documentation</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=Sklc_fQBmcs" target="_blank" rel="noopener noreferrer">Next.js in 100 Seconds // Plus Full Beginner's Tutorial</a></li>
+<li><a href="https://www.youtube.com/watch?v=zQnBQ4tB3ZA" target="_blank" rel="noopener noreferrer">TypeScript in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=vn3tm0quoqE" target="_blank" rel="noopener noreferrer">The Async Await Episode I Promised</a></li>
+<li><a href="https://www.youtube.com/watch?v=996OiexHze0" target="_blank" rel="noopener noreferrer">OAuth 2.0 and OpenID Connect (in plain English)</a></li>
+</ul>
+</section>
+</section>
+<section id="resghost-jobradar" class="level2">
+<h2>ResGhost JobRadar</h2>
+<section id="at-a-glance-26" class="level3">
+<h3>At a Glance</h3>
+<p>ResGhost JobRadar (repo <code>resghost</code>, folder <code>JobHunt/jobradar</code>) is a private AI job finder built for a focused cybersecurity internship and job hunt. You upload a resume, it searches several legal job sources plus live web search, removes duplicates, ranks the results against your profile, and lets you save jobs, create tailored resume variants and track applications. It replaces a messy routine of many tabs and spreadsheets with one pipeline. Access is restricted to an allowlist plus email/password sign-up.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>TypeScript</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Next.js 16, React 19, Tailwind 4, shadcn/ui</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>OpenAI SDK, NextAuth v5 beta, Vercel KV, Vercel Blob, unpdf, mammoth, Recharts</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Vercel</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/resghost" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/resghost</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Working MVP, 17 commits (March 2026)</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-26" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Think of a recruiter's assistant with a stack of newspapers from different cities. The assistant reads your resume, circles every ad that fits, and notices when the same job appears in three papers so it only clips one copy (keeping a note of the other two). Then the assistant sorts the clippings: best fit first, fresh ads before old ones, and ads straight from the company above ads on general boards. When you pick one, the assistant photocopies your resume and edits the copy for that job, never your original.</p>
+</section>
+<section id="architecture-26" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>ResumeUploader -&gt; /api/parse-resume (unpdf/mammoth)
+                     -&gt; lib/ai.ts analyzeResume (OpenAI)
+DashboardClient -&gt; /api/search
+   lib/search-sources.ts
+     Adzuna | The Muse | Arbeitnow | SerpAPI Google Jobs
+     | OpenAI web_search_preview (LinkedIn, ATS, gov)
+        -&gt; lib/dedupe.ts mergeDuplicateJobs
+        -&gt; lib/ai.ts scoreJobsWithAI
+        -&gt; lib/ranking.ts rankJobs
+   lib/kv.ts (Vercel KV or in-memory fallback)
+/api/jobs/[id]/tailor -&gt; generateTailoredResume
+/api/applications -&gt; tracker + status history</code></pre>
+</section>
+<section id="deep-dive-26" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Sources.</strong> <code>lib/search-sources.ts</code> (850 lines) calls the Adzuna API, The Muse public API, the Arbeitnow job board API, Google Jobs through SerpAPI, and an OpenAI Responses call with the <code>web_search_preview</code> tool for sites without APIs. Every fetch goes through <code>fetchJson</code> with a 12 second timeout so one slow source cannot stall the search. Each source's raw fields are normalised into one <code>Job</code> type.</p>
+<p><strong>Duplicate detection.</strong> <code>lib/dedupe.ts</code> normalises company names (removing "inc", "llc" and aliasing "amazon web services" to "aws"), titles ("cyber security" becomes "cybersecurity") and locations. Similarity uses Jaccard overlap: the number of shared words divided by the number of distinct words in both.</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb14-1"><span class="cf">if</span> (companyScore <span class="op">&lt;</span> <span class="fl">0.6</span> <span class="op">||</span> titleScore <span class="op">&lt;</span> <span class="fl">0.58</span>) {</span>
+<span id="cb14-2">  <span class="cf">return</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb14-3">}</span>
+<span id="cb14-4"></span>
+<span id="cb14-5"><span class="kw">let</span> score <span class="op">=</span></span>
+<span id="cb14-6">  companyScore <span class="op">*</span> <span class="fl">0.32</span> <span class="op">+</span></span>
+<span id="cb14-7">  titleScore <span class="op">*</span> <span class="fl">0.28</span> <span class="op">+</span></span>
+<span id="cb14-8">  locationScore <span class="op">*</span> <span class="fl">0.12</span> <span class="op">+</span></span>
+<span id="cb14-9">  urlScore <span class="op">*</span> <span class="fl">0.12</span> <span class="op">+</span></span>
+<span id="cb14-10">  descriptionScore <span class="op">*</span> <span class="fl">0.1</span> <span class="op">+</span></span>
+<span id="cb14-11">  postedScore <span class="op">*</span> <span class="fl">0.03</span> <span class="op">+</span></span>
+<span id="cb14-12">  payScore <span class="op">*</span> <span class="fl">0.03</span><span class="op">;</span></span></code></pre></div>
+<p>Company and title act as a gate; only after passing it do the other signals count. Penalties apply when the same role appears in clearly different non-remote locations, because that is often two real openings. A group's canonical job is chosen by source priority (company site first), then richest description, then newest date. Its id is a SHA-1 hash of normalised company, title and location, so the same job keeps the same id across searches.</p>
+<p><strong>Ranking.</strong> <code>lib/ranking.ts</code> combines eight scores into one number:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb15-1">job<span class="op">.</span><span class="at">matchScore</span> <span class="op">*</span> <span class="fl">0.50</span> <span class="op">+</span></span>
+<span id="cb15-2">  freshnessScore <span class="op">*</span> <span class="fl">0.12</span> <span class="op">+</span></span>
+<span id="cb15-3">  sourceQualityScore <span class="op">*</span> <span class="fl">0.10</span> <span class="op">+</span></span>
+<span id="cb15-4">  domainRelevanceScore <span class="op">*</span> <span class="fl">0.10</span> <span class="op">+</span></span>
+<span id="cb15-5">  locationFitScore <span class="op">*</span> <span class="fl">0.08</span> <span class="op">+</span></span>
+<span id="cb15-6">  typeFitScore <span class="op">*</span> <span class="fl">0.04</span> <span class="op">+</span></span>
+<span id="cb15-7">  workModeFitScore <span class="op">*</span> <span class="fl">0.02</span> <span class="op">+</span></span>
+<span id="cb15-8">  salaryFitScore <span class="op">*</span> <span class="fl">0.02</span> <span class="op">+</span></span>
+<span id="cb15-9">  duplicateConfidenceScore <span class="op">*</span> <span class="fl">0.02</span></span></code></pre></div>
+<p>Freshness steps down from 100 (posted today) to 28 (older than 30 days). Source quality ranks "Company Site" at 100 and "OpenAI Web Search" at 68. A long list of irrelevant title patterns (marketing, sales, recruiter, barista) sinks off-domain roles.</p>
+<p><strong>Storage.</strong> <code>lib/kv.ts</code> wraps Vercel KV (a hosted Redis) but falls back to an in-memory object with values, hashes and lists so local development needs no setup. Keys are namespaced per user email. Resume files go to Vercel Blob. <code>lib/user-accounts.ts</code> hashes passwords with PBKDF2-SHA256 through the Web Crypto API with a random salt. PBKDF2 is a deliberately slow hashing function that makes password guessing expensive.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-26" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Legal sources only.</strong> The README stresses public APIs and web search over scraping job boards, trading coverage for safety.</li>
+<li><strong>Base resume never overwritten.</strong> Tailored variants are separate records, and each application stores the exact variant used.</li>
+<li><strong>Weights in code.</strong> Ranking and dedupe weights are hand-tuned constants: transparent and easy to change, but not learned from feedback.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-26" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>Early searches returned zero jobs because The Muse and Arbeitnow return job types in different shapes (<code>6d8f4d4</code>). Resume PDF parsing failed in production until the parser was replaced with <code>unpdf</code>, which runs without native dependencies on Vercel (<code>c888a82</code>). A later overhaul (<code>52c70ee</code>) targeted internship and security role accuracy, adding the irrelevant-title penalties and Google Jobs. <code>vercel.json</code> raises the search function's limit to 120 seconds.</p>
+</section>
+<section id="security-and-performance-notes-26" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>The admin allowlist is checked server-side in <code>lib/admin-access.ts</code>; a cleanup commit removed allowlisted emails from public screens.</li>
+<li>Sources are fetched with timeouts and gathered with <code>Promise.allSettled</code>, so one failing source does not fail the search.</li>
+</ul>
+</section>
+<section id="how-to-run-it-26" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb16"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb16-1"><span class="ex">npm</span> install</span>
+<span id="cb16-2"><span class="fu">cp</span> .env.example .env.local  <span class="co"># GOOGLE_*, NEXTAUTH_*, OPENAI_API_KEY</span></span>
+<span id="cb16-3"><span class="ex">npm</span> run dev</span>
+<span id="cb16-4"><span class="ex">npm</span> run typecheck <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> run build</span></code></pre></div>
+</section>
+<section id="learn-more-26" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://platform.openai.com/docs/guides/tools-web-search" target="_blank" rel="noopener noreferrer">OpenAI web search tool guide</a></li>
+<li><a href="https://authjs.dev/" target="_blank" rel="noopener noreferrer">Auth.js (NextAuth v5) documentation</a></li>
+<li><a href="https://developer.adzuna.com/" target="_blank" rel="noopener noreferrer">Adzuna API documentation</a></li>
+<li><a href="https://en.wikipedia.org/wiki/Jaccard_index" target="_blank" rel="noopener noreferrer">Jaccard index (Wikipedia)</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveBits" target="_blank" rel="noopener noreferrer">MDN: SubtleCrypto.deriveBits (PBKDF2)</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=Sklc_fQBmcs" target="_blank" rel="noopener noreferrer">Next.js in 100 Seconds // Plus Full Beginner's Tutorial</a></li>
+<li><a href="https://www.youtube.com/watch?v=G1rOthIU-uo" target="_blank" rel="noopener noreferrer">Redis in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=-MTSQjw5DrM" target="_blank" rel="noopener noreferrer">RESTful APIs in 100 Seconds // Build an API from Scratch with Node.js Express</a></li>
+<li><a href="https://www.youtube.com/watch?v=b4b8ktEV4Bg" target="_blank" rel="noopener noreferrer">Hashing Algorithms and Security - Computerphile</a></li>
+</ul>
+</section>
+</section>
+<section id="vaultsnake" class="level2">
+<h2>VAULTSNAKE</h2>
+<section id="at-a-glance-27" class="level3">
+<h3>At a Glance</h3>
+<p>VAULTSNAKE is a secure vault and access-monitoring web platform built as a cybersecurity master's final project. Users sign in with Google, store encrypted secrets, and see an audit log, security alerts and a risk score for their account; admins get platform-wide dashboards. It began life as a Tkinter desktop login screen that unlocked a Snake game, and was refactored into a full-stack app that demonstrates authentication, authorization, encryption, audit logging and threat detection.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Python, TypeScript</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>FastAPI, Next.js 15, Tailwind CSS</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>SQLAlchemy 2, Pydantic, python-jose, cryptography (Fernet), NextAuth v5, SWR</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Vercel (multi-service), SQLite or PostgreSQL</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/VAULTSNAKE" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/VAULTSNAKE</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>v2.0, 4 commits (April 2026), legacy app archived in <code>legacy/</code></td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-27" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Imagine a bank vault with a guard and a logbook. You show your Google ID at the front desk, and the desk hands you a stamped visitor pass (a JWT). Each time you open your safe deposit box, the guard checks the pass and writes a line in the logbook. A supervisor reads the logbook constantly. If someone tries a locked door three times in five minutes, or empties ten boxes in a hurry, the supervisor raises an alarm. Your valuables are kept inside sealed envelopes that only the vault's master key opens.</p>
+</section>
+<section id="architecture-27" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>Next.js 15 frontend (Vercel, route "/")
+  NextAuth Google sign-in
+    signIn callback -&gt; POST /api/auth/sync
+    stores backend JWT in session
+  pages: dashboard, vault, activity, alerts, admin/*
+        |  Authorization: Bearer &lt;JWT&gt;
+        v
+FastAPI backend (Vercel, route "/_/backend")
+  api/auth  api/vault  api/audit  api/alerts  api/admin
+  core/security (JWT, require_admin)
+  core/encryption (Fernet)
+  core/audit (log_event)  core/threat (rules, score)
+        |
+        v
+SQLAlchemy -&gt; SQLite (dev) / PostgreSQL (prod)
+  users, vault_items, audit_logs, alerts</code></pre>
+<p><code>vercel.json</code> uses Vercel's <code>experimentalServices</code> to deploy both folders from one repo, and <code>backend/api/index.py</code> simply re-exports the FastAPI <code>app</code> as the ASGI entry point. ASGI is the standard interface between Python async web apps and servers.</p>
+</section>
+<section id="deep-dive-27" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Authentication flow.</strong> After Google OAuth completes, the NextAuth <code>signIn</code> callback in <code>frontend/lib/auth.ts</code> posts the user's Google subject id, email and name to <code>/api/auth/sync</code>. The backend creates or updates the user, logs a <code>login</code> event and returns a JWT signed with <code>JWT_SECRET_KEY</code>. A JWT (JSON Web Token) is a signed, self-contained token listing who you are and when it expires. <code>core/security.py</code> decodes it on every request via FastAPI dependencies, and <code>require_admin</code> returns 403 for non-admins.</p>
+<p><strong>Vault encryption.</strong> <code>core/encryption.py</code> uses Fernet, which combines AES-128-CBC encryption with an HMAC-SHA256 integrity check. The key comes only from <code>VAULT_ENCRYPTION_KEY</code>; a decryption failure returns a generic 500 rather than details.</p>
+<p><strong>Threat rules.</strong> <code>core/threat.py</code> runs after every audited event:</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Trigger</th>
+<th>Severity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>repeated_unauthorized_access</td>
+<td>3+ unauthorized hits in 5 min</td>
+<td>high</td>
+</tr>
+<tr>
+<td>rapid_vault_operations</td>
+<td>10+ vault ops in 5 min</td>
+<td>medium</td>
+</tr>
+<tr>
+<td>admin_escalation_attempt</td>
+<td>5+ admin-path denials in 30 min</td>
+<td>critical</td>
+</tr>
+</tbody>
+</table></div>
+<p>An alert is only created if no unresolved alert of the same type exists in the window, which stops alert floods.</p>
+<p><strong>Risk score.</strong> The score sums audit events from the last 24 hours with weights by severity.</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb18-1">weights <span class="op">=</span> {<span class="st">"info"</span>: <span class="dv">0</span>, <span class="st">"warning"</span>: <span class="dv">2</span>, <span class="st">"critical"</span>: <span class="dv">5</span>}</span>
+<span id="cb18-2">score <span class="op">=</span> <span class="bu">sum</span>(weights.get(row.severity, <span class="dv">0</span>) <span class="op">*</span> row.cnt</span>
+<span id="cb18-3">            <span class="cf">for</span> row <span class="kw">in</span> rows)</span>
+<span id="cb18-4"></span>
+<span id="cb18-5"><span class="cf">if</span> score <span class="op">&lt;=</span> <span class="dv">10</span>:</span>
+<span id="cb18-6">    label <span class="op">=</span> <span class="st">"Low"</span></span>
+<span id="cb18-7"><span class="cf">elif</span> score <span class="op">&lt;=</span> <span class="dv">25</span>:</span>
+<span id="cb18-8">    label <span class="op">=</span> <span class="st">"Medium"</span></span>
+<span id="cb18-9"><span class="cf">elif</span> score <span class="op">&lt;=</span> <span class="dv">50</span>:</span>
+<span id="cb18-10">    label <span class="op">=</span> <span class="st">"High"</span></span>
+<span id="cb18-11"><span class="cf">else</span>:</span>
+<span id="cb18-12">    label <span class="op">=</span> <span class="st">"Critical"</span></span></code></pre></div>
+<p>The query groups by severity in SQL, so only three rows come back regardless of how many events exist.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-27" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Separate Python backend</strong> keeps the security logic in a language and framework (FastAPI with Pydantic) suited to validation, at the cost of running two services.</li>
+<li><strong>Fernet over raw AES</strong> removes the chance of misusing IVs or forgetting integrity checks.</li>
+<li><strong>Rules over machine learning.</strong> Threshold rules are explainable and testable, which matters for a course project.</li>
+<li><strong>Docs only in development.</strong> <code>/docs</code> and <code>/redoc</code> are disabled unless <code>APP_ENV</code> is development.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-27" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p><code>PROJECT_REFACTOR_PLAN.md</code> documents the legacy problems honestly: plaintext passwords, the Fernet key stored as a file next to the encrypted data, no audit trail, a JSON flat file as the database, and desktop-only deployment. Each became a feature of v2: Google OAuth instead of passwords, an environment-variable key, the audit log, SQL storage and Vercel deployment.</p>
+</section>
+<section id="security-and-performance-notes-27" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>The <code>/api/auth/sync</code> endpoint accepts <code>google_sub</code> and <code>email</code> from the request body without verifying a Google ID token. The <code>google-auth</code> package is in <code>requirements.txt</code> but is not imported anywhere in <code>backend/app</code>. Anyone who can reach the backend could therefore request a JWT for any email. Verifying the Google ID token server-side (or requiring a shared secret between frontend and backend) would close this gap.</li>
+<li>The first user ever created becomes admin, as does the configured admin email; on a fresh deployment, whoever signs in first gets admin.</li>
+<li>Every audit write commits immediately, which is simple and durable but adds a database round trip per request.</li>
+</ul>
+</section>
+<section id="how-to-run-it-27" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb19"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb19-1"><span class="bu">cd</span> backend</span>
+<span id="cb19-2"><span class="ex">pip</span> install <span class="at">-r</span> requirements.txt</span>
+<span id="cb19-3"><span class="fu">cp</span> .env.example .env   <span class="co"># JWT_SECRET_KEY, VAULT_ENCRYPTION_KEY</span></span>
+<span id="cb19-4"><span class="ex">uvicorn</span> app.main:app <span class="at">--reload</span></span>
+<span id="cb19-5"></span>
+<span id="cb19-6"><span class="bu">cd</span> ../frontend</span>
+<span id="cb19-7"><span class="ex">npm</span> install <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> run dev</span></code></pre></div>
+</section>
+<section id="learn-more-27" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://fastapi.tiangolo.com/tutorial/security/" target="_blank" rel="noopener noreferrer">FastAPI documentation: Security</a></li>
+<li><a href="https://cryptography.io/en/latest/fernet/" target="_blank" rel="noopener noreferrer">cryptography.io: Fernet</a></li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc7519" target="_blank" rel="noopener noreferrer">RFC 7519: JSON Web Token</a></li>
+<li><a href="https://developers.google.com/identity/sign-in/web/backend-auth" target="_blank" rel="noopener noreferrer">Google: Verify the Google ID token on your server</a></li>
+<li><a href="https://docs.sqlalchemy.org/en/20/orm/" target="_blank" rel="noopener noreferrer">SQLAlchemy 2.0 ORM documentation</a></li>
+<li><a href="https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html" target="_blank" rel="noopener noreferrer">OWASP Logging Cheat Sheet</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=tLKKmouUams" target="_blank" rel="noopener noreferrer">FastAPI Course for Beginners</a></li>
+<li><a href="https://www.youtube.com/watch?v=7Q17ubqLfaM" target="_blank" rel="noopener noreferrer">What Is JWT and Why Should You Use JWT</a></li>
+<li><a href="https://www.youtube.com/watch?v=UBUNrFtufWo" target="_blank" rel="noopener noreferrer">Session vs Token Authentication in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=996OiexHze0" target="_blank" rel="noopener noreferrer">OAuth 2.0 and OpenID Connect (in plain English)</a></li>
+<li><a href="https://www.youtube.com/watch?v=O4xNJsjtN6E" target="_blank" rel="noopener noreferrer">AES Explained (Advanced Encryption Standard) - Computerphile</a></li>
+</ul>
+</section>
+</section>
+<section id="splitforge-local" class="level2">
+<h2>SplitForge Local</h2>
+<section id="at-a-glance-28" class="level3">
+<h3>At a Glance</h3>
+<p>SplitForge Local splits a huge block of text into numbered <code>.txt</code> files of a fixed character count, entirely inside the browser. It is aimed at people feeding long text into tools with input limits, such as text-to-speech services (the default limit is 7,100 characters). Nothing is uploaded: splitting runs in a Web Worker and files are written straight to a folder you choose, or downloaded as a ZIP.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>TypeScript</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Next.js 14, React 18, Tailwind CSS 3</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>fflate (ZIP), File System Access API, Jest + ts-jest</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Browser (Vercel-hosted static app)</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/splitforge-local" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/splitforge-local</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Rebuilt and complete, 13 commits (March 2026)</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-28" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Imagine slicing a very long baguette into pieces that each fit a lunchbox. "Exact" mode measures with a ruler and cuts every 20 cm, even through a seed. "Smart" mode looks a little back from the 20 cm mark for a natural crack (a paragraph break, then a line break, then a space) and cuts there instead, so no piece is ever too long. A helper in the back room (the Web Worker) does the slicing so the shop counter (the page) stays responsive, and calls out "40% done" as it goes.</p>
+</section>
+<section id="architecture-28" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>TextInput (paste / file) --&gt; storage.ts (localStorage draft)
+        |
+        v
+workerClient.ts --postMessage--&gt; splitter.worker.ts
+        ^                         (progress, result)
+        |                                |
+PreviewPanel &lt;- previewChunks()          v
+ExportPanel --&gt; exporter.ts
+                 saveToFolder (showDirectoryPicker)
+                 downloadAsZip (fflate zipSync)
+                 + optional manifest.json</code></pre>
+</section>
+<section id="deep-dive-28" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Unicode-safe counting.</strong> JavaScript strings are UTF-16, so an emoji or many CJK extension characters count as two units with <code>.length</code>. <code>splitter.ts</code> uses <code>[...text]</code>, which iterates by Unicode code point, so a split never lands between the two halves of a character.</p>
+<p><strong>Smart split.</strong> The search window starts at 60% of the limit, so a chunk is never shorter than 60% unless the text ends.</p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb21-1"><span class="kw">let</span> breakAt <span class="op">=</span> pos <span class="op">+</span> limit<span class="op">;</span></span>
+<span id="cb21-2"><span class="kw">const</span> windowStart <span class="op">=</span> pos <span class="op">+</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">floor</span>(limit <span class="op">*</span> <span class="fl">0.6</span>)<span class="op">;</span></span>
+<span id="cb21-3"></span>
+<span id="cb21-4"><span class="kw">let</span> found <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb21-5"><span class="cf">for</span> (<span class="kw">let</span> i <span class="op">=</span> breakAt <span class="op">-</span> <span class="dv">1</span><span class="op">;</span> i <span class="op">&gt;=</span> windowStart<span class="op">;</span> i<span class="op">--</span>) {</span>
+<span id="cb21-6">  <span class="cf">if</span> (chars[i] <span class="op">===</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span> <span class="op">&amp;&amp;</span> i <span class="op">&gt;</span> <span class="dv">0</span> <span class="op">&amp;&amp;</span> chars[i <span class="op">-</span> <span class="dv">1</span>] <span class="op">===</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>) {</span>
+<span id="cb21-7">    breakAt <span class="op">=</span> i <span class="op">+</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb21-8">    found <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb21-9">    <span class="cf">break</span><span class="op">;</span></span>
+<span id="cb21-10">  }</span>
+<span id="cb21-11">}</span>
+<span id="cb21-12"><span class="co">// then single "\n", then " ", else hard cut at limit</span></span>
+<span id="cb21-13">chunks<span class="op">.</span><span class="fu">push</span>(chars<span class="op">.</span><span class="fu">slice</span>(pos<span class="op">,</span> breakAt)<span class="op">.</span><span class="fu">join</span>(<span class="st">""</span>))<span class="op">;</span></span>
+<span id="cb21-14">pos <span class="op">=</span> breakAt<span class="op">;</span></span></code></pre></div>
+<p><strong>Worker and progress.</strong> <code>splitter.worker.ts</code> re-implements the split so the worker bundle has no imports. It posts a <code>progress</code> message about 20 times per job (<code>reportEvery = approxTotal / 20</code>) and one final <code>result</code> with the chunks, total characters and duration. The main thread only computes the first three chunks for the live preview, on a slice of <code>limit * 3</code> characters.</p>
+<p><strong>Export.</strong> <code>exporter.ts</code> uses <code>window.showDirectoryPicker</code> (File System Access API, available in Chrome and Edge) to write each file directly, optionally into a timestamped subfolder, and records per-file success or failure. Other browsers get <code>downloadAsZip</code>, which uses fflate's <code>zipSync</code> at compression level 1 (fast). <code>fileNaming.ts</code> pads numbers to the width of the total, so 120 files are named <code>001.txt</code> to <code>120.txt</code> and sort correctly.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-28" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Browser-first rebuild.</strong> The repo started as a monorepo with a Tauri (Rust) desktop app, a web landing page and a shared core package. Commit <code>141127e</code> deleted all of it in favour of one Next.js app, because the browser's File System Access API made the desktop shell unnecessary.</li>
+<li><strong>Duplicated split logic</strong> in the worker and <code>lib/splitter.ts</code> keeps the worker self-contained, at the cost of two copies to keep in sync. Jest tests cover the library copy.</li>
+<li><strong>localStorage with try/catch</strong> autosaves drafts up to 512 KB and survives private-mode failures.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-28" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>A TypeScript 5.7 change made <code>Uint8Array</code> generic, which broke passing fflate's output to <code>Blob</code> (<code>2359fed</code>); the fix casts to <code>Uint8Array&lt;ArrayBuffer&gt;</code>. Tests in <code>__tests__/</code> pin Unicode safety, file naming and splitting edge cases. An empty <code>TTSGUI/</code> folder suggests a planned text-to-speech companion that was never started.</p>
+</section>
+<section id="security-and-performance-notes-28" class="level3">
+<h3>Security and Performance Notes</h3>
+<p>Text never leaves the machine. Splitting is O(n) over code points; the worker prevents UI freezes on multi-megabyte inputs.</p>
+</section>
+<section id="how-to-run-it-28" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb22"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb22-1"><span class="ex">npm</span> install</span>
+<span id="cb22-2"><span class="ex">npm</span> run dev</span>
+<span id="cb22-3"><span class="ex">npm</span> test</span></code></pre></div>
+</section>
+<section id="learn-more-28" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers" target="_blank" rel="noopener noreferrer">MDN: Using Web Workers</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/Window/showDirectoryPicker" target="_blank" rel="noopener noreferrer">MDN: File System Access API, showDirectoryPicker</a></li>
+<li><a href="https://github.com/101arrowz/fflate" target="_blank" rel="noopener noreferrer">fflate on GitHub</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/@@iterator" target="_blank" rel="noopener noreferrer">MDN: String iterator and code points</a></li>
+<li><a href="https://jestjs.io/docs/getting-started" target="_blank" rel="noopener noreferrer">Jest documentation</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=8aGhZQkoFbQ" target="_blank" rel="noopener noreferrer">What the heck is the event loop anyway? | Philip Roberts | JSConf EU</a></li>
+<li><a href="https://www.youtube.com/watch?v=MijmeoH9LT4" target="_blank" rel="noopener noreferrer">Characters, Symbols and the Unicode Miracle - Computerphile</a></li>
+<li><a href="https://www.youtube.com/watch?v=-X8evddpu7M" target="_blank" rel="noopener noreferrer">Tauri in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=Tn6-PIqc4UM" target="_blank" rel="noopener noreferrer">React in 100 Seconds</a></li>
+</ul>
+</section>
+</section>
+<section id="speak-translate-studio" class="level2">
+<h2>Speak Translate Studio</h2>
+<section id="at-a-glance-29" class="level3">
+<h3>At a Glance</h3>
+<p>Speak Translate Studio is a translation and text-to-speech web app generated and iterated with Lovable, an AI app builder that commits to GitHub. It has pages for translation, TTS with a voice picker, a jobs queue, pricing and settings, backed by Supabase Edge Functions that call Google Cloud Translation and Text-to-Speech. It is effectively a parallel experiment to txttranslation, exploring the same product with a different stack.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>TypeScript (React), TypeScript on Deno</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Vite, React 18, shadcn/ui (Radix), Tailwind CSS</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td><span class="citation">@supabase/supabase-js</span>, TanStack Query, react-router-dom, Vitest, Playwright</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Lovable Cloud / Supabase</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/speak-translate-studio" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/speak-translate-studio</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Prototype, 27 commits (March 2026)</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-29" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>You drop a request ticket in a box (insert a row in the <code>jobs</code> table) and ring a bell (invoke the <code>process-job</code> function). A worker picks up the ticket, marks it "processing", does the translation or speech, and writes the result back on the ticket. A screen in the lobby (the Jobs page) is wired to the box and refreshes the instant any ticket changes, thanks to Supabase Realtime.</p>
+</section>
+<section id="architecture-29" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>React SPA (Vite)
+  Translate.tsx  TTS.tsx  Jobs.tsx
+     | supabase.functions.invoke(...)
+     v
+Supabase Edge Functions (Deno)
+  translate  text-to-speech  edge-tts  process-job
+     |                         |
+     v                         v
+Google Translation v2    Google TTS v1 (MP3)
+     |
+     v
+Postgres table "jobs" --Realtime--&gt; Jobs.tsx</code></pre>
+</section>
+<section id="deep-dive-29" class="level3">
+<h3>Deep Dive</h3>
+<p>The single migration creates the <code>jobs</code> table, enables row-level security and adds it to the <code>supabase_realtime</code> publication. Realtime streams Postgres changes over a WebSocket to subscribed clients.</p>
+<div class="sourceCode" id="cb24"><pre class="sourceCode sql"><code class="sourceCode sql"><span id="cb24-1"><span class="kw">CREATE</span> POLICY <span class="ot">"Allow all access to jobs"</span></span>
+<span id="cb24-2">  <span class="kw">ON</span> <span class="kw">public</span>.jobs <span class="cf">FOR</span> <span class="kw">ALL</span> <span class="kw">USING</span> (<span class="kw">true</span>) <span class="kw">WITH</span> <span class="kw">CHECK</span> (<span class="kw">true</span>);</span>
+<span id="cb24-3"></span>
+<span id="cb24-4"><span class="kw">ALTER</span> PUBLICATION supabase_realtime <span class="kw">ADD</span> <span class="kw">TABLE</span> <span class="kw">public</span>.jobs;</span></code></pre></div>
+<p><code>process-job/index.ts</code> reads the job with the service-role key, updates progress to 10, then branches. For TTS it splits text into 4,500-character chunks at the last <code>". "</code> or space, calls Google TTS per chunk, updates progress from 30 to 90, decodes each base64 MP3, concatenates the bytes and stores the result back as base64. Concatenating MP3 frames this way generally plays because MP3 is a stream of independent frames. <code>Jobs.tsx</code> subscribes with <code>.channel('jobs-realtime').on('postgres_changes', ...)</code>.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-29" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<p>Lovable sped up UI scaffolding (the <code>.lovable/plan.md</code> file holds the AI build plan, including "Phase 2: Edge TTS, Long Text Chunking, Admin Fix, Job Queue"). The trade-off is that generated code needs a careful review before production use.</p>
+</section>
+<section id="challenges-and-how-they-were-solved-29" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>The plan admits that Deno Edge Functions cannot easily speak Edge TTS's WebSocket protocol. The resulting <code>edge-tts</code> function posts SSML to an Azure endpoint without a valid subscription key, which the code comments acknowledge will not work, so the final commits added a "voice fallback mapping" from Edge voice names to Google voices. txttranslation solved the same problem properly with the <code>msedge-tts</code> package on Node.</p>
+</section>
+<section id="security-and-performance-notes-29" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>The RLS policy allows every client full read and write on <code>jobs</code>, so any visitor with the public anon key can read or change all jobs.</li>
+<li>Admin status is computed in <code>RoleContext.tsx</code> on the client from a hard-coded email list, so it controls UI only.</li>
+<li>The Google API key is passed as a <code>?key=</code> query parameter from the edge function, which is normal for that API but means it may appear in server logs.</li>
+<li>A <code>.env</code> file with the Supabase URL and publishable key is tracked in git; those values are designed to be public, but committing <code>.env</code> is a habit worth avoiding.</li>
+<li>Storing whole MP3s as base64 text in a table row inflates size by about a third; Supabase Storage would suit audio better.</li>
+</ul>
+</section>
+<section id="how-to-run-it-29" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb25"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb25-1"><span class="ex">npm</span> install</span>
+<span id="cb25-2"><span class="ex">npm</span> run dev</span>
+<span id="cb25-3"><span class="ex">npm</span> test</span></code></pre></div>
+</section>
+<section id="learn-more-29" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://supabase.com/docs/guides/functions" target="_blank" rel="noopener noreferrer">Supabase Edge Functions</a></li>
+<li><a href="https://supabase.com/docs/guides/realtime/postgres-changes" target="_blank" rel="noopener noreferrer">Supabase Realtime: Postgres Changes</a></li>
+<li><a href="https://supabase.com/docs/guides/database/postgres/row-level-security" target="_blank" rel="noopener noreferrer">Supabase Row Level Security</a></li>
+<li><a href="https://cloud.google.com/text-to-speech/docs/reference/rest" target="_blank" rel="noopener noreferrer">Google Cloud Text-to-Speech REST reference</a></li>
+<li><a href="https://vite.dev/guide/" target="_blank" rel="noopener noreferrer">Vite guide</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=zBZgdTb-dns" target="_blank" rel="noopener noreferrer">Supabase in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=KCrXgy8qtjM" target="_blank" rel="noopener noreferrer">Vite in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=F0G9lZ7gecE" target="_blank" rel="noopener noreferrer">Deno in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=1BfCnjr_Vjg" target="_blank" rel="noopener noreferrer">WebSockets in 100 Seconds &amp; Beyond with Socket.io</a></li>
+</ul>
+</section>
+</section>
+<section id="drive-folder-topology" class="level2">
+<h2>Drive Folder Topology</h2>
+<section id="at-a-glance-30" class="level3">
+<h3>At a Glance</h3>
+<p>Drive Folder Topology is a Google Apps Script web app that turns a Google Drive folder link into a text tree like the output of the <code>tree</code> command, which you can copy or download as <code>.txt</code>. Google Drive has no built-in way to export a folder structure, which makes documenting a shared drive tedious. The project's main point of pride is printing in true depth-first order, so the output looks the way humans expect.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>JavaScript (Apps Script V8), HTML/CSS</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Google Apps Script HtmlService</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>Drive API v3 Advanced Service, DriveApp</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Google Apps Script web app</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/drive-folder-topology" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/drive-folder-topology</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Complete, 7 commits (February 2026)</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-30" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Imagine exploring a building floor by floor versus room by room. Breadth-first (BFS) lists every room on floor 1, then every room on floor 2, which makes a confusing list. Depth-first (DFS) walks into a room, lists everything inside it, including rooms within rooms, and only then comes back out to the next door. That is how a printed folder tree reads, so the script walks Drive depth-first.</p>
+</section>
+<section id="architecture-30" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>Browser (Index.html)
+  generate() -&gt; google.script.run
+                 .withSuccessHandler(...)
+                 .buildTopologyFast(link, opts)
+                        |
+                        v
+Apps Script (Code.gs)
+  extractFolderId_ -&gt; DriveApp.getFolderById (name)
+  walkFolderDFS_ (recursive)
+     -&gt; listChildrenV3_ -&gt; Drive.Files.list (v3)
+  returns { text, stats }</code></pre>
+</section>
+<section id="deep-dive-30" class="level3">
+<h3>Deep Dive</h3>
+<p><code>doGet()</code> serves <code>Index.html</code>. <code>buildTopologyFast</code> clamps options server-side (<code>maxDepth</code> 1 to 50, <code>maxItems</code> 100 to 50,000) because client values cannot be trusted. <code>listChildrenV3_</code> queries <code>'&lt;id&gt;' in parents and trashed=false</code>, adds a MIME filter for folders unless files are requested, pages through results 1,000 at a time, stops early once a per-folder budget is reached, and sorts names with <code>localeCompare</code>.</p>
+<p>The tree drawing happens in <code>walkFolderDFS_</code>:</p>
+<div class="sourceCode" id="cb27"><pre class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb27-1"><span class="kw">const</span> child <span class="op">=</span> children[i]<span class="op">;</span></span>
+<span id="cb27-2"><span class="kw">const</span> isLast <span class="op">=</span> i <span class="op">===</span> children<span class="op">.</span><span class="at">length</span> <span class="op">-</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb27-3"><span class="kw">const</span> branch <span class="op">=</span> isLast <span class="op">?</span> <span class="st">"└── "</span> <span class="op">:</span> <span class="st">"├── "</span><span class="op">;</span></span>
+<span id="cb27-4"></span>
+<span id="cb27-5"><span class="cf">if</span> (child<span class="op">.</span><span class="at">type</span> <span class="op">===</span> <span class="st">"folder"</span>) {</span>
+<span id="cb27-6">  lines<span class="op">.</span><span class="fu">push</span>(prefix <span class="op">+</span> branch <span class="op">+</span> child<span class="op">.</span><span class="at">name</span> <span class="op">+</span> <span class="st">"/"</span>)<span class="op">;</span></span>
+<span id="cb27-7">  state<span class="op">.</span><span class="at">itemsRendered</span><span class="op">++;</span></span>
+<span id="cb27-8"></span>
+<span id="cb27-9">  <span class="kw">const</span> nextPrefix <span class="op">=</span> prefix <span class="op">+</span> (isLast <span class="op">?</span> <span class="st">"    "</span> <span class="op">:</span> <span class="st">"│   "</span>)<span class="op">;</span></span>
+<span id="cb27-10">  <span class="fu">walkFolderDFS_</span>(child<span class="op">.</span><span class="at">id</span><span class="op">,</span> nextPrefix<span class="op">,</span> depth <span class="op">+</span> <span class="dv">1</span><span class="op">,</span></span>
+<span id="cb27-11">    maxDepth<span class="op">,</span> maxItems<span class="op">,</span> includeFiles<span class="op">,</span> lines<span class="op">,</span> state)<span class="op">;</span></span>
+<span id="cb27-12">  <span class="cf">if</span> (state<span class="op">.</span><span class="at">stopped</span>) <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb27-13">}</span></code></pre></div>
+<p>The <code>prefix</code> string carries the vertical bars of all ancestors. If a folder is the last child, its descendants get blank space instead of a bar, which is what makes the tree's lines join up correctly. A shared <code>state</code> object lets any level stop the whole walk once <code>maxItems</code> is reached.</p>
+<p>On the client, <code>google.script.run</code> is Apps Script's asynchronous bridge from page to server. Because an Apps Script call cannot be cancelled, the Stop button sets <code>ignoreResult = true</code> and simply discards the eventual reply. The failure handler maps common errors to hints: quota, a v2 versus v3 field mismatch, or missing access.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-30" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>"Execute as user accessing the app"</strong> is recommended in the README so each person sees only folders they can access, rather than exposing the deployer's Drive.</li>
+<li><strong>Advanced Drive service over DriveApp iterators</strong> allows field selection and large pages, which is much faster.</li>
+<li><strong>Hard caps</strong> protect against Apps Script's 6 minute execution limit and quotas.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-30" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>The header comment of <code>Code.gs</code> lists the fixes: switching from BFS to DFS for correct order, and staying on Drive API v3 (<code>files</code>, <code>name</code>, <code>pageSize</code>) after v2 field names produced "Invalid field selection items" errors.</p>
+</section>
+<section id="security-and-performance-notes-30" class="level3">
+<h3>Security and Performance Notes</h3>
+<p>Each folder costs at least one API call, so very deep trees are slow; "Include files" off is the fast path. The README warns not to commit <code>.clasp.json</code> or private links.</p>
+</section>
+<section id="how-to-run-it-30" class="level3">
+<h3>How to Run It</h3>
+<p>Create a project at script.google.com, paste <code>Code.gs</code> and <code>Index.html</code>, add the Drive API v3 service, then Deploy as a Web app.</p>
+</section>
+<section id="learn-more-30" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://developers.google.com/apps-script/guides/web" target="_blank" rel="noopener noreferrer">Apps Script: Web Apps</a></li>
+<li><a href="https://developers.google.com/apps-script/guides/html/reference/run" target="_blank" rel="noopener noreferrer">Apps Script: google.script.run client API</a></li>
+<li><a href="https://developers.google.com/drive/api/reference/rest/v3/files/list" target="_blank" rel="noopener noreferrer">Drive API v3: files.list</a></li>
+<li><a href="https://developers.google.com/drive/api/guides/ref-search-terms" target="_blank" rel="noopener noreferrer">Drive API: search query terms</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=7fujbpJ0LB4" target="_blank" rel="noopener noreferrer">Depth First Search Algorithm | Graph Theory</a></li>
+<li><a href="https://www.youtube.com/watch?v=rf60MejMz3E" target="_blank" rel="noopener noreferrer">Recursion in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=DHvZLI7Db8E" target="_blank" rel="noopener noreferrer">JavaScript Promises In 10 Minutes</a></li>
+</ul>
+</section>
+</section>
+<section id="patreon-drive-access" class="level2">
+<h2>Patreon Drive Access</h2>
+<section id="at-a-glance-31" class="level3">
+<h3>At a Glance</h3>
+<p>Patreon Drive Access is a tiny Next.js site that lets Patreon members unlock a Google Drive folder with a shared password, without the Drive URL appearing in the page HTML. It suits a creator who shares files with supporters and wants to stop casual link scraping. The README is unusually honest about its limits and lists stronger upgrade paths such as Patreon OAuth and signed URLs.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>TypeScript</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Next.js 16, React 19 (no CSS framework)</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>Node <code>crypto</code> only</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Vercel</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/patreon-drive-access" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/patreon-drive-access</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Minimal, 3 commits</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-31" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>A doorman asks for the password. If it is right, he shows you a door labelled "Open Google Drive Folder". Behind that door is a hallway (<code>/go</code>) that sends you on to the real address, which is written down only in the back office (an environment variable), never on the sign out front.</p>
+</section>
+<section id="architecture-31" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>page.tsx --POST {password}--&gt; /api/verify
+   |                           compares to ACCESS_PASSWORD
+   |&lt;-------- 200 / 401 -------
+   v
+&lt;a href="/go"&gt; --GET--&gt; /go route
+                         302 redirect to DRIVE_URL (env)
+lib/auth.ts: HMAC token helpers (not yet wired in)</code></pre>
+</section>
+<section id="deep-dive-31" class="level3">
+<h3>Deep Dive</h3>
+<p><code>/go</code> reads <code>DRIVE_URL</code>, refuses anything not starting with <code>http://</code> or <code>https://</code>, and redirects:</p>
+<div class="sourceCode" id="cb29"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb29-1"><span class="im">export</span> <span class="kw">async</span> <span class="kw">function</span> <span class="fu">GET</span>() {</span>
+<span id="cb29-2">  <span class="kw">const</span> driveUrl <span class="op">=</span> <span class="bu">process</span><span class="op">.</span><span class="at">env</span><span class="op">.</span><span class="at">DRIVE_URL</span><span class="op">;</span></span>
+<span id="cb29-3">  <span class="cf">if</span> (<span class="op">!</span>driveUrl) {</span>
+<span id="cb29-4">    <span class="cf">return</span> <span class="kw">new</span> <span class="fu">NextResponse</span>(<span class="st">"...config error..."</span><span class="op">,</span></span>
+<span id="cb29-5">      { status<span class="op">:</span> <span class="dv">500</span> })<span class="op">;</span></span>
+<span id="cb29-6">  }</span>
+<span id="cb29-7">  <span class="cf">if</span> (<span class="op">!</span>driveUrl<span class="op">.</span><span class="fu">startsWith</span>(<span class="st">"https://"</span>) <span class="op">&amp;&amp;</span></span>
+<span id="cb29-8">      <span class="op">!</span>driveUrl<span class="op">.</span><span class="fu">startsWith</span>(<span class="st">"http://"</span>)) {</span>
+<span id="cb29-9">    <span class="cf">return</span> <span class="kw">new</span> <span class="fu">NextResponse</span>(<span class="st">"Invalid redirect target."</span><span class="op">,</span></span>
+<span id="cb29-10">      { status<span class="op">:</span> <span class="dv">500</span> })<span class="op">;</span></span>
+<span id="cb29-11">  }</span>
+<span id="cb29-12">  <span class="cf">return</span> NextResponse<span class="op">.</span><span class="fu">redirect</span>(driveUrl<span class="op">,</span> { status<span class="op">:</span> <span class="dv">302</span> })<span class="op">;</span></span>
+<span id="cb29-13">}</span></code></pre></div>
+<p><code>lib/auth.ts</code>, added in the latest commit, defines stateless session tokens: <code>HMAC-SHA256(accessCode, TOKEN_SECRET)</code>, compared with <code>timingSafeEqual</code>. HMAC is a keyed hash that proves a value was produced by someone holding the secret. A timing-safe comparison takes the same time whether the first or last byte differs, so attackers cannot guess byte by byte from response times.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-31" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<p>No database and no accounts keep it free to host. A shared password is easy for members but cannot be revoked per person.</p>
+</section>
+<section id="challenges-and-how-they-were-solved-31" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>A Next.js vulnerability (CVE-2025-66478) prompted an upgrade in the second commit.</p>
+</section>
+<section id="security-and-performance-notes-31" class="level3">
+<h3>Security and Performance Notes</h3>
+<p>As the code stands, <code>/go</code> does not check any token or cookie, so anyone who learns the <code>/go</code> path can reach the Drive URL without the password; the password gate only controls whether the button is shown. The new HMAC helpers in <code>lib/auth.ts</code> read <code>ACCESS_CODE</code> and <code>TOKEN_SECRET</code>, while the verify route uses <code>ACCESS_PASSWORD</code>, so wiring them together (verify issues a token, <code>/go</code> validates it) is the obvious next step. <code>/api/verify</code> uses a plain <code>!==</code> comparison and has no attempt limit.</p>
+</section>
+<section id="how-to-run-it-31" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb30"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb30-1"><span class="ex">npm</span> install</span>
+<span id="cb30-2"><span class="fu">cp</span> .env.example .env.local  <span class="co"># ACCESS_PASSWORD, DRIVE_URL</span></span>
+<span id="cb30-3"><span class="ex">npm</span> run dev</span></code></pre></div>
+</section>
+<section id="learn-more-31" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://nextjs.org/docs/app/api-reference/functions/next-response#redirect" target="_blank" rel="noopener noreferrer">Next.js redirect in route handlers</a></li>
+<li><a href="https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b" target="_blank" rel="noopener noreferrer">Node.js crypto.timingSafeEqual</a></li>
+<li><a href="https://docs.patreon.com/" target="_blank" rel="noopener noreferrer">Patreon API documentation</a></li>
+<li><a href="https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html" target="_blank" rel="noopener noreferrer">OWASP Unvalidated Redirects Cheat Sheet</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=UBUNrFtufWo" target="_blank" rel="noopener noreferrer">Session vs Token Authentication in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=b4b8ktEV4Bg" target="_blank" rel="noopener noreferrer">Hashing Algorithms and Security - Computerphile</a></li>
+<li><a href="https://www.youtube.com/watch?v=Sklc_fQBmcs" target="_blank" rel="noopener noreferrer">Next.js in 100 Seconds // Plus Full Beginner's Tutorial</a></li>
+</ul>
+</section>
+</section>
+<section id="ffmpeg-web-gui" class="level2">
+<h2>FFmpeg Web GUI</h2>
+<section id="at-a-glance-32" class="level3">
+<h3>At a Glance</h3>
+<p>FFmpeg Web GUI (folder <code>scratch/FFmpeg/ffmpeg_web_gui</code>) is a local Flask app that wraps FFmpeg for two jobs: turning a still image plus an audio track into a video, and looping a short video under a longer audio track. It is for creators producing audiobook or music uploads who do not want to memorise FFmpeg flags. It shows the exact command it will run, a live progress bar and the FFmpeg log, and remembers last-used settings.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Python, JavaScript</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Flask 3</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>subprocess, threading, werkzeug</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Local (macOS tested), needs FFmpeg on PATH</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>local only (no git)</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Working local tool (March 2026)</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-32" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>The app is a translator between buttons and FFmpeg's command language. You pick a mode, files, resolution and quality. The app writes the long command for you and shows it. When you press Run, it starts FFmpeg in the background and listens to FFmpeg's progress reports ("I am 1 minute 20 seconds into the output"). Since it knows the audio length, it turns that into a percentage. Your browser asks for an update every moment and redraws the bar.</p>
+</section>
+<section id="architecture-32" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>Browser (templates/index.html, static/app.js)
+  /api/preview  /api/run  /api/status?cursor=N
+  /api/cancel   /api/reveal-output   /api/health
+        |
+        v
+app.py (Flask routes) -&gt; FFmpegRunner (ffmpeg_runner.py)
+   _prepare_job: validate + build argv list
+   start: Thread(_run_job)
+      Popen(ffmpeg ... -progress pipe:1)
+        stdout -&gt; _read_progress thread
+        stderr -&gt; _read_stderr thread (logs)
+   shared _state dict guarded by threading.Lock
+config_manager.py -&gt; config.json (settings, recent)</code></pre>
+</section>
+<section id="deep-dive-32" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Validation by allowlist.</strong> <code>_prepare_job</code> accepts only known values: resolutions <code>1280x720</code> or <code>1920x1080</code>, FPS 24, 30 or 60, presets fast, medium or slow, AAC bitrates 128k to 256k, and CRF 0 to 51. CRF (Constant Rate Factor) is x264's quality dial, where lower means better quality and bigger files. Output names go through werkzeug's <code>secure_filename</code> plus a regex, so a user cannot write outside <code>outputs/</code>.</p>
+<p><strong>Command building.</strong> The image mode uses <code>-loop 1</code> on the image, a scale-and-pad filter to letterbox any aspect ratio, <code>-tune stillimage</code>, and <code>-shortest</code> so the video ends with the audio. The loop mode uses <code>-stream_loop -1</code> to repeat the video forever, again cut by <code>-shortest</code>. The command is a Python list passed to <code>Popen</code>, never a shell string, so file names with spaces or quotes cannot inject commands. A "sample" option uses FFmpeg's <code>lavfi</code> test sources (<code>color</code>, <code>testsrc2</code>, <code>sine</code>) to render a 12 second test clip without any input files.</p>
+<p><strong>Progress parsing.</strong> <code>-progress pipe:1</code> makes FFmpeg print <code>key=value</code> lines to stdout.</p>
+<div class="sourceCode" id="cb32"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb32-1">key, value <span class="op">=</span> line.split(<span class="st">"="</span>, maxsplit<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb32-2"><span class="cf">if</span> key <span class="op">==</span> <span class="st">"out_time_ms"</span>:</span>
+<span id="cb32-3">    current_seconds <span class="op">=</span> <span class="bu">max</span>(<span class="bu">float</span>(value) <span class="op">/</span> <span class="fl">1_000_000.0</span>, <span class="fl">0.0</span>)</span>
+<span id="cb32-4">    progress_percent <span class="op">=</span> <span class="fl">0.0</span></span>
+<span id="cb32-5">    <span class="cf">if</span> total_duration <span class="kw">and</span> total_duration <span class="op">&gt;</span> <span class="dv">0</span>:</span>
+<span id="cb32-6">        progress_percent <span class="op">=</span> <span class="bu">min</span>(</span>
+<span id="cb32-7">            (current_seconds <span class="op">/</span> total_duration) <span class="op">*</span> <span class="fl">100.0</span>, <span class="fl">99.0</span>)</span>
+<span id="cb32-8">    <span class="cf">with</span> <span class="va">self</span>._lock:</span>
+<span id="cb32-9">        <span class="va">self</span>._state[<span class="st">"current_time"</span>] <span class="op">=</span> (</span>
+<span id="cb32-10">            format_seconds_for_ui(current_seconds))</span>
+<span id="cb32-11">        <span class="va">self</span>._state[<span class="st">"progress_percent"</span>] <span class="op">=</span> progress_percent</span>
+<span id="cb32-12"><span class="cf">elif</span> key <span class="op">==</span> <span class="st">"progress"</span> <span class="kw">and</span> value <span class="op">==</span> <span class="st">"end"</span>:</span>
+<span id="cb32-13">    <span class="cf">with</span> <span class="va">self</span>._lock:</span>
+<span id="cb32-14">        <span class="va">self</span>._state[<span class="st">"progress_percent"</span>] <span class="op">=</span> <span class="fl">100.0</span></span></code></pre></div>
+<p>Despite its name, <code>out_time_ms</code> is in microseconds, hence the division by a million. Progress is capped at 99% until FFmpeg says <code>progress=end</code>. The total duration comes from <code>ffprobe -show_entries format=duration</code> on the audio file.</p>
+<p><strong>Log streaming.</strong> Logs live in a list; the browser polls <code>/api/status?cursor=N</code> and receives only lines after <code>N</code> plus the new cursor. This is a cheap way to stream without WebSockets.</p>
+<p><strong>Cancellation.</strong> <code>cancel</code> sends <code>terminate()</code> (SIGTERM) and starts a helper thread that calls <code>kill()</code> if the process has not exited after 3 seconds.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-32" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<p>One render at a time keeps the state model simple. Polling over WebSockets avoids extra dependencies. Flask's threaded dev server is fine for a single local user.</p>
+</section>
+<section id="challenges-and-how-they-were-solved-32" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>Reading stdout and stderr on separate threads avoids a classic deadlock where FFmpeg blocks because one pipe's buffer is full while the parent waits on the other. <code>detect_ffmpeg</code> also checks <code>/opt/homebrew/bin/ffmpeg</code>, since apps launched outside a shell on Apple silicon Macs often lack Homebrew on PATH.</p>
+</section>
+<section id="security-and-performance-notes-32" class="level3">
+<h3>Security and Performance Notes</h3>
+<p>The server binds to 127.0.0.1 by default (overridable with <code>FFMPEG_WEB_GUI_HOST</code>). Uploaded inputs are deleted after each job. <code>libx264</code> with <code>-preset</code> controls the speed versus compression trade-off.</p>
+</section>
+<section id="how-to-run-it-32" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb33"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb33-1"><span class="bu">cd</span> ffmpeg_web_gui</span>
+<span id="cb33-2"><span class="ex">python3</span> <span class="at">-m</span> venv .venv <span class="kw">&amp;&amp;</span> <span class="bu">source</span> .venv/bin/activate</span>
+<span id="cb33-3"><span class="ex">pip</span> install <span class="at">-r</span> requirements.txt</span>
+<span id="cb33-4"><span class="ex">python</span> app.py   <span class="co"># open http://127.0.0.1:5000</span></span></code></pre></div>
+</section>
+<section id="learn-more-32" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://ffmpeg.org/ffmpeg.html" target="_blank" rel="noopener noreferrer">FFmpeg documentation</a></li>
+<li><a href="https://trac.ffmpeg.org/wiki/Encode/H.264" target="_blank" rel="noopener noreferrer">FFmpeg H.264 encoding guide</a></li>
+<li><a href="https://ffmpeg.org/ffmpeg-filters.html" target="_blank" rel="noopener noreferrer">FFmpeg filters documentation</a></li>
+<li><a href="https://flask.palletsprojects.com/" target="_blank" rel="noopener noreferrer">Flask documentation</a></li>
+<li><a href="https://docs.python.org/3/library/subprocess.html" target="_blank" rel="noopener noreferrer">Python subprocess module</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=Y7sLXo05mD4" target="_blank" rel="noopener noreferrer">FFmpeg Explained: The Invisible Engine Running the Entire Internet</a></li>
+<li><a href="https://www.youtube.com/watch?v=5lC0mv-Shts" target="_blank" rel="noopener noreferrer">What is FFmpeg? Complete Guide to Video &amp; Audio Processing Tool</a></li>
+<li><a href="https://www.youtube.com/watch?v=Qr4QMBUPxWo" target="_blank" rel="noopener noreferrer">Flask Course - Python Web Application Development</a></li>
+<li><a href="https://www.youtube.com/watch?v=x7X9w_GIm1s" target="_blank" rel="noopener noreferrer">Python in 100 Seconds</a></li>
+</ul>
+</section>
+</section>
+<section id="resumeai-resume-ai-main" class="level2">
+<h2>ResumeAI (resume-ai-main)</h2>
+<section id="at-a-glance-33" class="level3">
+<h3>At a Glance</h3>
+<p>ResumeAI is an ATS resume analyzer built during a GDG On Campus workshop. ATS (applicant tracking system) software is what companies use to filter resumes before a human reads them. The app parses a PDF resume in the browser, sends it with a job description to Gemini 2.5 Flash, and shows a weighted score, matched and missing keywords, formatting issues and rewrite suggestions, saving history per user in Firestore.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>JavaScript (JSX), Node.js</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>React 18 + Vite, Tailwind CSS, Firebase Cloud Functions v2</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>pdfjs-dist, Recharts, react-dropzone, firebase, <span class="citation">@google/generative-ai</span></td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Firebase Hosting, Auth, Firestore, Storage</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>local only (no git)</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Workshop project (March 2026)</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-33" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>A careful reader sits with your resume on the left and a job ad on the right. They tick off every skill the ad asks for that your resume mentions, note the ones that are missing, check whether your layout would confuse a scanning machine, and grade you in five categories. The app asks Gemini to be that reader and to fill in a fixed form, so the answer is always in the same shape and easy to chart.</p>
+</section>
+<section id="architecture-33" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>UploadZone -&gt; pdfParser.js (pdf.js, rebuild lines)
+App.jsx -&gt; geminiService.analyzeResume
+   direct mode: fetch generativelanguage API (dev)
+   cloud mode: POST Cloud Function analyzeResume
+       verifyIdToken -&gt; rateLimits/{uid} -&gt; Gemini
+   &lt;- JSON matching analysisResponseSchema.json
+ScoreDashboard, KeywordHeatmap, SectionCard
+historyService.js -&gt; Firestore (userId, createdAt)</code></pre>
+</section>
+<section id="deep-dive-33" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>Rebuilding lines from a PDF.</strong> pdf.js returns text fragments with coordinates, not lines. <code>pdfParser.js</code> groups fragments by rounded Y position and sorts them.</p>
+<div class="sourceCode" id="cb35"><pre class="sourceCode js"><code class="sourceCode javascript"><span id="cb35-1"><span class="cf">for</span> (<span class="kw">const</span> item <span class="kw">of</span> content<span class="op">.</span><span class="at">items</span>) {</span>
+<span id="cb35-2">  <span class="kw">const</span> y <span class="op">=</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">round</span>(item<span class="op">.</span><span class="at">transform</span>[<span class="dv">5</span>] <span class="op">/</span> <span class="dv">2</span>) <span class="op">*</span> <span class="dv">2</span><span class="op">;</span></span>
+<span id="cb35-3">  <span class="cf">if</span> (<span class="op">!</span>lines[y]) lines[y] <span class="op">=</span> []<span class="op">;</span></span>
+<span id="cb35-4">  lines[y]<span class="op">.</span><span class="fu">push</span>({ <span class="dt">text</span><span class="op">:</span> item<span class="op">.</span><span class="at">str</span><span class="op">,</span> <span class="dt">x</span><span class="op">:</span> item<span class="op">.</span><span class="at">transform</span>[<span class="dv">4</span>] })<span class="op">;</span></span>
+<span id="cb35-5">}</span>
+<span id="cb35-6"></span>
+<span id="cb35-7"><span class="kw">const</span> sortedYs <span class="op">=</span> <span class="bu">Object</span><span class="op">.</span><span class="fu">keys</span>(lines)</span>
+<span id="cb35-8">  <span class="op">.</span><span class="fu">map</span>(<span class="bu">Number</span>)</span>
+<span id="cb35-9">  <span class="op">.</span><span class="fu">sort</span>((a<span class="op">,</span> b) <span class="kw">=&gt;</span> b <span class="op">-</span> a)<span class="op">;</span></span></code></pre></div>
+<p><code>transform[5]</code> is the Y coordinate and <code>transform[4]</code> the X. Rounding to 2-point buckets merges fragments on the same visual line; PDF Y grows upward, hence the descending sort. Under 30 extracted characters means the PDF is probably a scanned image.</p>
+<p><strong>Structured output.</strong> <code>atsPrompt.js</code> defines the rubric (keywords 30%, formatting 20%, experience 20%, completeness 15%, readability 15%) and caps list lengths to avoid truncation. <code>geminiService.js</code> also sends <code>responseMimeType: "application/json"</code> with a <code>responseSchema</code>, Gemini's structured output feature, and falls back to the default model if a configured model is unavailable.</p>
+<p><strong>Cloud Function.</strong> <code>functions/analyzeResume.js</code> keeps the Gemini key in Secret Manager via <code>defineSecret</code>, verifies the Firebase ID token with <code>admin.auth().verifyIdToken</code>, and enforces 20 requests per user per hour with a Firestore document holding <code>windowStart</code> and <code>count</code>.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-33" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<p>Two modes let workshop attendees start with a direct API call and graduate to a secure proxy. The direct mode puts <code>VITE_GEMINI_API_KEY</code> into the browser bundle, which is acceptable only for local development.</p>
+</section>
+<section id="challenges-and-how-they-were-solved-33" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>Long JSON answers were being cut off, which led to the list caps in the prompt, a configurable <code>maxOutputTokens</code> (default 8,192), and the response schema.</p>
+</section>
+<section id="security-and-performance-notes-33" class="level3">
+<h3>Security and Performance Notes</h3>
+<p><code>firestore.rules</code> and <code>storage.rules</code> are still the Firebase "test mode" defaults that allow anyone to read and write everything until 19 April 2026, after which all client access is denied. Per-user rules such as <code>request.auth.uid == resource.data.userId</code> are needed for real use. The rate-limit read-then-write is not in a transaction, so concurrent requests can slip past the limit.</p>
+</section>
+<section id="how-to-run-it-33" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb36"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb36-1"><span class="bu">cd</span> Desktop/resume-ai</span>
+<span id="cb36-2"><span class="ex">npm</span> install</span>
+<span id="cb36-3"><span class="fu">cp</span> .env.example .env.local  <span class="co"># VITE_GEMINI_API_KEY, ...</span></span>
+<span id="cb36-4"><span class="ex">npm</span> run dev</span>
+<span id="cb36-5"><span class="ex">npm</span> run build <span class="kw">&amp;&amp;</span> <span class="ex">firebase</span> deploy</span></code></pre></div>
+</section>
+<section id="learn-more-33" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://ai.google.dev/gemini-api/docs/structured-output" target="_blank" rel="noopener noreferrer">Gemini API: structured output</a></li>
+<li><a href="https://firebase.google.com/docs/rules" target="_blank" rel="noopener noreferrer">Firebase Security Rules</a></li>
+<li><a href="https://firebase.google.com/docs/functions/config-env" target="_blank" rel="noopener noreferrer">Cloud Functions for Firebase: secrets</a></li>
+<li><a href="https://firebase.google.com/docs/auth/admin/verify-id-tokens" target="_blank" rel="noopener noreferrer">Firebase Admin: verify ID tokens</a></li>
+<li><a href="https://mozilla.github.io/pdf.js/examples/" target="_blank" rel="noopener noreferrer">PDF.js examples</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=vAoB4VbhRzM" target="_blank" rel="noopener noreferrer">Firebase in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=Tn6-PIqc4UM" target="_blank" rel="noopener noreferrer">React in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=KCrXgy8qtjM" target="_blank" rel="noopener noreferrer">Vite in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=mr15Xzb1Ook" target="_blank" rel="noopener noreferrer">Tailwind in 100 Seconds</a></li>
+</ul>
+</section>
+</section>
+<section id="early-front-end-exercises-aveengers-and-petsnap-facts" class="level2">
+<h2>Early Front-End Exercises: Aveengers and PetSnap Facts</h2>
+<p>These two small sites are learning projects from 2024. Each is a few files of plain HTML, CSS and JavaScript, but they show the basics later projects build on.</p>
+<section id="at-a-glance-34" class="level3">
+<h3>At a Glance</h3>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Aveengers</th>
+<th>PetSnap Facts</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>What</td>
+<td>Avengers team landing page</td>
+<td>Random cat fact + random dog photo</td>
+</tr>
+<tr>
+<td>Language(s)</td>
+<td>HTML, CSS</td>
+<td>HTML, CSS, JavaScript</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>Google Fonts (Protest Riot)</td>
+<td>axios 1.6.7 (CDN), GoodDog font</td>
+</tr>
+<tr>
+<td>APIs</td>
+<td>none</td>
+<td>catfact.ninja, TheDogAPI</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/Aveengers" target="_blank" rel="noopener noreferrer">Aveengers</a></td>
+<td><a href="https://github.com/VijaysinghPuwar/PetSnap-Facts" target="_blank" rel="noopener noreferrer">PetSnap-Facts</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Done (revamped Oct 2025)</td>
+<td>Done (April 2024)</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-34" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Aveengers is a poster: a hero image, a title and three hero cards for Iron Man, Captain America and Hulk. PetSnap Facts is a vending machine: press the bone-shaped "Bite me" button, and it asks one website for a cat fact and another for a dog picture, then places both on the page.</p>
+</section>
+<section id="architecture-34" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>PetSnap:  button click -&gt; getFacts()  -&gt; catfact.ninja/fact
+                       -&gt; getImage()  -&gt; thedogapi.com/v1/
+                                         images/search
+          -&gt; #result.innerText, #image.src
+Aveengers: index.html + style.css (static)</code></pre>
+</section>
+<section id="deep-dive-34" class="level3">
+<h3>Deep Dive</h3>
+<p>PetSnap's <code>app.js</code> uses <code>async</code>/<code>await</code> with axios, wrapping each call in try/catch and returning a fallback string on failure:</p>
+<div class="sourceCode" id="cb38"><pre class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb38-1"><span class="kw">async</span> <span class="kw">function</span> <span class="fu">getFacts</span>() {</span>
+<span id="cb38-2">    <span class="cf">try</span> {</span>
+<span id="cb38-3">        <span class="kw">let</span> res <span class="op">=</span> <span class="cf">await</span> axios<span class="op">.</span><span class="fu">get</span>(url)<span class="op">;</span></span>
+<span id="cb38-4">        <span class="cf">return</span> res<span class="op">.</span><span class="at">data</span><span class="op">.</span><span class="at">fact</span><span class="op">;</span></span>
+<span id="cb38-5">    } <span class="cf">catch</span> (e) {</span>
+<span id="cb38-6">        <span class="bu">console</span><span class="op">.</span><span class="fu">log</span>(<span class="st">"error -"</span><span class="op">,</span> e)<span class="op">;</span></span>
+<span id="cb38-7">        <span class="cf">return</span> <span class="st">"no fact found"</span><span class="op">;</span></span>
+<span id="cb38-8">    }</span>
+<span id="cb38-9">}</span></code></pre></div>
+<p>The two requests run one after another; <code>Promise.all</code> would fetch them in parallel. On failure the image function returns the string "image not found", which then becomes an invalid <code>src</code>.</p>
+<p>Aveengers was revamped in October 2025 with a Codex-assisted pull request. The CSS now uses custom properties (CSS variables such as <code>--accent-ironman</code>) for per-hero colours, <code>clamp()</code> for fluid padding, a fixed <code>body::before</code> layer for a faded wallpaper, and semantic HTML (<code>main</code>, <code>header</code>, <code>figure</code>, <code>section</code> with <code>aria-label</code>).</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-34" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<p>No build step and no framework, which is right for a first project. The wallpaper is hot-linked from a third-party site, which can break without warning.</p>
+</section>
+<section id="challenges-and-how-they-were-solved-34" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>The Aveengers revamp replaced the original 2024 layout with accessible, responsive markup.</p>
+</section>
+<section id="security-and-performance-notes-34" class="level3">
+<h3>Security and Performance Notes</h3>
+<p>Both use <code>innerText</code> or attributes rather than <code>innerHTML</code>, so API text cannot inject HTML.</p>
+</section>
+<section id="how-to-run-it-34" class="level3">
+<h3>How to Run It</h3>
+<p>Open <code>index.html</code> in a browser.</p>
+</section>
+<section id="learn-more-34" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function" target="_blank" rel="noopener noreferrer">MDN: Using the Fetch API and async functions</a></li>
+<li><a href="https://axios-http.com/docs/intro" target="_blank" rel="noopener noreferrer">axios documentation</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties" target="_blank" rel="noopener noreferrer">MDN: CSS custom properties</a></li>
+<li><a href="https://docs.thedogapi.com/" target="_blank" rel="noopener noreferrer">TheDogAPI documentation</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=ok-plXXHlWw" target="_blank" rel="noopener noreferrer">HTML in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=K74l26pE4YA" target="_blank" rel="noopener noreferrer">CSS Flexbox in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=DHvZLI7Db8E" target="_blank" rel="noopener noreferrer">JavaScript Promises In 10 Minutes</a></li>
+<li><a href="https://www.youtube.com/watch?v=PkZNo7MFNFg" target="_blank" rel="noopener noreferrer">Learn JavaScript - Full Course for Beginners</a></li>
+</ul>
+</section>
+</section>
+<section id="incraler-lightnovel-crawler-workspace" class="level2">
+<h2>Incraler (lightnovel-crawler workspace)</h2>
+<section id="at-a-glance-35" class="level3">
+<h3>At a Glance</h3>
+<p>Incraler is a working folder, not an original codebase. It holds an unmodified clone of the open-source <a href="https://github.com/lncrawl/lightnovel-crawler" target="_blank" rel="noopener noreferrer">lightnovel-crawler</a> project (at upstream commit <code>cc64f8d4</code>), two Python virtual environments, local configuration, and downloaded output. The author's own contribution is the setup and use of the tool, documented here; the crawler code itself belongs to its upstream maintainers.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Python (upstream tool)</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>lncrawl web server and CLI (upstream)</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>lightnovel_crawler 4.0.0 (<code>.venv</code>), 3.10.1 (<code>lncrawl-stable</code>)</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Local macOS</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>local only (wraps upstream clone)</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Personal use</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-35" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>It is like keeping two versions of a downloader installed side by side: the newest release in one box and an older stable release in another, so if the new one misbehaves on a site you can switch. Output lands in a tidy library folder per site and per book.</p>
+</section>
+<section id="architecture-35" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>Incraler/
+  lightnovel-crawler/   upstream clone + local config
+     .lncrawl-config*.json  (server, crawler, db settings)
+     .lncrawl-data/         (novels, sources, sqlite, tmp)
+  .venv/                lightnovel_crawler 4.0.0
+  lncrawl-stable/       venv with 3.10.1
+  Lightnovels/&lt;site&gt;/&lt;book&gt;/{epub,json,web,archives}
+  sqlite.db             user, job, novel, artifact tables</code></pre>
+</section>
+<section id="deep-dive-35" class="level3">
+<h3>Deep Dive</h3>
+<p>The only author-specific files are the two untracked config JSONs. They set crawler concurrency to 5, allow browser-based crawling, point the database at a local SQLite file, and configure the bundled web server at <code>http://localhost:8080</code> with a local SMTP port 1025 (a typical dev mail catcher). They also contain secrets (token secret, admin password, an API key field), which are not reproduced here. The sample output under <code>Lightnovels/</code> shows one book's chapters 50 to 100 exported as EPUB plus zipped JSON and web versions.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-35" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<p>Pinning a stable version in its own venv is a cheap rollback strategy. This workspace is also the background for TOC Extractor, which the author later built as his own, more polite and audited alternative.</p>
+</section>
+<section id="challenges-and-how-they-were-solved-35" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>No notes or commits exist beyond the configuration.</p>
+</section>
+<section id="security-and-performance-notes-35" class="level3">
+<h3>Security and Performance Notes</h3>
+<p>The config files hold credentials in plaintext and sit inside a git clone; they are untracked, but adding them to <code>.gitignore</code> would prevent accidental commits.</p>
+</section>
+<section id="how-to-run-it-35" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb40"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb40-1"><span class="bu">source</span> .venv/bin/activate</span>
+<span id="cb40-2"><span class="ex">lncrawl</span> <span class="at">--help</span></span></code></pre></div>
+</section>
+<section id="learn-more-35" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://github.com/lncrawl/lightnovel-crawler" target="_blank" rel="noopener noreferrer">lightnovel-crawler on GitHub</a></li>
+<li><a href="https://docs.python.org/3/library/venv.html" target="_blank" rel="noopener noreferrer">Python venv documentation</a></li>
+<li><a href="https://www.w3.org/TR/epub-33/" target="_blank" rel="noopener noreferrer">EPUB 3 specification</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=XVv6mJpFOb0" target="_blank" rel="noopener noreferrer">Web Scraping with Python - Beautiful Soup Crash Course</a></li>
+<li><a href="https://www.youtube.com/watch?v=x7X9w_GIm1s" target="_blank" rel="noopener noreferrer">Python in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=zsjvFFKOm3c" target="_blank" rel="noopener noreferrer">SQL Explained in 100 Seconds</a></li>
+</ul>
+</section>
+</section>
+<section id="nightframe-studio" class="level2">
+<h2>NightFrame Studio</h2>
+<section id="at-a-glance-36" class="level3">
+<h3>At a Glance</h3>
+<p>NightFrame Studio is an unstarted scaffold for an AI video production studio: a git repository with zero commits, an empty README, and empty <code>worker/</code>, <code>scripts/</code>, <code>docker/</code> and <code>docs/</code> folders. What exists is a FastAPI backend with a data model and a Next.js 15 frontend running on mock data.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Python, TypeScript</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>FastAPI 0.135, SQLAlchemy 2.0, Next.js 15</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>pydantic-settings, uvicorn</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Local, SQLite (<code>nightframe.db</code>)</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>local only (zero commits)</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Scaffold</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-36" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>It models a film the way a production office does: a Project has Episodes, an Episode has Scenes, a Scene has Shots, and each Shot has a prompt, framing, duration, assets, voice lines and generation jobs.</p>
+</section>
+<section id="architecture-36" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>Next.js (projects page, ShotEditor, PromptPanel,
+         VoicePreview; lib/mock-data.ts)
+    |  lib/api.ts
+    v
+FastAPI routers: projects, episodes, scenes, shots,
+                 assets, jobs, tts
+    -&gt; services/*  -&gt; SQLAlchemy models -&gt; SQLite
+    -&gt; integrations/kokoro_client.py (stub)</code></pre>
+</section>
+<section id="deep-dive-36" class="level3">
+<h3>Deep Dive</h3>
+<p>Models use SQLAlchemy 2.0's typed <code>Mapped[...]</code> and <code>mapped_column</code> style, with <code>cascade="all, delete-orphan"</code> so deleting a Shot removes its assets and jobs. <code>GenerationJob</code> has <code>kind</code>, <code>status</code>, <code>provider</code> and <code>output_path</code>, ready for a future worker. <code>KokoroClient.synthesize_preview</code> returns a placeholder saying HTTP integration is pending; Kokoro is an open-weight TTS model.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-36" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<p>A layered routes, services, models split from day one keeps future workers and providers pluggable.</p>
+</section>
+<section id="challenges-and-how-they-were-solved-36" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>None recorded yet.</p>
+</section>
+<section id="security-and-performance-notes-36" class="level3">
+<h3>Security and Performance Notes</h3>
+<p>A <code>.env</code> file exists in the working tree; make sure <code>.gitignore</code> covers it before the first commit.</p>
+</section>
+<section id="how-to-run-it-36" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb42"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb42-1"><span class="bu">cd</span> backend <span class="kw">&amp;&amp;</span> <span class="bu">source</span> .venv/bin/activate</span>
+<span id="cb42-2"><span class="ex">uvicorn</span> app.main:app <span class="at">--reload</span></span>
+<span id="cb42-3"><span class="bu">cd</span> ../frontend <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> install <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> run dev</span></code></pre></div>
+</section>
+<section id="learn-more-36" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://fastapi.tiangolo.com/tutorial/bigger-applications/" target="_blank" rel="noopener noreferrer">FastAPI bigger applications guide</a></li>
+<li><a href="https://docs.sqlalchemy.org/en/20/orm/declarative_tables.html" target="_blank" rel="noopener noreferrer">SQLAlchemy 2.0 declarative mapping</a></li>
+<li><a href="https://huggingface.co/hexgrad/Kokoro-82M" target="_blank" rel="noopener noreferrer">Kokoro-82M model card</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=iWS9ogMPOI0" target="_blank" rel="noopener noreferrer">Python FastAPI Tutorial: Build a REST API in 15 Minutes</a></li>
+<li><a href="https://www.youtube.com/watch?v=Sklc_fQBmcs" target="_blank" rel="noopener noreferrer">Next.js in 100 Seconds // Plus Full Beginner's Tutorial</a></li>
+<li><a href="https://www.youtube.com/watch?v=zsjvFFKOm3c" target="_blank" rel="noopener noreferrer">SQL Explained in 100 Seconds</a></li>
+</ul>
+</section>
+</section>
+</section>

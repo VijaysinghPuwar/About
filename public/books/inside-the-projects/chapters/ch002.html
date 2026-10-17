@@ -1,0 +1,662 @@
+<section id="chapter-2-spoonstill-a-batch-film-renderer-in-rust" class="level1">
+<h1><span class="header-section-number">2</span> spoonstill, a Batch Film Renderer in Rust</h1>
+<p>This chapter covers the largest project in the book: a Rust workspace that turns a folder of photographs and narration into one finished MP4 video. It is worth reading slowly, because the interesting part is not only the code. It is also the method around the code: a numbered decision log, benchmarks taken on real hardware, and tests that exist to stop a rule from being broken. By the end you should understand how FFmpeg can be driven safely and predictably from Rust at the scale of hundreds of scenes.</p>
+<section id="spoonstill" class="level2">
+<h2>spoonstill</h2>
+<section id="at-a-glance" class="level3">
+<h3>At a Glance</h3>
+<p>spoonstill is a batch renderer for narrated photo films. You give it still images and, for each one, a voice recording, a line of text, or nothing. It produces one MP4 in which every still slowly zooms or pans (the "Ken Burns" effect) and each scene lasts exactly as long as its narration. It is built for people making narrated photo essays, audiobook chapters with artwork, lecture slides with voiceover, or vertical Shorts made from a photo set. The problem it solves is the tedium of doing this by hand in a timeline editor: at 500 scenes, aligning every picture to every sentence is hours of dragging, and spoonstill computes all of that alignment instead.</p>
+<p>The program has two front ends that share one engine: a command line tool called <code>still</code>, and a desktop window called spoonstill built with Tauri 2. The design rule is "if the CLI cannot do it, it does not exist", so the window is only a thin layer over the same library calls.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Rust (edition 2024, toolchain pinned to 1.94.0), plus about 4,900 lines of hand-written HTML, CSS and JavaScript for the window</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Tauri 2 (desktop shell), clap 4 (CLI)</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>serde, serde_yaml_ng, csv, sysinfo, fontdue (glyph rasterizer), harfrust (text shaper), ctrlc, tauri-plugin-dialog, tauri-plugin-opener</td>
+</tr>
+<tr>
+<td>External tools</td>
+<td>FFmpeg and ffprobe (video work), <code>edge-tts</code> Python tool (neural voices)</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>macOS (Apple Silicon and Intel, one universal app) and Windows 10/11 64-bit</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/spoonstill" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/spoonstill</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Version 0.1.25, unsigned preview builds. Milestones M0 to M2 complete, M3 and M4 partly done, M5 (signing, bundled FFmpeg, auto update) not started</td>
+</tr>
+</tbody>
+</table></div>
+<p>A few numbers give a sense of the size. The six crates and the desktop app hold roughly 52,000 lines of Rust including tests. There are about 825 <code>#[test]</code> functions, 39 shell "exit gates" that render real media, and 174 numbered decisions in <code>decisions.md</code>. The git history has 126 commits, starting on 2026-08-26 with a commit titled "docs: planning corpus before any code". Code came second.</p>
+<p>A note on the folders the task mentions. The <code>AI Model/</code> directory does not contain machine learning models. It contains written audits of this codebase made by three AI coding assistants (Codex, Gemini and Claude), plus a review that re-tested their claims. The only "AI" in the running product is the neural text-to-speech voice, which is a cloud service reached through <code>edge-tts</code>. The <code>learning/</code> folder holds the author's own study notes, and <code>plan/</code> holds reference checkouts of other open source projects (Tauri, Remotion, editly, ffmpeg-sidecar, lossless-cut, MoneyPrinterTurbo and others) that were studied before the code was written.</p>
+</section>
+<section id="how-it-works-simple-version" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Imagine you are making a slideshow for a family dinner. You have 40 photos and you want to say a sentence or two about each one. Doing it by hand, you would record your voice for photo 1, time how long it lasted, set photo 1 to stay on screen exactly that long, add a slow zoom so it does not look frozen, then do the same for photo 2, and so on. Then you would join everything together and hope the volume is even.</p>
+<p>spoonstill does each of those steps for you, in this order:</p>
+<ol type="1">
+<li><strong>Read the folder.</strong> It looks at what you gave it. <code>001.jpg</code> and <code>001.m4a</code> share the number 001, so they belong to the same scene. <code>002.jpg</code> with <code>002.txt</code> means "read this text aloud over photo 2".</li>
+<li><strong>Check everything first.</strong> Before doing any slow work it opens every file with <code>ffprobe</code> (FFmpeg's inspection tool) and reports every problem at once: a broken JPEG, an empty MP3, two recordings for one photo.</li>
+<li><strong>Get the narration ready.</strong> Recordings are converted to one standard audio format and made equally loud. Text lines are sent to a neural voice service, which returns speech. Then the length of each piece of audio is measured precisely.</li>
+<li><strong>Make one small video per scene.</strong> For each photo, FFmpeg is told: "make exactly N frames, zooming from here to there, with this audio underneath". N comes from the measured audio length.</li>
+<li><strong>Check each small video.</strong> It is opened again and every property (size, colour format, frame count) is compared against a fixed checklist. Only a video that passes is kept.</li>
+<li><strong>Glue them together.</strong> The small videos are joined end to end without re-encoding, like taping film reels together.</li>
+<li><strong>Check the final film</strong>, then delete small videos from older runs that are no longer needed.</li>
+</ol>
+<p>The trick that makes it fast the second time: each small video is named after a fingerprint of everything that went into it. If you fix a typo in scene 12 and render again, only scene 12 has a new fingerprint, so only scene 12 is rebuilt. The other 39 are reused.</p>
+</section>
+<section id="architecture" class="level3">
+<h3>Architecture</h3>
+<p>The workspace is split into crates (Rust's unit of compilation and packaging) arranged in strict layers. A crate may only depend on crates in lower layers, and a test reads the real <code>Cargo.toml</code> files to enforce this.</p>
+<pre class="text"><code>  +-------------------+        +----------------------------+
+  | spoonstill-cli    |        | apps/desktop (Tauri 2)     |
+  | binary: still     |        | Rust IPC + ui/app.js       |
+  +---------+---------+        +-------------+--------------+
+            |                                |
+            +---------------+----------------+
+                            v
+              +-----------------------------+
+              | spoonstill-app              |
+              | import, ingest, arrange,    |
+              | audio cache, pools, film    |
+              +--+---------+---------+------+
+                 |         |         |
+                 v         v         v
+        +-----------+ +---------+ +------------------+
+        | spoon-    | | spoon-  | | spoonstill-state |
+        | still-tts | | still-  | | JSONL logs,      |
+        | Edge TTS  | | media   | | runs.csv, bundle |
+        +-----+-----+ +----+----+ +--------+---------+
+              |  uses      |               |
+              +-----------&gt;+               |
+                           v               v
+              +-----------------------------+
+              | spoonstill-core             |
+              | ZERO dependencies: motion,  |
+              | geometry, timing, hashing,  |
+              | project model, captions     |
+              +-----------------------------+
+
+  spoonstill-media is the only crate that spawns
+  processes: ffmpeg, ffprobe, and edge-tts.</code></pre>
+<p>The layer numbers, as written in <code>crates/spoonstill-cli/tests/architecture.rs</code>:</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Crate</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td><code>spoonstill-core</code></td>
+<td>The domain model. Pure functions and types, no I/O, no dependencies at all</td>
+</tr>
+<tr>
+<td>1</td>
+<td><code>spoonstill-media</code></td>
+<td>The process boundary: FFmpeg and ffprobe, segment profile, captions rasterizer, hardware encoder detection</td>
+</tr>
+<tr>
+<td>1</td>
+<td><code>spoonstill-state</code></td>
+<td>Append-only logs, the machine-wide <code>runs.csv</code>, the diagnostics bundle</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>spoonstill-tts</code></td>
+<td>Text-to-speech provider trait and the Edge implementation, which spawns <code>edge-tts</code> through <code>spoonstill-media</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>spoonstill-app</code></td>
+<td>Orchestration: settings and manifest parsing, folder ingest, caches, worker pools, the film render</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>spoonstill-cli</code></td>
+<td>The <code>still</code> binary, a thin translation from arguments to <code>spoonstill-app</code></td>
+</tr>
+<tr>
+<td>(top)</td>
+<td><code>apps/desktop</code></td>
+<td>The Tauri window. May depend on <code>spoonstill-app</code> and <code>spoonstill-core</code> only</td>
+</tr>
+</tbody>
+</table></div>
+<p>How the pieces talk at run time:</p>
+<ul>
+<li><strong>CLI to app</strong>: plain function calls such as <code>spoonstill_app::render_project(&amp;options, &amp;cancel, &amp;on_event)</code>. Progress comes back as <code>FilmEvent</code> values passed to a callback.</li>
+<li><strong>Window to app</strong>: the JavaScript calls <code>invoke("render_project", ...)</code>, which runs a Rust <code>#[tauri::command]</code>. That command calls the same <code>render_project</code> on a blocking thread and streams <code>FilmEvent</code>s back to the webview through an ordered Tauri <code>Channel</code>.</li>
+<li><strong>App to media</strong>: Rust calls that eventually build an <code>FfmpegCommand</code> (an argument vector) and spawn a child process.</li>
+<li><strong>Media to FFmpeg</strong>: operating system processes, with arguments passed as a list, stdin used for a graceful "quit", stdout used for <code>-progress</code> key/value lines, and stderr retained in full for diagnostics.</li>
+<li><strong>TTS to the voice service</strong>: <code>edge-tts</code> is a Python program that talks to Microsoft's speech endpoint over a websocket. spoonstill never speaks that protocol itself.</li>
+</ul>
+</section>
+<section id="deep-dive" class="level3">
+<h3>Deep Dive</h3>
+<p>This section walks the pipeline from bottom to top: first the pure maths in <code>spoonstill-core</code>, then the FFmpeg boundary, then audio, captions and voices, then the orchestration and concurrency, and finally the two front ends and the build system.</p>
+<section id="timing-from-seconds-of-speech-to-a-frame-count" class="level4">
+<h4>Timing: from seconds of speech to a frame count</h4>
+<p>Everything starts with one question: a narration is 3.717 seconds long and the video runs at 30 frames per second, so how many frames should the scene have? The answer lives in <code>crates/spoonstill-core/src/timing.rs</code>, which the author's own learning notes call "the single most load-bearing calculation in the program".</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="kw">pub</span> <span class="kw">fn</span> frames_for_duration(seconds<span class="op">:</span> <span class="dt">f64</span><span class="op">,</span> fps<span class="op">:</span> <span class="dt">u32</span>) <span class="op">-&gt;</span> <span class="dt">u32</span> <span class="op">{</span></span>
+<span id="cb2-2">    <span class="cf">if</span> <span class="op">!</span>seconds<span class="op">.</span>is_finite() <span class="op">||</span> seconds <span class="op">&lt;=</span> <span class="dv">0.0</span> <span class="op">||</span> fps <span class="op">==</span> <span class="dv">0</span> <span class="op">{</span></span>
+<span id="cb2-3">        <span class="cf">return</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb2-4">    <span class="op">}</span></span>
+<span id="cb2-5">    <span class="kw">let</span> exact <span class="op">=</span> seconds <span class="op">*</span> <span class="dt">f64</span><span class="pp">::</span>from(fps)<span class="op">;</span></span>
+<span id="cb2-6">    <span class="kw">let</span> frames <span class="op">=</span> (exact <span class="op">-</span> <span class="dv">1e-9</span>)<span class="op">.</span>ceil()<span class="op">;</span></span>
+<span id="cb2-7">    <span class="co">// Saturating rather than `as u32`, which would wrap a</span></span>
+<span id="cb2-8">    <span class="co">// nonsense duration into a small frame count ...</span></span>
+<span id="cb2-9">    <span class="cf">if</span> frames <span class="op">&gt;=</span> <span class="dt">f64</span><span class="pp">::</span>from(<span class="dt">u32</span><span class="pp">::</span><span class="cn">MAX</span>) <span class="op">{</span></span>
+<span id="cb2-10">        <span class="dt">u32</span><span class="pp">::</span><span class="cn">MAX</span></span>
+<span id="cb2-11">    <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb2-12">        (frames <span class="kw">as</span> <span class="dt">u32</span>)<span class="op">.</span>max(<span class="dv">1</span>)</span>
+<span id="cb2-13">    <span class="op">}</span></span>
+<span id="cb2-14"><span class="op">}</span></span></code></pre></div>
+<p>Three decisions are packed into these lines:</p>
+<ul>
+<li><strong>Round up, never down</strong> (decision D-022). Rounding down would cut the last syllable of nearly every scene. Instead, the audio is padded with silence up to the next whole frame.</li>
+<li><strong>Subtract a tiny epsilon before <code>ceil</code>.</strong> Floating point numbers (the <code>f64</code> type, which stores decimals approximately) mean <code>4.0 * 30.0</code> might come out as <code>120.00000000000001</code>. A plain <code>ceil</code> would turn that into 121 frames. The <code>1e-9</code> is far smaller than one audio sample, so it can never swallow a real frame.</li>
+<li><strong>Saturate instead of casting blindly.</strong> <code>as u32</code> on a huge float would wrap around to a small, plausible-looking number. Saturating makes a nonsense input produce an obviously nonsense output.</li>
+</ul>
+<p>The same file has <code>samples_for_frames</code>, which returns the exact number of audio samples at 48,000 samples per second that fill a given number of frames. For the reference case, 112 frames at 30 fps is 179,200 samples. Using an integer sample count means FFmpeg's audio trim is told <code>atrim=end_sample=179200</code> instead of a rounded decimal like <code>atrim=0:3.733333</code>. The sample rate 48 kHz divides evenly by 24, 25, 30, 50 and 60, so every common frame rate gets an exact answer.</p>
+</section>
+<section id="geometry-output-sizes-and-the-prescale-canvas" class="level4">
+<h4>Geometry: output sizes and the prescale canvas</h4>
+<p><code>crates/spoonstill-core/src/geometry.rs</code> defines <code>Aspect</code> (16:9, 9:16, 1:1), <code>Resolution</code> names (720p to 2160p, also called 4k), and <code>OutputSpec</code>. A resolution number always means the <strong>short edge</strong>, so "4K vertical" is 2160x3840. The constant <code>PRESCALE_FACTOR = 3</code> says the still is first scaled onto a canvas three times the output size in each axis. For 1080p that canvas is 5760x3240, and for 4K it is 11520x6480.</p>
+<p>Why three? The answer is a measurement in <code>ffmpeg-findings.md</code> section 1. FFmpeg's <code>zoompan</code> filter rounds its zoom factor per frame. If the canvas is too small, two consecutive frames round to the same zoom and the motion visibly "steps". The author rendered a 10% zoom over 300 frames at different prescale sizes and counted unique frames with FFmpeg's <code>mpdecimate</code> filter:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Prescale height</th>
+<th>Unique frames of 300</th>
+<th>Duplicates</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1x output</td>
+<td>188</td>
+<td>37%</td>
+</tr>
+<tr>
+<td>2x output</td>
+<td>280</td>
+<td>7%</td>
+</tr>
+<tr>
+<td><strong>3x output</strong></td>
+<td><strong>300</strong></td>
+<td><strong>0%</strong></td>
+</tr>
+<tr>
+<td>6x output</td>
+<td>300</td>
+<td>0%</td>
+</tr>
+</tbody>
+</table></div>
+<p>Three times is both the floor (below it, stepping) and the ceiling (above it, only slower). The same section also disproved a claim from the planning documents that a big prescale was "a memory trap": peak memory moved only 8% across a 6x range. It is a CPU cost.</p>
+<p><code>OutputSpec::new</code> also refuses sizes past 4K, because the resulting H.264 "level" (a tag that tells players the maximum stream complexity to expect) would exceed what players honour. The limit is expressed as <code>MAX_MACROBLOCKS = 36_864</code>, where a macroblock is the 16x16 pixel tile H.264 works on.</p>
+</section>
+<section id="motion-the-ken-burns-filter-graph" class="level4">
+<h4>Motion: the Ken Burns filter graph</h4>
+<p><code>crates/spoonstill-core/src/motion.rs</code> is described by its own header as "the whole reason the project has measurements". It produces the FFmpeg filter graph string for one scene. A filter graph is FFmpeg's mini language for chaining image and audio operations, written as comma-separated filters. The emitted chain is:</p>
+<pre class="text"><code>scale=&lt;3*W&gt;:&lt;3*H&gt;:force_original_aspect_ratio=increase:out_range=tv,
+crop=&lt;3*W&gt;:&lt;3*H&gt;,
+zoompan=z='&lt;f(on)&gt;':x='&lt;expr&gt;':y='&lt;expr&gt;':d=&lt;N&gt;:s=&lt;W&gt;x&lt;H&gt;:fps=&lt;FPS&gt;,
+setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709,
+setsar=1,
+format=yuv420p</code></pre>
+<p>Each position fixes a failure that was reproduced first:</p>
+<ul>
+<li><strong>Cover-fit before <code>zoompan</code></strong> (D-034). <code>scale</code> with <code>force_original_aspect_ratio=increase</code> plus <code>crop</code> makes the canvas fill the target shape exactly. Since the canvas is never smaller than the output aspect, the moving window can never slide off the picture and show black edges.</li>
+<li><strong>The frame count is structural</strong> (D-030). The still is fed once, with no <code>-loop</code> flag, and <code>zoompan</code> is told <code>d=N</code> (emit N output frames per input frame). The command also gets <code>-frames:v N</code>. Section 2 of the findings shows why: the common form <code>-loop 1</code> with <code>d=N</code> and no duration limit produces frames forever. A reference project had recorded this as a "five-hour hang". The author measured it at 8,400 frames in 25 seconds and still accelerating. It was never hung; it was succeeding forever.</li>
+<li><strong><code>setsar=1</code> is last before <code>format</code></strong> (D-033). SAR is "sample aspect ratio", the shape of one pixel. A 1999x1001 source picks up a SAR of 30007:30000 during scaling, and an early <code>setsar</code> does not survive <code>zoompan</code>. A segment with the wrong SAR is still joined by FFmpeg without any warning, which is how corrupted films happen.</li>
+<li><strong><code>setparams</code> and <code>out_range=tv</code></strong> (D-037). JPEGs use "full range" colour (values 0 to 255) while video normally uses "TV range" (16 to 235). Without pinning, the encoder writes <code>yuvj420p</code>, a different pixel format, and two segments from differently ranged sources join with exit code 0 and visibly different colour.</li>
+</ul>
+<p>The pan and zoom expressions are where the "cannot walk off the image" guarantee becomes structural rather than clamped:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb4-1"><span class="kw">fn</span> axis_expr(axis<span class="op">:</span> Axis<span class="op">,</span> motion<span class="op">:</span> MotionSpec<span class="op">,</span> frames<span class="op">:</span> <span class="dt">u32</span>) <span class="op">-&gt;</span> <span class="dt">String</span> <span class="op">{</span></span>
+<span id="cb4-2">    <span class="kw">let</span> (ax<span class="op">,</span> ay) <span class="op">=</span> motion<span class="op">.</span>anchor<span class="op">.</span>fractions()<span class="op">;</span></span>
+<span id="cb4-3">    <span class="kw">let</span> p <span class="op">=</span> progress_expr(frames)<span class="op">;</span></span>
+<span id="cb4-4"></span>
+<span id="cb4-5">    <span class="kw">let</span> fraction <span class="op">=</span> <span class="cf">match</span> (axis<span class="op">,</span> motion<span class="op">.</span>kind) <span class="op">{</span></span>
+<span id="cb4-6">        (<span class="pp">Axis::</span>X<span class="op">,</span> <span class="pp">MotionKind::</span>PanRight) <span class="op">=&gt;</span> p<span class="op">,</span></span>
+<span id="cb4-7">        (<span class="pp">Axis::</span>X<span class="op">,</span> <span class="pp">MotionKind::</span>PanLeft) <span class="op">=&gt;</span> <span class="pp">format!</span>(<span class="st">"1-{p}"</span>)<span class="op">,</span></span>
+<span id="cb4-8">        (<span class="pp">Axis::</span>Y<span class="op">,</span> <span class="pp">MotionKind::</span>PanDown) <span class="op">=&gt;</span> p<span class="op">,</span></span>
+<span id="cb4-9">        (<span class="pp">Axis::</span>Y<span class="op">,</span> <span class="pp">MotionKind::</span>PanUp) <span class="op">=&gt;</span> <span class="pp">format!</span>(<span class="st">"1-{p}"</span>)<span class="op">,</span></span>
+<span id="cb4-10">        (<span class="pp">Axis::</span>X<span class="op">,</span> _) <span class="op">=&gt;</span> expr_num(ax)<span class="op">,</span></span>
+<span id="cb4-11">        (<span class="pp">Axis::</span>Y<span class="op">,</span> _) <span class="op">=&gt;</span> expr_num(ay)<span class="op">,</span></span>
+<span id="cb4-12">    <span class="op">};</span></span>
+<span id="cb4-13"></span>
+<span id="cb4-14">    <span class="cf">match</span> axis <span class="op">{</span></span>
+<span id="cb4-15">        <span class="pp">Axis::</span>X <span class="op">=&gt;</span> <span class="pp">format!</span>(<span class="st">"({fraction})*(iw-iw/zoom)"</span>)<span class="op">,</span></span>
+<span id="cb4-16">        <span class="pp">Axis::</span>Y <span class="op">=&gt;</span> <span class="pp">format!</span>(<span class="st">"({fraction})*(ih-ih/zoom)"</span>)<span class="op">,</span></span>
+<span id="cb4-17">    <span class="op">}</span></span>
+<span id="cb4-18"><span class="op">}</span></span></code></pre></div>
+<p>In <code>zoompan</code>, <code>iw</code> is the input width, <code>zoom</code> is the current zoom factor and <code>on</code> is the output frame number. The expression <code>iw-iw/zoom</code> is exactly the legal range of the window's left edge at that zoom: 0 puts it flush left, the full value puts it flush right. Because <code>fraction</code> is either a constant anchor between 0 and 1, or <code>progress_expr</code>, which is <code>min(on/(frames-1),1)</code>, the result can never leave the image. No clamp is needed because nothing can go out of range. Two smaller details matter too: <code>progress_expr</code> returns the literal <code>0</code> for a one-frame segment so FFmpeg never divides by zero, and <code>expr_num</code> formats every number with <code>{:.6}</code> so a European locale can never write <code>0,1</code> instead of <code>0.1</code>.</p>
+<p>A pan also needs room to travel, so pans run at a fixed zoom of <code>1 + amount</code>. At zoom 1 the legal travel is zero.</p>
+<p><strong>Deterministic motion.</strong> If you do not choose a move, one is derived from the scene's identity with <code>MotionSpec::seeded</code>. The seed is a hash of the project name, the scene index and the hash of the image bytes. Three different bit ranges of that 64-bit seed pick the move kind (6 options), the anchor (9 options), and the amount (0.08 to 0.12). Because it is a pure function of stable inputs, a re-render is byte-identical and the cache stays valid.</p>
+<p>A later decision, D-153, added a second seed rule <code>MotionSeed::V2</code> that leaves out the scene index and uses "how many earlier scenes use this same photo" instead. Under V1, moving scene 8 to the front changed the index of every scene after it, which changed every move and forced a full re-encode. Under V2 a reorder is free. The old rule is frozen and stays the default for projects that do not opt in, so films already made never change. <code>still new</code> writes <code>motion_seed: v2</code> into new projects.</p>
+</section>
+<section id="hashing-why-not-rusts-built-in-hasher" class="level4">
+<h4>Hashing: why not Rust's built-in hasher</h4>
+<p><code>crates/spoonstill-core/src/hash.rs</code> implements FNV-1a, a simple 64-bit non-cryptographic hash, by hand. The reason is written in the header: Rust's <code>DefaultHasher</code> does not promise the same output across compiler versions, and <code>RandomState</code> reseeds per process. Using it for cache keys would build a program that works, and then silently invalidates every cached segment after a compiler upgrade.</p>
+<p>There are two field-combining variants, and the story of why tells you a lot about this codebase. <code>fnv1a_fields</code> separates fields with the byte <code>0x1f</code>. That was safe while the fields were paths and hex digests. Then subtitles arrived, and subtitle text comes from the operator's <code>.txt</code> files. <code>0x1f</code> is not whitespace, so it survives text cleanup, and two different sets of captions could hash to the same key (D-118). The fix was <code>fnv1a_prefixed</code>, which writes each field's length as 8 bytes before the field. A boundary stated as a count cannot be faked by data.</p>
+</section>
+<section id="the-project-model-and-validation" class="level4">
+<h4>The project model and validation</h4>
+<p><code>crates/spoonstill-core/src/project.rs</code> defines <code>SceneId</code>, <code>AudioSource</code>, <code>SceneDraft</code>, <code>SceneSpec</code>, and a long <code>ProblemKind</code> enum. <code>AudioSource</code> is the heart of the model: every scene has <strong>exactly one</strong> of a recording file, a line of text to speak (TTS), or a silent duration (D-020). A scene with both a recording and a text file is not ambiguous: the recording is the narration, and the text becomes its caption.</p>
+<p><code>validate_drafts</code> checks everything that needs no disk access and returns a <code>Validation</code> holding every <code>Problem</code> found, each tied to its scene. Limits such as <code>MAX_SCENE_SECONDS = 3600</code> and <code>MAX_SCRIPT_BYTES = 256 KiB</code> are here too.</p>
+<p><code>crates/spoonstill-core/src/path_safety.rs</code> decides whether a path an operator wrote in a manifest stays inside the project folder. It compares canonical paths component by component, not strings (so <code>/proj-evil</code> is not inside <code>/proj</code>). It also gives the same error whether or not an outside file exists, so the error message cannot be used to probe the disk. The actual call to <code>canonicalize</code> comes in through a <code>RealPath</code> trait, which keeps core free of I/O and lets the tests run with a fake table on both macOS and Windows.</p>
+<p>Other core modules:</p>
+<ul>
+<li><code>captions.rs</code>: subtitle themes (<code>classic</code>, <code>boxed</code>, <code>band</code>, <code>card</code>, <code>punch</code>, <code>minimal</code>), placement, and <code>cues()</code>, which splits text into timed caption cues with a minimum of 0.9 seconds each and at most 60 per scene. Every theme measurement is a fraction of the frame, so a theme looks the same at 720p and 4K.</li>
+<li><code>language.rs</code>: guesses the language from the writing system (Devanagari means Hindi, Han with kana means Japanese, and so on). This only applies when the operator named no voice, so a Hindi line is not sent to an English voice that returns silence.</li>
+<li><code>chapter.rs</code>: cuts a whole chapter of prose into scene-sized pieces (described below).</li>
+<li><code>diagnostics.rs</code>: the <code>Event</code> type and <code>Diagnostics</code> trait every layer logs through, plus <code>redact</code> for secrets.</li>
+<li><code>remedy.rs</code>: a structured "what is wrong and what fixes it" value that the window turns into an Install button.</li>
+</ul>
+</section>
+<section id="cutting-a-chapter-into-scenes" class="level4">
+<h4>Cutting a chapter into scenes</h4>
+<p><code>chapter.rs</code> solves a real workflow problem the author had: writing a novel chapter and wanting a new picture every three to five seconds. Cutting by hand into <code>001.txt</code>, <code>002.txt</code> was most of the work. The algorithm treats every gap between words as a possible cut and gives it a cost: 0 after a full stop, 1 after a semicolon or dash, 2 after a comma, 3 before words like "and" or "then", 25 anywhere else, plus 20 for leaving a dangling "the" or "of". There is also a cost for every second a piece falls outside the target pacing. Joining the end of one sentence to the start of the next is refused outright.</p>
+<p>The cheapest set of cuts is found as a <strong>shortest path</strong> over word positions, a form of dynamic programming. With <code>n</code> words and at most <code>w</code> words per piece, it runs in <code>O(n*w)</code>, microseconds for a chapter. Lengths are estimated at 16.3 characters per second, a number measured from the author's own 431 lines (30,391 characters over 1,868 seconds of speech). The real length is only known after the line is spoken and measured.</p>
+</section>
+<section id="the-process-boundary-spoonstill-mediasrccommand.rs" class="level4">
+<h4>The process boundary: <code>spoonstill-media/src/command.rs</code></h4>
+<p>This is the only file in the workspace allowed to start a process. A test, <code>tests/no_shell_strings.rs</code>, reads the crate's own source and fails if any other module constructs a process or reaches for <code>sh -c</code> or <code>cmd /c</code>. <code>FfmpegCommand</code> is a builder that holds a program path and a <code>Vec&lt;OsString&gt;</code> of arguments. <code>OsString</code> is used instead of <code>String</code> because file names on both platforms can contain bytes that are not valid UTF-8.</p>
+<p>Why does this matter so much? Because a shell string turns data into code. One of the test fixtures is literally named <code>ünïcode spaced 名前.jpg</code>, and others contain <code>$(pwd)</code> and backticks. Passed as separate arguments, these are just file names. Concatenated into a shell command, they are one quote away from running something.</p>
+<p>Other details of <code>command.rs</code>:</p>
+<ul>
+<li><strong>Raw stderr is always kept</strong>, capped at the last 256 KiB per child so a damaged file cannot exhaust memory. Interesting FFmpeg failures do not always announce themselves as errors.</li>
+<li><strong>Cancellation is graceful, then forced</strong> (D-045). <code>quit()</code> writes <code>q</code> to FFmpeg's stdin, which tells it to finish the file cleanly. If it has not exited within a grace period, <code>kill()</code> follows. Stdin is used instead of a signal because there is no portable way to send SIGINT to a child on Windows.</li>
+<li><strong>Adaptive polling</strong> (D-149). Rust's standard <code>Child</code> has no timed wait, so waiting means checking repeatedly. The gap between checks is <code>clamp(time_waited / 8, 1 ms, 20 ms)</code>. A fixed 20 ms poll had made <code>still validate</code> on 200 scenes take 11.82 seconds, because each 23 ms probe was noticed at 40 ms. With proportional backoff plus concurrent probes it dropped to 1.31 seconds.</li>
+<li><strong>Every command is logged in a paste-ready form</strong>, so when scene 147 fails, the operator (or developer) can run the exact command by hand.</li>
+</ul>
+<p><code>tools.rs</code> finds <code>ffmpeg</code> and <code>ffprobe</code>. It never hands <code>Command::new</code> a bare name. A Mac app launched from Finder inherits launchd's minimal PATH, which has no Homebrew directory, so a bare <code>ffmpeg</code> would fail for every photo. <code>locate</code> searches the places package managers install to and returns an absolute path. The pair is resolved once per run and cloned into each worker, so a 500-scene batch cannot run half on one FFmpeg build and half on another.</p>
+<p><code>probe.rs</code> wraps <code>ffprobe -of json</code> with a timeout from the very first call, parses the JSON with <code>serde_json</code> into <code>ProbeResult</code> and <code>Stream</code>, and has <code>probe_counting_frames</code>, which decodes the whole file and counts frames instead of trusting the header. Section D-179 records that 9 of 10 probe timeouts seen on a network share were read-after-write delays, so a failed probe is retried once instead of simply given a bigger timeout.</p>
+</section>
+<section id="rendering-one-scene-spoonstill-mediasrcscene.rs" class="level4">
+<h4>Rendering one scene: <code>spoonstill-media/src/scene.rs</code></h4>
+<p><code>render_scene</code> is "M1's whole product in miniature". Its order is fixed by D-042:</p>
+<pre class="text"><code>render to a temporary path beside the destination
+  -&gt; ffprobe validate (frames, duration, size, codec, SAR, colour)
+    -&gt; atomic rename into the real segment path
+      -&gt; the caller records success</code></pre>
+<p>Inside <code>render_scene_inner</code>, step by step:</p>
+<ol type="1">
+<li>Probe the image for its <code>SourceGeometry</code> and probe the normalized audio for its duration. Duration is measured, never estimated (D-021).</li>
+<li>Compute <code>frames</code>, <code>duration</code> and <code>pad</code> with the timing functions.</li>
+<li>Use the requested motion or derive the seeded one from the image's content hash.</li>
+<li>Build the filter string and the expected <code>SegmentProfile</code>, then log a "scene resolved" event with every number, including the full filter string.</li>
+<li>Draw caption bands to temporary raw RGBA files if subtitles are on.</li>
+<li>Run FFmpeg, writing to a <code>.partial</code> file.</li>
+<li>Validate. On any failure the partial file is deleted, so nothing half-written can be mistaken for a finished segment.</li>
+<li>Rename into place.</li>
+</ol>
+<p>The FFmpeg invocation itself is built with argument vectors. A trimmed excerpt of <code>run_ffmpeg</code>:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb6-1"><span class="kw">let</span> audio_chain <span class="op">=</span> <span class="pp">format!</span>(</span>
+<span id="cb6-2">    <span class="st">"[1:a]aresample={SAMPLE_RATE},apad,</span><span class="sc">\</span></span>
+<span id="cb6-3"><span class="st">     atrim=end_sample={samples},asetpts=N/SR/TB[a]"</span>)<span class="op">;</span></span>
+<span id="cb6-4"><span class="co">// ...</span></span>
+<span id="cb6-5">command</span>
+<span id="cb6-6">    <span class="op">.</span>arg(<span class="st">"-filter_complex"</span>)</span>
+<span id="cb6-7">    <span class="op">.</span>arg(<span class="op">&amp;</span>graph)</span>
+<span id="cb6-8">    <span class="op">.</span>args([<span class="st">"-map"</span><span class="op">,</span> <span class="st">"[v]"</span><span class="op">,</span> <span class="st">"-map"</span><span class="op">,</span> <span class="st">"[a]"</span>])</span>
+<span id="cb6-9">    <span class="op">.</span>arg(<span class="st">"-frames:v"</span>)</span>
+<span id="cb6-10">    <span class="op">.</span>arg(frames<span class="op">.</span>to_string())</span>
+<span id="cb6-11">    <span class="op">.</span>args([<span class="st">"-c:v"</span><span class="op">,</span> request<span class="op">.</span>encode<span class="op">.</span>encoder<span class="op">.</span>name()])</span>
+<span id="cb6-12">    <span class="op">.</span>args(request<span class="op">.</span>encode<span class="op">.</span>encoder</span>
+<span id="cb6-13">        <span class="op">.</span>quality_args(<span class="op">&amp;</span>request<span class="op">.</span>encode<span class="op">.</span>preset<span class="op">,</span> request<span class="op">.</span>encode<span class="op">.</span>crf))</span>
+<span id="cb6-14">    <span class="op">.</span>args([<span class="st">"-profile:v"</span><span class="op">,</span> <span class="st">"high"</span>])</span>
+<span id="cb6-15">    <span class="op">.</span>args([<span class="st">"-c:a"</span><span class="op">,</span> <span class="st">"aac"</span><span class="op">,</span> <span class="st">"-b:a"</span><span class="op">,</span> <span class="pp">profile::</span>AUDIO_BITRATE])</span>
+<span id="cb6-16">    <span class="op">.</span>arg(<span class="st">"-video_track_timescale"</span>)</span>
+<span id="cb6-17">    <span class="op">.</span>arg(<span class="pp">profile::</span>VIDEO_TIMESCALE<span class="op">.</span>to_string())</span>
+<span id="cb6-18">    <span class="op">.</span>arg(<span class="st">"-movie_timescale"</span>)</span>
+<span id="cb6-19">    <span class="op">.</span>arg(<span class="pp">profile::</span>VIDEO_TIMESCALE<span class="op">.</span>to_string())</span>
+<span id="cb6-20">    <span class="op">.</span>with_progress()</span>
+<span id="cb6-21">    <span class="op">.</span>arg(temporary)<span class="op">;</span></span></code></pre></div>
+<p>The audio chain resamples to 48 kHz, pads with silence (<code>apad</code>), cuts at the exact sample count (<code>atrim=end_sample=</code>), and resets timestamps to start at zero (<code>asetpts</code>). Input 0 is the still and input 1 is the narration. Each caption cue is a further <code>rawvideo</code> input, laid on top with FFmpeg's core <code>overlay</code> filter after the motion chain. The <code>-movie_timescale</code> line is the most recent fix in the history (D-206): MP4 stores each track's length in an "edit list" using a movie clock that defaults to 1,000 ticks per second. A 119-frame segment of 3.966667 seconds was declared as 3.966 seconds. On the author's 800-scene film, 52 segments each lost 0.67 ms, the joined 4K film came out 38 ms short, and the final length assertion correctly refused it. Setting the movie clock to the same 90,000 ticks as the video track fixed it.</p>
+</section>
+<section id="the-segment-profile-exit-code-0-is-not-validation" class="level4">
+<h4>The segment profile: exit code 0 is not validation</h4>
+<p><code>profile.rs</code> pins every property a segment must have: container MP4, codec H.264 High profile, pixel format <code>yuv420p</code>, TV range, BT.709 colour, SAR 1:1, a 90 kHz video timescale, and AAC-LC stereo 48 kHz at 192 kbps. <code>assert_matches_profile</code> compares each field against the ffprobe output and returns a list of <code>Mismatch { field, expected, actual }</code>.</p>
+<p>The reason is section 5 of the findings: concatenating a SAR 30007:30000 segment between two 1:1 segments with stream copy gave exit code 0, no warning, and a film declaring SAR 1:1 throughout. Sixty frames had the wrong geometry, silently. So "FFmpeg did not complain" is not evidence (D-041), and the profile module is the thing that complains. The 90 kHz timescale was chosen because it divides evenly by 24, 25, 30, 50 and 60.</p>
+</section>
+<section id="joining-spoonstill-mediasrcconcat.rs" class="level4">
+<h4>Joining: <code>spoonstill-media/src/concat.rs</code></h4>
+<p>Segments are joined with FFmpeg's concat demuxer and <code>-c copy</code>, which copies compressed data without re-encoding. That is only safe because every segment was already proven identical in format. The concat list is a text file FFmpeg parses, which makes it the one place in the codebase where a string format is unavoidable. Instead of escaping operator file names, <code>is_safe_list_name</code> only allows ASCII letters, digits, <code>-</code>, <code>_</code> and <code>.</code>, which is the shape of spoonstill's own generated segment names. An operator's spelling never reaches the list.</p>
+<p>After the join, the film is probed and checked: its video must be within one frame of the sum of the segment frame counts, and its container may run up to one AAC frame (1024 samples, 21.3 ms) longer because of AAC "priming" samples. If the film is short, <code>stopped_at</code> walks the per-segment frame counts to name <strong>which segment</strong> the join stopped at. This came from D-178: a segment written to a network share had an intact header over an incomplete picture, and the old error message blamed the film, the one file that was not at fault.</p>
+</section>
+<section id="atomic-writes-atomic.rs" class="level4">
+<h4>Atomic writes: <code>atomic.rs</code></h4>
+<p>Every artifact is written to a temporary name <strong>beside</strong> its destination, then renamed. A rename within one filesystem is atomic (it happens completely or not at all), while a rename across filesystems is really a copy that can be interrupted. Temporary names look like <code>.film.mp4.partial-&lt;pid&gt;-&lt;counter&gt;.mp4</code>. The counter comes from a global <code>AtomicU64</code>, because two workers in one process can target the same cached audio file at the same moment. The extension is preserved because FFmpeg picks its output format from it. The cleanup function only deletes files matching that exact pattern, because the film's destination may be the operator's Downloads folder, and a looser rule could delete a stranger's file.</p>
+</section>
+<section id="audio-one-shape-for-every-source" class="level4">
+<h4>Audio: one shape for every source</h4>
+<p><code>spoonstill-media/src/audio.rs</code> turns every audio source into the same artifact: 48 kHz stereo 16-bit PCM in a WAV file (PCM means uncompressed samples). PCM instead of AAC avoids two generations of lossy compression, at the cost of disk (about 2.9 GB for 500 scenes of 30 seconds). The cache can always be rebuilt; lost quality cannot.</p>
+<p>Loudness is measured in LUFS (Loudness Units relative to Full Scale, the EBU R128 broadcast standard for perceived loudness). Edge TTS lands around -24 LUFS and a phone recording around -12, so a mixed film would be uneven. The target is -16 LUFS with a true-peak ceiling of -1.5 dBTP. The analysis pass runs FFmpeg's <code>loudnorm</code> filter only to <strong>measure</strong>, and <code>silencedetect</code> to find where speech starts and stops. The correction is then a single linear gain:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb7-1"><span class="kw">fn</span> gain_db(analysis<span class="op">:</span> <span class="op">&amp;</span>Analysis) <span class="op">-&gt;</span> <span class="dt">Option</span><span class="op">&lt;</span><span class="dt">f64</span><span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb7-2">    <span class="kw">let</span> loudness <span class="op">=</span> analysis<span class="op">.</span>loudness<span class="op">?;</span></span>
+<span id="cb7-3">    <span class="kw">let</span> wanted <span class="op">=</span> LOUDNESS_TARGET_LUFS <span class="op">-</span> loudness<span class="op">;</span></span>
+<span id="cb7-4">    <span class="kw">let</span> allowed <span class="op">=</span> analysis</span>
+<span id="cb7-5">        <span class="op">.</span>peak</span>
+<span id="cb7-6">        <span class="op">.</span>map_or(<span class="dt">f64</span><span class="pp">::</span><span class="cn">INFINITY</span><span class="op">,</span> <span class="op">|</span>peak<span class="op">|</span> <span class="op">{</span></span>
+<span id="cb7-7">            TRUE_PEAK_CEILING_DBTP <span class="op">-</span> peak</span>
+<span id="cb7-8">        <span class="op">}</span>)<span class="op">;</span></span>
+<span id="cb7-9">    <span class="kw">let</span> gain <span class="op">=</span> wanted<span class="op">.</span>min(allowed)</span>
+<span id="cb7-10">        <span class="op">.</span>clamp(<span class="op">-</span>MAX_GAIN_DB<span class="op">,</span> MAX_GAIN_DB)<span class="op">;</span></span>
+<span id="cb7-11">    (gain<span class="op">.</span>abs() <span class="op">&gt;=</span> <span class="dv">0.05</span>)<span class="op">.</span>then_some(gain)</span>
+<span id="cb7-12"><span class="op">}</span></span></code></pre></div>
+<p>The gain is the smaller of "what loudness asks for" and "what the peak allows", capped at plus or minus 24 dB so a recording made with the microphone muted does not become a wall of hiss. Gains under 0.05 dB are skipped. The comment explains why <code>loudnorm</code> is not used to apply the change: in single-pass mode it compresses dynamics, which changes how speech sounds and depends on FFmpeg's version. A plain <code>volume=</code> filter moves every sample equally and is byte-identical run to run.</p>
+<p>Synthesized speech has its leading and trailing padding trimmed; the operator's own recording never is, because "your padding is a decision and a provider's is an artifact". Silence is a real PCM file of an exact sample count, so a silent scene takes exactly the same path through the renderer as a narrated one. The normalization profile string <code>pcm_s16le/48000/2/-16lufs/v2</code> is part of every audio cache key, so changing the profile misses the cache.</p>
+</section>
+<section id="captions-drawn-in-rust" class="level4">
+<h4>Captions drawn in Rust</h4>
+<p><code>spoonstill-media/src/caption.rs</code> exists because Homebrew's default <code>ffmpeg</code> formula no longer includes <code>libass</code> or <code>libfreetype</code>, so the <code>subtitles</code> and <code>drawtext</code> filters do not exist on the very FFmpeg the README tells users to install. Rather than require a special build, spoonstill draws the text itself into RGBA pixels and asks FFmpeg only for <code>overlay</code>, which every build has.</p>
+<p>The pipeline per cue is: wrap to the frame width, shrink if it still does not fit, draw the shadow, the backdrop, the outline (the glyph mask dilated), then the fill. Fonts are compiled into the binary with <code>include_bytes!</code>: three weights of Inter and three of Noto Sans Devanagari, both under the SIL Open Font License. Embedding them means a theme looks identical on every machine. <code>fontdue</code> rasterizes individual glyphs, and <code>harfrust</code> (a Rust port of the HarfBuzz text shaper) decides which glyphs to use. Shaping matters for Hindi: a conjunct like स + ् + त becomes one shape, and the vowel sign ि is drawn to the left of the consonant it follows.</p>
+<p>Performance work here is a good example of the project's method (D-130). An audit asked for benchmarks, and drawing one 4K caption took 604 ms, with cost growing with the fourth power of resolution. Two algorithmic fixes brought it to 62 ms:</p>
+<ul>
+<li><strong>Dilation</strong> (growing the text mask to make an outline) now uses a sliding-window maximum with a monotonic deque: a queue that only holds indices whose values could still be the maximum, so each pixel is pushed and popped once and the pass is <code>O(width)</code> per row.</li>
+<li><strong>Box blur</strong> (for the shadow) now keeps a running sum: consecutive windows differ by one sample at each end, so each pass is <code>O(area)</code> instead of <code>O(area * radius)</code>.</li>
+</ul>
+<p>The old slow versions are kept in the tests as the definition of correct, and the new output is asserted byte-identical.</p>
+</section>
+<section id="hardware-encoders-run-it-do-not-trust-the-list" class="level4">
+<h4>Hardware encoders: run it, do not trust the list</h4>
+<p><code>hardware.rs</code> detects GPU encoders such as NVIDIA's NVENC (<code>h264_nvenc</code>), AMD's AMF, Windows Media Foundation, Intel Quick Sync and Apple's VideoToolbox. The key lesson is in its header table. On a Windows machine with an RTX 3060 and an AMD Radeon, <code>ffmpeg -encoders</code> listed seven H.264 hardware encoders, and only four could actually encode. The list reports what FFmpeg was compiled with, not what the machine can do. So each candidate is <strong>run</strong>: it encodes a few small <code>yuv420p</code> software frames from a synthetic source within a 30 second limit. Encoders that only accept frames already on the GPU are correctly reported unusable, because spoonstill's filter graph always produces CPU frames.</p>
+<p><code>VideoEncoder::quality_args</code> translates x264's settings for each encoder, because <code>-crf 18</code> means nothing to most of them. NVENC gets <code>-rc vbr -cq 18 -b:v 0</code> with the preset translated to its own p1 to p7 scale; AMF gets constant QP on all frame types; VideoToolbox takes a 1 to 100 quality scale that runs the other way.</p>
+<p>Is the GPU worth it? Section 12c of the findings measured that at 4K the encoder is only 14% of a scene's time on macOS (22.7% on Windows), because the work is the CPU filter graph and the 11520x6480 prescale canvas. GPU encode gives 1.2 to 1.67x and saves zero memory. Since v0.1.20 (D-199) the control surfaces nevertheless pick a working graphics encoder by default through <code>spoonstill_app::tooling::default_encoder</code>, with an off switch in Settings, <code>still doctor --graphics off</code>, or the <code>SPOONSTILL_GRAPHICS</code> environment variable. The library itself still means libx264 when no encoder is named, so every test that pins a film's exact bytes keeps describing the same film. Hardware encodes also get a different cache key, while the software key string is unchanged from before, so old caches still hit.</p>
+</section>
+<section id="text-to-speech-spoonstill-tts" class="level4">
+<h4>Text to speech: <code>spoonstill-tts</code></h4>
+<p>The <code>Provider</code> trait has a small contract: <code>id</code>, <code>availability</code> (ready, or missing with a <code>Remedy</code>), <code>voices</code>, <code>default_voice</code>, <code>install</code>, and speaking one line to one file. A provider does not choose the output format (everything is normalized afterwards), does not decide scene length (that is measured), and does not cache (the caller's key covers text, provider, voice, settings and profile).</p>
+<p>The Edge provider (<code>edge.rs</code>, the largest file in the crate) spawns the Python <code>edge-tts</code> tool through <code>spoonstill_media::command</code> rather than reimplementing Microsoft's protocol in Rust, because that endpoint is reverse-engineered, uses a clock-skew-based anti-abuse token, and changes. Some notable choices:</p>
+<ul>
+<li><strong>Text goes in a file, never on the command line</strong>, passed with <code>--file</code>. Long text could exceed the OS argument limit, arguments are visible to every process through <code>ps</code>, and above all the command line is logged into diagnostics bundles. The operator's script should never end up in a bug report.</li>
+<li><strong>Failures are classified before they are retried.</strong> Every <code>edge-tts</code> failure ends with a Python exception on the last stderr line. <code>NoAudioReceived</code> and <code>Invalid voice</code> are permanent; <code>aiohttp</code> and websocket errors are transient and retried with growing pauses. An unrecognized error defaults to permanent, which avoids retrying a bad request three times slowly.</li>
+<li><strong>Timeouts scale with line length.</strong> Measured: a short line takes about 0.6 seconds, 5,980 characters took 37.6 seconds (about 6.3 ms per character). A fixed 90 second limit would wrongly call a long paragraph on a slow link a dead network.</li>
+<li><strong>Long lines are split</strong> (<code>split_line</code>) and the pieces are joined.</li>
+<li><strong>Speaking twice does not produce identical bytes</strong> (two runs differed in 5,916 bytes), which is why the raw speech is cached beside the normalized artifact: re-normalizing must never mean re-speaking.</li>
+</ul>
+<p><code>pace.rs</code> handles throttling, a problem found in production logs. A 431-scene render sent 335 lines in three and a half minutes and then every connection to the speech service was refused. Later, at a fifth of the rate, a Windows machine was cut off after about 390 lines. The conclusion (D-195, D-199) is that the service limits a <strong>count</strong>, not a rate. The <code>Pace</code> rules are process-wide: at most two requests in flight, starts at least 1.2 seconds apart, and after a refusal a cool-down that starts at 15 seconds, doubles up to 120, and resets on the first success. A refusal streak is waited out for up to an hour once the process has spoken anything (and much less if it never has, because that looks like a blocked network). Meanwhile the segment pool keeps encoding everything already spoken. The arithmetic lives in a <code>Schedule</code> type that takes the clock as an argument, so it is tested without sleeping, and a <code>Gate</code> with a <code>Mutex</code> and <code>Condvar</code> wraps it for real threads.</p>
+</section>
+<section id="orchestration-and-concurrency-spoonstill-app" class="level4">
+<h4>Orchestration and concurrency: <code>spoonstill-app</code></h4>
+<p><code>spoonstill-app/src/film.rs</code> is <code>still render</code>. Its phases:</p>
+<pre class="text"><code>import      every problem at once; nothing renders on any error
+lock        one render per project at a time
+audio pool  each scene -&gt; (normalized path, measured duration)
+render pool each scene -&gt; validated segment, N at a time
+concat      stream copy, then assert the film's profile and length
+sweep       remove superseded segments</code></pre>
+<p><strong>Two pools, not one</strong> (D-044). Audio work is network and I/O bound; rendering is CPU and memory bound. They have separate limits. Originally they ran as two separate phases, which left encoders idle while narration was being fetched. D-146 overlapped them with <code>pool::pipeline</code>, which starts rendering a scene as soon as that scene's audio is ready.</p>
+<p>The pool is built on plain threads, not an async runtime. The comment in <code>pool.rs</code> gives the reason: the unit of work is a child process that runs for seconds, so there is no I/O concurrency problem to solve, and <code>std::thread::scope</code> lets workers borrow the caller's data without wrapping everything in <code>Arc</code>. The core of the simple pool:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb9-1"><span class="pp">std::thread::</span>scope(<span class="op">|</span>scope<span class="op">|</span> <span class="op">{</span></span>
+<span id="cb9-2">    <span class="cf">for</span> _ <span class="kw">in</span> <span class="dv">0</span><span class="op">..</span>workers <span class="op">{</span></span>
+<span id="cb9-3">        scope<span class="op">.</span>spawn(<span class="op">||</span> <span class="cf">loop</span> <span class="op">{</span></span>
+<span id="cb9-4">            <span class="cf">if</span> cancel<span class="op">.</span>is_requested() <span class="op">{</span></span>
+<span id="cb9-5">                <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb9-6">            <span class="op">}</span></span>
+<span id="cb9-7">            <span class="kw">let</span> index <span class="op">=</span> next<span class="op">.</span>fetch_add(<span class="dv">1</span><span class="op">,</span> <span class="pp">Ordering::</span>SeqCst)<span class="op">;</span></span>
+<span id="cb9-8">            <span class="kw">let</span> <span class="cn">Some</span>(item) <span class="op">=</span> items<span class="op">.</span>get(index) <span class="cf">else</span> <span class="op">{</span> <span class="cf">return</span> <span class="op">};</span></span>
+<span id="cb9-9"></span>
+<span id="cb9-10">            <span class="kw">let</span> value <span class="op">=</span> work(index<span class="op">,</span> item)<span class="op">;</span></span>
+<span id="cb9-11"></span>
+<span id="cb9-12">            <span class="cf">if</span> <span class="kw">let</span> <span class="cn">Ok</span>(<span class="kw">mut</span> slot) <span class="op">=</span> results<span class="op">.</span>lock() <span class="op">{</span></span>
+<span id="cb9-13">                slot[index] <span class="op">=</span> <span class="cn">Some</span>(value)<span class="op">;</span></span>
+<span id="cb9-14">            <span class="op">}</span></span>
+<span id="cb9-15">        <span class="op">}</span>)<span class="op">;</span></span>
+<span id="cb9-16">    <span class="op">}</span></span>
+<span id="cb9-17"><span class="op">}</span>)<span class="op">;</span></span></code></pre></div>
+<p>Each worker claims the next index with an atomic counter (<code>fetch_add</code>), does the work without holding any lock, and only locks the results vector to drop its value into the slot for that index. Results therefore come back in input order regardless of which worker finished first, so <code>--jobs 8</code> and <code>--jobs 1</code> produce the same film byte for byte. Cancellation stops admitting new items; work in flight stops through FFmpeg's own quit-then-kill ladder. Items never started are reported as <code>NotAdmitted</code> with a reason (<code>Cancelled</code> or <code>EarlierFailure</code>), a distinction added after a single failed narration was reported as five scenes "cancelled" when nobody had cancelled anything (D-174).</p>
+<p><code>pipeline_in</code> is the two-stage version. Producers run stage one (audio) and push finished items into a <code>VecDeque</code> inside a <code>Mutex</code>, guarded by a <code>Condvar</code> that wakes consumers. A <code>live</code> count of running producers is the only signal that no more work is coming, because an empty queue "right now" says nothing. If stage one fails, an <code>AtomicBool</code> stops further narration from being bought for a film nobody will get. D-199 added an admission <code>order</code>: scenes whose narration is already cached go first, so the encoders stay busy while throttled lines wait.</p>
+<p><strong>How many workers?</strong> <code>default_jobs()</code> is half the cores, capped at 4. Findings section 10a measured the speedup on twelve 1080p scenes: 1.00x at one job, 1.55x at two, 1.83x at three, 1.85x at four and only 1.92x at eight, because x264 already uses about 2.7 cores per worker. <code>capacity.rs</code> (D-144) then caps by memory. Its model is <code>192 MB + 36 bytes per prescale pixel</code> per worker, which sits above every measurement (369 MB at 720p, 768 MB at 1080p, 2,630 MB at 4K), and a render may plan to use 70% of <strong>total</strong> RAM (total rather than available, so two runs pick the same number). This module was written after a Windows machine froze on start with four 4K workers.</p>
+<p><strong>The render lock</strong> (D-113). Two renders of the same project would interleave segments. The lock is the operating system's, via <code>std::fs::File::try_lock</code> on <code>.spoonstill/render.lock</code>. The file's existence means nothing and it is never deleted. A kernel lock cannot go stale, because the OS releases it when the process dies. One related Windows bug is worth knowing: <code>LockFileEx</code> refuses a handle opened only for append, so a different lock (on the activity log) had failed on every Windows write for five releases without anyone noticing, because its failure was tolerated by design (D-135). The fix was to open the file read/write, and the lesson was that "a lock whose failure is survivable must still be a lock whose failure is loud".</p>
+<p><strong>The segment cache key</strong> (D-043, D-107). <code>segment_key</code> hashes, with length-prefixed fields: the image content hash, the narration's own audio cache key, the frame count, the motion descriptor and seed, the output geometry, the encoder settings, the pinned pixel format, colour space and timescale, and each subtitle field. Nothing about paths, scene IDs or the machine is included. The narration key was added after a nasty bug: the key once included the frame count but not the audio itself, so re-recording a line at the same length reused the old segment, and the film had the operator's previous take while reporting success.</p>
+<p>The audio cache (<code>app/src/audio.rs</code>) keys by content too:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Key</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Recording</td>
+<td>hash(file bytes, normalization profile)</td>
+</tr>
+<tr>
+<td>Silence</td>
+<td>hash("silent", sample count, profile)</td>
+</tr>
+<tr>
+<td>TTS</td>
+<td>hash(text, provider, voice, settings, profile)</td>
+</tr>
+</tbody>
+</table></div>
+<p>The cache is a directory of content-named files with no index database, so it can be inspected with <code>ls</code>. Superseded segments are swept after a render unless <code>--keep-cache</code> is set (D-109).</p>
+</section>
+<section id="import-ingest-and-arrange" class="level4">
+<h4>Import, ingest and arrange</h4>
+<p><code>import/</code> turns a folder into a project. <code>settings.rs</code> loads <code>project.yaml</code> with <code>serde_yaml_ng</code> (the maintained fork of the deprecated <code>serde_yaml</code>). <code>rows.rs</code> either reads a CSV manifest with the <code>csv</code> crate or pairs files by stem (D-050). Then core validation runs, paths are resolved with <code>resolve_within</code>, and every file is probed. Each stage adds to one problem list, so <code>still validate</code> reports everything at once. Extensions are only a hint: a <code>.jpg</code> that is really a PDF is caught by ffprobe.</p>
+<p>A strict rule: <code>project.yaml</code> is an <strong>input</strong>, and the renderer never writes to it (D-013). Machine state lives in the hidden <code>.spoonstill/</code> folder, which can be deleted at any time. Per-run choices such as <code>--voice</code> are overrides that never touch the file.</p>
+<p><code>ingest.rs</code> (D-080) copies the operator's files in under numbered names. Its rules: copy, never move; never overwrite (numbering continues past the highest existing number); skip and count unusable files instead of failing. Pairing is natural-sort positional (<code>IMG_2</code> before <code>IMG_10</code>) after matching names. Copies are made beside the destination and renamed in, because of D-120: on APFS <code>fs::copy</code> is an instant clone so the problem is invisible, but on a FAT32 volume an interrupted copy of a 400 MB photo left 232 MB at <code>001.jpg</code>.</p>
+<p><code>arrange.rs</code> (D-100) implements <code>still move</code> and <code>still remove</code>. Because the scene number <strong>is</strong> the order, moving a scene means renaming files. Renames happen in two passes through temporary "parked" names that encode what they were doing, so <code>recover</code> can finish or undo an interrupted renumber the next time the project is read (D-121). This came from a real disaster: a killed <code>still remove</code> left files under dotfile names the scanner ignored, and <code>validate</code> reported "1566 scenes, no problems" over a project that had 2000. A move only renames scenes whose numbers change, so swapping two neighbours in 431 scenes is four renames, not 862. Removed scenes go to <code>removed/</code>; nothing is ever deleted. <code>picture.rs</code> (D-194) adds placing, swapping and undoing a picture on a specific scene, journalled the same way.</p>
+</section>
+<section id="state-and-diagnostics-spoonstill-state" class="level4">
+<h4>State and diagnostics: <code>spoonstill-state</code></h4>
+<p>Despite a module comment that still describes SQLite, there is no database yet; the crate description says "No SQLite yet, that is M3". What exists:</p>
+<ul>
+<li><code>logs.rs</code>: every run appends JSON Lines (one JSON object per line) to <code>.spoonstill/logs/</code>, rotated at 8 MiB with five files kept. JSON Lines is append-only, so a crash loses at most the last line. Values pass through <code>redact</code> before being written. <code>write_bundle</code> packages logs plus environment details into one text file for bug reports, with a header that tells the user plainly it contains their paths.</li>
+<li><code>runs.rs</code>: a machine-wide <code>runs.csv</code> in the OS config folder, so "what went wrong just now" can be answered without knowing which project folder to look in. Failures here are silent by design, because a render must never fail over a spreadsheet. Values starting with <code>=</code>, <code>+</code>, <code>-</code>, <code>@</code> or a tab are defused, because spreadsheets execute those as formulas even after stripping CSV quotes (D-122). This was verified with folders named <code>=1+1</code> and <code>@SUM(A1:A9)</code>.</li>
+</ul>
+</section>
+<section id="the-cli-spoonstill-clisrcmain.rs" class="level4">
+<h4>The CLI: <code>spoonstill-cli/src/main.rs</code></h4>
+<p><code>still</code> uses clap's derive API. Its subcommands: <code>new</code>, <code>add</code>, <code>import-chapter</code>, <code>picture</code>, <code>remove</code>, <code>move</code>, <code>validate</code>, <code>render</code>, <code>render-scene</code>, <code>voices</code>, <code>subtitles</code>, <code>resolutions</code> (alias <code>formats</code>), <code>doctor</code>, <code>licences</code>, and <code>diagnostics export|where</code>. Ctrl-C uses the <code>ctrlc</code> crate to set the shared <code>Cancel</code> flag, because a hand-written signal handler would need <code>unsafe</code>, which the workspace forbids, and would not cover Windows console events. Render progress arrives as <code>FilmEvent</code>s; the <code>Planned</code> event prints how many workers were chosen and whether memory, not cores, decided it.</p>
+</section>
+<section id="the-desktop-window-appsdesktop" class="level4">
+<h4>The desktop window: <code>apps/desktop</code></h4>
+<p>The Tauri 2 shell is "the review grid of D-051, and nothing more". Tauri apps have a Rust backend and a system webview frontend; the frontend calls Rust functions by name through IPC (inter-process communication). <code>src/main.rs</code> registers about 40 commands (<code>validate_project</code>, <code>add_media</code>, <code>import_chapter</code>, <code>voices</code>, <code>preview_voice</code>, <code>subtitle_preview</code>, <code>render_project</code>, <code>cancel_render</code>, and others). Every one translates arguments into a <code>spoonstill-app</code> call and returns a serializable view. There is no filter string, FFmpeg argument, duration maths or cache key in the shell.</p>
+<p>Security is tight by construction:</p>
+<ul>
+<li>The capability file grants only <code>core:default</code>, window dragging and the open-file dialog. There is no filesystem scope at all.</li>
+<li><code>open_film</code> and <code>reveal_project</code> take <strong>no path arguments</strong>. They can only open the film this window just rendered, so the webview cannot name an arbitrary file.</li>
+<li>The asset protocol (used to show thumbnails) starts with an empty scope, and a project's folder is granted at runtime only when it is opened.</li>
+<li>The content security policy is <code>script-src 'self'</code>, which forbids inline scripts.</li>
+</ul>
+<p><code>render_project</code> runs the blocking render inside <code>tauri::async_runtime::spawn_blocking</code> and sends progress through a <code>Channel&lt;ProgressView&gt;</code>. The cancel flag lives in Rust managed state, not in the webview, so reloading the page cannot lose track of a running render. A guard object (<code>ActiveRender::claim</code>) releases the "a render is running" slot on every exit path; it used to be cleared by a line after <code>handle.await?</code>, which <code>?</code> skipped on a panic, leaving the window convinced a render was running forever (D-115).</p>
+<p>The UI itself is <code>ui/index.html</code>, <code>ui/styles.css</code> and <code>ui/app.js</code>, about 4,900 lines with no framework and no build step. The dialog plugin is invoked by name (<code>invoke("plugin:dialog|open")</code>) because there is no bundler to import its npm package. Screens are home, then a project with tabs for scenes, voice, subtitles, output and render. The Subtitles preview is drawn by the real Rust rasterizer, not imitated in CSS. Because a webview fails silently, <code>tests/ui_contract.rs</code> checks that every <code>el("id")</code> in the JavaScript exists in the HTML and that every <code>invoke("cmd")</code> is a registered command, and <code>make ui</code> runs <code>node --check</code> plus a smoke script on <code>app.js</code>.</p>
+</section>
+<section id="build-system-tests-and-release" class="level4">
+<h4>Build system, tests and release</h4>
+<ul>
+<li><strong>Workspace <code>Cargo.toml</code></strong>: resolver 3, edition 2024, <code>rust-version = 1.94</code>, shared version 0.1.25. <code>unsafe_code = "forbid"</code> and <code>clippy::all = "deny"</code> apply to every crate. Release builds use thin LTO and one codegen unit. <code>rust-toolchain.toml</code> pins 1.94.0.</li>
+<li><strong>Dependencies</strong> are few: about a dozen third-party crates at runtime, and <code>spoonstill-core</code> has none. Each <code>Cargo.toml</code> explains its dependencies in comments (for example, <code>harfrust</code> was chosen over <code>rustybuzz</code> because the latter was declared unmaintained in a RustSec advisory).</li>
+<li><strong>Makefile</strong> targets: <code>test</code>, <code>lint</code> (clippy with warnings denied, rustfmt check, <code>actionlint</code> for workflows, <code>shellcheck</code> for scripts, <code>node --check</code> for the UI), <code>fixtures</code> (synthesizes test media with FFmpeg, including <code>odd.jpg</code>, <code>truncated.jpg</code>, <code>zero_byte.mp3</code>, <code>vbr_lying_header.mp3</code> and the Unicode-named file), <code>gates</code>, <code>demo</code>, <code>tts-live</code>, <code>brand</code>, <code>clean</code>.</li>
+<li><strong>Exit gates</strong>: <code>scripts/m0-gates.sh</code>, <code>m1-gates.sh</code> and <code>m2-gates.sh</code> (the last is 82 KB of shell) render real media and assert real properties: 8 + 8 + 23 = 39 checks.</li>
+<li><strong>Rule-enforcing tests</strong>: <code>architecture.rs</code> (layering), <code>no_shell_strings.rs</code>, <code>motion_matrix.rs</code> (durations x frame rates x aspects x source shapes x hostile paths), <code>segment_integrity.rs</code>, <code>hardware_report.rs</code> (checks both directions: usable encoders encode, unusable ones fail), <code>cited_decisions.rs</code> (every <code>D-nnn</code> cited in code exists), <code>readme_claims.rs</code> (the README's counts are derived from the tree), <code>release_assets.rs</code>, and <code>edge_retry.rs</code> (retries through a real process boundary with a fake <code>edge-tts</code>).</li>
+<li><strong>CI</strong> (<code>.github/workflows/ci.yml</code>) runs six jobs per push: <code>cargo audit --deny warnings</code>, macOS and Windows builds with fmt, clippy and full tests rendering real media, both installers executed for real, and the gates on a machine <strong>without</strong> the voice service, to prove a missing provider fails loudly instead of silently producing silence.</li>
+<li><strong>Release</strong> (<code>release.yml</code>): a tag must match the versions in <code>Cargo.toml</code> and <code>tauri.conf.json</code>; the CLI is built for macOS Apple Silicon, macOS Intel and Windows, smoke-tested and architecture-checked; the Tauri app is bundled as a universal <code>.dmg</code> and an NSIS <code>.exe</code> installer; checksums are generated; the publish job asserts the exact set of expected assets before undrafting.</li>
+<li><strong>Installers</strong> (<code>scripts/install.sh</code>, <code>install.ps1</code>) verify SHA-256 checksums, install to the user's own folder with no admin rights, clear the macOS quarantine attribute, and offer to install FFmpeg through Homebrew or winget.</li>
+</ul>
+</section>
+</section>
+<section id="key-design-decisions-and-trade-offs" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>FFmpeg as a child process, not linked bindings</strong> (D-011). The alternatives were <code>rust-ffmpeg</code> C bindings (described as maintenance mode with painful cross-platform builds) and <code>ffmpeg.wasm</code> (an order of magnitude slower, about a 4 GB ceiling, no hardware encode). A child process is isolated, easy to log and paste, and cancellable. The cost is that every result must be validated from outside, which the segment profile does.</li>
+<li><strong>Reimplement the <code>ffmpeg-sidecar</code> pattern instead of depending on it</strong> (D-012). The crate auto-downloads FFmpeg by default (rejected: shipped builds must be pinned), has no timeout on ffprobe, and its typed stderr parsing was something the project had already decided not to trust. The result was a smaller module than the estimated 600 lines.</li>
+<li><strong>CLI first, GUI as a thin adapter</strong> (D-010). A headless CLI over 500 scenes can be tested in CI; a webview cannot. The trade-off is that every feature costs a CLI surface first, but nothing can only be done in the window.</li>
+<li><strong><code>zoompan</code> over time-based <code>scale</code>+<code>crop</code></strong> (D-031). The planning documents suggested <code>scale</code>+<code>crop</code> would avoid zoom quantization. Measured, <code>zoompan</code> was 7.7x faster and used half the memory, because <code>scale</code> with <code>eval=frame</code> re-runs a lanczos resample on the whole canvas every frame. The 3x prescale had already fixed quantization.</li>
+<li><strong>Per-scene segments plus stream-copy concat</strong> (D-040). This enables resume and caching, and the join costs I/O, not encoding. The alternative, studied in editly, renders every frame in one Node process with no segments, so no resume. editly's frame-server approach is recorded as the escape hatch if motion ever needs more than FFmpeg filters can express.</li>
+<li><strong>Hard cuts only for now</strong>. Transitions with <code>xfade</code> are on the roadmap but deferred until measured at 500 scenes, because overlapping segments would break the simple "segment length equals narration length" model.</li>
+<li><strong>Draw captions in Rust</strong>. It costs about 1,900 lines and two font families in the binary, but subtitles work on the stock Homebrew FFmpeg.</li>
+<li><strong>Threads instead of async</strong>. No runtime dependency and no "function colouring" (the way async spreads through every signature), for work that is a handful of long-running processes.</li>
+<li><strong>No state database yet</strong>. Resume already works through content-addressed files, so the planned SQLite <code>state.db</code> is explicitly "not load-bearing for correctness", only a future reporting index.</li>
+<li><strong>Edge TTS as a development provider</strong>. It is free and good enough, but it rests on a reverse-engineered endpoint, so the design reserves a bring-your-own-key provider (ElevenLabs, with keys in the OS keychain via <code>keyring-rs</code>, D-014) for any sold build. That provider is not written yet.</li>
+<li><strong>Unsigned builds and no bundled FFmpeg</strong> (D-062). The FFmpeg used in development is a GPL build that cannot be shipped with a proprietary product; a custom LGPL build is required first. The licence for spoonstill's own code is not chosen yet.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>The project's <code>PROCESS.md</code> states one rule above all: <strong>reproduce it before believing it, fix it, then prove the test fails without the fix.</strong> Many of the fixes below came with a test that was first run against the broken code.</p>
+<ul>
+<li><strong>The five-hour "hang"</strong>: measured as unbounded output from <code>-loop 1</code> with <code>d=N</code>. Solved by making the frame count structural (<code>d=N</code> plus <code>-frames:v N</code>, no loop flag).</li>
+<li><strong>Wrong SAR and colour range passing silently through concat</strong>: solved with the fixed filter tail and a per-field profile assertion on every segment and on the final film.</li>
+<li><strong>A fixture that could not exhibit its own bug</strong>: <code>odd.jpg</code> was first generated at 1998x1000, which is even, so the odd-dimension SAR test would have passed for the wrong reason. Findings section 8b documents the three deliberate steps needed to make a truly odd fixture, and the tests now assert the fixture still has the hazard.</li>
+<li><strong>The cache that returned your previous take</strong> (D-107): the narration's own key was added to the segment key.</li>
+<li><strong>Caption text colliding with the hash separator</strong> (D-118): switched to length-prefixed hashing.</li>
+<li><strong>The interrupted renumber that hid 433 photos</strong> (D-121) and <strong>the removal that kept half a scene</strong> (D-203): journal-in-the-filename parking plus <code>recover</code>.</li>
+<li><strong>A Windows file lock that never worked</strong> (D-135): open with read/write access, and make tolerated failures visible.</li>
+<li><strong>A 4K render freezing a Windows PC</strong> (D-144): memory-derived worker count.</li>
+<li><strong>The voice service cutting off after about 350 lines</strong> (D-195, D-199): process-wide pacing, cool-down, waiting out refusals, and admitting cached scenes first so encoders stay busy.</li>
+<li><strong>Hindi rendered as boxes</strong> (D-157): Inter's missing-glyph box (which literally says "NO GLYPH") was drawn per character. Fixed by embedding Noto Sans Devanagari and adding a real shaper, while proving three Latin captions render byte-identically before and after.</li>
+<li><strong>The export "hidden in the folder"</strong> (D-178): it was actually four failed renders leaving invisible <code>.partial-</code> files and a segment on a network share with an intact header but incomplete picture. The fix made the join name the segment it stopped at and made sure a failed export leaves nothing invisible.</li>
+<li><strong>The film 38 ms short</strong> (D-206): MP4's default movie timescale of 1,000 rounding each segment's declared length. Fixed with <code>-movie_timescale 90000</code>.</li>
+<li><strong>Tests that passed by checking nothing</strong> (D-153, D-154): a resume gate killed a process that had already exited, and another gate reported PASS while running no command for three sessions. The lesson recorded: "a gate count is not evidence that every gate ran."</li>
+<li><strong>Parallel AI sessions corrupting each other's tests</strong>: the <code>AI Model/claude/plan.md</code> review found that tests used a fixed scratch folder that was deleted on entry, so two terminals running tests at once could make results lie in either direction. It ranked fixing test isolation first, before any other work.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes" class="level3">
+<h3>Security and Performance Notes</h3>
+<p><strong>Security.</strong></p>
+<ul>
+<li><code>unsafe</code> is forbidden in every crate.</li>
+<li>No shell is ever involved in running FFmpeg or <code>edge-tts</code>; this is enforced by a test that reads the source.</li>
+<li>Manifest paths are canonicalized and contained, with one generic error for anything outside, so errors cannot be used to probe the filesystem.</li>
+<li>The concat list, the only text format FFmpeg parses, only accepts names spoonstill generated.</li>
+<li>The Tauri window has no filesystem scope, path-free open commands, a runtime-granted asset scope and a strict CSP.</li>
+<li>The narration text is passed to <code>edge-tts</code> through a file, never an argument, so it does not appear in <code>ps</code> or in logs. Diagnostics are redacted before being written.</li>
+<li>CSV output is defused against formula injection.</li>
+<li><code>cargo audit</code> runs on every push; one advisory (<code>unsafe-libyaml</code> unmaintained, RUSTSEC-2024-0449) is recorded with the reason it is not swapped yet.</li>
+<li>Installers verify SHA-256 checksums and need no admin rights. Releases are not code-signed yet, which the README explains openly.</li>
+</ul>
+<p><strong>Performance.</strong> Every number below is a measurement from <code>ffmpeg-findings.md</code> or the decision log:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Question</th>
+<th>Measured answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Best prescale</td>
+<td>3x output: 0 duplicate frames, about 761 MB</td>
+</tr>
+<tr>
+<td><code>zoompan</code> vs <code>scale</code>+<code>crop</code></td>
+<td>1.08 s vs 8.32 s for 4 s of 1080p</td>
+</tr>
+<tr>
+<td>Worker speedup</td>
+<td>flattens at 3 to 4 workers</td>
+</tr>
+<tr>
+<td>Memory per worker</td>
+<td>768 MB at 1080p, 2,630 MB at 4K</td>
+</tr>
+<tr>
+<td>Encoder share of a 4K scene</td>
+<td>14% (macOS), 22.7% (Windows)</td>
+</tr>
+<tr>
+<td>Caption at 4K</td>
+<td>604 ms reduced to 62 ms, same bytes</td>
+</tr>
+<tr>
+<td><code>still validate</code>, 200 scenes</td>
+<td>11.82 s reduced to 1.31 s</td>
+</tr>
+<tr>
+<td>Second render of an unchanged project</td>
+<td>encodes nothing</td>
+</tr>
+</tbody>
+</table></div>
+<p>The scaling principle (D-002) is that n=500 is the design point: something fine at 5 scenes but quadratic at 500 is a defect. The author stress-tested the voice and pool changes on a real 431-scene project and on a synthetic one forty times larger.</p>
+</section>
+<section id="how-to-run-it" class="level3">
+<h3>How to Run It</h3>
+<p>From the repository README and Makefile:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb10-1"><span class="co"># Prerequisites: FFmpeg, and optionally the edge-tts voice tool</span></span>
+<span id="cb10-2"><span class="ex">brew</span> install ffmpeg              <span class="co"># macOS</span></span>
+<span id="cb10-3"><span class="ex">winget</span> install Gyan.FFmpeg       <span class="co"># Windows</span></span>
+<span id="cb10-4"><span class="ex">still</span> voices <span class="at">--install</span>           <span class="co"># or: pipx install edge-tts</span></span>
+<span id="cb10-5"></span>
+<span id="cb10-6"><span class="co"># Build from source</span></span>
+<span id="cb10-7"><span class="fu">git</span> clone https://github.com/VijaysinghPuwar/spoonstill.git</span>
+<span id="cb10-8"><span class="bu">cd</span> spoonstill</span>
+<span id="cb10-9"><span class="ex">cargo</span> build <span class="at">--release</span> <span class="at">-p</span> spoonstill-cli     <span class="co"># -&gt; target/release/still</span></span>
+<span id="cb10-10"><span class="ex">cargo</span> run   <span class="at">--release</span> <span class="at">-p</span> spoonstill-desktop <span class="co"># the window</span></span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb11-1"><span class="co"># Make a project, check it, render it</span></span>
+<span id="cb11-2"><span class="ex">still</span> new ~/holiday ~/Pictures/trip/<span class="pp">*</span>.jpg ~/Voice\ Memos/<span class="pp">*</span>.m4a</span>
+<span id="cb11-3"><span class="ex">still</span> validate ~/holiday</span>
+<span id="cb11-4"><span class="ex">still</span> render ~/holiday <span class="at">--out</span> ~/holiday.mp4</span>
+<span id="cb11-5"></span>
+<span id="cb11-6"><span class="co"># Options</span></span>
+<span id="cb11-7"><span class="ex">still</span> render ~/holiday <span class="at">--out</span> ~/film.mp4 <span class="at">--subtitles</span> boxed</span>
+<span id="cb11-8"><span class="ex">still</span> render ~/holiday <span class="at">--out</span> ~/short.mp4 <span class="at">--aspect</span> shorts <span class="dt">\</span></span>
+<span id="cb11-9">  <span class="at">--resolution</span> 1080p</span>
+<span id="cb11-10"><span class="ex">still</span> doctor            <span class="co"># what is installed, which GPU encoders work</span></span>
+<span id="cb11-11"><span class="ex">still</span> move ~/holiday 8 1</span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><span class="co"># Developer loop</span></span>
+<span id="cb12-2"><span class="fu">make</span> fixtures   <span class="co"># synthesize test media</span></span>
+<span id="cb12-3"><span class="fu">make</span> test       <span class="co"># cargo test --workspace</span></span>
+<span id="cb12-4"><span class="fu">make</span> lint       <span class="co"># clippy, fmt, actionlint, shellcheck, node --check</span></span>
+<span id="cb12-5"><span class="fu">make</span> gates      <span class="co"># the 39 milestone exit gates</span></span></code></pre></div>
+<p>A warning from the README: building and running the gates fills <code>target/</code> quickly (37 GB on the author's machine). <code>make clean</code> removes it.</p>
+</section>
+<section id="learn-more" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://ffmpeg.org/ffmpeg-filters.html" target="_blank" rel="noopener noreferrer">FFmpeg Filters Documentation (zoompan, scale, overlay, loudnorm)</a></li>
+<li><a href="https://ffmpeg.org/ffmpeg-formats.html#concat-1" target="_blank" rel="noopener noreferrer">FFmpeg Formats Documentation (concat demuxer)</a></li>
+<li><a href="https://tech.ebu.ch/publications/r128" target="_blank" rel="noopener noreferrer">EBU R 128: Loudness normalisation and permitted maximum level</a></li>
+<li><a href="https://v2.tauri.app/security/capabilities/" target="_blank" rel="noopener noreferrer">Tauri 2 Documentation: Security and Capabilities</a></li>
+<li><a href="https://doc.rust-lang.org/book/ch16-00-concurrency.html" target="_blank" rel="noopener noreferrer">The Rust Book: Fearless Concurrency</a></li>
+<li><a href="https://doc.rust-lang.org/std/thread/fn.scope.html" target="_blank" rel="noopener noreferrer">std::thread::scope in the Rust standard library</a></li>
+<li><a href="https://datatracker.ietf.org/doc/html/draft-eastlake-fnv" target="_blank" rel="noopener noreferrer">FNV hash (IETF draft by Fowler, Noll, Vo)</a></li>
+<li><a href="https://github.com/rany2/edge-tts" target="_blank" rel="noopener noreferrer">edge-tts on GitHub</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=5C_HPTJg5ek" target="_blank" rel="noopener noreferrer">Rust in 100 Seconds</a> (Fireship)</li>
+<li><a href="https://www.youtube.com/watch?v=Y7sLXo05mD4" target="_blank" rel="noopener noreferrer">FFmpeg Explained: The Invisible Engine Running the Entire Internet</a> (Cloud Codes)</li>
+<li><a href="https://www.youtube.com/watch?v=QETZ6MO2QX0" target="_blank" rel="noopener noreferrer">How video compression works</a> (Elecard)</li>
+<li><a href="https://www.youtube.com/watch?v=Q2aEzeMDHMA" target="_blank" rel="noopener noreferrer">JPEG DCT, Discrete Cosine Transform (JPEG Pt2)- Computerphile</a> (Computerphile)</li>
+<li><a href="https://www.youtube.com/watch?v=nOzZKEWJ5wk" target="_blank" rel="noopener noreferrer">Volume vs Loudness - LUFS &amp; LKFS for Measuring Loudness for Video</a> (Curtis Judd)</li>
+<li><a href="https://www.youtube.com/watch?v=kRoGYgAuZQE" target="_blank" rel="noopener noreferrer">Rust Tauri 1.0 - Quick Intro - Rust Desktop App</a> (Jeremy Chone)</li>
+</ul>
+</section>
+</section>
+</section>

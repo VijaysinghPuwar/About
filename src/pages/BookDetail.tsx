@@ -1,6 +1,7 @@
 import { Helmet } from 'react-helmet-async';
 import { Link, useParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { BookCover } from '@/components/books/BookCover';
 import { ChapterList } from '@/components/books/ChapterList';
 import { useAuth } from '@/hooks/useAuth';
@@ -38,13 +39,12 @@ export default function BookDetail() {
   const readCount = progress
     ? book.chapters.filter(c => (progress.chapters[c.id]?.p ?? 0) >= READ_THRESHOLD).length
     : 0;
-  const published = book.date
-    ? new Date(`${book.date}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-    : null;
+  const published = formatPublished(book.date);
+  const parts = new Set(book.chapters.map(c => c.part).filter(p => p && p !== 'Appendices')).size;
 
   const facts = [
     { label: 'Chapters', value: String(book.chapters.length) },
-    { label: 'Parts', value: String(new Set(book.chapters.map(c => c.part).filter(p => p && p !== 'Appendices')).size) },
+    ...(parts ? [{ label: 'Parts', value: String(parts) }] : []),
     { label: 'Words', value: book.words.toLocaleString('en-US') },
     ...(published ? [{ label: 'Published', value: published }] : []),
   ];
@@ -84,7 +84,7 @@ export default function BookDetail() {
               <p className="mt-5 max-w-[62ch] text-[15.5px] leading-relaxed text-muted-foreground">{book.description}</p>
             )}
 
-            <dl className="mt-7 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
+            <dl className={cn('mt-7 grid gap-px overflow-hidden rounded-lg border border-border bg-border', facts.length === 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4')}>
               {facts.map(f => (
                 <div key={f.label} className="bg-background px-4 py-3">
                   <dt className="meta-label">{f.label}</dt>
@@ -147,6 +147,19 @@ export default function BookDetail() {
       </div>
     </div>
   );
+}
+
+/**
+ * "7 October 2026", "October 2026" or "2026", as precise as the EPUB's
+ * dc:date is. A bare year must not become "1 January".
+ */
+function formatPublished(date: string | null): string | null {
+  const m = date?.match(/^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?/);
+  if (!m) return null;
+  const [, y, mo, d] = m;
+  if (!mo) return y;
+  const at = new Date(Date.UTC(+y, +mo - 1, d ? +d : 1, 12));
+  return at.toLocaleDateString('en-GB', { ...(d ? { day: 'numeric' } : {}), month: 'long', year: 'numeric', timeZone: 'UTC' });
 }
 
 export function BookNotFound() {

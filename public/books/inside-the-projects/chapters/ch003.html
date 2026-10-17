@@ -1,0 +1,646 @@
+<section id="chapter-3-web-audio-tv-an-audiobook-streaming-platform" class="level1">
+<h1><span class="header-section-number">3</span> Web Audio TV, an Audiobook Streaming Platform</h1>
+<p>Web Audio TV is the largest system in this book and the only one that runs in production for real users who pay for it. It combines a React single page application, a Postgres database with row level security, twenty five serverless functions, private object storage on Cloudflare R2, and a small Cloudflare Worker that delivers audio bytes. This chapter walks through how a listener presses Play and hears a chapter of a novel, and how the system makes sure only the right people hear it, that listening time is counted honestly, and that the hosting bill stays small.</p>
+<section id="web-audio-tv" class="level2">
+<h2>Web Audio TV</h2>
+<section id="at-a-glance-1" class="level3">
+<h3>At a Glance</h3>
+<p>Web Audio TV (webaudiotv.com) is a streaming site for audiobooks and audio novels. Listeners browse a catalogue of more than 400 novels and about 1,671 tracks (roughly 180 GB of audio), play chapters in a player that keeps going while they navigate, and earn XP, levels and streaks for listening. A PRO subscription, paid through PayPal or Stripe, unlocks PRO tier tracks, Early Access releases and downloads. Publishers apply for an account and manage only their own novels, while admins run user management, manual PRO grants and an XP forensics console. The README reports about 1,000 registered users and 200 daily actives.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>TypeScript (React app, Deno edge functions, Cloudflare Worker), SQL (PL/pgSQL), Bash</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>React 18, Vite 5, Tailwind CSS 3, shadcn/ui over Radix UI, Supabase (Postgres, PostgREST, GoTrue, Edge Functions)</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>TanStack Query 5, React Router 6, supabase-js 2, react-hook-form + zod, Recharts, Sonner, Vitest + Testing Library</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Web (desktop and mobile browsers), hosted on Lovable, Cloudflare DNS, R2 and Workers</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/web-audio-tv" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/web-audio-tv</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Live in production; about 1,060 commits from February to October 2026; 98 test files, 1,059 tests</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-1" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Think of Web Audio TV as a library with a ticket booth and a separate listening room.</p>
+<ol type="1">
+<li><strong>You walk into the lobby.</strong> The React app loads in your browser. It reads the catalogue (novels, sections, tracks, covers, reviews) straight from the database, which only shows each visitor the rows they are allowed to see.</li>
+<li><strong>You pick a chapter and press Play.</strong> The app does not know where the audio file lives. That location is hidden from every browser. Instead the app goes to the ticket booth: a server function called <code>issue_stream_token</code>.</li>
+<li><strong>The booth checks your membership.</strong> It asks a few questions. Is this chapter published? Is the novel public? Is it a PRO chapter, and if so do you have PRO? Is the novel in an Early Access window? If everything passes, the booth prints a ticket that names you, names the chapter, and expires soon.</li>
+<li><strong>You hand the ticket to the door of the listening room.</strong> The browser's audio element fetches the audio from either the Cloudflare Worker or a fallback function called <code>stream_media</code>. The door checks only one thing: is this ticket genuine, unexpired, and for this chapter? If yes, it streams the bytes from private storage.</li>
+<li><strong>A clerk keeps your listening log.</strong> Every 60 seconds the player sends "I listened for N more seconds" to <code>add_listen_time</code>. The clerk checks the wall clock, refuses anything that does not add up, and awards XP. Because XP can be converted into free PRO time, this clerk is strict.</li>
+</ol>
+<p>The two key ideas are that the booth decides and the door only checks, and that the server never trusts the client about time or money.</p>
+</section>
+<section id="architecture-1" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code>               +-------------------------------+
+               |  Browser: React SPA (Vite)    |
+               |  PlayerProvider + &lt;audio&gt;     |
+               +--+---------+-----------+------+
+                  |         |           |
+   REST + RLS     |   JWT in header     | &lt;audio src=ticket URL&gt;
+                  v         v           v
+        +-----------+  +-----------+  +----------------------+
+        | Supabase  |  | Edge fns  |  | Cloudflare Worker    |
+        | Postgres  |&lt;-| (Deno x25)|  | media-gate           |
+        | RLS, RPCs |  | issue_    |  | verify ticket only   |
+        +-----------+  | stream_   |  +----------+-----------+
+              ^        | token,    |             | R2 binding
+              |        | stream_   |             v
+              |        | media,    |  +----------------------+
+              |        | add_listen|  | Cloudflare R2        |
+              |        | _time,    |-&gt;| private bucket:      |
+              |        | paypal_*, |  | audio + covers       |
+              |        | stripe_*  |  +----------+-----------+
+              |        +-----+-----+             |
+              |              ^          media.webaudiotv.com
+              |              |          /cdn-cgi/image resize
+   PayPal / Stripe ----------+          (covers only)
+   signed webhooks</code></pre>
+<p>The components and how they talk:</p>
+<ul>
+<li><strong>React SPA</strong> (<code>src/</code>). Reads catalogue data directly from Postgres through PostgREST (Supabase's automatic REST layer over the database). Calls edge functions with the user's JWT (a signed JSON Web Token that proves who is logged in) in the <code>Authorization</code> header.</li>
+<li><strong>Supabase Postgres</strong> (<code>supabase/migrations/</code>, 100 SQL files). Holds 41 tables. Row Level Security (RLS, rules in the database that filter rows per user) and column privileges decide what a browser may read or write.</li>
+<li><strong>Edge functions</strong> (<code>supabase/functions/</code>, 25 functions plus a <code>_shared</code> folder). Deno programs that run with the service role key, which bypasses RLS. They handle streaming authorization, listen credit, payments, email, cron jobs and admin actions.</li>
+<li><strong>Cloudflare R2.</strong> S3 compatible object storage holding audio and covers. R2 does not charge for egress (data leaving the bucket), which is the key to the cost design.</li>
+<li><strong>Cloudflare Worker</strong> (<code>workers/media-gate/</code>). About 140 lines. Verifies a media ticket and streams the R2 object with HTTP Range support. It has no database access and no business logic.</li>
+<li><strong>Payment providers.</strong> PayPal subscriptions and orders, Stripe checkout, both confirmed through signed webhooks.</li>
+</ul>
+<p>Deployment flows from GitHub <code>main</code> to Lovable (a hosted app builder that syncs with the repo), then Lovable publishes the build behind Cloudflare DNS.</p>
+</section>
+<section id="deep-dive-1" class="level3">
+<h3>Deep Dive</h3>
+<section id="the-content-model-and-the-database" class="level4">
+<h4>The content model and the database</h4>
+<p>Content is a three level tree:</p>
+<pre class="text"><code>novel  -&gt;  section  -&gt;  track
+(book)     (volume)     (chapter: the actual audio or video file)</code></pre>
+<p>The important columns are on <code>tracks</code>: <code>drive_file_url</code> (where the audio lives), <code>access_tier</code> (<code>free</code> or <code>pro</code>), <code>published</code>, <code>media_kind</code> (<code>audio</code> or <code>video</code>) and <code>file_type</code>. On <code>novels</code>: <code>visibility</code> (<code>public</code> or <code>private</code>), <code>publisher_id</code>, and the Early Access fields <code>early_access_enabled</code> and <code>early_access_until</code>.</p>
+<p>The schema is grouped into content (<code>novels</code>, <code>sections</code>, <code>tracks</code>, <code>tags</code>), identity (<code>profiles</code>, <code>user_roles</code>, <code>publisher_profiles</code>), engagement (<code>listening_progress</code>, <code>listening_events</code>, <code>user_novel_stats</code>, <code>novel_reviews</code>, <code>review_reactions</code>), gamification (<code>user_xp_logs</code>, <code>user_xp_daily_totals</code>, <code>xp_abuse_flags</code>, <code>xp_flag_policy</code>, <code>pro_rewards</code>, <code>shop_items</code>), commerce (<code>subscriptions</code>, <code>payments</code>, <code>paypal_webhook_events</code>, <code>admin_pro_grants</code>), email, and an <code>admin_audit_log</code>.</p>
+<p>Three database layers enforce security before any edge function runs:</p>
+<ol type="1">
+<li><strong>RLS policies.</strong> A user reads and writes only their own progress, bookmarks and reviews. Drafts and private novels are visible only to the owning approved publisher and admins. Every ownership policy checks <code>publisher_profiles.status = 'approved'</code>, so revoking a publisher instantly removes write access without touching their content.</li>
+<li><strong>Column privileges.</strong> <code>tracks.drive_file_url</code> is revoked from the <code>anon</code> and <code>authenticated</code> roles at the column level. A browser can read a track's title but can never learn where its file is stored. This is what makes the ticket design necessary.</li>
+<li><strong>A profile trigger.</strong> Columns such as <code>plan</code>, <code>xp_total</code>, <code>level</code>, streaks, listening totals and PRO dates cannot be changed from the client, even on the user's own row. Cosmetics must be owned before they can be equipped.</li>
+</ol>
+<p><code>SECURITY DEFINER</code> functions (SQL functions that run with the owner's rights rather than the caller's) pin their <code>search_path</code> so a malicious schema cannot shadow a table name, and admin functions check <code>is_admin()</code> at the top.</p>
+</section>
+<section id="the-frontend-shell" class="level4">
+<h4>The frontend shell</h4>
+<p><code>src/main.tsx</code> is eleven lines long, and its first import is deliberate: <code>import "./startupGuard"</code>, followed by <code>react-dom</code>, <code>App</code> and the stylesheet. <code>startupGuard.ts</code> checks that <code>VITE_SUPABASE_URL</code>, <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> and <code>VITE_SUPABASE_PROJECT_ID</code> exist. If any is missing, it writes a plain "App configuration error" screen into <code>#root</code> and throws.</p>
+<p>This fixes a real outage. ES modules evaluate their imports before the importing file's body. When the environment check lived in the body of <code>main.tsx</code>, <code>import App</code> had already built the Supabase client and crashed, so a misconfigured build still showed a black page. Moving the check into its own module and importing it first means a thrown error stops every later import. A test, <code>src/test/mainBootstrap.guard.test.ts</code>, pins this import order.</p>
+<p><code>App.tsx</code> composes the provider tree in dependency order: <code>ErrorBoundary</code>, <code>QueryClientProvider</code> (TanStack Query, a cache for server data), <code>ThemeProvider</code>, <code>TooltipProvider</code>, <code>BrowserRouter</code>, <code>AuthProvider</code>, <code>PlayerProvider</code>, then the routes. The player sits inside auth because it needs the signed in user to flush listening time and show XP toasts. Auth sits inside the router because sign in callbacks read the URL.</p>
+<p>Almost every page under <code>src/pages/</code> (34 route pages) is loaded with <code>React.lazy</code>, each behind its own <code>Suspense</code> boundary. A slow admin chunk therefore cannot blank out the header and player, which matters because audio may be playing.</p>
+<p>The <code>QueryClient</code> defaults were tuned after a cloud cost audit. It used to be <code>new QueryClient()</code>, which means <code>staleTime: 0</code> (refetch on every mount and focus) and three retries for every failure. Now <code>staleTime</code> is 60 seconds and retries go through <code>shouldRetryQuery</code> in <code>src/lib/queryRetry.ts</code>. That function classifies errors: Postgres SQLSTATE classes 22, 23, 28 and 42 (bad data, constraint, auth, syntax or privilege) and PostgREST codes <code>PGRST1xx</code> to <code>PGRST3xx</code> are permanent and never retried; connection errors get exactly one retry. One dead request no longer becomes four.</p>
+<p>A structural rule runs through the frontend: any logic worth testing is moved into a pure module in <code>src/lib/</code> that does not import React. Examples include <code>streamAuth.ts</code>, <code>listenCredit.ts</code>, <code>playerClock.ts</code>, <code>listenIdle.ts</code>, <code>progressSave.ts</code>, <code>playerInterruption.ts</code>, <code>mediaSession.ts</code> and <code>xpUtils.ts</code>. The hook or component becomes a thin caller, and Vitest can test the rules without a browser media stack (jsdom, the fake browser used in tests, has no real audio pipeline).</p>
+</section>
+<section id="the-audio-player-engine" class="level4">
+<h4>The audio player engine</h4>
+<p>Despite the product name, playback does not use the Web Audio API (the browser's graph based audio processing API). It uses plain <code>HTMLMediaElement</code>: one <code>&lt;audio&gt;</code> and one <code>&lt;video&gt;</code> element, created once inside <code>PlayerProvider</code> in <code>src/hooks/usePlayer.tsx</code> and kept alive for the whole session. Route changes never touch them, which is how audio keeps playing while you browse. The only microphone code is in <code>ReviewVoiceRecorder.tsx</code>, which uses <code>MediaRecorder</code> to capture voice notes of up to 30 seconds for reviews, choosing <code>audio/webm</code> where supported and <code>audio/mp4</code> on Safari.</p>
+<p><code>usePlayer.tsx</code> is about 2,450 lines, the largest hand written file in the repo. Its size comes from browser reality. The player has seven states:</p>
+<pre class="text"><code>idle -&gt; resolving -&gt; loading -&gt; playing &lt;-&gt; paused
+                        |          |
+                        v          |
+                     retrying -----+
+                        |
+                        v
+                      error</code></pre>
+<p><code>resolving</code> is the round trip to <code>issue_stream_token</code>; <code>loading</code> is the media element buffering. Separating them lets the UI say "checking access" versus "downloading", which need different error messages.</p>
+<p>Some important constants and what they guard against:</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Constant</th>
+<th>Value</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>R2_LOAD_TIMEOUT_MS</code></td>
+<td>60,000</td>
+<td>Slow first bytes from large files</td>
+</tr>
+<tr>
+<td><code>DIRECT_LOAD_TIMEOUT_MS</code></td>
+<td>12,000</td>
+<td>A direct URL that has not loaded in 12 s is broken</td>
+</tr>
+<tr>
+<td><code>TRACK_START_STEP_TIMEOUT_MS</code></td>
+<td>15,000</td>
+<td>Bounds session and saved position reads</td>
+</tr>
+<tr>
+<td><code>LISTEN_FLUSH_INTERVAL_MS</code></td>
+<td>60,000</td>
+<td>Listen time reporting cadence</td>
+</tr>
+<tr>
+<td><code>MAX_RETRY_ATTEMPTS</code></td>
+<td>2</td>
+<td>With delays of 2 s and 4 s</td>
+</tr>
+<tr>
+<td><code>MAX_CONSECUTIVE_RECOVERY_RELOADS</code></td>
+<td>3</td>
+<td>Stop reload loops</td>
+</tr>
+<tr>
+<td><code>MAX_CONSECUTIVE_SPURIOUS_ENDED</code></td>
+<td>2</td>
+<td>Stop autoplay racing through broken files</td>
+</tr>
+</tbody>
+</table></div>
+<p>The hook holds many <code>useRef</code> values. The reason is the stale closure problem: native event listeners (<code>error</code>, <code>stalled</code>, <code>ended</code>) are attached once and capture the variables from the render in which they were attached. If they called <code>saveProgress</code> directly they would use an old <code>currentTrack</code>. Routing calls through a ref like <code>saveProgressRef.current()</code> means the listener always runs the newest version.</p>
+<p>Playback position (<code>currentTime</code>) changes about four times per second. It lives in a separate <code>PlayerTimeContext</code>, read with <code>usePlayerTime()</code>. When it lived in the main context, every component using <code>usePlayer()</code>, including a novel page with a long chapter list, re-rendered four times a second.</p>
+<p>Several pure helpers handle specific browser problems:</p>
+<ul>
+<li><strong><code>playerClock.ts</code>.</strong> <code>resolveDuration()</code> picks the first trustworthy duration from three sources: the element's <code>duration</code>, the end of its <code>seekable</code> range, and the duration stored in the database. iOS Safari reports <code>Infinity</code> for streamed responses and every element reports <code>NaN</code> before metadata arrives, either of which would show "0:00" and a dead scrubber. <code>readSeekableEnd()</code> wraps <code>seekable.end()</code> in a try block because reading it on an empty range throws, which would kill the clock timer. <code>pickClockSource()</code> reads the clock from whichever element is actually playing in case a track was routed to the wrong one.</li>
+<li><strong><code>playerInterruption.ts</code>.</strong> Every deliberate pause is tagged with a reason (<code>user</code>, <code>track-change</code>, <code>ended</code>, <code>seeking</code>, <code>source-refresh</code>, <code>teardown</code>). An untagged pause while playing must have come from the operating system, such as a phone call. Only those show a notice, at most once per 20 seconds.</li>
+<li><strong><code>mediaSession.ts</code>.</strong> A feature detected wrapper around the Media Session API (the browser API that drives lock screen and headphone controls). It sets title and artwork, binds play, pause, next, previous, seek forward and back (10 s default) and seek to, and clamps position state to values the spec accepts. Every call is a no-op instead of a throw on browsers that lack an action.</li>
+<li><strong><code>listenIdle.ts</code>.</strong> After three hours with no tap, click, key or lock screen action, playback pauses ("Still listening?"). <code>isAudible()</code> returns false when the element is muted or at zero volume, and no listening seconds are counted then.</li>
+<li><strong><code>progressSave.ts</code>.</strong> Position is autosaved every 15 seconds and on pause, track change, route change, tab hide and unload. <code>isRedundantProgressWrite()</code> skips a write when the position has not moved (a stalled truncated file can pin the clock) but always writes after a deliberate scrub so seeking backwards is never lost.</li>
+</ul>
+<p>Saved position restore is careful. <code>safeSeekToProgress()</code> bails out if a newer play request has replaced the current one, and <code>resolveSavedPosition()</code> throws away corrupt or out of range saved values and starts from the beginning instead of parking the UI hours ahead of the audio.</p>
+<p>Page unload is the hardest moment to report listening time. The original code used <code>navigator.sendBeacon</code>, which cannot carry an <code>Authorization</code> header, so every unload report was rejected. The fix uses <code>fetch</code> with <code>keepalive: true</code>, which survives page unload and still sends headers, without ever putting the JWT in the URL. It listens to both <code>beforeunload</code> and <code>pagehide</code> (iOS often skips the first) with a flag so only one request goes out, and it subtracts any seconds already in flight so they are not reported twice.</p>
+</section>
+<section id="streaming-authorization-the-booth" class="level4">
+<h4>Streaming authorization: the booth</h4>
+<p>Streaming started with a mistake that shaped everything after it. The first version streamed from <code>stream_media?track_id=...&amp;token=&lt;Supabase JWT&gt;</code>. A token in a URL leaks into browser history, <code>Referer</code> headers, server logs and proxy logs, and a Supabase JWT is valid for every endpoint, not just one track. The replacement is a two step flow.</p>
+<p>First, the browser POSTs <code>{ track_id }</code> to <code>issue_stream_token</code> with the JWT in the header. The function loads the track, its section and novel in one embedded query (<code>_shared/stream_context.ts</code>), runs the access decision, and returns a short lived credential.</p>
+<p>The access decision lives in exactly one place, <code>supabase/functions/_shared/stream_access.ts</code>. Before this module existed, <code>issue_stream_token</code> and <code>stream_media</code> each had their own copy of the rules; they agreed, but nothing forced them to. The module also makes the check lazy:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb4-1"><span class="im">export</span> <span class="kw">function</span> <span class="fu">requiresProEntitlement</span>(opts<span class="op">:</span> {</span>
+<span id="cb4-2">  accessTier<span class="op">?:</span> <span class="dt">string</span> <span class="op">|</span> <span class="dt">null</span><span class="op">;</span></span>
+<span id="cb4-3">  novel<span class="op">:</span> NovelAccessContext <span class="op">|</span> <span class="dt">null</span><span class="op">;</span></span>
+<span id="cb4-4">  publiclyListed<span class="op">:</span> <span class="dt">boolean</span><span class="op">;</span></span>
+<span id="cb4-5">  downloadMode<span class="op">?:</span> <span class="dt">boolean</span><span class="op">;</span></span>
+<span id="cb4-6">  nowMs<span class="op">?:</span> <span class="dt">number</span><span class="op">;</span></span>
+<span id="cb4-7">})<span class="op">:</span> <span class="dt">boolean</span> {</span>
+<span id="cb4-8">  <span class="cf">return</span> (</span>
+<span id="cb4-9">    <span class="op">!</span>opts<span class="op">.</span><span class="at">publiclyListed</span> <span class="op">||</span></span>
+<span id="cb4-10">    <span class="fu">isEarlyAccessActive</span>(opts<span class="op">.</span><span class="at">novel</span><span class="op">,</span> opts<span class="op">.</span><span class="at">nowMs</span> <span class="op">??</span> <span class="bu">Date</span><span class="op">.</span><span class="fu">now</span>()) <span class="op">||</span></span>
+<span id="cb4-11">    opts<span class="op">.</span><span class="at">accessTier</span> <span class="op">===</span> <span class="st">"pro"</span> <span class="op">||</span></span>
+<span id="cb4-12">    opts<span class="op">.</span><span class="at">downloadMode</span> <span class="op">===</span> <span class="kw">true</span></span>
+<span id="cb4-13">  )<span class="op">;</span></span>
+<span id="cb4-14">}</span></code></pre></div>
+<p>There are four gates that could deny: not publicly listed, Early Access active, PRO tier track, and download mode. Each one needs the user's entitlement (roles, publisher ownership, profile grants, subscriptions), which costs four database reads. <code>requiresProEntitlement()</code> is exactly the OR of those four conditions. When it is false (the common case: a published free track in a public novel, being streamed), no gate can deny, so the reads are skipped. This saves work without loosening any rule, and <code>src/test/streamAccess.test.ts</code> asserts exactly which reads each scenario performs, so adding a fifth gate without updating this function fails the tests.</p>
+<p>When the reads are needed, <code>resolveProAccess()</code> issues them in two parallel batches. Roles and publisher ownership come first; an admin, or the approved publisher of this specific novel, short circuits to allowed. Otherwise profile and subscriptions are read, and <code>proAccessEndsAt()</code> (in <code>_shared/pro_entitlement.ts</code>) computes whether any grant is active and when the latest one ends. The gates then run in a fixed order:</p>
+<ol type="1">
+<li><strong>Not listed.</strong> A draft or private track returns <code>404 not_available</code>, not a paywall. PRO buys tier access, not access to unreleased work, and this ordering avoids leaking an Early Access date for a hidden track.</li>
+<li><strong>Early Access.</strong> Active window and no PRO returns <code>403 early_access_locked</code> with <code>unlocks_at</code>.</li>
+<li><strong>Track tier.</strong> A PRO track without PRO returns <code>403 pro_required</code>.</li>
+<li><strong>Download.</strong> Free users get <code>403 download_forbidden</code>.</li>
+</ol>
+<p>If a parent row read fails, <code>stream_context.ts</code> throws <code>TrackContextUnavailableError</code> and the function answers <code>503 context_unavailable</code>. A failed read is never treated as "no parent", which would otherwise let the not listed gate see <code>null</code> and behave unpredictably.</p>
+<p>On the client, <code>src/lib/streamDenial.ts</code> turns these reasons into helpful messages and the right button: "Early Access until ..." with an Upgrade button, rather than a Retry that can never succeed.</p>
+</section>
+<section id="two-kinds-of-credential" class="level4">
+<h4>Two kinds of credential</h4>
+<p><code>issue_stream_token</code> always returns a v1 <strong>stream token</strong> for the fallback path and, when the Worker is enabled for that user, a v2 <strong>media ticket</strong>.</p>
+<p>The v1 token (<code>_shared/stream_token.ts</code>) is <code>base64url(payload).base64url(HMAC-SHA256(payload))</code>, where the payload holds <code>user_id</code>, <code>track_id</code> and <code>exp</code>. HMAC (a hash keyed with a secret, so only the holder of the secret can produce a valid signature) means the browser cannot forge or edit it. It lives six hours. The comment in <code>issue_stream_token</code> explains why: a shorter token would expire mid chapter, the next Range request (a seek) would get <code>401</code>, and the audio element would reset to zero. Since the token is bound to one user and one track, six hours was judged an acceptable exposure. The signing secret comes from a shared helper <code>getStreamSigningSecret()</code> so signer and verifier cannot disagree, and it refuses any secret shorter than 32 characters.</p>
+<p>The v2 media ticket (<code>_shared/media_ticket.ts</code>) is built for the Worker and is stricter:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb5-1"><span class="kw">const</span> aad <span class="op">=</span> (p<span class="op">:</span> { sub<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> tid<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> exp<span class="op">:</span> <span class="dt">number</span><span class="op">;</span> dl<span class="op">:</span> <span class="dt">boolean</span> }) <span class="kw">=&gt;</span></span>
+<span id="cb5-2">  <span class="fu">buf</span>(enc<span class="op">.</span><span class="fu">encode</span>(<span class="vs">`</span><span class="sc">${</span>p<span class="op">.</span><span class="at">sub</span><span class="sc">}</span><span class="vs">|</span><span class="sc">${</span>p<span class="op">.</span><span class="at">tid</span><span class="sc">}</span><span class="vs">|</span><span class="sc">${</span>p<span class="op">.</span><span class="at">exp</span><span class="sc">}</span><span class="vs">|</span><span class="sc">${</span>p<span class="op">.</span><span class="at">dl</span> <span class="op">?</span> <span class="dv">1</span> <span class="op">:</span> <span class="dv">0</span><span class="sc">}</span><span class="vs">`</span>))<span class="op">;</span></span>
+<span id="cb5-3"></span>
+<span id="cb5-4"><span class="co">// inside signMediaTicket():</span></span>
+<span id="cb5-5"><span class="kw">const</span> { mac<span class="op">,</span> aes } <span class="op">=</span> <span class="cf">await</span> <span class="fu">deriveKeys</span>(opts<span class="op">.</span><span class="at">secret</span>)<span class="op">;</span></span>
+<span id="cb5-6"><span class="kw">const</span> exp <span class="op">=</span> (opts<span class="op">.</span><span class="at">nowSeconds</span> <span class="op">??</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">floor</span>(<span class="bu">Date</span><span class="op">.</span><span class="fu">now</span>() <span class="op">/</span> <span class="dv">1000</span>))</span>
+<span id="cb5-7">  <span class="op">+</span> opts<span class="op">.</span><span class="at">ttlSeconds</span><span class="op">;</span></span>
+<span id="cb5-8"><span class="kw">const</span> iv <span class="op">=</span> crypto<span class="op">.</span><span class="fu">getRandomValues</span>(<span class="kw">new</span> <span class="bu">Uint8Array</span>(<span class="dv">12</span>))<span class="op">;</span></span>
+<span id="cb5-9"><span class="kw">const</span> ciphertext <span class="op">=</span> <span class="kw">new</span> <span class="bu">Uint8Array</span>(<span class="cf">await</span> crypto<span class="op">.</span><span class="at">subtle</span><span class="op">.</span><span class="fu">encrypt</span>(</span>
+<span id="cb5-10">  { name<span class="op">:</span> <span class="st">"AES-GCM"</span><span class="op">,</span> iv<span class="op">:</span> <span class="fu">buf</span>(iv)<span class="op">,</span></span>
+<span id="cb5-11">    additionalData<span class="op">:</span> <span class="fu">aad</span>({ sub<span class="op">:</span> opts<span class="op">.</span><span class="at">userId</span><span class="op">,</span> tid<span class="op">:</span> opts<span class="op">.</span><span class="at">trackId</span><span class="op">,</span></span>
+<span id="cb5-12">                          exp<span class="op">,</span> dl }) }<span class="op">,</span></span>
+<span id="cb5-13">  aes<span class="op">,</span></span>
+<span id="cb5-14">  <span class="fu">buf</span>(enc<span class="op">.</span><span class="fu">encode</span>(opts<span class="op">.</span><span class="at">objectKey</span>))<span class="op">,</span></span>
+<span id="cb5-15">))<span class="op">;</span></span>
+<span id="cb5-16"><span class="co">// payload = { v:2, aud, sub, tid, exp, ct, dl, iv, k: ciphertext }</span></span>
+<span id="cb5-17"><span class="kw">const</span> head <span class="op">=</span> <span class="vs">`v2.</span><span class="sc">${</span>opts<span class="op">.</span><span class="at">kid</span><span class="sc">}</span><span class="vs">.</span><span class="sc">${</span><span class="fu">b64u</span>(enc<span class="op">.</span><span class="fu">encode</span>(<span class="bu">JSON</span><span class="op">.</span><span class="fu">stringify</span>(payload)))<span class="sc">}</span><span class="vs">`</span><span class="op">;</span></span>
+<span id="cb5-18"><span class="kw">const</span> sig <span class="op">=</span> <span class="kw">new</span> <span class="bu">Uint8Array</span>(</span>
+<span id="cb5-19">  <span class="cf">await</span> crypto<span class="op">.</span><span class="at">subtle</span><span class="op">.</span><span class="fu">sign</span>(<span class="st">"HMAC"</span><span class="op">,</span> mac<span class="op">,</span> <span class="fu">buf</span>(enc<span class="op">.</span><span class="fu">encode</span>(head))))<span class="op">;</span></span>
+<span id="cb5-20"><span class="cf">return</span> { ticket<span class="op">:</span> <span class="vs">`</span><span class="sc">${</span>head<span class="sc">}</span><span class="vs">.</span><span class="sc">${</span><span class="fu">b64u</span>(sig)<span class="sc">}</span><span class="vs">`</span><span class="op">,</span> exp }<span class="op">;</span></span></code></pre></div>
+<p>The format is <code>v2.&lt;kid&gt;.&lt;payload&gt;.&lt;hmac&gt;</code>. Several ideas are packed in:</p>
+<ul>
+<li><strong>The R2 object key is encrypted</strong> with AES-GCM (an authenticated cipher that both hides data and detects tampering). The file path never reaches the browser, so the column revoke on <code>drive_file_url</code> still means something.</li>
+<li><strong>AAD binds the ciphertext to the ticket.</strong> AAD (additional authenticated data) is extra text that is checked but not encrypted. Using <code>user|track|exp|download</code> as AAD means an encrypted key lifted from one ticket fails to decrypt inside another.</li>
+<li><strong>HKDF derives two keys from one secret.</strong> HKDF (a standard way to stretch one secret into several independent keys) produces a MAC key and an AES key with different <code>info</code> labels, so there is one secret to manage per key id.</li>
+<li><strong>Key ids allow rotation.</strong> The Worker holds a JSON map of <code>kid</code> to secret. To rotate, add a new kid, sign with it, keep verifying the old one for one ticket lifetime, then remove it.</li>
+<li><strong>Short life.</strong> <code>mediaTicketTtlSeconds()</code> in <code>_shared/media_worker.ts</code> caps tickets at 15 minutes and also at the end of the entitlement that granted access. A three month grant ending in five minutes gets a five minute ticket.</li>
+</ul>
+<p>The verifier checks, in order: format, known kid, HMAC signature, audience (<code>webaudiotv-media</code>), expiry, that the track id in the URL path equals the ticket's, then decrypts the key and rejects any key starting with <code>/</code> or containing <code>..</code>.</p>
+<p>The secret for tickets must be dedicated. The design documents are explicit that the Supabase service role key must never be copied to Cloudflare.</p>
+</section>
+<section id="the-worker-the-door" class="level4">
+<h4>The Worker: the door</h4>
+<p><code>workers/media-gate/src/handler.ts</code> handles <code>GET</code> and <code>HEAD</code> on <code>/a/&lt;track-uuid&gt;?t=&lt;ticket&gt;</code>. After the ticket checks, it looks up the object size with <code>env.MEDIA.head(key)</code> through an R2 binding (a direct connection from the Worker to the bucket, with no credentials in code), then serves bytes.</p>
+<p>Range requests are how seeking works. The browser asks for <code>Range: bytes=START-END</code> and the server answers <code>206 Partial Content</code> with a <code>Content-Range</code> header. The Worker implements the single range case of RFC 9110:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb6-1"><span class="im">export</span> <span class="kw">function</span> <span class="fu">parseRange</span>(header<span class="op">:</span> <span class="dt">string</span> <span class="op">|</span> <span class="dt">null</span><span class="op">,</span> size<span class="op">:</span> <span class="dt">number</span>) {</span>
+<span id="cb6-2">  <span class="cf">if</span> (<span class="op">!</span>header) <span class="cf">return</span> { kind<span class="op">:</span> <span class="st">"none"</span> }<span class="op">;</span></span>
+<span id="cb6-3">  <span class="kw">const</span> m <span class="op">=</span> <span class="ss">/</span><span class="sc">^</span><span class="ss">bytes=</span><span class="sc">(\d*)</span><span class="ss">-</span><span class="sc">(\d*)$</span><span class="ss">/</span><span class="op">.</span><span class="fu">exec</span>(header<span class="op">.</span><span class="fu">trim</span>())<span class="op">;</span></span>
+<span id="cb6-4">  <span class="cf">if</span> (<span class="op">!</span>m) <span class="cf">return</span> { kind<span class="op">:</span> <span class="st">"none"</span> }<span class="op">;</span> <span class="co">// multi-range: serve whole object</span></span>
+<span id="cb6-5">  <span class="kw">const</span> [<span class="op">,</span> a<span class="op">,</span> b] <span class="op">=</span> m<span class="op">;</span></span>
+<span id="cb6-6">  <span class="cf">if</span> (a <span class="op">===</span> <span class="st">""</span> <span class="op">&amp;&amp;</span> b <span class="op">===</span> <span class="st">""</span>) <span class="cf">return</span> { kind<span class="op">:</span> <span class="st">"none"</span> }<span class="op">;</span></span>
+<span id="cb6-7">  <span class="cf">if</span> (a <span class="op">===</span> <span class="st">""</span>) {                   <span class="co">// suffix: last N bytes</span></span>
+<span id="cb6-8">    <span class="kw">const</span> n <span class="op">=</span> <span class="bu">Number</span>(b)<span class="op">;</span></span>
+<span id="cb6-9">    <span class="cf">if</span> (<span class="op">!</span><span class="bu">Number</span><span class="op">.</span><span class="fu">isSafeInteger</span>(n) <span class="op">||</span> n <span class="op">===</span> <span class="dv">0</span>)</span>
+<span id="cb6-10">      <span class="cf">return</span> { kind<span class="op">:</span> <span class="st">"unsatisfiable"</span> }<span class="op">;</span></span>
+<span id="cb6-11">    <span class="cf">return</span> { kind<span class="op">:</span> <span class="st">"range"</span><span class="op">,</span></span>
+<span id="cb6-12">      range<span class="op">:</span> { start<span class="op">:</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">max</span>(<span class="dv">0</span><span class="op">,</span> size <span class="op">-</span> n)<span class="op">,</span> end<span class="op">:</span> size <span class="op">-</span> <span class="dv">1</span> } }<span class="op">;</span></span>
+<span id="cb6-13">  }</span>
+<span id="cb6-14">  <span class="kw">const</span> start <span class="op">=</span> <span class="bu">Number</span>(a)<span class="op">;</span></span>
+<span id="cb6-15">  <span class="cf">if</span> (<span class="op">!</span><span class="bu">Number</span><span class="op">.</span><span class="fu">isSafeInteger</span>(start)) <span class="cf">return</span> { kind<span class="op">:</span> <span class="st">"none"</span> }<span class="op">;</span></span>
+<span id="cb6-16">  <span class="cf">if</span> (start <span class="op">&gt;=</span> size) <span class="cf">return</span> { kind<span class="op">:</span> <span class="st">"unsatisfiable"</span> }<span class="op">;</span></span>
+<span id="cb6-17">  <span class="kw">let</span> end <span class="op">=</span> b <span class="op">===</span> <span class="st">""</span> <span class="op">?</span> size <span class="op">-</span> <span class="dv">1</span> <span class="op">:</span> <span class="bu">Number</span>(b)<span class="op">;</span></span>
+<span id="cb6-18">  <span class="cf">if</span> (<span class="op">!</span><span class="bu">Number</span><span class="op">.</span><span class="fu">isSafeInteger</span>(end) <span class="op">||</span> end <span class="op">&lt;</span> start)</span>
+<span id="cb6-19">    <span class="cf">return</span> { kind<span class="op">:</span> <span class="st">"none"</span> }<span class="op">;</span></span>
+<span id="cb6-20">  end <span class="op">=</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">min</span>(end<span class="op">,</span> size <span class="op">-</span> <span class="dv">1</span>)<span class="op">;</span></span>
+<span id="cb6-21">  <span class="cf">return</span> { kind<span class="op">:</span> <span class="st">"range"</span><span class="op">,</span> range<span class="op">:</span> { start<span class="op">,</span> end } }<span class="op">;</span></span>
+<span id="cb6-22">}</span></code></pre></div>
+<p>An unsatisfiable range returns <code>416</code> with <code>Content-Range: bytes */SIZE</code>, which Safari can use to learn a file's length. A malformed or multi range header falls back to a full <code>200</code>, matching what <code>stream_media</code> did. The R2 body stream is returned as is: nothing is buffered, and a client disconnect cancels the R2 read. Responses carry <code>Cache-Control: private, no-store</code> (no shared cache may store PRO audio), <code>X-Content-Type-Options: nosniff</code>, and CORS headers only for the two allowed site origins. Downloads add <code>Content-Disposition: attachment</code> with a sanitised filename.</p>
+<p>The <code>wrangler.toml.example</code> sets <code>workers_dev = false</code> so no public <code>*.workers.dev</code> copy exists, and turns observability off because the ticket sits in the query string and must not be logged.</p>
+<p>The Worker is behind a server side flag, <code>MEDIA_WORKER_ENABLED</code>, which accepts exactly <code>admins</code> (a canary rollout to admin accounts) or <code>all</code>. Anything else, including a missing secret or a malformed base URL, means off, logged as <code>media_worker_config_error</code>. Turning the flag on therefore cannot break playback by itself. The repo's own status notes (dated 2 October 2026) record that the Worker was deployed and bound to R2 on the Cloudflare side while the matching Lovable secrets were still missing, so the flag was effectively off at that moment; the README, written the same day, reports first bytes of 0.35 s through the Worker against 0.6 s through the edge function.</p>
+</section>
+<section id="fallback-and-recovery-on-the-client" class="level4">
+<h4>Fallback and recovery on the client</h4>
+<p><code>src/lib/streamAuth.ts</code> is the client side of streaming. It caches credentials per track in a <code>Map</code>, and each entry records the user id it was issued to. If user B signs in on the same browser, A's cached PRO ticket is never reused. <code>clearStreamTokenCache()</code> runs on sign out.</p>
+<p>Failures are never cached, so every retry really calls the function again. The whole lookup has a 15 second deadline (<code>STREAM_TOKEN_TIMEOUT_MS</code>), added after a backend outage left the player spinning in <code>resolving</code> forever.</p>
+<p>The Worker fallback logic is a small state machine:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb7-1"><span class="im">export</span> <span class="kw">function</span> <span class="fu">noteStreamSourceError</span>(trackId<span class="op">:</span> <span class="dt">string</span>)</span>
+<span id="cb7-2">    <span class="op">:</span> <span class="st">"proxy"</span> <span class="op">|</span> <span class="st">"worker-renew"</span> <span class="op">|</span> <span class="st">"fallback-to-proxy"</span> {</span>
+<span id="cb7-3">  <span class="cf">if</span> (lastDelivery<span class="op">.</span><span class="fu">get</span>(trackId) <span class="op">!==</span> <span class="st">"worker"</span>) <span class="cf">return</span> <span class="st">"proxy"</span><span class="op">;</span></span>
+<span id="cb7-4">  <span class="kw">const</span> entry <span class="op">=</span> tokenCache<span class="op">.</span><span class="fu">get</span>(trackId)<span class="op">;</span></span>
+<span id="cb7-5">  <span class="kw">const</span> ticketLive <span class="op">=</span> <span class="op">!!</span>entry<span class="op">?.</span><span class="at">mediaExpiresAt</span> <span class="op">&amp;&amp;</span></span>
+<span id="cb7-6">    entry<span class="op">.</span><span class="at">mediaExpiresAt</span> <span class="op">-</span> <span class="bu">Date</span><span class="op">.</span><span class="fu">now</span>() <span class="op">&gt;</span> TICKET_EXPIRY_SLACK_MS<span class="op">;</span></span>
+<span id="cb7-7">  <span class="cf">if</span> (<span class="op">!</span>ticketLive) {</span>
+<span id="cb7-8">    <span class="co">// Renew at most once a minute per track</span></span>
+<span id="cb7-9">    <span class="kw">const</span> last <span class="op">=</span> lastRenewAt<span class="op">.</span><span class="fu">get</span>(trackId) <span class="op">??</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb7-10">    <span class="cf">if</span> (<span class="bu">Date</span><span class="op">.</span><span class="fu">now</span>() <span class="op">-</span> last <span class="op">&gt;</span> RENEW_LOOP_WINDOW_MS) {</span>
+<span id="cb7-11">      lastRenewAt<span class="op">.</span><span class="fu">set</span>(trackId<span class="op">,</span> <span class="bu">Date</span><span class="op">.</span><span class="fu">now</span>())<span class="op">;</span></span>
+<span id="cb7-12">      <span class="cf">return</span> <span class="st">"worker-renew"</span><span class="op">;</span></span>
+<span id="cb7-13">    }</span>
+<span id="cb7-14">  }</span>
+<span id="cb7-15">  workerFailedTracks<span class="op">.</span><span class="fu">add</span>(trackId)<span class="op">;</span></span>
+<span id="cb7-16">  workerSessionFailures <span class="op">+=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb7-17">  <span class="cf">return</span> <span class="st">"fallback-to-proxy"</span><span class="op">;</span></span>
+<span id="cb7-18">}</span></code></pre></div>
+<p>When the audio element reports an error, the player asks this function what to do next. If the last URL was the proxy, normal recovery applies. If it was the Worker and the ticket had expired, the player mints a new ticket and stays on the Worker. If the ticket was still valid, the Worker itself failed, so this track moves to <code>stream_media</code> for the rest of the session. After two such failures (<code>WORKER_SESSION_FAILURE_LIMIT</code>), every track does. A Worker outage can therefore cost at most one failed load per track and can never loop.</p>
+<p><code>streamTokenExpiresAt()</code> tells the player when the credential baked into the element's <code>src</code> will die, so a long chapter reloads its source with a fresh ticket before a seek would hit <code>401</code>.</p>
+</section>
+<section id="the-fallback-proxy-stream_media" class="level4">
+<h4>The fallback proxy: <code>stream_media</code></h4>
+<p><code>stream_media</code> verifies the v1 token, reruns <code>evaluateStreamAccess</code> as defence in depth, and then fetches the bytes. The original source may be one of three shapes, detected by <code>src/lib/mediaResolver.ts</code> and mirrored on the server:</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Type</th>
+<th>Detected by</th>
+<th>Handling</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>r2</code></td>
+<td><code>media.webaudiotv.com</code>, <code>*.r2.dev</code>, <code>*.cloudflarestorage.com</code></td>
+<td>SigV4 signed GET to private R2</td>
+</tr>
+<tr>
+<td><code>gdrive</code></td>
+<td><code>drive.google.com</code>, <code>docs.google.com</code></td>
+<td>Rewritten to a direct download URL with <code>confirm=t</code></td>
+</tr>
+<tr>
+<td><code>direct</code></td>
+<td>anything else</td>
+<td>Fetched behind SSRF checks</td>
+</tr>
+</tbody>
+</table></div>
+<p>For R2, <code>_shared/r2_sign.ts</code> implements AWS Signature Version 4 (the request signing scheme S3 compatible stores use) with only WebCrypto and no SDK. It builds a canonical request, hashes it, and derives the signing key through the chain <code>AWS4+secret -&gt; date -&gt; region ("auto") -&gt; "s3" -&gt; "aws4_request"</code>. Two details matter: each path segment is percent encoded per RFC 3986 (so an apostrophe in a filename does not break the signature), and the <code>Range</code> header is included in the signed headers, or every seek would be rejected. <code>extractR2ObjectKey()</code> strips the bucket prefix only for the raw S3 endpoint form, and returns <code>null</code> for unknown hosts, so a publisher cannot point a track at an arbitrary host and get a signed request sent there.</p>
+<p>For non R2 sources, <code>_shared/media_security.ts</code> defends against SSRF (server side request forgery, tricking a server into fetching internal addresses). <code>isBlockedHost()</code> rejects localhost, <code>metadata.google.internal</code>, <code>*.internal</code>, private IPv4 ranges, <code>169.254.*</code> (the cloud metadata address) and private IPv6 ranges, after stripping a trailing dot and IPv6 brackets. Redirects are followed manually with <code>redirect: "manual"</code>, and every hop is revalidated, with a cap of five hops. Automatic redirects would only validate the first URL. R2 requests use <code>redirect: "error"</code> since a signed request should never redirect.</p>
+<p><code>stream_media</code> also offers <code>mode=metadata</code>, which requests only the first 256 KB (<code>bytes=0-262143</code>) and reads the MP3 duration with <code>_shared/mp3_metadata.ts</code>. That parser skips an ID3 tag, finds the first MPEG frame (confirming it with the following frame), then trusts, in order, a Xing or Info header's frame count, a VBRI header's frame count, or a constant bitrate estimate only after five or more consecutive frames share the same bitrate. A zero frame count is refused rather than guessed. If an origin ignores the Range header and starts sending a multi hour file, the function reads only the prefix and cancels the stream.</p>
+</section>
+<section id="measuring-how-browsers-actually-fetch-audio" class="level4">
+<h4>Measuring how browsers actually fetch audio</h4>
+<p><code>docs/STREAMING_CLOUD_EFFICIENCY_AUDIT.md</code> measured the real request pattern against a local origin that reproduced the exact response contract, using a 2.5 hour, 72 MB MP3. Key findings:</p>
+<ul>
+<li>Continuous playback and pause or resume cost <strong>zero</strong> extra requests. One connection carried five minutes of audio.</li>
+<li>One seek costs about one request. A saved position restore costs about four in Chrome and five in Safari.</li>
+<li>Chrome sends only open ended ranges (<code>bytes=N-</code>) and aborts 19 of 21 connections once it has buffered enough. Safari sends bounded ranges and starts every source with a two byte probe (<code>bytes=0-1</code>) just to learn the length.</li>
+<li>Proxied egress is a multiple of the file size: 109.7 MB in Chrome and 662.3 MB in Safari for the same 72 MB file, because aborted connections and fresh source loads re-fetch data.</li>
+</ul>
+<p>That last finding is the economic case for the Worker. The design document records audio delivery as about 55 percent of the hosting platform's usage, and R2 storage at about a dollar a month, because R2 egress is free. Moving the bytes to Cloudflare turns every Range request from a billed function invocation plus database reads into a free Worker read.</p>
+<p>The measurement also explained a cost that looked like a bug: the Safari two byte probe used to run the full entitlement chain to return two bytes. The lazy <code>requiresProEntitlement()</code> check and the embedded context read cut that work for free public tracks.</p>
+</section>
+<section id="listening-credit-the-clerk" class="level4">
+<h4>Listening credit: the clerk</h4>
+<p><code>supabase/functions/add_listen_time/index.ts</code> is about 1,100 lines. It accepts <code>{ seconds, track_id, novel_id, session_id, request_id }</code> and returns a receipt: <code>accepted_seconds</code>, <code>rejected_seconds</code>, <code>deferred_seconds</code>, <code>retry_after_seconds</code>.</p>
+<p>Idempotency comes first. An idempotent operation gives the same result if repeated. Each flush carries a UUID <code>request_id</code>. If a <code>listening_events</code> row with that id already exists, the function returns the original receipt with <code>duplicate: true</code> before running any rate or pace checks, which would otherwise flag a legitimate retry as abuse. Two concurrent requests with the same id are resolved by a partial unique index on <code>(user_id, request_id)</code>: the loser gets Postgres error <code>23505</code> and is answered as a duplicate.</p>
+<p>Then the bounds apply in order:</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Value</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>REQUEST_CAP_PER_HOUR</code></td>
+<td>120</td>
+<td>Anti hammering only; deferred, not rejected</td>
+</tr>
+<tr>
+<td><code>MAX_SECONDS_PER_REQUEST</code></td>
+<td>3,600</td>
+<td>An hour holds at most 3,600 seconds</td>
+</tr>
+<tr>
+<td>Pace check</td>
+<td>elapsed + 15 s</td>
+<td>Cannot exceed wall clock since last event</td>
+</tr>
+<tr>
+<td><code>MAX_SECONDS_NO_ANCHOR</code></td>
+<td>900</td>
+<td>No recent event to pace against</td>
+</tr>
+<tr>
+<td><code>HOUR_SECONDS_CAP</code></td>
+<td>3,900</td>
+<td>65 minutes of credit per rolling hour</td>
+</tr>
+<tr>
+<td><code>DAILY_LISTEN_SECONDS_CAP</code></td>
+<td>57,600</td>
+<td>16 hours per UTC day</td>
+</tr>
+</tbody>
+</table></div>
+<p>The pace check is the core rule:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb8-1"><span class="cf">if</span> (seconds <span class="op">&gt;</span> <span class="dv">0</span>) {</span>
+<span id="cb8-2">  <span class="kw">const</span> lastCreatedAt <span class="op">=</span> recentRows[<span class="dv">0</span>]<span class="op">?.</span><span class="at">created_at</span> <span class="op">??</span> <span class="kw">null</span><span class="op">;</span></span>
+<span id="cb8-3">  <span class="cf">if</span> (lastCreatedAt) {</span>
+<span id="cb8-4">    <span class="kw">const</span> elapsed <span class="op">=</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">floor</span>(</span>
+<span id="cb8-5">      (<span class="bu">Date</span><span class="op">.</span><span class="fu">now</span>() <span class="op">-</span> <span class="kw">new</span> <span class="bu">Date</span>(lastCreatedAt)<span class="op">.</span><span class="fu">getTime</span>()) <span class="op">/</span> <span class="dv">1000</span>)<span class="op">;</span></span>
+<span id="cb8-6">    <span class="kw">const</span> allowed <span class="op">=</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">max</span>(<span class="dv">0</span><span class="op">,</span> elapsed <span class="op">+</span> PACE_TOLERANCE_SECONDS)<span class="op">;</span></span>
+<span id="cb8-7">    <span class="cf">if</span> (seconds <span class="op">&gt;</span> allowed) {</span>
+<span id="cb8-8">      <span class="cf">await</span> <span class="fu">insertFlag</span>(<span class="st">"pace_violation"</span><span class="op">,</span> {</span>
+<span id="cb8-9">        requested<span class="op">:</span> seconds<span class="op">,</span> allowed<span class="op">,</span> elapsed_since_last<span class="op">:</span> elapsed<span class="op">,</span></span>
+<span id="cb8-10">      })<span class="op">;</span></span>
+<span id="cb8-11">      <span class="co">// exceeded real elapsed time: never creditable</span></span>
+<span id="cb8-12">      rejectedSeconds <span class="op">+=</span> seconds <span class="op">-</span> allowed<span class="op">;</span></span>
+<span id="cb8-13">      seconds <span class="op">=</span> allowed<span class="op">;</span></span>
+<span id="cb8-14">    }</span>
+<span id="cb8-15">  } <span class="cf">else</span> <span class="cf">if</span> (seconds <span class="op">&gt;</span> MAX_SECONDS_NO_ANCHOR) {</span>
+<span id="cb8-16">    <span class="cf">await</span> <span class="fu">insertFlag</span>(<span class="st">"no_pace_anchor"</span><span class="op">,</span> { requested<span class="op">:</span> seconds<span class="op">,</span></span>
+<span id="cb8-17">      clamped_to<span class="op">:</span> MAX_SECONDS_NO_ANCHOR })<span class="op">;</span></span>
+<span id="cb8-18">    rejectedSeconds <span class="op">+=</span> seconds <span class="op">-</span> MAX_SECONDS_NO_ANCHOR<span class="op">;</span></span>
+<span id="cb8-19">    seconds <span class="op">=</span> MAX_SECONDS_NO_ANCHOR<span class="op">;</span></span>
+<span id="cb8-20">  }</span>
+<span id="cb8-21">}</span></code></pre></div>
+<p>You cannot be credited more seconds than have passed since your last credited event, plus 15 seconds of jitter. Two tabs playing at once, or a replayed request, hit this wall. The hourly cap is 3,900 rather than 3,600 so a client that was offline for a few minutes and flushes its backlog still lands in full.</p>
+<p>The client side of this protocol is <code>src/lib/listenCredit.ts</code>. <code>consumedSeconds()</code> reads the receipt: accepted and rejected seconds are removed from the local accumulator, deferred seconds are kept for the next flush, and a failed request (no receipt) consumes nothing. <code>reconcileAccumulator()</code> subtracts rather than assigns, because the accumulator kept ticking while the request was in flight, and caps the pending buffer at one hour (<code>MAX_PENDING_LISTEN_SECONDS = 3600</code>). The same module contains <code>simulateServerCredit()</code>, a faithful copy of the server rules that exists only so 34 unit tests can check the arithmetic; a guard test pins its constants to the edge function's.</p>
+<p>Every read before the claim is fail closed. If any query errors, the function throws <code>ReadFailedError</code> and answers <code>500 db_read_failed</code> with nothing written, and the client keeps its seconds. Before this rule, a failed profile read was treated as "no profile", so the function rebuilt XP, level and streaks from zero and wrote them back over the real values. After the claim, a failed read may only withhold XP or a reward, and a failed write is logged as <code>partial_commit</code>.</p>
+</section>
+<section id="xp-levels-and-anti-abuse" class="level4">
+<h4>XP, levels and anti abuse</h4>
+<p>XP is not decorative here. A 30 day streak grants 7 days of PRO, reaching level 50 grants 30 days, and the monthly leaderboard top three earn PRO through the <code>award_monthly_badges</code> cron function. The technical overview sums this up as "XP is money".</p>
+<p>The level curve is superlinear: the XP needed for level N is the sum of <code>floor(100 * n^1.5)</code> for n from 1 to N minus 1. Level 2 needs 100, level 3 needs 382, level 4 needs 901. It is implemented in both <code>src/lib/xpUtils.ts</code> (for the progress bar) and the edge function (authoritative), because Deno functions cannot import from <code>src/</code>.</p>
+<p>XP has three nested daily caps: 60 listening XP per track, 480 listening XP in total (eight hours), and 1,000 from all sources. Hitting a cap writes an abuse flag. There are 19 flag types, grouped as rate and pace, caps, behavioural (<code>same_track_farm</code>, <code>rapid_track_switch</code>, <code>impossible_daily_listen</code> above 20 hours) and review related. Flags are deduplicated by a <code>dedupe_key</code> with an <code>occurrences</code> counter, and severity thresholds live in a data table, <code>xp_flag_policy</code>, so they can be retuned with an <code>UPDATE</code> instead of a deploy.</p>
+<p>For multi account detection, the function stores a SHA-256 hash of the IP address salted with the current UTC date. Accounts sharing a machine on the same day can be correlated, but yesterday's hash cannot be linked to today's, and raw IPs are never stored.</p>
+<p>Review XP (+50) passes five gates: ownership, one award per user per novel ever, at least 600 seconds of listening on that novel, at most three review awards per day, and at most three in ten minutes. Corrections for historical abuse are append only: <code>admin_correct_review_xp()</code> writes a negative ledger entry, defaults to a dry run, requires the typed word <code>CORRECT</code> and a reason, and can be undone by <code>admin_revert_xp_correction()</code>. <code>admin_freeze_xp</code> suspends accrual on a suspicious account without banning it.</p>
+</section>
+<section id="payments" class="level4">
+<h4>Payments</h4>
+<p>Eleven functions handle PayPal and three handle Stripe. Money logic is kept in pure, tested helpers:</p>
+<ul>
+<li><code>_shared/paypal_security.ts</code> compares captured amounts in integer cents, never as floats, and requires status <code>COMPLETED</code> and a matching currency. <code>resolveSubscriptionOwnership()</code> denies when the PayPal <code>custom_id</code>, the stored subscription owner or the payment owner disagrees with the caller, and also denies when none of them exists: absence of evidence is denial.</li>
+<li><code>PAYPAL_ENV</code> must be exactly <code>live</code> or <code>sandbox</code>. There is no default, because a wrong default would either take real money into a test account or grant PRO for test payments.</li>
+<li>Stripe webhooks are verified by hand with WebCrypto (the SDK's synchronous verifier does not fit Deno), checking both the HMAC signature and a five minute timestamp window to stop replays.</li>
+<li><code>isSandboxBlocked()</code> rejects all sandbox Stripe traffic once <code>PAYMENTS_MODE=live</code>, because production and sandbox share one database.</li>
+<li><code>sanitizeReturnUrl()</code> rejects scheme relative URLs like <code>//evil.com</code>, allows only <code>http</code> and <code>https</code>, requires the site origin in live mode, and returns the original string so Stripe's <code>{CHECKOUT_SESSION_ID}</code> placeholder is not percent encoded.</li>
+<li>Cron endpoints (<code>award_monthly_badges</code>, <code>reconcile_subscriptions</code>) require an <code>x-cron-secret</code> header.</li>
+</ul>
+</section>
+<section id="covers-and-images" class="level4">
+<h4>Covers and images</h4>
+<p>Covers are served from <code>media.webaudiotv.com</code> through Cloudflare Image Transformations. <code>coverImageUrl(url, width)</code> in <code>src/lib/utils.ts</code> rewrites a cover URL to <code>/cdn-cgi/image/width=W,quality=75,format=auto,fit=scale-down/&lt;path&gt;</code>, clamping width between 32 and 1600 pixels, when <code>VITE_IMAGE_RESIZE</code> is <code>on</code>. The median cover went from 3.0 MB to about 80 KB (AVIF at 480 pixels), and repeat requests hit the edge cache in under 0.1 s. A Cloudflare WAF (web application firewall) rule blocks audio and video file types on that public domain, so it serves images only.</p>
+</section>
+<section id="publishers-reviews-and-the-mcp-endpoint" class="level4">
+<h4>Publishers, reviews and the MCP endpoint</h4>
+<p>Publishers apply through <code>publisher_applications</code>. An admin calls <code>approve_publisher_application()</code>, an RPC (a remote procedure call into a SQL function) that atomically creates the profile, grants the role and writes the audit log, so there is never an approved application with no role. The publisher workspace in <code>src/components/publisher/</code> provides novel, section, track and tag management and Early Access controls.</p>
+<p>Reviews support star ratings, replies, reactions and short voice notes. <code>src/lib/reviewRanking.ts</code> sorts and aggregates reactions; <code>reviewReplies.ts</code> batches reply loading after an audit found one request per review (an N+1 query pattern).</p>
+<p><code>supabase/functions/mcp/</code> is generated by <code>@lovable.dev/mcp-js</code> from <code>src/lib/mcp/</code>. It exposes seven tools (search novels, get novel, list tracks, rankings, continue listening, get and save progress) over the Model Context Protocol, a standard for letting AI assistants call application functions.</p>
+</section>
+<section id="testing" class="level4">
+<h4>Testing</h4>
+<p>There are three kinds of tests.</p>
+<ul>
+<li><strong>Pure logic tests</strong> for <code>src/lib/</code> and <code>_shared/</code> modules: listen credit arithmetic, stream access read sets, ticket signing, PRO entitlement, payment security, SSRF filters, player clock and interruption rules.</li>
+<li><strong>Handler tests</strong> run real edge function code against a fake service client (<code>src/test/fakeServiceClient.ts</code>). <code>addListenTime.handler.test.ts</code> fails each database read in turn and checks that nothing is written.</li>
+<li><strong>Guard tests</strong> (<code>*.guard.test.ts</code>) read source files and assert that a forbidden pattern has not returned, for example that <code>stream_media</code> never accepts a <code>?token=</code> JWT, that <code>startupGuard</code> stays the first import, or that ranking SQL keeps its <code>LIMIT</code> inside the subquery. These exist because a streaming outage was once nearly "fixed" by restoring the insecure pattern.</li>
+</ul>
+<p>Outside Vitest, <code>tests/db/rig.sh up</code> starts a throwaway local Postgres, loads stubs for Supabase's <code>auth</code> schema and extensions, and applies all 100 migrations in order. <code>tests/db/access_matrix.sql</code> then runs 48 checks as real PostgREST roles with JWT claims: signed out, two free users, a PRO user, two publishers and an admin. For example, it checks that publisher 2 cannot see publisher 1's private draft and that no role can read <code>drive_file_url</code>. <code>tests/db/seed_scale.sql</code> seeds production sized row counts, and <code>tests/db/load/*.sql</code> are pgbench (Postgres's benchmarking tool) workloads. <code>tests/worker-e2e/</code> drives the real production build in a browser against the real Worker running locally in Cloudflare's <code>workerd</code> runtime, with a mock Supabase that can compress ticket lifetime to 60 seconds and simulate a dead Worker or a bad ticket.</p>
+</section>
+</section>
+<section id="key-design-decisions-and-trade-offs-1" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Booth and door instead of presigned URLs.</strong> The design documents considered giving the browser a direct presigned R2 URL (a URL with a time limited signature from the storage provider). That would expose the object key, could not be capped at the entitlement's end, and would put access logic in two places. The Worker keeps one decision point (<code>evaluateStreamAccess</code>) and makes the Worker a dumb, auditable gate.</li>
+<li><strong>15 minute tickets versus revocation.</strong> A ticket cannot be revoked once issued. The trade-off accepted is that an unscheduled revocation, such as a refund, takes up to 15 minutes to bite, and bytes already buffered or downloaded are never revoked. Scheduled ends are exact because the ticket is capped at them.</li>
+<li><strong>Six hour v1 tokens.</strong> Longer than ideal for security, but a short token resets the audio element on seek. The binding to one user and one track limits the damage.</li>
+<li><strong>Fallback by default.</strong> Any Worker misconfiguration means off, and any Worker failure moves the session back to the proxy. Cost savings never come at the price of playback.</li>
+<li><strong><code>.env</code> is tracked in Git.</strong> Normally wrong, but it holds only three publishable Supabase values that are compiled into the bundle anyway, and Lovable's build reads <code>.env</code> from the repo. All real secrets live only in Lovable Cloud Secrets and are read with <code>Deno.env.get()</code>.</li>
+<li><strong>Fail closed everywhere.</strong> A failed read is never "no row". That costs an occasional 500 but has prevented data corruption and accidental access.</li>
+<li><strong>Bound seconds, not requests.</strong> The old limiter allowed 12 requests per hour; a continuous listener was throttled after 12 minutes and every rejected flush destroyed real seconds. Bounding credited seconds against the wall clock is both fairer and harder to cheat.</li>
+<li><strong>Pure modules plus guard tests.</strong> Deno functions cannot run in Vitest, so logic is extracted into plain TypeScript and the deployed code is pinned to the model by source asserting tests.</li>
+<li><strong>Append only XP corrections.</strong> Rebuilding totals from the ledger was rejected because historical totals had been written directly and would silently move legitimate scores. Negative compensating entries keep the evidence and can be reverted.</li>
+<li><strong>UA sniffing in the player.</strong> Usually poor practice, but iOS Safari, iOS Chrome and desktop browsers really do behave differently around autoplay, playback rate and backgrounding.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-1" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li><strong>Black screen on deploy.</strong> A build without <code>VITE_SUPABASE_URL</code> crashed before React mounted. The startup guard became the first import and shows a clear configuration error.</li>
+<li><strong>JWT in the URL.</strong> Replaced with the two function flow and guarded by tests. When <code>issue_stream_token</code> was later committed but never deployed (Lovable does not reliably deploy new functions), the player showed "Couldn't authorize this track". The runbook in <code>CLAUDE.md</code> now requires calling every new or changed function and checking for a 404 before declaring a deploy done. A later audit found eight functions still running six week old code and redeployed them.</li>
+<li><strong>The public audio bucket.</strong> An audit found every audio file downloadable without signing in, through the custom media domain and an <code>r2.dev</code> development URL. Covers were moved to the firewalled domain, the dev URL was disabled, a WAF rule blocks audio on the media domain, and the ticket checking Worker became the only intended public path to audio.</li>
+<li><strong>Truncated uploads.</strong> Users reported chapters that stopped halfway and showed <code>--:--</code> for duration. <code>docs/incidents/2026-09-20-truncated-audio-uploads.md</code> found three tells: object sizes that are exact multiples of 64 KB, a final MP3 frame cut in half, and a Xing header with zero frames (ffmpeg writes a placeholder and patches it at the end, which never happened). The size test alone identified 65 broken files out of 1,671 without downloading the library.</li>
+<li><strong>Leaderboard farming.</strong> Forensic queries showed the top account credited 16 to 21 hours a day by a looping player. The fix added the 16 hour daily cap, the three hour idle pause, and no credit while muted.</li>
+<li><strong>Review XP farming.</strong> Deleting and rewriting a review produced a new row id, so the old dedup check never matched and +50 XP could be earned repeatedly. Dedup now matches on <code>novel_id</code> and on any review the user holds for that novel, with listening and burst gates.</li>
+<li><strong><code>invoke</code> never throws.</strong> <code>supabase.functions.invoke</code> returns errors in <code>{ data, error }</code>, so a <code>try/catch</code> treated failures as success and discarded listened seconds. The receipt protocol fixed this.</li>
+<li><strong>Exposed email queue.</strong> Queue functions were callable with the public key because a migration revoked access only from <code>PUBLIC</code>, not from Supabase's <code>anon</code> and <code>authenticated</code> roles. That would have allowed reading password reset links. Fixed by <code>20261002010000_lock_email_queue_rpcs.sql</code>.</li>
+<li><strong>Slow admin audit page.</strong> A per user aggregate ran over every profile before <code>LIMIT</code>, timing out at 8 seconds. Ranking first and aggregating after, with two new indexes, took it to 0.49 s in production and from 806 ms to 18 ms locally, with byte for byte identical output.</li>
+<li><strong>Domain outages that were not code.</strong> A lapsed hosting plan at the registrar rewrote the nameservers, and Lovable's domain check stuck on that bad reading and served <code>421 Project not found</code>. Another morning showed grey skeleton cards that looked like a storage failure but were a backend restart. <code>CLAUDE.md</code> now documents diagnostic <code>curl</code> and <code>dig</code> commands for each signature so nobody "fixes" code during an infrastructure incident.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-1" class="level3">
+<h3>Security and Performance Notes</h3>
+<p><strong>Security layers:</strong></p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Layer</th>
+<th>What it enforces</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RLS and column privileges</td>
+<td>Own rows only; drafts hidden; <code>drive_file_url</code> unreadable by browsers</td>
+</tr>
+<tr>
+<td>Profile trigger</td>
+<td>Plan, XP, levels, streaks, PRO dates not client writable</td>
+</tr>
+<tr>
+<td>SECURITY DEFINER functions</td>
+<td>Pinned <code>search_path</code>; admin checks; internal functions revoked from <code>anon</code> and <code>authenticated</code></td>
+</tr>
+<tr>
+<td>Edge functions</td>
+<td>JWT in header only; fail closed reads; idempotent listen claims; signed webhooks; cron secret</td>
+</tr>
+<tr>
+<td>Media</td>
+<td>Private bucket; WAF blocks audio on the public domain; tickets bound to user, track, mode and expiry</td>
+</tr>
+<tr>
+<td>Downloads</td>
+<td><code>fetch</code> plus <code>Blob</code> with an <code>Authorization</code> header, never a token in the URL</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Performance numbers reported in the README:</strong></p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Before</th>
+<th>After</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Points Audit top 50</td>
+<td>8.05 s timeout</td>
+<td>0.49 s</td>
+</tr>
+<tr>
+<td>Median cover image</td>
+<td>3.0 MB</td>
+<td>about 80 KB</td>
+</tr>
+<tr>
+<td>Audio first bytes (Range)</td>
+<td>0.6 s via edge function</td>
+<td>0.35 s via Worker</td>
+</tr>
+<tr>
+<td>XP audit query, 50 rows (local)</td>
+<td>806 ms</td>
+<td>18 ms</td>
+</tr>
+</tbody>
+</table></div>
+<p>A pgbench mix of progress saves, credit transactions and home page reads on the local rig sustained 11,300 to 12,800 transactions per second from 10 to 100 clients with zero errors; credit transaction p95 latency rose from 1.3 ms to 88 ms. A lock contention test of 50 clients updating the same 20 users ran 364,000 transactions with no lost seconds. The notes are honest that the laptop is not production hardware and that <code>add_listen_time</code> reads then writes, so truly concurrent flushes for one user could under count. Real peak demand is about 8 writes per second.</p>
+</section>
+<section id="how-to-run-it-1" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb9"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb9-1"><span class="fu">git</span> clone https://github.com/VijaysinghPuwar/web-audio-tv.git</span>
+<span id="cb9-2"><span class="bu">cd</span> web-audio-tv</span>
+<span id="cb9-3"><span class="ex">npm</span> install</span>
+<span id="cb9-4"><span class="ex">npm</span> run dev            <span class="co"># dev server (Vite)</span></span>
+<span id="cb9-5"><span class="ex">npm</span> run build          <span class="co"># production build</span></span>
+<span id="cb9-6"><span class="ex">npm</span> run test           <span class="co"># Vitest suite</span></span>
+<span id="cb9-7"><span class="ex">npm</span> run lint           <span class="co"># ESLint</span></span>
+<span id="cb9-8"><span class="ex">npx</span> tsc <span class="at">--noEmit</span> <span class="at">-p</span> tsconfig.app.json   <span class="co"># type check</span></span></code></pre></div>
+<p>Database tests need a local PostgreSQL install:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb10-1"><span class="ex">tests/db/rig.sh</span> up</span>
+<span id="cb10-2"><span class="ex">psql</span> <span class="at">-h</span> 127.0.0.1 <span class="at">-p</span> 54329 <span class="at">-U</span> rig rig <span class="at">-f</span> tests/db/seed_scale.sql</span>
+<span id="cb10-3"><span class="ex">psql</span> <span class="at">-h</span> 127.0.0.1 <span class="at">-p</span> 54329 <span class="at">-U</span> rig rig <span class="at">-f</span> tests/db/access_matrix.sql</span>
+<span id="cb10-4"><span class="ex">psql</span> <span class="at">-h</span> 127.0.0.1 <span class="at">-p</span> 54329 <span class="at">-U</span> rig rig <span class="at">-f</span> tests/db/load/setup.sql</span>
+<span id="cb10-5"><span class="ex">pgbench</span> <span class="at">-h</span> 127.0.0.1 <span class="at">-p</span> 54329 <span class="at">-U</span> rig <span class="at">-n</span> <span class="dt">\</span></span>
+<span id="cb10-6">  <span class="at">-f</span> tests/db/load/progress.sql@4 <span class="at">-f</span> tests/db/load/credit.sql@1 <span class="dt">\</span></span>
+<span id="cb10-7">  <span class="at">-f</span> tests/db/load/browse.sql@1 <span class="at">-c</span> 50 <span class="at">-T</span> 30 rig</span>
+<span id="cb10-8"><span class="ex">tests/db/rig.sh</span> down</span></code></pre></div>
+<p>Deploying an edge function by hand, when Lovable does not:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb11-1"><span class="ex">supabase</span> functions deploy issue_stream_token <span class="at">--project-ref</span> <span class="op">&lt;</span>project-id<span class="op">&gt;</span></span></code></pre></div>
+</section>
+<section id="learn-more-1" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://supabase.com/docs/guides/database/postgres/row-level-security" target="_blank" rel="noopener noreferrer">Supabase: Row Level Security</a></li>
+<li><a href="https://supabase.com/docs/guides/functions" target="_blank" rel="noopener noreferrer">Supabase Edge Functions</a></li>
+<li><a href="https://developers.cloudflare.com/r2/api/workers/workers-api-reference/" target="_blank" rel="noopener noreferrer">Cloudflare R2: Workers API (R2 bindings)</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests" target="_blank" rel="noopener noreferrer">MDN: HTTP range requests</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/Media_Session_API" target="_blank" rel="noopener noreferrer">MDN: Media Session API</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto" target="_blank" rel="noopener noreferrer">MDN: SubtleCrypto (HMAC, AES-GCM, HKDF)</a></li>
+<li><a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv.html" target="_blank" rel="noopener noreferrer">AWS Signature Version 4 for API requests</a></li>
+<li><a href="https://tanstack.com/query/latest/docs/framework/react/guides/important-defaults" target="_blank" rel="noopener noreferrer">TanStack Query: Important Defaults</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=zBZgdTb-dns" target="_blank" rel="noopener noreferrer">Supabase in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=n2Fluyr3lbc" target="_blank" rel="noopener noreferrer">PostgreSQL in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=Tn6-PIqc4UM" target="_blank" rel="noopener noreferrer">React in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=KCrXgy8qtjM" target="_blank" rel="noopener noreferrer">Vite in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=wlSG3pEiQdc" target="_blank" rel="noopener noreferrer">Securing Stream Ciphers (HMAC) - Computerphile</a></li>
+<li><a href="https://www.youtube.com/watch?v=b4b8ktEV4Bg" target="_blank" rel="noopener noreferrer">Hashing Algorithms and Security - Computerphile</a></li>
+</ul>
+</section>
+</section>
+</section>

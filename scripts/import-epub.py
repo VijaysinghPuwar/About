@@ -75,6 +75,28 @@ def image_size(path: Path):
     data = path.read_bytes()
     if data[:8] == b"\x89PNG\r\n\x1a\n":
         return struct.unpack(">II", data[16:24])
+    if data[:2] == b"\xff\xd8":
+        # Walk the JPEG markers to the first start-of-frame, which holds the size.
+        i = 2
+        while i + 9 < len(data):
+            if data[i] != 0xFF:
+                i += 1
+                continue
+            marker = data[i + 1]
+            if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7 or marker == 0xFF:
+                i += 1 if marker == 0xFF else 2
+                continue
+            seg = struct.unpack(">H", data[i + 2:i + 4])[0]
+            if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+                h, w = struct.unpack(">HH", data[i + 5:i + 9])
+                return w, h
+            i += 2 + seg
+        return None
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        out = subprocess.run(["sips", "-g", "pixelWidth", "-g", "pixelHeight", str(path)],
+                             capture_output=True, text=True).stdout
+        nums = re.findall(r"pixel(?:Width|Height):\s*(\d+)", out)
+        return (int(nums[0]), int(nums[1])) if len(nums) == 2 else None
     if path.suffix == ".svg":
         root = ET.fromstring(data)
         vb = root.get("viewBox")
@@ -260,6 +282,18 @@ class Book:
             title = text_of(title_el) if title_el is not None else Path(href).stem
             if number and title.startswith(number):
                 title = title[len(number):].strip()
+            # Books written without --number-sections spell the number into the
+            # heading instead: "Chapter 4: BreachScope". Same label either way.
+            spelled = re.match(r"^Chapter\s+(\d+)\s*[:.–—-]\s*(.+)$", title)
+            if not number and spelled:
+                number, title = spelled.group(1), spelled.group(2).strip()
+                if len(h1) == 0:
+                    # Rewrite it as pandoc would have, so the reader styles the
+                    # number the same way in every book.
+                    num = ET.Element(f"{{{NS['x']}}}span", {"class": "header-section-number"})
+                    num.text, num.tail = number, " " + title
+                    h1.text = None
+                    h1.append(num)
 
             classes = (h1.get("class") or "") if h1 is not None else ""
             words = len(re.findall(r"\w+", text_of(body)))
@@ -275,7 +309,12 @@ class Book:
                 part = "Appendices"
 
             sections = []
-            for h2 in body.iter(f"{{{NS['x']}}}h2"):
+            # A chapter about one project has a single h2 (its name); the
+            # useful map of it is one level down.
+            n_h2 = len(list(body.iter(f"{{{NS['x']}}}h2")))
+            n_h3 = len(list(body.iter(f"{{{NS['x']}}}h3")))
+            level = "h3" if n_h2 <= 1 and n_h3 > 1 else "h2"
+            for h2 in body.iter(f"{{{NS['x']}}}{level}"):
                 parent_id = None
                 # ElementTree has no parent pointers; the id lives on the section.
                 for s in body.iter(f"{{{NS['x']}}}section"):

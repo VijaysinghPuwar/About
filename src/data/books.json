@@ -1,9 +1,582 @@
 [
   {
+    "slug": "inside-the-projects",
+    "title": "Inside the Projects",
+    "subtitle": "A Deep Technical Guide to the Projects of Vijaysingh Puwar",
+    "author": "Vijaysingh Puwar",
+    "date": "2026-10-16",
+    "description": "Architecture, code walkthroughs, design decisions, reference material and videos for every project.",
+    "subjects": [
+      "software engineering",
+      "software architecture",
+      "cybersecurity",
+      "networking",
+      "text-to-speech",
+      "web development",
+      "Rust",
+      "Python",
+      "TypeScript"
+    ],
+    "cover": {
+      "src": "/books/inside-the-projects/cover.webp",
+      "width": 640,
+      "height": 1024
+    },
+    "words": 102702,
+    "minutes": 467,
+    "chapters": [
+      {
+        "id": "ch001",
+        "title": "How to Use This Book",
+        "number": "1",
+        "part": null,
+        "words": 1181,
+        "minutes": 5,
+        "sections": [
+          {
+            "id": "reading-guide",
+            "title": "Reading Guide",
+            "number": null
+          },
+          {
+            "id": "project-map",
+            "title": "Project Map",
+            "number": null
+          },
+          {
+            "id": "ideas-that-appear-across-many-projects",
+            "title": "Ideas That Appear Across Many Projects",
+            "number": null
+          },
+          {
+            "id": "general-learning-resources",
+            "title": "General Learning Resources",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch002",
+        "title": "spoonstill, a Batch Film Renderer in Rust",
+        "number": "2",
+        "part": null,
+        "words": 10133,
+        "minutes": 46,
+        "sections": [
+          {
+            "id": "at-a-glance",
+            "title": "At a Glance",
+            "number": null
+          },
+          {
+            "id": "how-it-works-simple-version",
+            "title": "How It Works (Simple Version)",
+            "number": null
+          },
+          {
+            "id": "architecture",
+            "title": "Architecture",
+            "number": null
+          },
+          {
+            "id": "deep-dive",
+            "title": "Deep Dive",
+            "number": null
+          },
+          {
+            "id": "key-design-decisions-and-trade-offs",
+            "title": "Key Design Decisions and Trade-offs",
+            "number": null
+          },
+          {
+            "id": "challenges-and-how-they-were-solved",
+            "title": "Challenges and How They Were Solved",
+            "number": null
+          },
+          {
+            "id": "security-and-performance-notes",
+            "title": "Security and Performance Notes",
+            "number": null
+          },
+          {
+            "id": "how-to-run-it",
+            "title": "How to Run It",
+            "number": null
+          },
+          {
+            "id": "learn-more",
+            "title": "Learn More",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch003",
+        "title": "Web Audio TV, an Audiobook Streaming Platform",
+        "number": "3",
+        "part": null,
+        "words": 7620,
+        "minutes": 35,
+        "sections": [
+          {
+            "id": "at-a-glance-1",
+            "title": "At a Glance",
+            "number": null
+          },
+          {
+            "id": "how-it-works-simple-version-1",
+            "title": "How It Works (Simple Version)",
+            "number": null
+          },
+          {
+            "id": "architecture-1",
+            "title": "Architecture",
+            "number": null
+          },
+          {
+            "id": "deep-dive-1",
+            "title": "Deep Dive",
+            "number": null
+          },
+          {
+            "id": "key-design-decisions-and-trade-offs-1",
+            "title": "Key Design Decisions and Trade-offs",
+            "number": null
+          },
+          {
+            "id": "challenges-and-how-they-were-solved-1",
+            "title": "Challenges and How They Were Solved",
+            "number": null
+          },
+          {
+            "id": "security-and-performance-notes-1",
+            "title": "Security and Performance Notes",
+            "number": null
+          },
+          {
+            "id": "how-to-run-it-1",
+            "title": "How to Run It",
+            "number": null
+          },
+          {
+            "id": "learn-more-1",
+            "title": "Learn More",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch004",
+        "title": "BreachScope, an Honest Live Threat Map",
+        "number": "4",
+        "part": null,
+        "words": 7710,
+        "minutes": 35,
+        "sections": [
+          {
+            "id": "at-a-glance-2",
+            "title": "At a Glance",
+            "number": null
+          },
+          {
+            "id": "how-it-works-simple-version-2",
+            "title": "How It Works (Simple Version)",
+            "number": null
+          },
+          {
+            "id": "architecture-2",
+            "title": "Architecture",
+            "number": null
+          },
+          {
+            "id": "deep-dive-2",
+            "title": "Deep Dive",
+            "number": null
+          },
+          {
+            "id": "key-design-decisions-and-trade-offs-2",
+            "title": "Key Design Decisions and Trade-offs",
+            "number": null
+          },
+          {
+            "id": "challenges-and-how-they-were-solved-2",
+            "title": "Challenges and How They Were Solved",
+            "number": null
+          },
+          {
+            "id": "security-and-performance-notes-2",
+            "title": "Security and Performance Notes",
+            "number": null
+          },
+          {
+            "id": "how-to-run-it-2",
+            "title": "How to Run It",
+            "number": null
+          },
+          {
+            "id": "learn-more-2",
+            "title": "Learn More",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch005",
+        "title": "Text-to-Speech Projects",
+        "number": "5",
+        "part": null,
+        "words": 10730,
+        "minutes": 49,
+        "sections": [
+          {
+            "id": "primer-how-neural-text-to-speech-works",
+            "title": "Primer: How Neural Text-to-Speech Works",
+            "number": null
+          },
+          {
+            "id": "setuptts",
+            "title": "SetupTTS",
+            "number": null
+          },
+          {
+            "id": "the-tts-experiments-workspace",
+            "title": "The TTS Experiments Workspace",
+            "number": null
+          },
+          {
+            "id": "kokorotts-hybrid-gui",
+            "title": "KokoroTTS (Hybrid GUI)",
+            "number": null
+          },
+          {
+            "id": "localttsvideostudio",
+            "title": "LocalTTSVideoStudio",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch006",
+        "title": "AI Video, Manga Recap, and Story Tools",
+        "number": "6",
+        "part": null,
+        "words": 14826,
+        "minutes": 67,
+        "sections": [
+          {
+            "id": "cutmox-local-first-ai-subtitles-in-the-browser",
+            "title": "Cutmox: Local-First AI Subtitles in the Browser",
+            "number": null
+          },
+          {
+            "id": "recap-verse-the-production-manga-recap-platform",
+            "title": "Recap Verse: The Production Manga Recap Platform",
+            "number": null
+          },
+          {
+            "id": "manga-recap-studio-from-batch-pipeline-to-panel-studio",
+            "title": "Manga Recap Studio: From Batch Pipeline to Panel Studio",
+            "number": null
+          },
+          {
+            "id": "panel-narrate-ai-the-same-idea-as-hosted-saas",
+            "title": "Panel Narrate AI: The Same Idea as Hosted SaaS",
+            "number": null
+          },
+          {
+            "id": "novelsin-a-serialized-fiction-platform",
+            "title": "Novelsin: A Serialized Fiction Platform",
+            "number": null
+          },
+          {
+            "id": "the-novel-folder-source-material-not-an-input",
+            "title": "The Novel Folder: Source Material, Not an Input",
+            "number": null
+          },
+          {
+            "id": "image-to-video-fal.ai-one-picture-one-hour-of-video",
+            "title": "Image to Video (fal.ai): One Picture, One Hour of Video",
+            "number": null
+          },
+          {
+            "id": "motion-scene-studio-living-artwork-with-veo",
+            "title": "Motion Scene Studio: Living Artwork with Veo",
+            "number": null
+          },
+          {
+            "id": "audio-video-studio-narration-to-story-video",
+            "title": "Audio-Video-Studio: Narration to Story Video",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch007",
+        "title": "Websites, Front-Ends, Data and 3D",
+        "number": "7",
+        "part": null,
+        "words": 10009,
+        "minutes": 45,
+        "sections": [
+          {
+            "id": "portfolio-website-vijaysinghpuwar.com",
+            "title": "Portfolio Website (vijaysinghpuwar.com)",
+            "number": null
+          },
+          {
+            "id": "zelqorix-corporate-website",
+            "title": "ZELQORIX Corporate Website",
+            "number": null
+          },
+          {
+            "id": "cardiocommand-hackathon-6",
+            "title": "CardioCommand (Hackathon 6)",
+            "number": null
+          },
+          {
+            "id": "india-budget-workbooks",
+            "title": "India Budget Workbooks",
+            "number": null
+          },
+          {
+            "id": "react-labs-lab-01-modules-without-a-build",
+            "title": "React Labs: Lab 01, Modules Without a Build",
+            "number": null
+          },
+          {
+            "id": "procedural-castle-in-blender-blenderhouse",
+            "title": "Procedural Castle in Blender (Blender/House)",
+            "number": null
+          },
+          {
+            "id": "trustkart-and-trustkart-catalog",
+            "title": "TrustKart and TrustKart-catalog",
+            "number": null
+          },
+          {
+            "id": "small-front-end-pieces",
+            "title": "Small Front-End Pieces",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch008",
+        "title": "Productivity Apps and Developer Tools",
+        "number": "8",
+        "part": null,
+        "words": 11081,
+        "minutes": 50,
+        "sections": [
+          {
+            "id": "toc-extractor",
+            "title": "TOC Extractor",
+            "number": null
+          },
+          {
+            "id": "txttranslation-google-api-translation",
+            "title": "txttranslation (Google API Translation)",
+            "number": null
+          },
+          {
+            "id": "jee-test-simulator-jee-cbt",
+            "title": "JEE Test Simulator (JEE CBT)",
+            "number": null
+          },
+          {
+            "id": "resghost-jobradar",
+            "title": "ResGhost JobRadar",
+            "number": null
+          },
+          {
+            "id": "vaultsnake",
+            "title": "VAULTSNAKE",
+            "number": null
+          },
+          {
+            "id": "splitforge-local",
+            "title": "SplitForge Local",
+            "number": null
+          },
+          {
+            "id": "speak-translate-studio",
+            "title": "Speak Translate Studio",
+            "number": null
+          },
+          {
+            "id": "drive-folder-topology",
+            "title": "Drive Folder Topology",
+            "number": null
+          },
+          {
+            "id": "patreon-drive-access",
+            "title": "Patreon Drive Access",
+            "number": null
+          },
+          {
+            "id": "ffmpeg-web-gui",
+            "title": "FFmpeg Web GUI",
+            "number": null
+          },
+          {
+            "id": "resumeai-resume-ai-main",
+            "title": "ResumeAI (resume-ai-main)",
+            "number": null
+          },
+          {
+            "id": "early-front-end-exercises-aveengers-and-petsnap-facts",
+            "title": "Early Front-End Exercises: Aveengers and PetSnap Facts",
+            "number": null
+          },
+          {
+            "id": "incraler-lightnovel-crawler-workspace",
+            "title": "Incraler (lightnovel-crawler workspace)",
+            "number": null
+          },
+          {
+            "id": "nightframe-studio",
+            "title": "NightFrame Studio",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch009",
+        "title": "Cybersecurity and Networking",
+        "number": "9",
+        "part": null,
+        "words": 11833,
+        "minutes": 54,
+        "sections": [
+          {
+            "id": "automating-infosec-winseckit",
+            "title": "Automating InfoSec (WinSecKit)",
+            "number": null
+          },
+          {
+            "id": "cissp-domains",
+            "title": "CISSP Domains",
+            "number": null
+          },
+          {
+            "id": "configuring-cloud-security-in-aws",
+            "title": "Configuring Cloud Security in AWS",
+            "number": null
+          },
+          {
+            "id": "http-hardening-check-nmap-nse",
+            "title": "HTTP Hardening Check (Nmap NSE)",
+            "number": null
+          },
+          {
+            "id": "secure-ubuntu-fleet-ansible",
+            "title": "Secure Ubuntu Fleet (Ansible)",
+            "number": null
+          },
+          {
+            "id": "windows-dev-and-security-bootstrap",
+            "title": "Windows Dev and Security Bootstrap",
+            "number": null
+          },
+          {
+            "id": "configuring-rip-in-cisco-packet-tracer",
+            "title": "Configuring RIP in Cisco Packet Tracer",
+            "number": null
+          },
+          {
+            "id": "inter-vlan-routing-via-router-on-a-stick",
+            "title": "Inter-VLAN Routing via Router-on-a-Stick",
+            "number": null
+          },
+          {
+            "id": "rapid-pvst-campus-lab",
+            "title": "Rapid PVST+ Campus Lab",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch010",
+        "title": "Academic and Foundations Projects",
+        "number": "10",
+        "part": null,
+        "words": 8884,
+        "minutes": 40,
+        "sections": [
+          {
+            "id": "cs601c-computational-statistics-project",
+            "title": "CS601C Computational Statistics Project",
+            "number": null
+          },
+          {
+            "id": "cs601c-final-project",
+            "title": "CS601C Final Project",
+            "number": null
+          },
+          {
+            "id": "distance-conversion-tool-pacelab",
+            "title": "Distance Conversion Tool (PaceLab)",
+            "number": null
+          },
+          {
+            "id": "python-projects",
+            "title": "Python Projects",
+            "number": null
+          },
+          {
+            "id": "x86-64-assembly-intro-lab",
+            "title": "x86-64 Assembly Intro Lab",
+            "number": null
+          },
+          {
+            "id": "a-note-on-the-jellyfin-clone",
+            "title": "A Note on the Jellyfin Clone",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch011",
+        "title": "GitHub-Only Projects: Networks, Firewalls, Static Sites and Practice",
+        "number": "11",
+        "part": null,
+        "words": 8695,
+        "minutes": 40,
+        "sections": [
+          {
+            "id": "dual-isp-network-assessment-and-subnet-remediation",
+            "title": "Dual-ISP Network Assessment and Subnet Remediation",
+            "number": null
+          },
+          {
+            "id": "hardening-linux-servers-with-iptables",
+            "title": "Hardening Linux Servers with iptables",
+            "number": null
+          },
+          {
+            "id": "hardened-static-page",
+            "title": "hardened-static-page",
+            "number": null
+          },
+          {
+            "id": "neetcode-submissions",
+            "title": "neetcode-submissions",
+            "number": null
+          },
+          {
+            "id": "vault-private",
+            "title": "Vault (private)",
+            "number": null
+          }
+        ]
+      }
+    ]
+  },
+  {
     "slug": "setuptts",
     "title": "SetupTTS: Technical Architecture and Learning Guide",
     "subtitle": "Understanding the Desktop TTS Application, Audio Pipeline, Reliability Architecture, and Distribution System",
-    "author": "Prepared for Vijay Puwar",
+    "author": "Vijaysingh Puwar",
     "date": "2026-10-07",
     "description": "A study guide to the SetupTTS repository at v1.6.2 (commit c6c43fe): architecture, the text-to-speech pipeline, long-form reliability, packaging, CI/CD and testing.",
     "subjects": [
@@ -858,7 +1431,83 @@
         "part": "Part VI: Working With It",
         "words": 1041,
         "minutes": 5,
-        "sections": []
+        "sections": [
+          {
+            "id": "python-tutorial-asyncio---complete-guide-to-asynchronous-programming-with-animations",
+            "title": "1. Python Tutorial: AsyncIO - Complete Guide to Asynchronous Programming with Animations",
+            "number": null
+          },
+          {
+            "id": "import-asyncio-learn-pythons-asyncio-playlist",
+            "title": "2. import asyncio: Learn Python’s AsyncIO (playlist)",
+            "number": null
+          },
+          {
+            "id": "learn-python-gui-development-for-desktop-pyside6-and-qt-tutorial",
+            "title": "3. Learn Python GUI Development for Desktop – PySide6 and Qt Tutorial",
+            "number": null
+          },
+          {
+            "id": "qtws17---multithreading-with-qt---giuseppe-dangelo-kdab",
+            "title": "4. QtWS17 - Multithreading with Qt - Giuseppe D’Angelo, KDAB",
+            "number": null
+          },
+          {
+            "id": "the-clean-architecture-in-python",
+            "title": "5. The Clean Architecture in Python",
+            "number": null
+          },
+          {
+            "id": "ssl-tls-https-explained",
+            "title": "6. SSL, TLS, HTTPS Explained",
+            "number": null
+          },
+          {
+            "id": "websockets-crash-course---handshake-use-cases-pros-cons-and-more",
+            "title": "7. WebSockets Crash Course - Handshake, Use-cases, Pros & Cons and more",
+            "number": null
+          },
+          {
+            "id": "norman-casagrande-wavenet-whats-behind-googles-voice",
+            "title": "8. Norman Casagrande: WaveNet, what’s behind Google’s voice",
+            "number": null
+          },
+          {
+            "id": "digital-audio-compression---computerphile",
+            "title": "9. Digital Audio Compression - Computerphile",
+            "number": null
+          },
+          {
+            "id": "thundering-herd-problem-and-how-not-to-do-api-retries",
+            "title": "10. Thundering Herd Problem and How not to do API retries",
+            "number": null
+          },
+          {
+            "id": "distributed-systems-lecture-series-playlist",
+            "title": "11. Distributed Systems lecture series (playlist)",
+            "number": null
+          },
+          {
+            "id": "atomic-file-replacement-os.rename-vs-os.replace-intermediate-anthony-explains-264",
+            "title": "12. atomic file replacement (os.rename vs os.replace) (intermediate) anthony explains #264",
+            "number": null
+          },
+          {
+            "id": "dustin-ingram---inside-the-cheeseshop-how-python-packaging-works---pycon-2018",
+            "title": "13. Dustin Ingram - Inside the Cheeseshop: How Python Packaging Works - PyCon 2018",
+            "number": null
+          },
+          {
+            "id": "packaging-with-pyinstaller",
+            "title": "14. Packaging with PyInstaller",
+            "number": null
+          },
+          {
+            "id": "github-actions-tutorial---basic-concepts-and-cicd-pipeline-with-docker",
+            "title": "15. GitHub Actions Tutorial - Basic Concepts and CI/CD Pipeline with Docker",
+            "number": null
+          }
+        ]
       },
       {
         "id": "ch029",
@@ -927,11 +1576,18 @@
   {
     "slug": "spoonstill",
     "title": "Understanding spoonstill",
-    "subtitle": null,
-    "author": "Generated for Vijay Puwar",
+    "subtitle": "A beginner-to-deep-dive guide to the architecture, Rust code, FFmpeg pipeline, desktop application, testing and engineering decisions",
+    "author": "Vijaysingh Puwar",
     "date": "2026-10-07",
     "description": "A study guide to the spoonstill repository at commit 7948f2496e08e5f7d22a7f57f04a83a69e4c66cd (v0.1.19).",
-    "subjects": [],
+    "subjects": [
+      "Rust",
+      "FFmpeg",
+      "video rendering",
+      "text-to-speech",
+      "desktop applications",
+      "software architecture"
+    ],
     "cover": {
       "src": "/books/spoonstill/cover.webp",
       "width": 640,

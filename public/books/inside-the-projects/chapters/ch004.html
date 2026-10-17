@@ -1,0 +1,592 @@
+<section id="chapter-4-breachscope-an-honest-live-threat-map" class="level1">
+<h1><span class="header-section-number">4</span> BreachScope, an Honest Live Threat Map</h1>
+<p>Public "cyber attack maps" are some of the most shared security images on the internet, and some of the least trustworthy. BreachScope is the author's answer to them: a live map of threat-intelligence records in which every dot can tell you who reported it, under what licence, when, and how precisely its location is known. This chapter walks through the whole system, from the Go code that politely pulls public feeds, through the Postgres schema built for a resumable live stream, to the React and MapLibre front end and the optional Azure honeypot that signs its own data.</p>
+<section id="breachscope" class="level2">
+<h2>BreachScope</h2>
+<section id="at-a-glance-2" class="level3">
+<h3>At a Glance</h3>
+<p>BreachScope is a web console that shows cyber threats reported by public security feeds on a flat map or a 3D globe. A Go backend pulls six free threat-intelligence sources (plus two optional ones), works out where each reported IP address is, and serves one merged snapshot. A React front end draws that snapshot and lets you click any dot to see its full provenance (where the record came from). It is aimed at students, analysts and curious visitors who want to see real threat data without being misled by vendor marketing maps. The whole system runs for $0 a month on free tiers.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Go, TypeScript, SQL, HCL (Terraform), Python, shell</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>chi (Go router), React 18, Vite, Tailwind CSS 4</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>pgx v5, maxminddb-golang, Testcontainers, MapLibre GL 6, three.js, Radix UI, Playwright, axe-core</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Vercel (static site plus Go function), Docker, optional Azure VM</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td><a href="https://github.com/VijaysinghPuwar/BreachScope" target="_blank" rel="noopener noreferrer">github.com/VijaysinghPuwar/BreachScope</a></td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Live at breachscope-live.vercel.app. Feed snapshot, map, reports and space view shipped. Database stream built and tested but not yet wired to the UI. Auth, investigations and anomaly jobs are planned (schema only).</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-2" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Imagine a newsroom that watches several wire services. Each wire service (a "feed") publishes a list of things it has spotted: a server that controls a botnet, a web address that hands out malware, a computer that keeps scanning the internet, a software flaw that criminals are actively using, a company that has just admitted a data breach.</p>
+<p>BreachScope is the editor at that newsroom. Every few minutes the editor checks each wire, but never more often than the wire asks, and always asks "has anything changed since last time?" so the wire can simply answer "no". For each new item the editor looks up the address in a big printed atlas of internet addresses (the DB-IP database) to find the city. If the atlas only knows the country, the editor writes "country only" and refuses to invent a city.</p>
+<p>The editor then pins every item on a wall map. Next to each pin is an index card listing the source, its licence, three different timestamps, how confident the source is, and how accurate the location is. Visitors to the newsroom do not each call the wire services. They all read the same wall map, which is photocopied once and handed out from a front desk (the CDN cache). So a thousand visitors cause the same number of wire checks as one visitor.</p>
+<p>One rule makes BreachScope different from the famous attack maps: it only draws a line from A to B when it actually knows both A and B. A feed that says "this IP is bad" names one place, so it becomes a dot, not an arrow. The only arrows come from the author's own honeypot (a fake server that attackers try to break into), where the attacker's address and the target are both known for certain.</p>
+</section>
+<section id="architecture-2" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> Public feeds (no account needed)        Optional sources
+ ThreatFox  URLhaus  Feodo Tracker       Cloudflare Radar (token)
+ DShield    CISA KEV Have I Been Pwned   Cowrie honeypot (Azure)
+        |  conditional GET,                    |  Ed25519-signed
+        |  min interval per feed               |  JSON over HTTP
+        v                                      v
+ +--------------------- Vercel ($0) -------------------------+
+ |  api/index.go  (Go function, chi router)                  |
+ |    feeds.Hub ---- refresh, normalise, place IPs           |
+ |       |                                                   |
+ |       +--&gt; geoip (DB-IP Lite .mmdb compiled in)           |
+ |       |                                                   |
+ |    GET /api/live  -&gt; JSON encoded + gzipped once          |
+ |    GET /api/healthz                                       |
+ |    GET /api/events, /api/stream  (need DATABASE_URL)      |
+ |                        |                                  |
+ |  CDN: s-maxage=120, stale-while-revalidate=600            |
+ |                        |                                  |
+ |  web/dist  (React SPA, MapLibre, lazy three.js)           |
+ +------------------------|----------------------------------+
+                          | poll every 60 s
+                          v
+                 Browser: map, feed, reports
+                          ^
+                          | (stage two, built and tested)
+ Postgres 16 (Neon or Docker) &lt;-- /api/events cursor paging
+                               &lt;-- /api/stream SSE resume</code></pre>
+<p>The pieces talk like this:</p>
+<ul>
+<li><strong><code>api/index.go</code></strong> is the Vercel entry point. Vercel rewrites every <code>/api/*</code> path to it, and the chi router inside dispatches on the original path.</li>
+<li><strong><code>pkg/app</code></strong> builds the router from configuration. Both the Vercel function and the local <code>cmd/apiserver</code> call the same <code>app.Build</code>, so production and Docker run identical code.</li>
+<li><strong><code>pkg/feeds</code></strong> holds one <code>Source</code> description per feed and a <code>Hub</code> that refreshes them, keeps the last good data in memory and builds the merged snapshot.</li>
+<li><strong><code>pkg/geoip</code></strong> turns an IP address into a city, country and network owner using DB-IP Lite files.</li>
+<li><strong><code>pkg/httpapi</code></strong> defines the routes and the JSON error format.</li>
+<li><strong><code>pkg/store</code>, <code>pkg/stream</code>, <code>pkg/db</code></strong> are the database tier: hand-written SQL, a server-sent events stream with resume, a small connection pool and migrations. They work and are tested, but the live site currently runs without a database and the browser uses <code>/api/live</code>.</li>
+<li><strong><code>web/</code></strong> is the React app. <code>web/src/map</code> holds the MapLibre layers, <code>web/src/space</code> the three.js space view, <code>web/src/lib</code> the data hooks.</li>
+<li><strong><code>infra/azure</code></strong> is Terraform plus a cloud-init template for the optional Cowrie honeypot and its signed exporter.</li>
+</ul>
+</section>
+<section id="deep-dive-2" class="level3">
+<h3>Deep Dive</h3>
+<section id="the-security-problem-being-addressed" class="level4">
+<h4>The security problem being addressed</h4>
+<p>Threat intelligence (information about attackers, their servers and their tools) is published by many free sources, but each one uses its own format and its own meaning. A ThreatFox record says "this IP:port was seen as a botnet command server". A DShield record says "this IP sent many packets to our sensors". A CISA KEV record says "this software bug is being exploited", with no location at all. A Have I Been Pwned record says "this company leaked this many accounts".</p>
+<p>Popular attack maps flatten all of that into glowing arcs between countries. The planning document (<code>plan.md</code>, section 3) states the gap directly: public maps from big vendors "show one vendor's sensors as arcs plus a feed. Their public pages do not show provenance, confidence, drill-down or replay." BreachScope's thesis is that a security tool should never overstate what it knows. That idea drives almost every design choice below: the data-class badges, the <code>geo_method</code> field, the refusal to draw country-centre dots, and the "arcs only when both ends are known" rule.</p>
+</section>
+<section id="data-classes-one-vocabulary-for-six-very-different-feeds" class="level4">
+<h4>Data classes: one vocabulary for six very different feeds</h4>
+<p>Every record carries a <code>data_class</code>. The set is fixed in three places that must agree: a Postgres <code>CHECK</code> constraint, a Go validation map in <code>pkg/store/events.go</code>, and the front end's <code>classCodes</code> table in <code>web/src/data/live.ts</code>.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr>
+<th>data_class</th>
+<th>UI badge</th>
+<th>Meaning</th>
+<th>Drawn as</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>indicator</code></td>
+<td>IOC</td>
+<td>Reported as malicious, not an observed attack</td>
+<td>Point</td>
+</tr>
+<tr>
+<td><code>aggregate_telemetry</code></td>
+<td>AGG</td>
+<td>A third party's counted observations</td>
+<td>Point (DShield), list only (Radar)</td>
+</tr>
+<tr>
+<td><code>telemetry</code></td>
+<td>TEL</td>
+<td>Seen directly on our own sensor</td>
+<td>Arc to the sensor</td>
+</tr>
+<tr>
+<td><code>vulnerability</code></td>
+<td>KEV</td>
+<td>Exploited CVE, not geographic</td>
+<td>Timeline and Reports</td>
+</tr>
+<tr>
+<td><code>breach_report</code></td>
+<td>BRCH</td>
+<td>Public breach disclosure</td>
+<td>Reports and alerts</td>
+</tr>
+<tr>
+<td><code>simulated</code></td>
+<td>SIM</td>
+<td>Demo data</td>
+<td>Off by default</td>
+</tr>
+</tbody>
+</table></div>
+<p>An IOC (indicator of compromise) is a piece of evidence such as an IP, URL or file hash that is associated with malicious activity. The badge exists because "this IP was reported" and "this IP attacked us" are very different claims, and the UI must never let one pass for the other.</p>
+</section>
+<section id="data-sources-and-how-each-is-parsed" class="level4">
+<h4>Data sources and how each is parsed</h4>
+<p><code>pkg/feeds/sources.go</code> defines the default sources. Each <code>Source</code> is a plain struct: a name, data class, licence, the URL to fetch, a minimum refresh interval, an optional <code>Verify</code> function and a <code>Parse</code> function that turns the response body into <code>store.Event</code> values.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr>
+<th>Source</th>
+<th>Feed</th>
+<th>Interval</th>
+<th>Data class</th>
+<th>Licence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ThreatFox (abuse.ch)</td>
+<td><code>export/json/recent/</code></td>
+<td>5 min</td>
+<td>indicator</td>
+<td>CC0</td>
+</tr>
+<tr>
+<td>URLhaus (abuse.ch)</td>
+<td><code>downloads/json_recent/</code></td>
+<td>5 min</td>
+<td>indicator</td>
+<td>CC0</td>
+</tr>
+<tr>
+<td>Feodo Tracker (abuse.ch)</td>
+<td><code>ipblocklist.json</code></td>
+<td>15 min</td>
+<td>indicator</td>
+<td>CC0</td>
+</tr>
+<tr>
+<td>SANS ISC DShield</td>
+<td><code>api/sources/attacks/100</code></td>
+<td>30 min</td>
+<td>aggregate_telemetry</td>
+<td>CC BY-NC-SA 4.0</td>
+</tr>
+<tr>
+<td>CISA KEV</td>
+<td><code>known_exploited_vulnerabilities.json</code></td>
+<td>1 h</td>
+<td>vulnerability</td>
+<td>CC0</td>
+</tr>
+<tr>
+<td>Have I Been Pwned</td>
+<td><code>api/v3/breaches</code></td>
+<td>1 h</td>
+<td>breach_report</td>
+<td>CC BY 4.0</td>
+</tr>
+<tr>
+<td>Cloudflare Radar (optional)</td>
+<td>Layer 7 top attack pairs</td>
+<td>1 h</td>
+<td>aggregate_telemetry</td>
+<td>CC BY-NC 4.0</td>
+</tr>
+<tr>
+<td>Cowrie sensor (optional)</td>
+<td>own exporter <code>/events</code></td>
+<td>2 min</td>
+<td>telemetry</td>
+<td>own data</td>
+</tr>
+</tbody>
+</table></div>
+<p>The parsers encode a surprising amount of security judgement:</p>
+<ul>
+<li><strong>ThreatFox.</strong> The <code>threat_type</code> decides the category and severity: <code>botnet_cc</code> becomes "C2 server" at severity 3, <code>payload_delivery</code> severity 2, anything else "Malware indicator". A C2 (command and control) server is the machine that sends orders to infected computers. Only <code>ip:port</code> indicators are geolocated. URL indicators are stored defanged, domains have their dots replaced with <code>[.]</code>, and hashes are kept as attributes.</li>
+<li><strong>URLhaus.</strong> A malware URL is severity 2 if it is still <code>online</code>, else 1. If the URL's host is a literal IP, it is located; if it is a domain name, it is not resolved.</li>
+<li><strong>Feodo Tracker.</strong> Verified botnet C2 servers (for families such as Dridex or Emotet). Online servers are severity 3. <code>last_online</code> becomes <code>observed_at</code> and <code>first_seen</code> becomes <code>reported_at</code>.</li>
+<li><strong>DShield.</strong> The SANS Internet Storm Center's list of top attacking sources. Severity rises to 2 at 100,000 reports. The confidence basis string records both numbers, for example "Seen by DShield sensors: N reports against M targets". The parser also fixes a quirk: some DShield endpoints zero-pad IPv4 octets (<code>079.124.059.078</code>), which Go's strict <code>netip</code> parser rejects, so <code>trimOctets</code> strips the padding first.</li>
+<li><strong>CISA KEV.</strong> The Known Exploited Vulnerabilities catalogue. Only entries added in the last 30 days are kept. Every entry is severity 3, raised to 4 when <code>knownRansomwareCampaignUse</code> is <code>Known</code>. Confidence is 100 because CISA is the authority for this list.</li>
+<li><strong>Have I Been Pwned.</strong> Breaches added in the last 90 days. Fabricated breaches, spam lists and sensitive breaches are skipped. Severity comes from <code>breachSeverity</code>: any leak of passwords, card data, bank numbers, government IDs or social security numbers is severity 4 regardless of size; otherwise 1M or more records is 3, 100k or more is 2. Verified breaches get confidence 100, unverified ones 50.</li>
+</ul>
+<p>Two caps keep the snapshot small: <code>recentWindow</code> (48 hours) for the large abuse.ch exports, <code>perSourceCap</code> (1,200) so one busy feed cannot crowd out the others, and <code>MaxEvents</code> (3,000) for the merged result.</p>
+<p>Here is the helper that makes malicious URLs safe to display:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb2-1"><span class="co">// defang makes a malicious URL safe to display and</span></span>
+<span id="cb2-2"><span class="co">// impossible to click by accident: http becomes hxxp and</span></span>
+<span id="cb2-3"><span class="co">// the dots in the host become [.].</span></span>
+<span id="cb2-4"><span class="kw">func</span> defang<span class="op">(</span>raw <span class="dt">string</span><span class="op">)</span> <span class="dt">string</span> <span class="op">{</span></span>
+<span id="cb2-5">    u<span class="op">,</span> err <span class="op">:=</span> url<span class="op">.</span>Parse<span class="op">(</span>raw<span class="op">)</span></span>
+<span id="cb2-6">    <span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">||</span> u<span class="op">.</span>Host <span class="op">==</span> <span class="st">""</span> <span class="op">{</span></span>
+<span id="cb2-7">        <span class="cf">return</span> strings<span class="op">.</span>ReplaceAll<span class="op">(</span>raw<span class="op">,</span> <span class="st">"http"</span><span class="op">,</span> <span class="st">"hxxp"</span><span class="op">)</span></span>
+<span id="cb2-8">    <span class="op">}</span></span>
+<span id="cb2-9">    host <span class="op">:=</span> strings<span class="op">.</span>ReplaceAll<span class="op">(</span>u<span class="op">.</span>Host<span class="op">,</span> <span class="st">"."</span><span class="op">,</span> <span class="st">"[.]"</span><span class="op">)</span></span>
+<span id="cb2-10">    scheme <span class="op">:=</span> strings<span class="op">.</span>Replace<span class="op">(</span>u<span class="op">.</span>Scheme<span class="op">,</span> <span class="st">"http"</span><span class="op">,</span> <span class="st">"hxxp"</span><span class="op">,</span> <span class="dv">1</span><span class="op">)</span></span>
+<span id="cb2-11">    rest <span class="op">:=</span> strings<span class="op">.</span>TrimPrefix<span class="op">(</span>raw<span class="op">,</span> u<span class="op">.</span>Scheme<span class="op">+</span><span class="st">"://"</span><span class="op">+</span>u<span class="op">.</span>Host<span class="op">)</span></span>
+<span id="cb2-12">    <span class="cf">return</span> scheme <span class="op">+</span> <span class="st">"://"</span> <span class="op">+</span> host <span class="op">+</span> rest</span>
+<span id="cb2-13"><span class="op">}</span></span></code></pre></div>
+<p>"Defanging" is a standard analyst convention: <code>http://evil.example/x</code> becomes <code>hxxp://evil[.]example/x</code>. Browsers and chat apps will not turn it into a live link, so nobody infects themselves by clicking a record. It is applied on the server, so no client can forget to do it.</p>
+</section>
+<section id="stable-event-identifiers" class="level4">
+<h4>Stable event identifiers</h4>
+<p>Every event needs an ID that is the same each time the same upstream record is seen, so the browser can merge polls without duplicates and the database can ignore re-ingested rows. <code>uid</code> in <code>pkg/feeds/hub.go</code> hashes <code>source + "|" + upstream id</code> with SHA-256 and formats the first 16 bytes as a UUID, setting the version and variant bits so it looks like a name-based UUID (a UUID derived deterministically from a name rather than at random). The upstream ID differs by feed: ThreatFox's numeric ID, Feodo's IP, DShield's <code>ip|lastseen</code>, KEV's CVE number, HIBP's breach name, the sensor's <code>ip|protocol|hour</code>.</p>
+</section>
+<section id="the-refresh-engine-feeds.hub" class="level4">
+<h4>The refresh engine: <code>feeds.Hub</code></h4>
+<p><code>Hub</code> is the heart of the backend. It holds per-source state (<code>sourceState</code>): the last events, the last attempt time, the last success time, the last error, and the <code>ETag</code> and <code>Last-Modified</code> values from the previous response.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb3-1"><span class="kw">func</span> <span class="op">(</span>h <span class="op">*</span>Hub<span class="op">)</span> Snapshot<span class="op">(</span>ctx context<span class="op">.</span>Context<span class="op">)</span> Snapshot <span class="op">{</span></span>
+<span id="cb3-2">    h<span class="op">.</span>mu<span class="op">.</span>Lock<span class="op">()</span></span>
+<span id="cb3-3">    done <span class="op">:=</span> h<span class="op">.</span>refresh</span>
+<span id="cb3-4">    <span class="cf">if</span> done <span class="op">==</span> <span class="ot">nil</span> <span class="op">&amp;&amp;</span> h<span class="op">.</span>anyDue<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-5">        done <span class="op">=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="kw">struct</span><span class="op">{})</span></span>
+<span id="cb3-6">        h<span class="op">.</span>refresh <span class="op">=</span> done</span>
+<span id="cb3-7">        <span class="cf">go</span> h<span class="op">.</span>runRefresh<span class="op">(</span>done<span class="op">)</span></span>
+<span id="cb3-8">    <span class="op">}</span></span>
+<span id="cb3-9">    h<span class="op">.</span>mu<span class="op">.</span>Unlock<span class="op">()</span></span>
+<span id="cb3-10"></span>
+<span id="cb3-11">    <span class="cf">if</span> done <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb3-12">        <span class="cf">select</span> <span class="op">{</span></span>
+<span id="cb3-13">        <span class="cf">case</span> <span class="op">&lt;-</span>done<span class="op">:</span></span>
+<span id="cb3-14">        <span class="cf">case</span> <span class="op">&lt;-</span>ctx<span class="op">.</span>Done<span class="op">():</span></span>
+<span id="cb3-15">        <span class="op">}</span></span>
+<span id="cb3-16">    <span class="op">}</span></span>
+<span id="cb3-17">    <span class="cf">return</span> h<span class="op">.</span>build<span class="op">()</span></span>
+<span id="cb3-18"><span class="op">}</span></span></code></pre></div>
+<p>This is a "single-flight" pattern: no matter how many requests arrive, at most one refresh runs. The <code>refresh</code> field is a channel that exists only while a refresh is running. The first caller that finds a source past its <code>MinInterval</code> creates the channel and starts the refresh in a goroutine (Go's lightweight thread). Every other caller sees the existing channel and waits on it. When the refresh finishes it closes the channel, which wakes all waiters at once. If a visitor's request context ends first (they closed the tab), that visitor gets whatever is in memory and leaves; the refresh keeps going.</p>
+<p><code>runRefresh</code> deliberately runs on <code>context.Background()</code> with a 45-second timeout, not on the visitor's context. The comment explains: "a slow feed should finish and be cached even if the visitor who triggered it has gone." Inside, every due source is fetched in parallel with a <code>sync.WaitGroup</code>. Each result updates state under the mutex with three outcomes: an error keeps the old events and records <code>lastError</code>; a <code>304 Not Modified</code> counts as a success and keeps the old events; a new body replaces the events and stores the new validators.</p>
+<p>The test <code>TestHubIsPoliteToFeeds</code> proves the behaviour with a fake clock and a fake server: 20 concurrent <code>Snapshot</code> calls cause exactly one upstream hit; a call inside the interval causes none; a call after the interval sends <code>If-None-Match</code> and gets a 304 with data kept; a 429 response is reported as <code>last_error</code> while the last good data stays on screen. The same test checks that the <code>User-Agent</code> names the project and includes a contact address, because DShield asks for that.</p>
+</section>
+<section id="fetching-politely" class="level4">
+<h4>Fetching politely</h4>
+<p><code>pkg/feeds/fetch.go</code> builds each request. It sets a <code>User-Agent</code> with the project URL and a contact address, <code>Accept: application/json</code>, any per-source headers (the Radar bearer token), and the conditional headers <code>If-Modified-Since</code> and <code>If-None-Match</code>. These conditional headers let the server reply with a tiny 304 instead of resending a 20 MB file. The body is read through <code>io.LimitReader</code> capped at 64 MB, because the largest feed (URLhaus recent) is about 20 MB and an unbounded read could exhaust memory if a feed misbehaved. If a source has a <code>Verify</code> function, it runs before parsing, so tampered data never reaches the parser.</p>
+</section>
+<section id="encode-once-serve-many" class="level4">
+<h4>Encode once, serve many</h4>
+<p>Under local load testing, the hot path turned out not to be the feeds but JSON encoding: the comment in <code>hub.go</code> records that encoding 2,000+ events per request capped throughput at about 60 requests a second. The fix is a version counter. Every refresh bumps <code>h.version</code>. <code>EncodedSnapshot</code> keeps the last JSON bytes, their gzip form and an ETag, and rebuilds them only when the version has changed.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1">body<span class="op">,</span> err <span class="op">:=</span> json<span class="op">.</span>Marshal<span class="op">(</span>h<span class="op">.</span>buildLocked<span class="op">())</span></span>
+<span id="cb4-2"><span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb4-3">    <span class="cf">return</span> <span class="ot">nil</span><span class="op">,</span> err</span>
+<span id="cb4-4"><span class="op">}</span></span>
+<span id="cb4-5"><span class="kw">var</span> buf bytes<span class="op">.</span>Buffer</span>
+<span id="cb4-6">zw<span class="op">,</span> _ <span class="op">:=</span> gzip<span class="op">.</span>NewWriterLevel<span class="op">(&amp;</span>buf<span class="op">,</span> gzip<span class="op">.</span>BestSpeed<span class="op">)</span></span>
+<span id="cb4-7"><span class="cf">if</span> _<span class="op">,</span> err <span class="op">:=</span> zw<span class="op">.</span>Write<span class="op">(</span>body<span class="op">);</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb4-8">    <span class="cf">return</span> <span class="ot">nil</span><span class="op">,</span> err</span>
+<span id="cb4-9"><span class="op">}</span></span>
+<span id="cb4-10"><span class="cf">if</span> err <span class="op">:=</span> zw<span class="op">.</span>Close<span class="op">();</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb4-11">    <span class="cf">return</span> <span class="ot">nil</span><span class="op">,</span> err</span>
+<span id="cb4-12"><span class="op">}</span></span>
+<span id="cb4-13">sum <span class="op">:=</span> sha256<span class="op">.</span>Sum256<span class="op">(</span>body<span class="op">)</span></span>
+<span id="cb4-14">h<span class="op">.</span>encoded <span class="op">=</span> <span class="op">&amp;</span>Encoded<span class="op">{</span>JSON<span class="op">:</span> body<span class="op">,</span> Gzip<span class="op">:</span> buf<span class="op">.</span>Bytes<span class="op">(),</span></span>
+<span id="cb4-15">    ETag<span class="op">:</span> fmt<span class="op">.</span>Sprintf<span class="op">(</span><span class="st">`"%x"`</span><span class="op">,</span> sum<span class="op">[:</span><span class="dv">12</span><span class="op">])}</span></span>
+<span id="cb4-16">h<span class="op">.</span>encodedVersion <span class="op">=</span> h<span class="op">.</span>version</span></code></pre></div>
+<p>The ETag (entity tag, a fingerprint of the response) is the first 12 bytes of the body's SHA-256. The README reports the snapshot going from 1.4 MB to 175 KB after gzip. The <code>live</code> handler in <code>pkg/httpapi/router.go</code> then does three cheap things: answers <code>304</code> if the browser's <code>If-None-Match</code> matches, sends the pre-gzipped bytes if the client accepts gzip, and sets <code>Cache-Control: public, max-age=30, s-maxage=120, stale-while-revalidate=600</code>. That header tells Vercel's CDN it may serve the same bytes for two minutes and keep serving a stale copy for ten more while it fetches a fresh one in the background. In practice most page views never reach the Go function at all, so they never reach the feed operators either.</p>
+</section>
+<section id="geolocation-honest-by-construction" class="level4">
+<h4>Geolocation: honest by construction</h4>
+<p><code>pkg/geoip/geoip.go</code> wraps DB-IP Lite, a free IP-to-location database under CC BY 4.0. The files use the MaxMind <code>.mmdb</code> format: a binary search tree over IP ranges, so a lookup is a handful of memory reads and needs no network call. There are two files: city (country, city, coordinates) and ASN. An ASN (autonomous system number) identifies the network that announces an IP range, such as a hosting company or ISP.</p>
+<p>The important logic is in <code>Lookup</code>:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb5-1"><span class="kw">func</span> <span class="op">(</span>d <span class="op">*</span>DB<span class="op">)</span> Lookup<span class="op">(</span>ip netip<span class="op">.</span>Addr<span class="op">)</span> <span class="op">(</span>loc Location<span class="op">,</span> ok <span class="dt">bool</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-2">    <span class="cf">if</span> d <span class="op">==</span> <span class="ot">nil</span> <span class="op">||</span> <span class="op">!</span>ip<span class="op">.</span>IsValid<span class="op">()</span> <span class="op">||</span></span>
+<span id="cb5-3">        <span class="op">!</span>ip<span class="op">.</span>IsGlobalUnicast<span class="op">()</span> <span class="op">||</span> ip<span class="op">.</span>IsPrivate<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb5-4">        <span class="cf">return</span> loc<span class="op">,</span> <span class="ot">false</span></span>
+<span id="cb5-5">    <span class="op">}</span></span>
+<span id="cb5-6">    <span class="kw">var</span> rec cityRecord</span>
+<span id="cb5-7">    err <span class="op">:=</span> d<span class="op">.</span>city<span class="op">.</span>Lookup<span class="op">(</span>ip<span class="op">.</span>Unmap<span class="op">()).</span>Decode<span class="op">(&amp;</span>rec<span class="op">)</span></span>
+<span id="cb5-8">    <span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">||</span> rec<span class="op">.</span>Country<span class="op">.</span>ISOCode <span class="op">==</span> <span class="st">""</span> <span class="op">{</span></span>
+<span id="cb5-9">        <span class="cf">return</span> loc<span class="op">,</span> <span class="ot">false</span></span>
+<span id="cb5-10">    <span class="op">}</span></span>
+<span id="cb5-11">    loc<span class="op">.</span>CountryCode <span class="op">=</span> strings<span class="op">.</span>ToUpper<span class="op">(</span>rec<span class="op">.</span>Country<span class="op">.</span>ISOCode<span class="op">)</span></span>
+<span id="cb5-12">    loc<span class="op">.</span>CountryName <span class="op">=</span> rec<span class="op">.</span>Country<span class="op">.</span>Names<span class="op">[</span><span class="st">"en"</span><span class="op">]</span></span>
+<span id="cb5-13">    loc<span class="op">.</span>City <span class="op">=</span> rec<span class="op">.</span>City<span class="op">.</span>Names<span class="op">[</span><span class="st">"en"</span><span class="op">]</span></span>
+<span id="cb5-14">    <span class="co">// DB-IP also carries coordinates for country-only</span></span>
+<span id="cb5-15">    <span class="co">// records (the country's centre); never draw those.</span></span>
+<span id="cb5-16">    <span class="cf">if</span> rec<span class="op">.</span>Location<span class="op">.</span>Latitude <span class="op">!=</span> <span class="ot">nil</span> <span class="op">&amp;&amp;</span></span>
+<span id="cb5-17">        rec<span class="op">.</span>Location<span class="op">.</span>Longitude <span class="op">!=</span> <span class="ot">nil</span> <span class="op">&amp;&amp;</span> loc<span class="op">.</span>City <span class="op">!=</span> <span class="st">""</span> <span class="op">{</span></span>
+<span id="cb5-18">        loc<span class="op">.</span>Lat<span class="op">,</span> loc<span class="op">.</span>Lon <span class="op">=</span> <span class="op">*</span>rec<span class="op">.</span>Location<span class="op">.</span>Latitude<span class="op">,</span> <span class="op">...</span></span>
+<span id="cb5-19">        loc<span class="op">.</span>HasPoint <span class="op">=</span> <span class="ot">true</span></span>
+<span id="cb5-20">    <span class="op">}</span></span>
+<span id="cb5-21">    <span class="op">...</span></span>
+<span id="cb5-22"><span class="op">}</span></span></code></pre></div>
+<p>Private, loopback and link-local addresses are never looked up. A result counts as city-level only when it has both a city name and coordinates. DB-IP stores the centre of the country for records it cannot place more precisely, and drawing that would pile fake dots in the middle of Kansas or central Russia. So such records get <code>geo_method = dbip_country</code> and no coordinates, and the front end shades the country polygon instead. <code>Location.Method</code> returns one of <code>dbip_city_lite</code>, <code>dbip_country</code> or <code>none</code>, and every event carries it. DB-IP Lite publishes no accuracy radius, so <code>geo_accuracy_km</code> is left empty rather than guessed.</p>
+<p>One more principled choice: URLs and domains are never DNS-resolved to find their IP. <code>pkg/feeds/NOTES.md</code> explains that resolving would contact infrastructure run by the people being tracked, and the answer changes with the resolver and the time.</p>
+<p>The geo database has two loading paths, chosen with a Go build tag (a compile-time switch that includes or excludes files). Vercel's Go runtime does not ship extra files next to a function, so the production build downloads the databases into <code>pkg/geoip/embedded/</code> and compiles with <code>-tags geoembed</code>, which activates <code>embed_on.go</code> and its <code>//go:embed</code> directives. Without the tag, <code>embed_off.go</code> is used and <code>app.openGeo</code> searches <code>GEOIP_DIR</code>, <code>geo/</code>, <code>../geo</code> and the executable's folder. If no database is found, the feeds still work and events simply carry no location; <code>/api/healthz</code> reports the reason in its <code>geo</code> field.</p>
+</section>
+<section id="cloudflare-radar-and-the-arcs-that-were-removed" class="level4">
+<h4>Cloudflare Radar and the arcs that were removed</h4>
+<p><code>pkg/feeds/radar.go</code> reads Cloudflare Radar's Layer 7 "top attacks" endpoint, which lists origin and target country pairs with their share of mitigated application-layer attack traffic over 24 hours. It is enabled only when <code>CLOUDFLARE_API_TOKEN</code> is set. Each pair is placed using country label points from Natural Earth (embedded as <code>centroids.json</code>) and tagged <code>geo_method = country_centroid</code>. Severity is 3 at a 10% share or more and 2 at 3% or more.</p>
+<p>The project's history shows the rule against overstatement tightening. Commit <code>48ae260</code> added Radar country-pair arcs to the map. Commit <code>e2ef88d</code> ("Draw only exact arcs") then removed them: "Country pairs from Cloudflare Radar name countries, not places, so they are listed in the feed and no longer drawn on the map." In <code>web/src/lib/geometry.ts</code>, <code>mapFeatures</code> now skips any event with a <code>pair</code> outright.</p>
+</section>
+<section id="the-honeypot-sensor-and-ed25519-signatures" class="level4">
+<h4>The honeypot sensor and Ed25519 signatures</h4>
+<p>The only data that becomes an arc on the map comes from the author's own Cowrie honeypot. Cowrie is an open-source fake SSH and Telnet server that pretends to be a vulnerable Linux box and logs everything attackers type. Because the sensor saw the connection itself, both ends of the line are known.</p>
+<p><code>infra/azure/main.tf</code> creates a resource group, a virtual network, a network security group (NSG, Azure's cloud firewall), a static public IP and a <code>Standard_B1s</code> Ubuntu VM, plus a budget alert. A <code>tls_private_key</code> resource generates an Ed25519 key pair. Ed25519 is a modern digital signature scheme: whoever holds the private key can sign data, and anyone with the public key can check the signature but cannot forge one.</p>
+<p>On the VM, <code>exporter.py</code> reads Cowrie's JSON logs, groups the last 48 hours by attacker IP, protocol and hour, counts sessions, login attempts, successful logins and commands, keeps the three most common usernames, and serves it on <code>GET /events</code> (port 8443). Passwords attackers try are never exported. Each response is signed:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb6-1">body <span class="op">=</span> body_now()</span>
+<span id="cb6-2">stamp <span class="op">=</span> <span class="bu">str</span>(<span class="bu">int</span>(time.time()))</span>
+<span id="cb6-3">signature <span class="op">=</span> KEY.sign(stamp.encode() <span class="op">+</span> <span class="st">b"."</span> <span class="op">+</span> body).<span class="bu">hex</span>()</span>
+<span id="cb6-4"><span class="va">self</span>.send_response(<span class="dv">200</span>)</span>
+<span id="cb6-5"><span class="va">self</span>.send_header(<span class="st">"Content-Type"</span>, <span class="st">"application/json"</span>)</span>
+<span id="cb6-6"><span class="va">self</span>.send_header(<span class="st">"Content-Length"</span>, <span class="bu">str</span>(<span class="bu">len</span>(body)))</span>
+<span id="cb6-7"><span class="va">self</span>.send_header(<span class="st">"X-Timestamp"</span>, stamp)</span>
+<span id="cb6-8"><span class="va">self</span>.send_header(<span class="st">"X-Signature"</span>, signature)</span></code></pre></div>
+<p>On the Go side, <code>verifySensor</code> in <code>pkg/feeds/sensor.go</code> recomputes the same message (<code>timestamp + "." + body</code>), checks it with <code>ed25519.Verify</code> against a public key embedded in the binary from <code>sensor_pubkey.pem</code>, and then refuses any response more than 10 minutes old (or more than a minute in the future). Including the timestamp inside the signed message is what stops replay: an attacker who captured an old valid response cannot resend it later, because its signed timestamp would be stale.</p>
+<p><code>parseSensor</code> turns each group into a <code>telemetry</code> event: <code>ssh_bruteforce</code> or <code>telnet_login</code>, severity 3 if the attacker got into the fake shell or ran commands, 2 at 20 or more login attempts, else 1. The destination is set to the published centre of the Azure East US region, with <code>attrs.sensor = "configured · Azure East US"</code>, so the UI says the target position is configured, not geolocated.</p>
+<p>In this checkout <code>sensor_pubkey.pem</code> is empty and <code>sensorDefaultURL</code> is <code>""</code>, so the sensor source stays switched off until the author runs Terraform and commits the two public values (or sets <code>SENSOR_URL</code> for testing). The design means no secret ever has to be stored in Vercel.</p>
+</section>
+<section id="http-api" class="level4">
+<h4>HTTP API</h4>
+<p><code>pkg/httpapi/router.go</code> defines five routes under <code>/api</code>:</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Route</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /api/live</code></td>
+<td>Merged feed snapshot, CDN-cacheable, gzip, ETag</td>
+</tr>
+<tr>
+<td><code>GET /api/healthz</code></td>
+<td>Always 200 with <code>status</code>, <code>db</code>, <code>geo</code>, <code>version</code></td>
+</tr>
+<tr>
+<td><code>GET /api/events</code></td>
+<td>Cursor-paged events from Postgres, with filters</td>
+</tr>
+<tr>
+<td><code>GET /api/stream</code></td>
+<td>Server-sent events with resume</td>
+</tr>
+<tr>
+<td><code>GET /api/sse-test</code></td>
+<td>One tick a second, no database, for streaming proofs</td>
+</tr>
+</tbody>
+</table></div>
+<p>Middleware assigns every request an ID (<code>chi/middleware.RequestID</code>), copies it into an <code>X-Request-ID</code> response header, and recovers from panics. Every error is JSON of the form <code>{"error": "...", "request_id": "..."}</code>, including the 404 for unknown routes. The front end shows that ID in its error banner, so a user can quote it and the author can find the exact log line.</p>
+<p><code>/api/healthz</code> always returns 200 on purpose, so an uptime checker can tell "API up, database down" apart from "API down". It pings the database with a 5-second timeout, long enough for Neon (a serverless Postgres host) to wake from autosuspend.</p>
+<p><code>/api/events</code> parses <code>after</code>, <code>limit</code> (1 to 1000, default 200), <code>class</code> (comma list), <code>min_severity</code>, <code>country</code> and <code>asn</code> (<code>64500</code> or <code>AS64500</code>). <code>parseFilter</code> rejects malformed numbers, and <code>Filter.Validate</code> checks every value against fixed rules before SQL ever sees it.</p>
+</section>
+<section id="database-schema" class="level4">
+<h4>Database schema</h4>
+<p><code>pkg/db/migrations/0001_init.sql</code> defines the schema planned for the full product. The core tables are:</p>
+<ul>
+<li><strong><code>source</code></strong>: one row per feed, with <code>data_class</code> (CHECK-constrained), <code>licence</code>, <code>attribution</code>, <code>min_interval</code>, <code>provides_pairs</code> and freshness columns.</li>
+<li><strong><code>category</code></strong>: a small lookup table seeded with labels such as <code>ssh_bruteforce</code>, <code>c2_server</code>, <code>known_exploited_vuln</code> and <code>breach_disclosure</code>.</li>
+<li><strong><code>event</code></strong>: one observation. <code>seq</code> is a <code>bigint GENERATED ALWAYS AS IDENTITY</code> primary key used as the stream cursor. <code>event_uid</code> is <code>uuid UNIQUE</code>. There are columns for severity (CHECK 0 to 4), confidence (0 to 100) with a required <code>confidence_basis</code>, three timestamps (<code>observed_at</code>, <code>reported_at</code>, <code>ingested_at</code>) plus <code>valid_until</code>, source and destination location, <code>geo_method</code>, <code>geo_accuracy_km</code>, an <code>h3_r3</code> cell (H3 is Uber's hexagonal grid; resolution 3 cells are roughly 12,000 square kilometres) and a <code>jsonb</code> attributes column. Two CHECK constraints refuse half a coordinate: <code>(src_lat IS NULL) = (src_lon IS NULL)</code> and the same for the destination.</li>
+<li><strong><code>rollup_hourly</code></strong>: hourly counts kept after raw events are pruned, with <code>UNIQUE NULLS NOT DISTINCT</code> so a NULL country is treated as one value and upserts work.</li>
+<li><strong><code>app_user</code>, <code>user_role</code>, <code>investigation</code>, <code>investigation_event</code>, <code>investigation_share</code></strong>: identity, role-based access and saved investigations. <code>investigation_event</code> stores a JSON snapshot of each pinned event so pruning never breaks an investigation.</li>
+<li><strong><code>anomaly</code></strong>: robust z-score results with every input number stored, so the UI can show its working.</li>
+<li><strong><code>ingest_nonce</code></strong>: one-time values for replay protection on pushed batches.</li>
+</ul>
+<p>Four indexes back the expected queries: <code>observed_at DESC</code> for the newest-first feed; <code>(category, severity, src_country, observed_at DESC)</code> for the common filter; <code>(src_asn, observed_at DESC)</code> for "everything from this network"; and a GiST index on <code>src_ip inet_ops</code>. GiST is a Postgres index type for non-scalar data, and with <code>inet_ops</code> it lets a query like <code>src_ip &lt;&lt; '198.51.100.0/24'</code> ("inside this subnet") use the index.</p>
+<p>The identity, investigation and anomaly tables exist in the migration but no Go code uses them yet. <code>CLAUDE.md</code> and <code>plan.md</code> describe Auth0 OIDC with PKCE, JWT checks, per-object authorization and a robust-z anomaly job as later milestones.</p>
+</section>
+<section id="hand-written-sql-and-cursor-paging" class="level4">
+<h4>Hand-written SQL and cursor paging</h4>
+<p><code>pkg/store/events.go</code> reads events with one query:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode sql"><code class="sourceCode sql"><span id="cb7-1"><span class="kw">SELECT</span> e.seq, e.event_uid:<span class="ch">:text</span>, s.name, s.data_class, <span class="op">..</span>.</span>
+<span id="cb7-2">       abbrev(e.src_ip), e.src_asn, e.src_country, <span class="op">..</span>.</span>
+<span id="cb7-3"><span class="kw">FROM</span> event e</span>
+<span id="cb7-4"><span class="kw">JOIN</span> <span class="kw">source</span> s   <span class="kw">ON</span> s.<span class="kw">id</span> <span class="op">=</span> e.source_id</span>
+<span id="cb7-5"><span class="kw">JOIN</span> <span class="kw">category</span> c <span class="kw">ON</span> c.<span class="kw">id</span> <span class="op">=</span> e.<span class="kw">category</span></span>
+<span id="cb7-6"><span class="kw">WHERE</span> e.seq <span class="op">&gt;</span> $<span class="dv">1</span></span>
+<span id="cb7-7">  <span class="kw">AND</span> (<span class="fu">cardinality</span>($<span class="dv">2</span>:<span class="ch">:text</span>[]) <span class="op">=</span> <span class="dv">0</span> <span class="kw">OR</span> s.data_class <span class="op">=</span> <span class="kw">ANY</span>($<span class="dv">2</span>))</span>
+<span id="cb7-8">  <span class="kw">AND</span> e.severity <span class="op">&gt;=</span> $<span class="dv">3</span></span>
+<span id="cb7-9">  <span class="kw">AND</span> ($<span class="dv">4</span> <span class="op">=</span> <span class="st">''</span> <span class="kw">OR</span> e.src_country <span class="op">=</span> $<span class="dv">4</span>)</span>
+<span id="cb7-10">  <span class="kw">AND</span> ($<span class="dv">5</span> <span class="op">=</span> <span class="dv">0</span> <span class="kw">OR</span> e.src_asn <span class="op">=</span> $<span class="dv">5</span>)</span>
+<span id="cb7-11"><span class="kw">ORDER</span> <span class="kw">BY</span> e.seq</span>
+<span id="cb7-12"><span class="kw">LIMIT</span> $<span class="dv">6</span></span></code></pre></div>
+<p>This is cursor paging (also called keyset pagination): instead of <code>OFFSET 400</code>, which makes Postgres scan and discard 400 rows and shifts when new rows arrive, the client passes back the last <code>seq</code> it saw. The <code>($4 = '' OR ...)</code> pattern lets one statement shape serve every combination of filters: an empty value switches that filter off. All values are bind parameters, so there is no string-built SQL and no injection path. <code>abbrev(src_ip)</code> prints a single host as <code>198.51.100.23</code> instead of <code>198.51.100.23/32</code>. Nullable columns scan into Go pointers and are omitted from JSON when NULL, because "unknown" and "zero" are different facts.</p>
+</section>
+<section id="the-ordering-problem-and-the-advisory-lock" class="level4">
+<h4>The ordering problem and the advisory lock</h4>
+<p><code>InsertEvents</code> in <code>pkg/store/write.go</code> solves a subtle bug that breaks most naive "poll for <code>id &gt; last</code>" designs:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb8-1"><span class="co">// Why the advisory lock: seq comes from an identity</span></span>
+<span id="cb8-2"><span class="co">// column, so two writers can take seq 104 and 105 and</span></span>
+<span id="cb8-3"><span class="co">// commit 105 first. A stream reader polling "seq &gt; 103"</span></span>
+<span id="cb8-4"><span class="co">// would then see 105, move its cursor past 104, and</span></span>
+<span id="cb8-5"><span class="co">// never see 104. Holding one transaction-scoped lock for</span></span>
+<span id="cb8-6"><span class="co">// every writer makes commit order equal seq order.</span></span>
+<span id="cb8-7">err <span class="op">:=</span> pgx<span class="op">.</span>BeginFunc<span class="op">(</span>ctx<span class="op">,</span> s<span class="op">.</span>pool<span class="op">,</span> <span class="kw">func</span><span class="op">(</span>tx pgx<span class="op">.</span>Tx<span class="op">)</span> <span class="dt">error</span> <span class="op">{</span></span>
+<span id="cb8-8">    _<span class="op">,</span> err <span class="op">:=</span> tx<span class="op">.</span>Exec<span class="op">(</span>ctx<span class="op">,</span></span>
+<span id="cb8-9">        <span class="st">`SELECT pg_advisory_xact_lock($1)`</span><span class="op">,</span> writerLockKey<span class="op">)</span></span>
+<span id="cb8-10">    <span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb8-11">        <span class="cf">return</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">"take writer lock: %w"</span><span class="op">,</span> err<span class="op">)</span></span>
+<span id="cb8-12">    <span class="op">}</span></span>
+<span id="cb8-13">    <span class="cf">for</span> _<span class="op">,</span> e <span class="op">:=</span> <span class="kw">range</span> evs <span class="op">{</span></span>
+<span id="cb8-14">        <span class="co">// INSERT ... ON CONFLICT (event_uid) DO NOTHING</span></span>
+<span id="cb8-15">    <span class="op">}</span></span>
+<span id="cb8-16">    <span class="cf">return</span> <span class="ot">nil</span></span>
+<span id="cb8-17"><span class="op">})</span></span></code></pre></div>
+<p>An advisory lock is a named mutex that lives inside Postgres; <code>pg_advisory_xact_lock</code> holds it until the transaction ends. Every writer takes the same key, so writers commit one at a time and a reader can never see a later <code>seq</code> before an earlier one. <code>ON CONFLICT (event_uid) DO NOTHING</code> makes ingest idempotent (running it twice has the same effect as once). It also consumes <code>seq</code> values, so <code>seq</code> has gaps and is only ever used as a cursor, never as a count.</p>
+<p><code>pkg/db/db.go</code> adds serverless-specific tuning. The pool keeps at most 4 connections and drops idle ones after 30 seconds, because a frozen function instance would otherwise hold Neon connections. It uses <code>QueryExecModeExec</code>, because Neon's pooled URL goes through PgBouncer in transaction mode, where a server-side prepared statement created on one backend connection may not exist on the next. Migrations take a session advisory lock (<code>pg_advisory_lock</code>) so two deploys starting together run one at a time, which is why <code>cmd/migrate</code> prefers the unpooled URL.</p>
+</section>
+<section id="the-resumable-sse-stream" class="level4">
+<h4>The resumable SSE stream</h4>
+<p><code>pkg/stream/stream.go</code> implements server-sent events (SSE): a normal HTTP response with <code>Content-Type: text/event-stream</code> that stays open while the server writes small text messages. Each message has <code>id:</code>, <code>event:</code> and <code>data:</code> lines and a blank line. The browser's built-in <code>EventSource</code> remembers the last <code>id</code> and, when the connection drops, reconnects automatically with a <code>Last-Event-ID</code> header.</p>
+<p>The handler picks a starting cursor (<code>Last-Event-ID</code> wins over <code>?after=</code>; with neither it starts at <code>max(seq)</code> so a new client only gets new events), sends <code>retry: 1000</code>, then loops. Every second it asks Postgres for <code>seq &gt; cursor</code>. If a full batch of 500 comes back it asks again immediately, so a client that reconnects far behind catches up quickly. Each batch is sent with <code>id: &lt;last seq in batch&gt;</code>. An idle connection gets a <code>: ping</code> comment every 15 seconds so proxies do not drop it. At 280 seconds the context deadline fires, the handler sends <code>event: close</code> with <code>{"reason":"max_duration"}</code>, and returns. Vercel's Hobby plan kills functions at 300 seconds, so a planned close at 280 leaves 20 seconds of headroom. The server keeps no state between connections, so any instance can serve the reconnect.</p>
+<p><code>reconnect_integration_test.go</code> is the proof. It starts a real Postgres 16 in Docker with Testcontainers, runs four writers inserting 1,200 events (half the batches sent twice to exercise idempotency), and has a client drop its connection at random points and reconnect with <code>Last-Event-ID</code>. It then compares the set of <code>event_uid</code> values the client received with the set in the database and passes only with zero missing and zero duplicates. It compares sets, not <code>seq</code> numbers, because <code>seq</code> has holes.</p>
+<p><code>/api/sse-test</code> and <code>cmd/ssecheck</code> exist to prove one risky assumption from the plan: that a Go function on Vercel can hold an SSE connection for the full 280 seconds. <code>ssecheck</code> reconnects for an hour and reports connection lengths and missing ticks.</p>
+</section>
+<section id="front-end-data-flow" class="level4">
+<h4>Front end: data flow</h4>
+<p>The React app polls rather than streams for now. <code>web/src/lib/useLiveFeed.ts</code> calls <code>getLive</code> (in <code>lib/api.ts</code>) every 60 seconds with a 20-second abort timeout. On failure it backs off to 5, 15 and then 60 seconds. It pauses entirely while the tab is hidden (<code>visibilitychange</code>), aborting any request in flight, and polls again when the tab returns. <code>getLive</code> validates the response shape before trusting it: arrays present, <code>generated_at</code> parseable, every event with a string <code>event_uid</code>, a known <code>data_class</code> and an integer severity 0 to 4. A bad response becomes a <code>LiveError</code> carrying the request ID.</p>
+<p><code>mergeEvents</code> in <code>lib/live.ts</code> unions the previous and incoming events by <code>event_uid</code> with a <code>Map</code>, sorts newest first and caps at 3,000. It also returns <code>newIds</code>, the set of IDs not seen before, which drives arrival ripples on the map and the arrival toast. On the very first load <code>newIds</code> is empty, so the page does not "arrive" all 3,000 events at once.</p>
+<p><code>toObservation</code> in <code>data/live.ts</code> converts the wire format to the UI model. It sets <code>coordinates</code> only when the event is not a KEV or breach, the method is <code>dbip_city_lite</code> and both numbers are finite. It sets <code>pair</code> only for <code>country_centroid</code> events. <code>isStale</code> marks a source stale when its last success is older than <code>max(24 h, 2 x min_interval)</code>, the same freshness rule <code>plan.md</code> defines.</p>
+</section>
+<section id="front-end-the-map" class="level4">
+<h4>Front end: the map</h4>
+<p><code>web/src/map/MapCanvas.tsx</code> creates a single MapLibre GL map. MapLibre is an open-source WebGL map renderer. The flat/globe toggle calls <code>map.setProjection({ type: 'mercator' | 'globe' })</code> on the same map, so the centre, zoom, filters and selection survive the switch. The base map at low zoom is Natural Earth land, country and label GeoJSON served from the site itself (built by <code>web/scripts/build-geo.mjs</code>); from zoom 4 OpenFreeMap vector tiles fade in for street-level detail (<code>map/detail.ts</code>). A <code>MapErrorBoundary</code> and commit <code>c3ea6fa</code> keep the map up when a tile fails to download.</p>
+<p><code>lib/geometry.ts</code> builds the GeoJSON layers. <code>mapFeatures</code> emits a point per located event, an accuracy circle when <code>geo_accuracy_km</code> is set, and an arc only for <code>TEL</code> events whose destination is the sensor. <code>greatCircle</code> computes the shortest path on a sphere by converting both ends to 3D unit vectors, finding the angle between them, building an orthogonal tangent (with a fallback for antipodal points, where the shortest path is not unique), and stepping along the circle in 96 steps. <code>splitAntimeridian</code> then cuts the line where longitude jumps across 180 degrees, otherwise MapLibre would draw the segment the long way around the world.</p>
+<p>On the globe, arcs are clipped to the visible hemisphere (<code>clipToHemisphere</code>) and re-clipped as the globe turns, at most once per frame. <code>map/arcFlow.ts</code> animates a short bright "head" moving from source to target every 4.2 seconds so the direction is readable. Each arc gets a stable phase from an FNV-1a hash of its ID so they do not pulse together, and the animation stops entirely under <code>prefers-reduced-motion</code> or while the tab is hidden.</p>
+<p>Leaving Earth is intentionally hard. The wheel handler in <code>MapCanvas.tsx</code> only hands over to the space view after the globe has sat at minimum zoom for 400 ms and enough further wheel distance and steps have accumulated, so a single fast flick never jumps (commit <code>dfc0da1</code>, "Make leaving Earth deliberate").</p>
+</section>
+<section id="front-end-the-space-view" class="level4">
+<h4>Front end: the space view</h4>
+<p><code>web/src/space</code> is a three.js scene that continues the zoom from 10 km out to 10^27 metres: Earth and Moon, real planet positions from JPL orbital elements solved with Kepler's equation (<code>astro.ts</code>), nearby stars and galaxies at their J2000 sky coordinates. It is loaded with <code>React.lazy</code> and preloaded in <code>requestIdleCallback</code> so it costs nothing on first paint.</p>
+<p>The interesting engineering problem is precision. GPUs use 32-bit floats, which keep about 7 significant digits, which is useless across a 10^23 range. The engine computes positions in 64-bit JavaScript numbers relative to the camera's target, divides by the camera distance, and hands the GPU only numbers near 1. Textures are drawn procedurally on an <code>OffscreenCanvas</code> in a Web Worker and swapped in nearest first; <code>space/NOTES.md</code> records that opening the view went from a 649 ms main-thread freeze to 83 ms. Every textured material starts with a 1x1 blank texture so swapping in the real one reuses the already-compiled shader.</p>
+</section>
+<section id="front-end-guide-pages-and-accessibility" class="level4">
+<h4>Front end: guide, pages and accessibility</h4>
+<p><code>components/Onboarding.tsx</code> shows a welcome card and an optional six-step tour. Tour targets are found by <code>data-tour</code> attributes that sit on different elements at each screen size, and steps whose target is not on screen are dropped, so one list works on desktop, tablet and phone. The "seen" flag lives in <code>localStorage</code> wrapped in <code>try</code>, because private windows can block storage. A deep link <code>/?event=&lt;uid&gt;</code> skips the welcome. Routes are <code>/</code> (Console), <code>/reports</code>, <code>/status</code>, <code>/about</code> and <code>/space</code>.</p>
+</section>
+<section id="build-packaging-and-deployment" class="level4">
+<h4>Build, packaging and deployment</h4>
+<p><code>vercel.json</code> is the whole deployment description. The install step is <code>npm ci --prefix web</code>. The build step runs <code>scripts/fetch-geo.sh pkg/geoip/embedded</code> (download this month's DB-IP files, falling back to last month early in a month) and then <code>npm run build --prefix web</code>. <code>GO_BUILD_FLAGS</code> sets <code>-ldflags '-s -w' -tags geoembed</code>, which strips debug symbols and compiles in the databases. Rewrites send <code>/api/(.*)</code> to the Go function and every other path to <code>index.html</code> for client-side routing. <code>maxDuration</code> is 300 seconds for the stream.</p>
+<p>The <code>Dockerfile</code> is a two-stage build: <code>golang</code> alpine to compile static (<code>CGO_ENABLED=0</code>) <code>apiserver</code> and <code>migrate</code> binaries, then <code>gcr.io/distroless/static-debian12:nonroot</code>, an image with no shell or package manager, running as a non-root user. <code>compose.yaml</code> runs Postgres 16 and the API for local work; Vite's dev server proxies <code>/api</code> to port 8080.</p>
+<p>Two path names are deliberate workarounds recorded in <code>api/NOTES.md</code>. Shared code lives in <code>pkg/</code>, not <code>internal/</code>, because Vercel compiles <code>index.go</code> inside a generated wrapper module and Go forbids importing another module's <code>internal/</code> packages. The local server is <code>cmd/apiserver</code>, not <code>cmd/api</code>, because Vercel treats <code>cmd/api/main.go</code> as a signal to deploy the whole project as a Go server, which would replace the static site.</p>
+<p>CI (<code>.github/workflows/ci.yml</code>) runs two jobs. The Go job runs <code>go vet</code>, <code>staticcheck</code>, <code>govulncheck</code> (known-vulnerability scan of dependencies), <code>go test -race</code> with Testcontainers Postgres, and a Docker build. The web job runs type checking, ESLint, Vitest, a production build and the Playwright suites, uploading screenshots on failure. Workflow permissions are <code>contents: read</code>.</p>
+</section>
+</section>
+<section id="key-design-decisions-and-trade-offs-2" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Go for the backend.</strong> <code>plan.md</code> justifies Go by job-description analysis (the most requested language the author did not yet have, stronger at security companies), its fit for concurrent polling and streaming, and the fact that one binary runs on Vercel and in a container unchanged. C++ was explicitly rejected with a table showing that load time, latency and frame time are dominated by bytes, Postgres and draw calls, not CPU.</li>
+<li><strong>A snapshot in memory before a database.</strong> The planned architecture was Postgres plus SSE from day one. What shipped first is a database-free <code>/api/live</code> snapshot. The trade-off: no history or replay yet, but zero database cost, no cold starts from Neon, and the CDN can cache the whole response. The database tier is built and tested so the next stage can swap in without redesign.</li>
+<li><strong>CDN caching instead of a scheduler.</strong> Vercel Hobby cron runs at most daily, and the plan notes that GitHub Actions' terms forbid using it as part of a serverless app. Refreshing lazily on request, combined with <code>s-maxage</code> and <code>stale-while-revalidate</code>, gives near-live data without any scheduler.</li>
+<li><strong>Polling at 60 s instead of SSE in the browser.</strong> The feeds themselves update every 5 to 60 minutes, so a 60-second ETag poll is effectively free (usually a 304 from the CDN). SSE is reserved for the database stage, where honeypot events can arrive in real time.</li>
+<li><strong>SSE instead of WebSocket.</strong> The data flows one way, SSE is plain HTTP, has built-in resume through <code>Last-Event-ID</code>, and fits Vercel's 300-second limit with a planned reconnect. WebSocket support on Vercel was beta and two-way messaging was unnecessary.</li>
+<li><strong>DB-IP Lite instead of MaxMind GeoLite2.</strong> The plan preferred GeoLite2 because it publishes an accuracy radius, but GeoLite2 requires an account and licence key, and shipping it to Vercel needed blob storage. DB-IP Lite needs no account and could be compiled in. The cost is no accuracy radius, which the UI states honestly rather than inventing one.</li>
+<li><strong>Plain MapLibre instead of deck.gl.</strong> The plan called for a deck.gl overlay and flagged a known globe distortion bug (#9466). The shipped code uses MapLibre's own GeoJSON layers and computes great circles itself, which avoids the bug and a large dependency.</li>
+<li><strong>Ed25519 instead of HMAC for the sensor.</strong> The plan specified HMAC-SHA256 pushes with a nonce table. Commit <code>54e87ec</code> switched to Ed25519-signed pulls. HMAC uses one shared secret, so Vercel would have had to store it, and anyone who read it could forge data. With Ed25519 the website holds only a public key, which can be committed to Git.</li>
+<li><strong>Hand-written SQL with pgx instead of an ORM.</strong> The plan lists this as a learning goal, and it allows the advisory-lock ordering, <code>abbrev(inet)</code> and the optional-filter pattern, which ORMs make awkward.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-2" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li><strong><code>internal/</code> packages broke the Vercel build.</strong> The first deploy failed with "use of internal package not allowed". Commit <code>e02e63c</code> moved everything to <code>pkg/</code>.</li>
+<li><strong>Vercel does not ship data files with Go functions.</strong> Commit <code>35f1a78</code> compiled the DB-IP databases into the binary with <code>go:embed</code> behind a build tag, so local and Docker builds still read from disk.</li>
+<li><strong>JSON encoding was the throughput limit.</strong> Commit <code>b8e2cbb</code> ("serve the live snapshot pre-encoded") introduced the version counter and cached JSON plus gzip. The README reports a local load test of 20,000 requests at 200 concurrent with zero errors and zero data races.</li>
+<li><strong>Fake precision from country centroids.</strong> DB-IP returns country-centre coordinates for coarse records. <code>Lookup</code> now requires a city name before treating coordinates as a point, and the map shades the country instead.</li>
+<li><strong>Arcs that implied knowledge the data did not have.</strong> Radar country-pair arcs were added and then removed in favour of a list, leaving only sensor arcs (commit <code>e2ef88d</code>).</li>
+<li><strong>Arcs drawn the wrong way round the planet.</strong> Great circles that cross the 180 degree meridian were split with interpolated boundary points, and the animated heads use a second split in <code>arcFlow.ts</code>. Arcs on the far side of the globe are clipped to the visible hemisphere.</li>
+<li><strong>Lost events on reconnect.</strong> The concurrent-writer race (seq 105 visible before 104) was solved with a transaction-scoped advisory lock and proven with a randomised forced-reconnect test.</li>
+<li><strong>PgBouncer and prepared statements.</strong> Solved with <code>QueryExecModeExec</code> and a small pool with a short idle timeout.</li>
+<li><strong>Space view jank.</strong> Textures moved into a Web Worker, shaders pre-compiled with blank textures, and the render loop stops when nothing changes, cutting the first-open freeze from 649 ms to 83 ms.</li>
+<li><strong>Azure CLI blocked by a school sign-in policy.</strong> Commit <code>f68c512</code> added <code>cloudshell-deploy.sh</code>, which runs the Terraform from Azure Cloud Shell where <code>az</code> and <code>terraform</code> are already signed in.</li>
+<li><strong>Browser stability under constant updates.</strong> <code>web/e2e/stress.spec.ts</code> runs 30 polls of 250 new events each while switching projection, opening records and resizing across all four breakpoints, and fails on any page error, a map that stops being ready, or climbing memory.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-2" class="level3">
+<h3>Security and Performance Notes</h3>
+<p><strong>Treating feed data as hostile.</strong> Everything from a feed is attacker-influenced. The backend caps response size at 64 MB, parses with strict typed structs, defangs URLs and domains, never resolves attacker domains, and never geolocates private addresses. The front end validates the snapshot's shape before using it.</p>
+<p><strong>Signed telemetry.</strong> Sensor data is accepted only if its Ed25519 signature over <code>timestamp.body</code> verifies against an embedded public key and the timestamp is within 10 minutes. Unsigned, altered or replayed responses are rejected before parsing, and the reason appears in the source's <code>last_error</code> on the Status page.</p>
+<p><strong>Honeypot containment.</strong> The NSG allows inbound 22 and 23 from the internet (redirected by iptables to Cowrie on 2222 and 2223), real SSH on 22222 only from the admin's <code>/32</code>, and the exporter on 8443. Outbound traffic is limited to web and DNS for updates, with a deny-all rule after that. On the host, an iptables <code>owner</code> match rejects every new outbound connection from the <code>cowrie</code> user while still allowing replies, so an attacker who types <code>wget</code> inside the fake shell cannot fetch anything. The admin account uses SSH keys only (<code>disable_password_authentication = true</code>). The exporter rate-limits to 30 requests a minute per address and caches for 30 seconds. Usernames are published; passwords are not.</p>
+<p><strong>Secrets.</strong> <code>.env.example</code> lists placeholders only, and <code>CLAUDE.md</code> forbids echoing secrets. The Radar token is read from the environment and only sent as a header. The sensor's private key lives on the VM and in local Terraform state, never in the repo.</p>
+<p><strong>HTTP hardening.</strong> <code>vercel.json</code> adds <code>X-Content-Type-Options: nosniff</code>, <code>Referrer-Policy: strict-origin-when-cross-origin</code> and <code>X-Frame-Options: DENY</code> to every response. The API container runs as non-root on distroless. CI runs <code>govulncheck</code>.</p>
+<p><strong>SQL safety.</strong> All queries use bind parameters; filters are validated against allow-lists and ranges before reaching SQL.</p>
+<p><strong>Performance.</strong> One upstream fetch per source interval regardless of traffic; one JSON and gzip encode per data change; CDN caching with stale-while-revalidate; 304 responses for unchanged snapshots; client polling paused in hidden tabs; three.js and its textures loaded lazily and in idle time; the arc animation stops under reduced motion. The plan sets targets (shell JS under 120 KB gzip, LCP under 2.5 s) that are stated as targets, not measured results.</p>
+<p><strong>Legal and ethics.</strong> Every record carries its licence. DShield, Radar and Vercel Hobby require non-commercial use, which the README states. The About text notes that IP location identifies a network, not a person.</p>
+</section>
+<section id="how-to-run-it-2" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb9"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb9-1"><span class="co"># Geo databases (free, no account)</span></span>
+<span id="cb9-2"><span class="fu">sh</span> scripts/fetch-geo.sh</span>
+<span id="cb9-3"></span>
+<span id="cb9-4"><span class="co"># API on :8080 with Postgres 16</span></span>
+<span id="cb9-5"><span class="ex">docker</span> compose up <span class="at">-d</span> <span class="at">--build</span></span>
+<span id="cb9-6"></span>
+<span id="cb9-7"><span class="co"># Web app on :5173, proxies /api to :8080</span></span>
+<span id="cb9-8"><span class="bu">cd</span> web <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> install <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> run dev</span></code></pre></div>
+<p>Tests:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb10-1"><span class="ex">go</span> vet ./... <span class="kw">&amp;&amp;</span> <span class="ex">staticcheck</span> ./... <span class="kw">&amp;&amp;</span> <span class="ex">go</span> test <span class="at">-race</span> ./...</span>
+<span id="cb10-2"><span class="bu">cd</span> web <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> run typecheck <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> run lint <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> test</span>
+<span id="cb10-3"><span class="bu">cd</span> web <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> run test:e2e</span></code></pre></div>
+<p>Run the front end with sample data and no backend by setting <code>VITE_USE_SAMPLE=1</code>. Deploying the optional sensor:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb11-1"><span class="bu">cd</span> infra/azure</span>
+<span id="cb11-2"><span class="fu">cp</span> terraform.tfvars.example terraform.tfvars   <span class="co"># fill in, never commit</span></span>
+<span id="cb11-3"><span class="ex">terraform</span> init <span class="kw">&amp;&amp;</span> <span class="ex">terraform</span> apply</span>
+<span id="cb11-4"><span class="ex">terraform</span> output <span class="at">-raw</span> sensor_public_key <span class="dt">\</span></span>
+<span id="cb11-5">  <span class="op">&gt;</span> ../../pkg/feeds/sensor_pubkey.pem</span></code></pre></div>
+</section>
+<section id="learn-more-2" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://threatfox.abuse.ch/api/" target="_blank" rel="noopener noreferrer">abuse.ch ThreatFox API and exports</a></li>
+<li><a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog" target="_blank" rel="noopener noreferrer">CISA Known Exploited Vulnerabilities Catalog</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events" target="_blank" rel="noopener noreferrer">MDN: Using server-sent events</a></li>
+<li><a href="https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS" target="_blank" rel="noopener noreferrer">PostgreSQL: Advisory Locks</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Conditional_requests" target="_blank" rel="noopener noreferrer">MDN: HTTP conditional requests</a></li>
+<li><a href="https://maplibre.org/maplibre-gl-js/docs/" target="_blank" rel="noopener noreferrer">MapLibre GL JS documentation</a></li>
+<li><a href="https://docs.cowrie.org/" target="_blank" rel="noopener noreferrer">Cowrie SSH/Telnet honeypot documentation</a></li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc8032" target="_blank" rel="noopener noreferrer">RFC 8032: Edwards-Curve Digital Signature Algorithm (EdDSA)</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=446E-r0rXHI" target="_blank" rel="noopener noreferrer">Go in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=4HlNv1qpZFY" target="_blank" rel="noopener noreferrer">Server-Sent Events Crash Course</a></li>
+<li><a href="https://www.youtube.com/watch?v=n2Fluyr3lbc" target="_blank" rel="noopener noreferrer">PostgreSQL in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=GSIDS_lvRv4" target="_blank" rel="noopener noreferrer">Public Key Cryptography - Computerphile</a></li>
+<li><a href="https://www.youtube.com/watch?v=tomUWcQ0P3k" target="_blank" rel="noopener noreferrer">Terraform in 100 Seconds</a></li>
+<li><a href="https://www.youtube.com/watch?v=Tn6-PIqc4UM" target="_blank" rel="noopener noreferrer">React in 100 Seconds</a></li>
+</ul>
+</section>
+</section>
+</section>

@@ -1,0 +1,870 @@
+<section id="chapter-11-github-only-projects-networks-firewalls-static-sites-and-practice" class="level1">
+<h1><span class="header-section-number">11</span> GitHub-Only Projects: Networks, Firewalls, Static Sites and Practice</h1>
+<p>The projects in this chapter live only on GitHub, with no working copy on the author's machine. They cover a wide range: a forensic investigation of a home network with two internet providers, a university firewall lab built on Linux <code>iptables</code>, a one-page website that exists to show off its security and performance guardrails, a log of algorithm practice, and a private notes vault. They have one thing in common. In each one, the interesting work is in the method around the artifact (the evidence trail, the CI gate, the verification script) more than in the artifact itself.</p>
+<section id="dual-isp-network-assessment-and-subnet-remediation" class="level2">
+<h2>Dual-ISP Network Assessment and Subnet Remediation</h2>
+<section id="at-a-glance-51" class="level3">
+<h3>At a Glance</h3>
+<p>A home network had two routers, each on its own internet service provider (ISP), and a network storage box (a NAS) plugged into both. Device lists taken from different computers kept contradicting each other. This project traces the cause to both routers using the same factory-default subnet and gateway address, which made two physically separate networks look identical at the IP layer. It then documents the fix (renumbering the second network) and proves it with live evidence. It is written for network and security engineers and for anyone who wants a repeatable, evidence-first way to troubleshoot "why can't I see that device".</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>PowerShell (5.1 and 7), Bash 3.2, Python 3.12</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Pester (PowerShell tests), pytest</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>Nmap 7.99, Wireshark/tshark, NetTCPIP cmdlets, matplotlib, ruff, PSScriptAnalyzer, ShellCheck, gitleaks</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Windows 11 and macOS clients, consumer routers, a Synology NAS</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/Dual-ISP-Network-Assessment-and-Subnet-Remediation</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Remediated and validated from one side; two checks from the other side still open</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-51" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Imagine two apartment buildings on different streets that were both built with the same floor plan, so both have a "Unit 1" for the building manager. A tenant in building A asks for "Unit 1" and gets their manager. A tenant in building B asks for "Unit 1" and gets a different manager. Nobody notices anything wrong, because each tenant gets an answer. Now imagine a storage company that rents a room in both buildings. When someone in building A sends it a letter, the reply may go out of the wrong building's door and never arrive.</p>
+<p>That is what happened here:</p>
+<ol type="1">
+<li>Both routers shipped with LAN address <code>192.168.0.1</code> and subnet <code>192.168.0.0/24</code>. Nobody changed either one.</li>
+<li>Every computer saw "gateway <code>192.168.0.1</code>", so the IP layer looked fine.</li>
+<li>At the hardware layer, the gateway answered with a different MAC address (the burned-in hardware ID of a network card) depending on which router you were plugged into. That was the clue.</li>
+<li>The fix moved the second router to <code>192.168.20.0/24</code> and gave the NAS's second port a fixed address in that new range with no gateway.</li>
+<li>A re-assessment two months later checked, from the first network, that only one device now owns the gateway address, only one DHCP server answers, there are no duplicate addresses, and the new range is not reachable from the first network.</li>
+</ol>
+</section>
+<section id="architecture-51" class="level3">
+<h3>Architecture</h3>
+<p>The repository is a case file, not a single program. It holds custom scanners, analysis tools, sanitized results, written analysis, and a CI pipeline that guards privacy.</p>
+<pre class="text"><code>         ISP-A                        ISP-B
+           |                            |
+     +-----------+                +-----------+
+     | ROUTER-A  |                | ROUTER-B  |
+     | .0.1/24   |                | .0.1/24   |  &lt;- before
+     |           |                | .20.1/24  |  &lt;- after
+     +-----------+                +-----------+
+       |   |   |                     |    |
+  clients  |   +---- NAS-01 ---------+  clients
+  (Dom A)  |   eth0 .0.x   eth1 .20.2   (Dom B)
+           |   (gateway)   (no gateway)
+           |
+   +------------------- tooling ---------------------+
+   | Scanners (.ps1/.sh) -&gt; HTML/CSV/JSON inventory   |
+   | Get-NetworkBaseline -&gt; private/ + public/        |
+   | tshark capture -&gt; Invoke-PacketSummary           |
+   | nmap XML -&gt; nmap_inventory.py -&gt; CSV/MD          |
+   | Test-PublicArtifacts (CI gate before publish)    |
+   +--------------------------------------------------+</code></pre>
+<p>Folders are numbered in the order a reader should go: <code>00_START_HERE</code> (a one-page brief), <code>01_Scanner_Scripts</code>, <code>02_Scan_Results</code> (the July scans, one folder per vantage point), <code>03_System_Diagnostics</code>, <code>04_Topology_Diagrams</code>, <code>05_Report</code> (an IEEE-style PDF), <code>06_Presentation</code>, <code>07_Media</code> (an audio explainer), and <code>08_Live_Assessment_2026-09-28</code> (the September re-check). The <code>docs/</code> folder holds methodology, root cause, findings, validation, a troubleshooting playbook, and the privacy rules. <code>tools/</code> and <code>tests/</code> hold the newer, tested tooling.</p>
+</section>
+<section id="deep-dive-51" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>The original scanners.</strong> <code>01_Scanner_Scripts/Home_Network_Inventory_v1.5.ps1</code> (about 1,300 lines) and its macOS port <code>Mac_Network_Inventory_v1.1.sh</code> (about 1,470 lines, written for the old Bash 3.2 that ships with macOS) do the same job. They find the private IPv4 subnets the machine is on, do an ICMP ping sweep (ICMP is the protocol behind <code>ping</code>), merge in the ARP cache, test a fixed list of 22 TCP ports, guess a device type, and write HTML, CSV, JSON and PDF reports. ARP (Address Resolution Protocol) is how a computer asks "who has this IP address?" on the local network; the ARP cache is its memory of the answers. Merging the ARP cache matters because some devices drop ping but must still answer ARP to use the network at all.</p>
+<p>The Windows ping sweep is deliberately synchronous, and a comment explains why:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb2-1"><span class="co"># Windows PowerShell 5.1 can throw "Argument types do not match" when</span></span>
+<span id="cb2-2"><span class="co"># async Task objects and Generic.List[object] are returned through an</span></span>
+<span id="cb2-3"><span class="co"># array subexpression. A synchronous Ping.Send call is more compatible</span></span>
+<span id="cb2-4"><span class="co"># ...</span></span>
+<span id="cb2-5"><span class="cf">foreach</span> <span class="op">(</span><span class="va">$address</span> <span class="kw">in</span> <span class="va">$Addresses</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-6">    <span class="va">$pinger</span> <span class="op">=</span> <span class="fu">New-Object</span> System<span class="op">.</span><span class="fu">Net</span><span class="op">.</span><span class="fu">NetworkInformation</span><span class="op">.</span><span class="fu">Ping</span></span>
+<span id="cb2-7">    <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb2-8">        <span class="va">$reply</span> <span class="op">=</span> <span class="va">$pinger</span><span class="op">.</span><span class="fu">Send</span><span class="op">(</span><span class="va">$address</span><span class="op">,</span> <span class="va">$TimeoutMs</span><span class="op">)</span></span>
+<span id="cb2-9">        <span class="va">$alive</span> <span class="op">=</span> <span class="va">$reply</span><span class="op">.</span><span class="fu">Status</span> <span class="op">-eq</span> `</span>
+<span id="cb2-10">            <span class="op">[</span>System<span class="op">.</span><span class="fu">Net</span><span class="op">.</span><span class="fu">NetworkInformation</span><span class="op">.</span><span class="fu">IPStatus</span><span class="op">]::</span>Success</span>
+<span id="cb2-11">        <span class="op">...</span></span>
+<span id="cb2-12">    <span class="op">}</span></span>
+<span id="cb2-13">    <span class="cf">finally</span> <span class="op">{</span> <span class="va">$pinger</span><span class="op">.</span><span class="fu">Dispose</span><span class="op">()</span> <span class="op">}</span></span>
+<span id="cb2-14"><span class="op">}</span></span></code></pre></div>
+<p>The port check, by contrast, is concurrent. <code>Get-OpenTcpPorts</code> starts a <code>TcpClient.ConnectAsync</code> for every port at once, then waits on each task with a timeout. That turns 22 sequential timeouts into roughly one. The device guesser <code>Get-LikelyDeviceType</code> is a chain of port rules: 5000/5001/6690 means "Synology NAS (likely)", 445/3389/5985 means "Windows PC", 9100/515/631 means "printer". The project's own write-up notes that this rule misfired: a Mac had TCP 5000 open (most likely the macOS AirPlay Receiver) and was labelled a NAS. The macOS script also counted multicast addresses as devices in its July run, which inflated its totals. Both quirks are documented rather than hidden.</p>
+<p><strong>The baseline collector.</strong> <code>tools/windows/Get-NetworkBaseline.ps1</code> is a read-only snapshot of one Windows host's view of the network, built on NetTCPIP cmdlets such as <code>Get-NetIPConfiguration</code>, <code>Get-NetRoute</code>, <code>Get-NetNeighbor</code> (the ARP cache) and <code>Get-NetTCPConnection</code>. For each active interface it records the address, prefix, gateway, the gateway's MAC, DNS servers, the Windows network profile (Public or Private), and adapter error counters. It counts default routes, because two <code>0.0.0.0/0</code> routes would mean the host can leave by two paths. It also searches its own neighbor cache for one IP mapped to more than one MAC.</p>
+<p>The subnet arithmetic is written out by hand so it can be unit tested:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb3-1"><span class="va">$bytes</span> <span class="op">=</span> <span class="va">$ip</span><span class="op">.</span><span class="fu">GetAddressBytes</span><span class="op">()</span></span>
+<span id="cb3-2"><span class="op">[</span>Array<span class="op">]::</span>Reverse<span class="op">(</span><span class="va">$bytes</span><span class="op">)</span>                 <span class="co"># network to host order</span></span>
+<span id="cb3-3"><span class="va">$value</span> <span class="op">=</span> <span class="op">[</span>BitConverter<span class="op">]::</span>ToUInt32<span class="op">(</span><span class="va">$bytes</span><span class="op">,</span> <span class="dv">0</span><span class="op">)</span></span>
+<span id="cb3-4"><span class="va">$mask</span> <span class="op">=</span> <span class="cf">if</span> <span class="op">(</span><span class="va">$PrefixLength</span> <span class="op">-eq</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span> <span class="op">[</span>uint32<span class="op">]</span><span class="dv">0</span> <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb3-5">    <span class="op">[</span>uint32<span class="op">](([</span>uint64<span class="op">]</span><span class="dv">4294967295</span> <span class="op">-</span>shl <span class="op">(</span><span class="dv">32</span> <span class="op">-</span> <span class="va">$PrefixLength</span><span class="op">))</span> `</span>
+<span id="cb3-6">        <span class="op">-band</span> <span class="op">[</span>uint64<span class="op">]</span><span class="dv">4294967295</span><span class="op">)</span> <span class="op">}</span></span>
+<span id="cb3-7"><span class="va">$net</span> <span class="op">=</span> <span class="op">[</span>BitConverter<span class="op">]::</span>GetBytes<span class="op">([</span>uint32<span class="op">](</span><span class="va">$value</span> <span class="op">-band</span> <span class="va">$mask</span><span class="op">))</span></span>
+<span id="cb3-8"><span class="op">[</span>Array<span class="op">]::</span>Reverse<span class="op">(</span><span class="va">$net</span><span class="op">)</span></span></code></pre></div>
+<p>A /24 "prefix length" means the first 24 bits name the network and the last 8 name the host. The code builds a mask of 24 one-bits by shifting a 32-bit all-ones value left, then ANDs it with the address to get the network address. Two Pester tests use this directly: one shows the two original LANs reduce to the same network, and one shows the remediated LANs are disjoint.</p>
+<p>The script writes two copies. <code>private/baseline.json</code> holds raw values and is git-ignored. <code>public/baseline.json</code> and <code>public/baseline.md</code> go through <code>Protect-Text</code> and <code>ConvertTo-PublicBaseline</code>, which mask MACs to the vendor prefix, replace public IPs with <code>&lt;public-ip&gt;</code>, replace home folder paths with <code>&lt;HOME&gt;</code>, strip the computer and user name, and reduce the list of listening ports to a count.</p>
+<p><strong>MAC masking and the U/L bit.</strong> Every tool in the repo shares one rule for MAC addresses, shown here from the Python parser:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><span class="kw">def</span> is_locally_administered(mac: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="bu">bool</span>:</span>
+<span id="cb4-2">    <span class="co">"""True when the U/L bit is set, i.e. a randomized MAC."""</span></span>
+<span id="cb4-3">    first <span class="op">=</span> <span class="bu">int</span>(re.sub(<span class="vs">r"</span><span class="pp">[^0-9A-Fa-f]</span><span class="vs">"</span>, <span class="st">""</span>, mac)[:<span class="dv">2</span>], <span class="dv">16</span>)</span>
+<span id="cb4-4">    <span class="cf">return</span> <span class="bu">bool</span>(first <span class="op">&amp;</span> <span class="bn">0x02</span>)</span>
+<span id="cb4-5"></span>
+<span id="cb4-6"></span>
+<span id="cb4-7"><span class="kw">def</span> mask_mac(mac: <span class="bu">str</span> <span class="op">|</span> <span class="va">None</span>) <span class="op">-&gt;</span> <span class="bu">str</span>:</span>
+<span id="cb4-8">    <span class="cf">if</span> <span class="kw">not</span> mac:</span>
+<span id="cb4-9">        <span class="cf">return</span> <span class="st">""</span></span>
+<span id="cb4-10">    <span class="cf">if</span> <span class="kw">not</span> MAC_RE.match(mac):</span>
+<span id="cb4-11">        <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="ss">f"not a MAC address: </span><span class="sc">{</span>mac<span class="sc">!r}</span><span class="ss">"</span>)</span>
+<span id="cb4-12">    <span class="cf">if</span> is_locally_administered(mac):</span>
+<span id="cb4-13">        <span class="cf">return</span> <span class="st">"XX:XX:XX:XX:XX:XX (randomized)"</span></span>
+<span id="cb4-14">    octets <span class="op">=</span> re.split(<span class="vs">r"</span><span class="pp">[:-]</span><span class="vs">"</span>, mac.upper())</span>
+<span id="cb4-15">    <span class="cf">return</span> <span class="st">":"</span>.join([<span class="op">*</span>octets[:<span class="dv">3</span>], <span class="st">"XX"</span>, <span class="st">"XX"</span>, <span class="st">"XX"</span>])</span></code></pre></div>
+<p>A MAC has two halves. The first three bytes, the OUI (Organizationally Unique Identifier), name the manufacturer. The last three identify the individual device. The second-lowest bit of the first byte (the "U/L" bit) is set when the address was made up by software, which is what phones and laptops do for privacy ("randomized MAC"). The finding depends on showing "same IP, two different vendors", so the OUI is kept. The device half is hidden, and a randomized MAC is hidden entirely because it carries no vendor meaning, only a tracking value.</p>
+<p><strong>The packet summarizer.</strong> <code>tools/windows/Invoke-PacketSummary.ps1</code> runs a fixed list of tshark display filters against a capture and records only counts and metadata. tshark is the command-line version of Wireshark. The filters include <code>arp.opcode==1</code> and <code>==2</code> (ARP requests and replies), <code>arp.src.proto_ipv4==0.0.0.0</code> (RFC 5227 probes, where a host checks whether an address is free before using it), <code>arp.duplicate-address-detected</code>, <code>dhcp</code>, <code>ssdp</code>, <code>tcp.analysis.retransmission</code> and broadcast and multicast frames. The core of the analysis is the ARP binding report:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb5-1"><span class="va">$pairs</span> <span class="op">|</span> <span class="fu">Group-Object</span> IP <span class="op">|</span> <span class="fu">ForEach-Object</span> <span class="op">{</span></span>
+<span id="cb5-2">    <span class="va">$macs</span> <span class="op">=</span> <span class="op">@(</span><span class="va">$_</span><span class="op">.</span><span class="fu">Group</span><span class="op">.</span><span class="fu">Mac</span> <span class="op">|</span> <span class="fu">Select-Object</span> <span class="op">-</span>Unique<span class="op">)</span></span>
+<span id="cb5-3">    <span class="op">[</span>pscustomobject<span class="op">]</span>@<span class="op">{</span></span>
+<span id="cb5-4">        IP           <span class="op">=</span> <span class="va">$_</span><span class="op">.</span><span class="fu">Name</span></span>
+<span id="cb5-5">        Frames       <span class="op">=</span> <span class="va">$_</span><span class="op">.</span><span class="fu">Count</span></span>
+<span id="cb5-6">        DistinctMacs <span class="op">=</span> <span class="va">$macs</span><span class="op">.</span><span class="fu">Count</span></span>
+<span id="cb5-7">        MacOui       <span class="op">=</span> <span class="op">(</span><span class="va">$macs</span> <span class="op">|</span> <span class="fu">ForEach-Object</span> <span class="op">{</span></span>
+<span id="cb5-8">                           ConvertTo-OuiMac <span class="va">$_</span> <span class="op">})</span> <span class="op">-join</span> <span class="st">', '</span></span>
+<span id="cb5-9">        Conflict     <span class="op">=</span> <span class="va">$macs</span><span class="op">.</span><span class="fu">Count</span> <span class="op">-gt</span> <span class="dv">1</span></span>
+<span id="cb5-10">    <span class="op">}</span></span>
+<span id="cb5-11"><span class="op">}</span> <span class="op">|</span> <span class="fu">Sort-Object</span> <span class="op">{</span> <span class="op">[</span>version<span class="op">](</span><span class="va">$_</span><span class="op">.</span><span class="fu">IP</span><span class="op">)</span> <span class="op">}</span></span></code></pre></div>
+<p>It groups every (sender IP, sender MAC) pair from ARP frames by IP and flags any IP claimed by more than one MAC. That is the exact signature of the original fault. Sorting with <code>[version]</code> is a small trick: it makes PowerShell compare IP addresses as four numbers, so <code>.20</code> sorts before <code>.118</code>, instead of comparing them as text.</p>
+<p><strong>The Nmap parser.</strong> <code>tools/parsers/nmap_inventory.py</code> uses only the Python standard library. It reads one or more Nmap XML files, keeps hosts whose status is <code>up</code>, merges ARP discovery and service scans by IP into an <code>Asset</code> dataclass, keeps the most accurate OS guess, and drops <code>open|filtered</code> UDP results because they are "ambiguous, not evidence of a service". Before writing any row, <code>require_private()</code> raises an error if the IP is not private. Hosts are labelled from a private <code>assets.json</code> map; anything unmapped becomes <code>UNKNOWN-01</code>, <code>UNKNOWN-02</code>, and so on.</p>
+<p><strong>The privacy gate.</strong> <code>tools/privacy/Test-PublicArtifacts.ps1</code> scans every tracked text file, and the text inside <code>.pptx</code> and <code>.docx</code> files, for full MACs, public IPv4 addresses, email addresses, Windows SIDs, home paths, credential-like strings, packet capture files, and terms from a local, git-ignored denylist of real hostnames. Its public-IP test skips private ranges, CGNAT (<code>100.64.0.0/10</code>), the RFC 5737 documentation ranges, a short list of well-known public DNS resolvers, and strings with leading zeros such as version numbers.</p>
+<p><strong>The assessment method.</strong> <code>docs/methodology.md</code> sets a strict order: scope and authorization, local baseline, passive capture <em>before</em> any active scan (so scan traffic does not pollute the baseline), Nmap ARP sweep, full TCP and top-50 UDP service scans, broadcast discovery (a DHCPDISCOVER that counts DHCP servers, plus SSDP, mDNS and WS-Discovery listeners), and a negative test against the new subnet. The NSE scripts are limited to <code>(default or discovery) and safe and not external and not broadcast</code>; NSE is Nmap's scripting engine, and <code>external</code> would send data to third-party services. Each conclusion in the root-cause document is tagged <strong>Observed</strong>, <strong>Inferred</strong> or <strong>Not tested</strong>.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-51" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Renumber rather than bridge or merge.</strong> The two ISP networks were meant to stay separate. Giving the second router a new /24 removes the duplicate identity without connecting the domains. The alternative (one router, one subnet, dual-WAN failover) would change the household's ISP design rather than fix a misconfiguration.</li>
+<li><strong>NAS second port gets no gateway.</strong> With two interfaces in one /24, the NAS had two equal routes to the same network and could answer on the wrong port, which is called asymmetric routing. One default route (through the first network) and a gateway-less second port removes the ambiguity.</li>
+<li><strong>Multiple vantage points as evidence.</strong> Instead of trusting one scan, inventories were taken from four machines on two LANs and compared. Different answers from different places were treated as data, not as tool error.</li>
+<li><strong>ARP over ICMP for discovery.</strong> A Windows host on the Public network profile drops ping by default but still answers ARP. ICMP silence is treated as "unknown", not "absent".</li>
+<li><strong>Publish summaries, never raw data.</strong> Raw captures and Nmap XML contain full MACs and banners. The repo only holds derived, sanitized files, and the CI blocks any <code>.pcap</code>, <code>.pcapng</code>, <code>.cap</code> or <code>.etl</code> file.</li>
+<li><strong>Keep private RFC 1918 addresses.</strong> Vendor-default ranges such as <code>192.168.0.0/24</code> are shared by millions of networks, and the finding cannot be shown without them, so they stay. Public IPs, SIDs, serials and SSIDs are removed.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-51" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li><strong>The symptom pointed nowhere.</strong> Each LAN worked on its own; internet, DHCP and DNS were fine everywhere. The playbook in <code>docs/troubleshooting-playbook.md</code> captures the lesson as step 4, "Who actually owns the gateway address?": compare the gateway's MAC with the router you think you are using. Layer 3 alone cannot see the overlap; Layer 2 can.</li>
+<li><strong>Proving a negative.</strong> A failed probe to the new subnet cannot tell "isolated" apart from "does not exist". <code>docs/validation.md</code> solves this by pairing two checks. The NAS's own SSDP advertisement on the first network listed a URL on its second-port address, which proves that address exists. The failed ICMP and SYN probes then prove it is unreachable. Together they confirm the design.</li>
+<li><strong>Misleading labels.</strong> The port-based device guess called a Mac a NAS. The fix was to document the quirk and rely on OUI and ARP correlation instead of port fingerprints alone.</li>
+<li><strong>PowerShell 5.1 async quirks.</strong> The ping sweep was rewritten to synchronous <code>Ping.Send</code> to avoid an "Argument types do not match" error in Windows PowerShell 5.1.</li>
+<li><strong>What remains open.</strong> Two checks need a host on the second network or shell access to the NAS (router answering on the new gateway, NAS default route). They are listed as <strong>Not tested</strong> rather than assumed.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-51" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>The September re-assessment produced four findings beyond the fixed overlap: UPnP Internet Gateway Device enabled on the first router (any LAN program can open inbound port forwards), NAS services such as SSH, SMB, iSCSI and HTTP admin exposed to every LAN host, the NAS advertising its second-network address into the first, and one unidentified device.</li>
+<li>All tools are read-only. No credentials were tried, no configuration was changed, and no intrusive, brute, DoS or exploit NSE categories were run.</li>
+<li>CI (<code>.github/workflows/quality.yml</code>) runs PSScriptAnalyzer, Pester, ShellCheck, ruff, pytest, markdownlint, the privacy gate, a "no packet captures tracked" check, and gitleaks. Its header comment says it never contacts any network.</li>
+<li>Retransmissions seen in the baseline capture (467) were 88% concentrated in one internet download, and the post-scan capture had 4, so the analysis concluded there was no LAN fault. <code>Get-StreamConcentration</code> computes that "share of the worst stream" figure.</li>
+</ul>
+</section>
+<section id="how-to-run-it-51" class="level3">
+<h3>How to Run It</h3>
+<p>On Windows, against a network you own:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb6-1"><span class="op">.</span>\tools\windows\Get-NetworkBaseline<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>OutputDirectory <span class="op">.</span>\artifacts</span>
+<span id="cb6-2"><span class="op">.</span>\tools\windows\Invoke-PacketSummary<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>CaptureFile capture<span class="op">.</span><span class="fu">pcapng</span> `</span>
+<span id="cb6-3">    <span class="op">-</span>OutputDirectory <span class="op">.</span>\artifacts\public</span>
+<span id="cb6-4">python tools\parsers\nmap_inventory<span class="op">.</span><span class="fu">py</span> <span class="op">--</span>vantage WIN-CLIENT-01 `</span>
+<span id="cb6-5">    <span class="op">--</span>csv inventory<span class="op">.</span><span class="fu">csv</span> scan<span class="op">.</span><span class="fu">xml</span></span>
+<span id="cb6-6"><span class="op">.</span>\tools\privacy\Test-PublicArtifacts<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>TrackedOnly</span></code></pre></div>
+<p>The original scanners run as <code>powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Home_Network_Inventory_v1.5.ps1 -OpenReport</code> and <code>./Mac_Network_Inventory_v1.1.sh --open-report</code>. Charts regenerate with <code>python tools/charts/make_charts.py</code> from the committed, sanitized CSVs.</p>
+</section>
+<section id="learn-more-51" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://www.rfc-editor.org/rfc/rfc1918" target="_blank" rel="noopener noreferrer">RFC 1918: Address Allocation for Private Internets</a></li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc826" target="_blank" rel="noopener noreferrer">RFC 826: An Ethernet Address Resolution Protocol</a></li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc5227" target="_blank" rel="noopener noreferrer">RFC 5227: IPv4 Address Conflict Detection</a></li>
+<li><a href="https://nmap.org/book/man.html" target="_blank" rel="noopener noreferrer">Nmap Reference Guide</a></li>
+<li><a href="https://www.wireshark.org/docs/dfref/" target="_blank" rel="noopener noreferrer">Wireshark Display Filter Reference</a></li>
+<li><a href="https://learn.microsoft.com/en-us/powershell/module/nettcpip/" target="_blank" rel="noopener noreferrer">Microsoft Learn: NetTCPIP PowerShell module</a></li>
+<li><a href="https://pester.dev/docs/quick-start" target="_blank" rel="noopener noreferrer">Pester documentation</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=cn8Zxh9bPio" target="_blank" rel="noopener noreferrer">ARP Explained - Address Resolution Protocol</a> (PowerCert Animated Videos)</li>
+<li><a href="https://www.youtube.com/watch?v=BWZ-MHIhqjM" target="_blank" rel="noopener noreferrer">What is Subnetting? - Subnetting Mastery - Part 1 of 7</a> (Practical Networking)</li>
+<li><a href="https://www.youtube.com/watch?v=1z0ULvg_pW8" target="_blank" rel="noopener noreferrer">Hub, Switch, &amp; Router Explained - What's the difference?</a> (PowerCert Animated Videos)</li>
+<li><a href="https://www.youtube.com/watch?v=4t4kBkMsDbQ" target="_blank" rel="noopener noreferrer">Nmap Tutorial to find Network Vulnerabilities</a> (NetworkChuck)</li>
+<li><a href="https://www.youtube.com/watch?v=4_7A8Ikp5Cc" target="_blank" rel="noopener noreferrer">Wireshark Tutorial - Installation and Password sniffing</a> (David Bombal)</li>
+</ul>
+</section>
+</section>
+<section id="hardening-linux-servers-with-iptables" class="level2">
+<h2>Hardening Linux Servers with iptables</h2>
+<section id="at-a-glance-52" class="level3">
+<h3>At a Glance</h3>
+<p>This is a group term project for a graduate network security course (CYB623, Spring 2026), built by a three-person team. It shows how a deliberately exposed Ubuntu server can be defended against SSH password guessing, ICMP ping floods and TCP SYN floods using only the kernel's built-in firewall, and how an internal web service can be published on a different port through destination NAT. Attacks are launched from a Kali Linux VM, and the defenses are measured by reading the firewall's own packet counters. It is aimed at students and junior defenders who want a reproducible, scripted firewall lab.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Bash</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Linux netfilter / iptables</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>iptables <code>recent</code>, <code>limit</code> and <code>conntrack</code> matches, Hydra, hping3, Apache, OpenSSH, iptables-persistent</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Two VirtualBox VMs (Ubuntu Server defender, Kali attacker) on a host-only network</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/hardening-linux-servers-with-iptables</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Complete academic project (report, slides, demo video), MIT licence</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-52" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Think of the server as a building with a security guard at the door. Without the guard, anyone can try the door handle as many times as they like (password guessing) or crowd the lobby so real visitors cannot get in (floods). The guard follows a short rule book:</p>
+<ol type="1">
+<li><strong>SSH door:</strong> write down the face of everyone who knocks. If the same face knocks twice within two minutes, turn them away.</li>
+<li><strong>Ping and new-connection doors:</strong> let people in at a steady pace (one ping per second, three new connections per second) with a small allowance for a sudden burst. Turn away the overflow.</li>
+<li><strong>Front desk redirect:</strong> visitors who ask for room 80 are quietly walked to room 8080, where the real web server lives.</li>
+</ol>
+<p>The lab runs in three steps: set up both VMs, apply the rules, fire the attacks, then run a checker that reads how many visitors each rule turned away.</p>
+</section>
+<section id="architecture-52" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> +-------------------+   host-only net   +---------------------+
+ | Kali attacker     | 192.168.56.0/24   | Ubuntu defender     |
+ | 192.168.56.7      |------------------&gt;| 192.168.56.6        |
+ |                   |                   |                     |
+ | setup-attacker.sh |                   | setup-defender.sh   |
+ | run-attack.sh     |                   | apply-rules.sh      |
+ |  hydra  (SSH)     |                   | verify-mitigation   |
+ |  hping3 (ICMP)    |                   | teardown.sh         |
+ |  hping3 (SYN)     |                   |                     |
+ |  curl   (:80)     |                   | sshd :22            |
+ +-------------------+                   | apache :8080        |
+                                         +---------------------+
+
+ Packet path on the defender:
+ in -&gt; nat PREROUTING (DNAT :80 -&gt; :8080)
+    -&gt; filter INPUT
+         SSH:  recent --update DROP | recent --set
+         ICMP: limit 1/s ACCEPT | DROP
+         SYN:  limit 3/s ACCEPT | DROP
+    -&gt; local process (sshd / apache)</code></pre>
+<p>Six scripts make up the lab, and three docs support it: <code>docs/LAB_GUIDE.md</code> (a full walkthrough with expected output), <code>docs/RULES_REFERENCE.md</code> (a flag cheat sheet) and <code>docs/TROUBLESHOOTING.md</code>.</p>
+</section>
+<section id="deep-dive-52" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>netfilter basics.</strong> netfilter is the packet-filtering framework inside the Linux kernel; <code>iptables</code> is the command-line tool that writes its rules. Rules live in <em>tables</em> (<code>filter</code> for allow and deny, <code>nat</code> for address rewriting) and inside each table in <em>chains</em> (<code>INPUT</code> for packets addressed to this machine, <code>PREROUTING</code> for packets just arrived, before a routing decision, <code>POSTROUTING</code> for packets about to leave). Rules are checked top to bottom, and the first rule with a terminating target (<code>ACCEPT</code>, <code>DROP</code>, <code>DNAT</code>) wins.</p>
+<p><strong><code>setup-defender.sh</code></strong> installs <code>apache2</code>, <code>openssh-server</code>, <code>iptables-persistent</code>, <code>hping3</code> and <code>curl</code> with <code>DEBIAN_FRONTEND=noninteractive</code>, so the iptables-persistent installer does not pop up a text menu. It then moves Apache from port 80 to 8080 by editing <code>ports.conf</code> and the default virtual host, but only if <code>Listen 8080</code> is not already present. <strong><code>setup-attacker.sh</code></strong> installs Hydra, hping3 and nmap and generates a small lab wordlist.</p>
+<p><strong><code>apply-rules.sh</code></strong> is the heart of the project. It has subcommands <code>ssh</code>, <code>icmp</code>, <code>syn</code>, <code>nat</code>, <code>all</code>, <code>status</code> and <code>reset</code>. Each prints the chain before and after the change and a one-line "why". The key engineering idea is idempotence (running it twice gives the same result as running it once):</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><span class="fu">ipt()</span> <span class="kw">{</span> <span class="fu">sudo</span> iptables <span class="st">"</span><span class="va">$@</span><span class="st">"</span><span class="kw">;</span> <span class="kw">}</span></span>
+<span id="cb8-2"></span>
+<span id="cb8-3"><span class="fu">ensure_input()</span> <span class="kw">{</span></span>
+<span id="cb8-4">  <span class="cf">if</span> <span class="ot">! </span><span class="ex">ipt</span> <span class="at">-C</span> INPUT <span class="st">"</span><span class="va">$@</span><span class="st">"</span> <span class="dv">2</span><span class="op">&gt;</span>/dev/null<span class="kw">;</span> <span class="cf">then</span></span>
+<span id="cb8-5">    <span class="ex">ipt</span> <span class="at">-I</span> INPUT <span class="st">"</span><span class="va">$@</span><span class="st">"</span><span class="kw">;</span> <span class="ex">ok</span> <span class="st">"added: iptables -I INPUT </span><span class="va">$*</span><span class="st">"</span></span>
+<span id="cb8-6">  <span class="cf">else</span></span>
+<span id="cb8-7">    <span class="ex">warn</span> <span class="st">"skip (exists): INPUT </span><span class="va">$*</span><span class="st">"</span></span>
+<span id="cb8-8">  <span class="cf">fi</span></span>
+<span id="cb8-9"><span class="kw">}</span></span></code></pre></div>
+<p><code>iptables -C</code> ("check") exits with success only if an identical rule already exists. The helper adds the rule only when the check fails, so re-running the script never stacks duplicate rules. There are four variants: <code>ensure_input</code> inserts at the top (<code>-I</code>), <code>ensure_input_a</code> appends (<code>-A</code>), and <code>ensure_pre</code> and <code>ensure_post</code> append to the NAT chains.</p>
+<p><strong>SSH brute-force defense with <code>recent</code>.</strong> The <code>recent</code> match keeps a small in-kernel list of source IPs and timestamps, named here <code>SSHBF</code>, visible under <code>/proc/net/xt_recent/SSHBF</code>.</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><span class="fu">cmd_ssh()</span> <span class="kw">{</span></span>
+<span id="cb9-2">  <span class="ex">ensure_input</span> <span class="at">-p</span> tcp <span class="at">--dport</span> 22 <span class="at">-m</span> conntrack <span class="at">--ctstate</span> NEW <span class="dt">\</span></span>
+<span id="cb9-3">    <span class="at">-m</span> recent <span class="at">--set</span> <span class="at">--name</span> <span class="st">"</span><span class="va">$RECENT_LIST</span><span class="st">"</span></span>
+<span id="cb9-4">  <span class="ex">ensure_input</span> <span class="at">-p</span> tcp <span class="at">--dport</span> 22 <span class="at">-m</span> conntrack <span class="at">--ctstate</span> NEW <span class="dt">\</span></span>
+<span id="cb9-5">    <span class="at">-m</span> recent <span class="at">--update</span> <span class="at">--seconds</span> <span class="st">"</span><span class="va">$SSH_WINDOW</span><span class="st">"</span> <span class="dt">\</span></span>
+<span id="cb9-6">    <span class="at">--hitcount</span> <span class="st">"</span><span class="va">$SSH_HITCOUNT</span><span class="st">"</span> <span class="at">--name</span> <span class="st">"</span><span class="va">$RECENT_LIST</span><span class="st">"</span> <span class="at">-j</span> DROP</span>
+<span id="cb9-7"><span class="kw">}</span></span></code></pre></div>
+<p><code>conntrack --ctstate NEW</code> limits the rule to the first packet of each new connection, so an established, working SSH session is never counted. The first call records the source (<code>--set</code>). The second updates its timestamp and drops the packet if the source has hit 2 new connections within 120 seconds. The order is subtle. Because <code>ensure_input</code> <em>inserts at the top</em>, the second call lands above the first, so the DROP check runs before the recording rule. The troubleshooting guide spells this out: "Line 1 should be the <code>--update ... -j DROP</code>." If the order were reversed, every attempt would be recorded and then checked in the wrong sequence.</p>
+<p><strong>Flood defense with <code>limit</code>.</strong> The <code>limit</code> match is a token bucket. Picture a bucket that holds 5 tokens (the burst) and refills at 1 token per second (the rate). Each matching packet takes a token. If there is a token, the rule matches and the packet is accepted; if the bucket is empty, the rule does not match and the packet falls through to the next rule, an unconditional DROP. ICMP echo requests are limited to <code>1/s</code> burst 5. New TCP connections, matched with <code>--syn</code> (the SYN flag opens a TCP handshake), are limited to <code>3/s</code> burst 5. A SYN flood works by sending many SYNs and never finishing the handshake, filling the server's table of half-open connections (<code>SYN_RECV</code>). Capping the rate of SYNs that reach the TCP stack keeps that table small.</p>
+<p><strong>DNAT port forwarding.</strong> DNAT (destination NAT) rewrites the destination address or port of a packet as it arrives.</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb10-1"><span class="fu">sudo</span> sysctl <span class="at">-w</span> net.ipv4.ip_forward=1 <span class="op">&gt;</span>/dev/null</span>
+<span id="cb10-2"><span class="ex">ensure_pre</span> <span class="at">-p</span> tcp <span class="at">--dport</span> <span class="st">"</span><span class="va">$PUBLIC_PORT</span><span class="st">"</span> <span class="dt">\</span></span>
+<span id="cb10-3">  <span class="at">-j</span> DNAT <span class="at">--to-destination</span> <span class="st">"</span><span class="va">$DEFENDER_IP</span><span class="st">:</span><span class="va">$INTERNAL_PORT</span><span class="st">"</span></span>
+<span id="cb10-4"><span class="ex">ensure_post</span> <span class="at">-j</span> MASQUERADE</span></code></pre></div>
+<p>A request to port 80 is rewritten in <code>PREROUTING</code> to <code>192.168.56.6:8080</code>, where Apache really listens. <code>MASQUERADE</code> rewrites the source of outgoing packets to the machine's own address. In this lab the forwarding target is the defender itself, so the rewritten packet goes to <code>INPUT</code> rather than <code>FORWARD</code>. Enabling <code>ip_forward</code> is what a real gateway forwarding to a separate internal host would need; here it mainly mirrors that production pattern.</p>
+<p><strong><code>run-attack.sh</code></strong> on Kali fires each attack: <code>hydra -l &lt;user&gt; -P &lt;wordlist&gt; -t 4 -f -V ssh://...</code> (4 parallel tasks, stop at first success, verbose so the rate limit is visible), <code>hping3 --icmp --flood</code> and <code>hping3 -S --flood -p 80</code>, each wrapped in <code>timeout</code> for 10 seconds, and a <code>curl</code> test of the DNAT path.</p>
+<p><strong><code>verify-mitigation.sh</code></strong> generates no traffic. It reads the firewall's own counters and prints PASS or FAIL:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb11-1"><span class="va">INPUT_RULES</span><span class="op">=</span><span class="va">$(</span><span class="fu">sudo</span> iptables <span class="at">-L</span> INPUT <span class="at">-v</span> <span class="at">-n</span> <span class="at">--line-numbers</span> <span class="kw">||</span> <span class="fu">true</span><span class="va">)</span></span>
+<span id="cb11-2"></span>
+<span id="cb11-3"><span class="fu">count_pkts()</span> <span class="kw">{</span></span>
+<span id="cb11-4">  <span class="bu">local</span> <span class="va">table</span><span class="op">=</span><span class="st">"</span><span class="va">$1</span><span class="st">"</span> <span class="va">pattern</span><span class="op">=</span><span class="st">"</span><span class="va">$2</span><span class="st">"</span></span>
+<span id="cb11-5">  <span class="bu">printf</span> <span class="st">'%s\n'</span> <span class="st">"</span><span class="va">$table</span><span class="st">"</span> <span class="kw">|</span></span>
+<span id="cb11-6">    <span class="fu">awk</span> <span class="at">-v</span> p=<span class="st">"</span><span class="va">$pattern</span><span class="st">"</span> <span class="st">'$0 ~ p { print $2; exit }'</span></span>
+<span id="cb11-7"><span class="kw">}</span></span>
+<span id="cb11-8"></span>
+<span id="cb11-9"><span class="va">ssh_drop_pkts</span><span class="op">=</span><span class="va">$(</span><span class="ex">count_pkts</span> <span class="st">"</span><span class="va">$INPUT_RULES</span><span class="st">"</span> <span class="dt">\</span></span>
+<span id="cb11-10">  <span class="st">"dpt:22.*recent: UPDATE.*DROP"</span><span class="va">)</span></span></code></pre></div>
+<p><code>iptables -L -v</code> prints a <code>pkts</code> column for each rule; with <code>--line-numbers</code> it is the second field. The checker finds the right rule with a regular expression and pulls that number. A rule that exists but has a zero counter is a FAIL with a hint to run the attack first, so the script tests that a defense <em>fired</em>, not only that it was typed in. The ICMP check requires more than 100 drops. The SYN check also reads the live half-open table size with <code>ss -ant state syn-recv</code>. The script exits 0 only when every check passes, so it can gate automation.</p>
+<p><strong><code>teardown.sh</code></strong> and <code>apply-rules.sh reset</code> flush every chain in both tables and set default policies back to ACCEPT.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-52" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong><code>recent</code> over fail2ban.</strong> fail2ban reads log files and adds bans afterward. <code>recent</code> acts in the kernel on the packet itself, with no log parsing, at the cost of having no allowlist: the troubleshooting guide notes that you can lock yourself out and shows how to clear one IP from the list.</li>
+<li><strong>Global <code>limit</code> versus per-source <code>hashlimit</code>.</strong> The <code>limit</code> match is one shared bucket for everyone. That is simple and absorbs a single-source flood, but during a real flood it also throttles legitimate users, and the SYN rule applies to every TCP port, SSH included. The <code>hashlimit</code> match keeps a bucket per source IP and would be the production choice.</li>
+<li><strong>Scripts, not a single rules file.</strong> One subcommand per defense lets the class demo each attack before and after its specific rule, with chains printed both times.</li>
+<li><strong>Counters as evidence.</strong> Reading kernel counters, rather than timing the attacker's output, gives a number the defender controls.</li>
+<li><strong>Host-only network.</strong> Floods and brute force never leave the VirtualBox host-only network, so the lab cannot harm anything outside it.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-52" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<ul>
+<li><strong>Rule order.</strong> The commit history and troubleshooting guide both stress that the <code>--update ... DROP</code> rule must sit above <code>--set</code>, and that the <code>limit ... ACCEPT</code> rule must come before its DROP. The idempotent helpers use <code>-I</code> and <code>-A</code> deliberately to get this ordering.</li>
+<li><strong>Kernel table limits.</strong> <code>xt_recent</code> defaults to tracking 100 sources and 20 packets each; the guide shows how to reload the module with <code>ip_list_tot</code> and <code>ip_pkt_list_tot</code>.</li>
+<li><strong>Lint warnings.</strong> The last commit fixes ShellCheck warnings SC1007, SC2155 and SC2034. SC2155 is why <code>run-attack.sh</code> declares <code>WORDLIST_DEFAULT</code> on one line and marks it <code>readonly</code> on the next: combining <code>readonly</code> with a command substitution hides the command's exit status.</li>
+<li><strong>Reported results.</strong> The README reports the SSH attack rate falling from 6.00 to 1.00 attempts per minute with about 61 packets dropped, 94,671 ICMP flood packets absorbed, half-open connections capped at 3, and DNAT reaching Apache on 8080. These numbers come from the team's report; the repo contains the PDF, not the raw captures.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-52" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>The rules are a demonstration set, not a complete server policy. The default policy stays ACCEPT, and there is no <code>ESTABLISHED,RELATED</code> accept rule or default-drop. A production firewall would start from default DROP and allow only the needed services.</li>
+<li><code>iptables</code> is now a compatibility front end on many distributions; new work usually targets <code>nftables</code>, which has its own rate-limit and set features.</li>
+<li>Rate limiting in the kernel is cheap, which is why the ICMP flood stopped elevating <code>ksoftirqd</code> (the kernel thread that handles network interrupts).</li>
+</ul>
+</section>
+<section id="how-to-run-it-52" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb12"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><span class="co"># On the Ubuntu defender (192.168.56.6)</span></span>
+<span id="cb12-2"><span class="ex">./scripts/setup-defender.sh</span></span>
+<span id="cb12-3"><span class="fu">sudo</span> ./scripts/apply-rules.sh all</span>
+<span id="cb12-4"><span class="fu">sudo</span> ./scripts/apply-rules.sh status</span>
+<span id="cb12-5"></span>
+<span id="cb12-6"><span class="co"># On the Kali attacker (192.168.56.7)</span></span>
+<span id="cb12-7"><span class="ex">./scripts/setup-attacker.sh</span></span>
+<span id="cb12-8"><span class="fu">sudo</span> ./scripts/run-attack.sh all</span>
+<span id="cb12-9"></span>
+<span id="cb12-10"><span class="co"># Back on the defender</span></span>
+<span id="cb12-11"><span class="fu">sudo</span> ./scripts/verify-mitigation.sh</span>
+<span id="cb12-12"><span class="fu">sudo</span> ./scripts/teardown.sh</span></code></pre></div>
+</section>
+<section id="learn-more-52" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://man7.org/linux/man-pages/man8/iptables-extensions.8.html" target="_blank" rel="noopener noreferrer">iptables-extensions(8) manual page</a></li>
+<li><a href="https://www.netfilter.org/" target="_blank" rel="noopener noreferrer">The netfilter.org project</a></li>
+<li><a href="https://wiki.archlinux.org/title/Iptables" target="_blank" rel="noopener noreferrer">ArchWiki: iptables</a></li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc4987" target="_blank" rel="noopener noreferrer">RFC 4987: TCP SYN Flooding Attacks and Common Mitigations</a></li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc4787" target="_blank" rel="noopener noreferrer">RFC 4787: NAT Behavioral Requirements for Unicast UDP</a></li>
+<li><a href="https://www.shellcheck.net/wiki/" target="_blank" rel="noopener noreferrer">ShellCheck wiki</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=vbhr4csDeI4" target="_blank" rel="noopener noreferrer">IPTABLES [PART-1] : "UNDERSTANDING THE CONCEPT"</a> (XPSTECH)</li>
+<li><a href="https://www.youtube.com/watch?v=tClcCMrXzek" target="_blank" rel="noopener noreferrer">SYN Flood Attack Explained</a> (Hussein Nasser)</li>
+<li><a href="https://www.youtube.com/watch?v=Bv2zBT2TNRc" target="_blank" rel="noopener noreferrer">SYN-Flood DDOS Attack Explained &amp; Simulated</a> (Elia Halevy)</li>
+<li><a href="https://www.youtube.com/watch?v=FTUV0t6JaDA" target="_blank" rel="noopener noreferrer">NAT Explained - Network Address Translation</a> (PowerCert Animated Videos)</li>
+</ul>
+</section>
+</section>
+<section id="hardened-static-page" class="level2">
+<h2>hardened-static-page</h2>
+<section id="at-a-glance-53" class="level3">
+<h3>At a Glance</h3>
+<p>This is a single static web page whose content is deliberately trivial: one screen, a shield logo, three cards. The real product is the engineering around it: a deny-by-default Content Security Policy, a strict page-weight budget, and a CI pipeline that fails the build if either one regresses. It began as a fan page carrying a 19.5 MB PNG and three third-party hosts, and the git history walks it down, one commit at a time, to a 34 KB cold load with no JavaScript and no external requests. It is a template and teaching example for anyone shipping a static site who wants security headers and performance that are tested, not assumed.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>HTML, CSS, Bash, Python 3</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>None (no build step)</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>html-validate, stylelint, Lighthouse CI, gitleaks, ImageMagick, librsvg</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Cloudflare Pages or Netlify (hosts that read <code>_headers</code>)</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/hardened-static-page</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Complete; Lighthouse 100/100/100/100 reported by CI; MIT (code), OFL (font)</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-53" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Think of a bank vault that only holds one envelope. The envelope is not interesting. The vault is: a door that refuses everything not on a short guest list, a scale at the entrance that sounds an alarm if anything heavy is carried in, and an inspector who, every night, tries to sneak a fake visitor through to prove the door really holds.</p>
+<ol type="1">
+<li>The web host sends extra instructions (HTTP response headers) with the page, including a Content Security Policy that tells the browser "load only styles, images and fonts from this same site, and nothing else at all".</li>
+<li>A budget script weighs every file on every push. Too heavy, and the build fails.</li>
+<li>A CI job injects a hostile inline script into a copy of the page, loads it in headless Chrome under those headers, and fails if the script runs.</li>
+<li>Lighthouse, Google's page auditing tool, scores the page and fails the build if performance, accessibility or byte weight slip.</li>
+</ol>
+</section>
+<section id="architecture-53" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> repo root (served as-is, no build)
+ +---------------------------------------------+
+ | index.html  404.html  style.css  robots.txt |
+ | assets/img/mark.svg (1,020 B) favicons, og  |
+ | assets/fonts/protest-riot-latin.woff2       |
+ | _headers  (CSP, HSTS, COOP/COEP/CORP, ...)  |
+ +---------------------------------------------+
+        |                         |
+        v                         v
+ Cloudflare Pages /        tools/serve.py
+ Netlify read _headers     (parses _headers locally)
+        |                         |
+        v                         v
+ +---------------------------------------------+
+ | GitHub Actions CI (SHA-pinned actions)      |
+ |  lint       html-validate + stylelint       |
+ |  budget     tools/check-budget.sh           |
+ |  headers    serve.py + check-headers.sh     |
+ |             + inline-script probe (Chrome)  |
+ |  secrets    gitleaks (SHA-256 verified)     |
+ |  lighthouse lhci autorun                    |
+ |  live       check-headers.sh on SITE_URL    |
+ +---------------------------------------------+</code></pre>
+</section>
+<section id="deep-dive-53" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>The page.</strong> <code>index.html</code> is 52 lines. It preloads the self-hosted font, links one stylesheet, and shows an <code>&lt;img&gt;</code> of the SVG mark with explicit <code>width</code> and <code>height</code>. Those dimensions let the browser reserve space before the image loads, which keeps Cumulative Layout Shift (CLS, how much the page jumps around while loading) at 0. <code>style.css</code> (279 lines) declares the font with a Latin <code>unicode-range</code> subset and <code>font-display: swap</code>, defines colour tokens as CSS custom properties, and paints the background with three radial gradients. A comment records why: the previous background was a 120 KB image hotlinked from a wallpaper site, and an A/B render showed it changed only 237 of 1.15 million pixels.</p>
+<p><strong>The <code>_headers</code> file.</strong> Cloudflare Pages and Netlify both read this file from the site root: a path pattern, then indented <code>Name: value</code> lines.</p>
+<pre class="text"><code>/*
+  Content-Security-Policy: default-src 'none'; style-src 'self';
+    img-src 'self'; font-src 'self'; base-uri 'none';
+    form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  Strict-Transport-Security: max-age=63072000;
+    includeSubDomains; preload</code></pre>
+<p>(The CSP and HSTS values are single lines in the real file; they are wrapped here to fit the page.) A Content Security Policy (CSP) is a header that tells the browser which sources each kind of content may come from. <code>default-src 'none'</code> blocks everything, then only styles, images and fonts from the same origin are allowed back. There is no <code>script-src</code> at all, so any script, inline or external, is blocked. <code>base-uri 'none'</code> stops an injected <code>&lt;base&gt;</code> tag from redirecting relative links, <code>form-action 'none'</code> stops forms from posting anywhere, and <code>frame-ancestors 'none'</code> stops other sites from framing the page (clickjacking). HSTS (HTTP Strict Transport Security) tells browsers to use HTTPS only, here for two years. COOP, COEP and CORP isolate the page from other origins. A <code>Permissions-Policy</code> turns off 18 browser features such as camera, microphone and geolocation. Later rules override earlier ones: <code>/assets/img/og.jpg</code> gets <code>Cross-Origin-Resource-Policy: cross-origin</code> so social media scrapers can fetch the preview image.</p>
+<p>Caching is a deliberate trade-off recorded in a comment: assets get one week, not a year with <code>immutable</code>, because filenames are not content-hashed, and an immutable stale file would strand visitors until it expired. The HTML entry point always revalidates so deploys show up immediately.</p>
+<p><strong><code>tools/serve.py</code></strong> solves the problem that <code>_headers</code> is only read by the host. It parses the file and applies the same rules to Python's built-in HTTP server, so the policy can be tested locally and in CI:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><span class="kw">def</span> end_headers(<span class="va">self</span>):</span>
+<span id="cb15-2">    url_path <span class="op">=</span> posixpath.normpath(<span class="va">self</span>.path.split(<span class="st">"?"</span>, <span class="dv">1</span>)[<span class="dv">0</span>])</span>
+<span id="cb15-3">    <span class="cf">if</span> url_path.endswith(<span class="st">"/index.html"</span>):</span>
+<span id="cb15-4">        url_path <span class="op">=</span> url_path[: <span class="op">-</span><span class="bu">len</span>(<span class="st">"index.html"</span>)]</span>
+<span id="cb15-5">    <span class="co"># Later matches win, so a specific path can override /*.</span></span>
+<span id="cb15-6">    applied <span class="op">=</span> {}</span>
+<span id="cb15-7">    <span class="cf">for</span> pattern, headers <span class="kw">in</span> <span class="va">self</span>.rules:</span>
+<span id="cb15-8">        <span class="cf">if</span> matches(pattern, url_path):</span>
+<span id="cb15-9">            <span class="cf">for</span> name, value <span class="kw">in</span> headers:</span>
+<span id="cb15-10">                applied[name] <span class="op">=</span> value</span>
+<span id="cb15-11">    <span class="cf">for</span> name, value <span class="kw">in</span> applied.items():</span>
+<span id="cb15-12">        <span class="va">self</span>.send_header(name, value)</span>
+<span id="cb15-13">    <span class="bu">super</span>().end_headers()</span></code></pre></div>
+<p>It overrides <code>end_headers</code>, the hook Python's <code>SimpleHTTPRequestHandler</code> calls just before finishing the response headers. It also registers MIME types Python's table lacks (<code>font/woff2</code>, <code>image/avif</code>, <code>image/webp</code>) and binds only to <code>127.0.0.1</code>.</p>
+<p><strong><code>tools/check-headers.sh</code></strong> fetches a URL with <code>curl -D -</code> (dump headers) and checks 11 assertions, each a header name plus an extended regex the value must match. HSTS is checked only on <code>https://</code> URLs, since hosts do not send it over plain HTTP; when checked, the regex <code>max-age=(6[0-9]{7}|[1-9][0-9]{8,})</code> requires roughly two years or more. It also fails if <code>X-Powered-By</code> or <code>X-AspNet-Version</code> leaks server details.</p>
+<p><strong>Testing the CSP for effect.</strong> The most interesting CI step injects an inline script and proves it is blocked:</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb16-1"><span class="bu">printf</span> <span class="st">'%s\n&lt;script&gt;document.title="EXECUTED";&lt;/script&gt;\n'</span> <span class="dt">\</span></span>
+<span id="cb16-2">  <span class="st">"</span><span class="va">$(</span><span class="fu">cat</span> index.html<span class="va">)</span><span class="st">"</span> <span class="op">&gt;</span> /tmp/probe.html</span>
+<span id="cb16-3"><span class="fu">cp</span> /tmp/probe.html ./probe.html</span>
+<span id="cb16-4"><span class="va">title</span><span class="op">=</span><span class="va">$(</span><span class="ex">google-chrome</span> <span class="at">--headless</span> <span class="at">--disable-gpu</span> <span class="at">--no-sandbox</span> <span class="dt">\</span></span>
+<span id="cb16-5">          <span class="at">--virtual-time-budget</span><span class="op">=</span>4000 <span class="at">--dump-dom</span> <span class="dt">\</span></span>
+<span id="cb16-6">          http://127.0.0.1:8000/probe.html <span class="dv">2</span><span class="op">&gt;</span>/dev/null <span class="dt">\</span></span>
+<span id="cb16-7">        <span class="kw">|</span> <span class="fu">grep</span> <span class="at">-oP</span> <span class="st">'(?&lt;=&lt;title&gt;).*?(?=&lt;/title&gt;)'</span><span class="va">)</span></span>
+<span id="cb16-8"><span class="fu">rm</span> <span class="at">-f</span> ./probe.html</span>
+<span id="cb16-9"><span class="cf">if</span> <span class="bu">[</span> <span class="st">"</span><span class="va">$title</span><span class="st">"</span> <span class="ot">=</span> <span class="st">"EXECUTED"</span> <span class="bu">]</span><span class="kw">;</span> <span class="cf">then</span></span>
+<span id="cb16-10">  <span class="bu">echo</span> <span class="st">"CSP did not block inline script"</span><span class="kw">;</span> <span class="bu">exit</span> 1</span>
+<span id="cb16-11"><span class="cf">fi</span></span></code></pre></div>
+<p>If the script runs, it changes the page title. Headless Chrome dumps the final DOM, and <code>grep -oP</code> with lookbehind and lookahead pulls out the title. As the README puts it, a header string being present "proves very little"; this checks the policy for effect rather than for spelling.</p>
+<p><strong>The budget.</strong> <code>tools/check-budget.sh</code> sets three limits in bytes: the critical path (what a 2x screen downloads for a cold load: HTML, CSS, font, SVG mark, favicon) at 150 KB, any single tracked file at 200 KB, and all files tracked by git at 1 MB. It uses <code>git ls-files</code> so only committed content counts, and prints the three largest files even when everything passes. Lighthouse CI enforces a second, independent weight limit (<code>total-byte-weight</code> at most 153,600 bytes) plus minimum scores: 0.95 for performance and best practices, 1.0 for accessibility, and 1.0 for SEO on <code>index.html</code>. <code>404.html</code> is exempt from SEO because it is <code>noindex</code> on purpose.</p>
+<p><strong>Image tooling.</strong> <code>tools/build-images.sh</code> rasterizes only what cannot be vector: a 32x32 favicon, a 180x180 Apple touch icon (flattened onto the page background because iOS fills transparency with black), and a 1200x630 Open Graph card. It uses <code>rsvg-convert</code> for SVG rendering because, per its comment, ImageMagick's own renderer handles gradients incorrectly.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-53" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Self-hosting the font is a security decision.</strong> The Google Fonts stylesheet is generated per browser, so it can never be pinned with Subresource Integrity (a hash that proves a file was not changed) or covered by <code>style-src 'self'</code>. Self-hosting a 26 KB Latin subset removed a render-blocking third-party request and made the strict CSP possible. Since the family only ships weight 400, the display face is used for headings and the system font stack for body text to avoid "synthetic bold".</li>
+<li><strong>One SVG instead of a responsive raster pipeline.</strong> An earlier commit built 240/480/720 px AVIF and WebP variants of the hero art. A later commit removed it in favour of a 1,020-byte hand-drawn SVG, with the note that "seven avif/webp/png derivatives of flat vector art would be worse engineering than one svg, even though the pipeline was more impressive to look at."</li>
+<li><strong>Host choice is part of security.</strong> GitHub Pages does not read <code>_headers</code>, so on it the whole policy would be dead config. The README names Cloudflare Pages and Netlify instead.</li>
+<li><strong>Actions pinned to commit SHAs.</strong> A git tag like <code>v7</code> can be moved by whoever controls the action's repository; a commit SHA cannot. Dependabot bumps the pins weekly so the project still receives fixes.</li>
+<li><strong>Downloaded binaries verified.</strong> gitleaks is installed from a pinned release and checked with <code>sha256sum --check --strict</code>, because "pinning a version without checking the bytes is half a control".</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-53" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>The commit messages read like a performance and security journal:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Before</th>
+<th>After</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hero artwork</td>
+<td>19,523,366 B PNG</td>
+<td>1,020 B SVG</td>
+</tr>
+<tr>
+<td>Cold page load</td>
+<td>about 19.6 MB</td>
+<td>34 KB</td>
+</tr>
+<tr>
+<td>Third-party hosts</td>
+<td>3</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Security headers</td>
+<td>none</td>
+<td>9</td>
+</tr>
+<tr>
+<td><code>git clone</code> size</td>
+<td>6.58 MiB</td>
+<td>502 KiB</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>The 19 MB PNG.</strong> The original hero was a 2124x2297 PNG scaled to 240 px by CSS. The budget job exists "because nothing stopped that 19 MB file the first time".</li>
+<li><strong>Mobile and Safari fixes.</strong> <code>100vh</code> on mobile is taller than the visible area, so <code>100svh</code> was added after the fallback. <code>-webkit-backdrop-filter</code> was restored after <code>stylelint --fix</code> stripped it, which broke the glass effect on Safari before version 18; the stylelint rule <code>property-no-vendor-prefix</code> was then turned off.</li>
+<li><strong>Reduced motion.</strong> Hover transforms are disabled under <code>prefers-reduced-motion</code>.</li>
+<li><strong>Secret scanning after a history rewrite.</strong> The official gitleaks action derives its scan range from the push event. After the history was rewritten (to drop the large PNG), the range became <code>&lt;root&gt;^..&lt;head&gt;</code>, and the root commit has no parent, so the job failed having scanned nothing. The fix runs a pinned gitleaks binary over the full history, which behaves the same on any push.</li>
+<li><strong>404 page paths.</strong> A 404 page is served at whatever wrong URL the visitor typed, so its asset paths are root-absolute; relative paths would resolve against the bad URL and break.</li>
+<li><strong>Local vs deployed.</strong> <code>serve.py</code> proves the file is correct but not that the host applies it. A <code>live</code> CI job runs the same checker against the real deployment once the <code>SITE_URL</code> repository variable is set, and skips until then.</li>
+</ul>
+</section>
+<section id="security-and-performance-notes-53" class="level3">
+<h3>Security and Performance Notes</h3>
+<ul>
+<li>With no server, database, login or user input, the realistic attack surface is the supply chain and the headers, and the CI targets exactly those.</li>
+<li><code>SECURITY.md</code> notes that if JavaScript is ever added, <code>script-src</code> must be added deliberately; today it falls under <code>default-src 'none'</code> and any script is blocked rather than silently allowed.</li>
+<li>Lighthouse reports performance, accessibility, best practices and SEO at 100, Largest Contentful Paint (LCP, when the biggest visible element finishes drawing) of 0.3 s, and CLS of 0.</li>
+<li>Text contrast is above 9:1, and the only interactive element (the link back on the 404 page) has a <code>:focus-visible</code> ring.</li>
+</ul>
+</section>
+<section id="how-to-run-it-53" class="level3">
+<h3>How to Run It</h3>
+<div class="sourceCode" id="cb17"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb17-1"><span class="ex">npm</span> ci</span>
+<span id="cb17-2"><span class="ex">npm</span> test                 <span class="co"># html-validate, stylelint, weight budget</span></span>
+<span id="cb17-3"><span class="ex">npm</span> run serve            <span class="co"># :8000 with production headers applied</span></span>
+<span id="cb17-4"><span class="ex">npm</span> run check:headers    <span class="co"># assert headers against the local server</span></span>
+<span id="cb17-5"><span class="ex">./tools/build-images.sh</span>  <span class="co"># favicons and OG card from the SVG</span></span>
+<span id="cb17-6"><span class="ex">gh</span> variable set SITE_URL <span class="at">--body</span> https://<span class="op">&lt;</span>project<span class="op">&gt;</span>.pages.dev</span></code></pre></div>
+</section>
+<section id="learn-more-53" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP" target="_blank" rel="noopener noreferrer">MDN: Content Security Policy (CSP)</a></li>
+<li><a href="https://www.w3.org/TR/CSP3/" target="_blank" rel="noopener noreferrer">W3C: Content Security Policy Level 3</a></li>
+<li><a href="https://developers.cloudflare.com/pages/configuration/headers/" target="_blank" rel="noopener noreferrer">Cloudflare Pages: Headers</a></li>
+<li><a href="https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html" target="_blank" rel="noopener noreferrer">OWASP HTTP Headers Cheat Sheet</a></li>
+<li><a href="https://github.com/GoogleChrome/lighthouse-ci/blob/main/docs/getting-started.md" target="_blank" rel="noopener noreferrer">Lighthouse CI documentation</a></li>
+<li><a href="https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions" target="_blank" rel="noopener noreferrer">GitHub Docs: Security hardening for GitHub Actions</a></li>
+<li><a href="https://web.dev/articles/vitals" target="_blank" rel="noopener noreferrer">web.dev: Web Vitals</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=-LjPRzFR5f0" target="_blank" rel="noopener noreferrer">Content Security Policy Explained</a> (Tejas Kumar)</li>
+<li><a href="https://www.youtube.com/watch?v=B0Rz_qiQAWo" target="_blank" rel="noopener noreferrer">Content Security Policy to prevent XSS attacks</a> (Duende Software)</li>
+<li><a href="https://www.youtube.com/watch?v=L5l9lSnNMxg" target="_blank" rel="noopener noreferrer">Cracking Websites with Cross Site Scripting - Computerphile</a> (Computerphile)</li>
+<li><a href="https://www.youtube.com/watch?v=F0NYT7DIlDQ" target="_blank" rel="noopener noreferrer">Understanding performance with Core Web Vitals</a> (Chrome for Developers)</li>
+<li><a href="https://www.youtube.com/watch?v=AQqFZ5t8uNc" target="_blank" rel="noopener noreferrer">Optimize for Core Web Vitals</a> (Chrome for Developers)</li>
+</ul>
+</section>
+</section>
+<section id="neetcode-submissions" class="level2">
+<h2>neetcode-submissions</h2>
+<section id="at-a-glance-54" class="level3">
+<h3>At a Glance</h3>
+<p>This repository is filled automatically by NeetCode.io's GitHub Sync feature. Every time a solution is submitted on the site, it is committed here as a new file. It records the early stage of a structured interview-prep practice in Python. It is for the author's own tracking, and for readers it is a compact look at the first patterns in the "Arrays and Hashing" family and how the same problem gets re-submitted.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Python 3</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>None (NeetCode's online judge supplies <code>List</code> and the <code>Solution</code> class harness)</td>
+</tr>
+<tr>
+<td>Key libraries</td>
+<td>Built-ins only (<code>set</code>, <code>sorted</code>, <code>max</code>)</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>NeetCode.io, synced to GitHub</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>https://github.com/VijaysinghPuwar/neetcode-submissions</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Active; three commits, all on 2026-10-01 (initial commit, a bulk sync of 14 submissions, one follow-up)</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works-simple-version-54" class="level3">
+<h3>How It Works (Simple Version)</h3>
+<p>Think of it as an automatic photocopier attached to a homework tray. Every time a solution goes into the tray on NeetCode, a copy is filed into a folder named after the problem, numbered <code>submission-0</code>, <code>submission-1</code>, and so on. Nothing is edited after filing, so the folder shows each attempt exactly as it was submitted.</p>
+</section>
+<section id="architecture-54" class="level3">
+<h3>Architecture</h3>
+<pre class="text"><code> NeetCode.io editor --submit--&gt; judge --(GitHub Sync)--&gt; repo
+                                                    |
+ Data Structures &amp; Algorithms/                      |
+   duplicate-integer/       submission-9,11,20,21 &lt;-+
+   is-anagram/              submission-0..3
+   two-integer-sum/         submission-0,1
+   max-consecutive-ones/    submission-0,1
+   remove-element/          submission-0
+   replace-elements-with-greatest-element-on-right-side/
+                            submission-0,1</code></pre>
+<p>The submission numbers are NeetCode's own counters, so gaps (for example 9, 11, 20, 21 for <code>duplicate-integer</code>) mean only some attempts were synced, likely just the accepted ones.</p>
+</section>
+<section id="deep-dive-54" class="level3">
+<h3>Deep Dive</h3>
+<p><strong>What is covered.</strong> There are 6 distinct problems and 15 submission files, all Python, under one topic folder.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr>
+<th>Category</th>
+<th>Problems</th>
+<th>Submissions</th>
+<th>Core technique</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Arrays and Hashing</td>
+<td>Contains Duplicate, Valid Anagram, Two Sum</td>
+<td>4 + 4 + 2 = 10</td>
+<td>Hash set, sorting, brute-force pairs</td>
+</tr>
+<tr>
+<td>Array traversal (single pass)</td>
+<td>Max Consecutive Ones, Remove Element</td>
+<td>2 + 1 = 3</td>
+<td>Running counter, two pointers (read/write)</td>
+</tr>
+<tr>
+<td>Array suffix scan</td>
+<td>Replace Elements with Greatest on Right</td>
+<td>2</td>
+<td>Repeated slicing (quadratic)</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>6</strong></td>
+<td><strong>15</strong></td>
+<td></td>
+</tr>
+</tbody>
+</table></div>
+<p>By technique: one hash-set solution, one sort-and-compare, one nested-loop brute force, one run-length counter, one in-place two-pointer compaction, and one slice-based maximum. Repeated submissions are almost always identical apart from variable names or whitespace, which suggests re-solving from memory as practice.</p>
+<p>Each solution below is explained with its time and space complexity. Big-O notation describes how running time or memory grows with input size <em>n</em>: O(1) is constant, O(n) grows in step with the input, O(n^2) grows with its square.</p>
+<p><strong>1. Contains Duplicate (hash set).</strong></p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb19-1"><span class="kw">class</span> Solution:</span>
+<span id="cb19-2">    <span class="kw">def</span> hasDuplicate(<span class="va">self</span>, nums: List[<span class="bu">int</span>]) <span class="op">-&gt;</span> <span class="bu">bool</span>:</span>
+<span id="cb19-3">        hashset <span class="op">=</span> <span class="bu">set</span>()</span>
+<span id="cb19-4">        <span class="cf">for</span> n <span class="kw">in</span> nums:</span>
+<span id="cb19-5">            <span class="cf">if</span> n <span class="kw">in</span> hashset:</span>
+<span id="cb19-6">                <span class="cf">return</span> <span class="va">True</span></span>
+<span id="cb19-7">            hashset.add(n)</span>
+<span id="cb19-8">        <span class="cf">return</span> <span class="va">False</span></span></code></pre></div>
+<p>A Python <code>set</code> is a hash table: it turns each value into a bucket index, so checking membership takes constant time on average. The loop remembers every number it has seen and stops the moment it meets one again. Time O(n), space O(n). The alternative of comparing every pair would be O(n^2); sorting first and checking neighbours would be O(n log n) time with less extra memory.</p>
+<p><strong>2. Valid Anagram (sort and compare).</strong></p>
+<div class="sourceCode" id="cb20"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb20-1"><span class="kw">class</span> Solution:</span>
+<span id="cb20-2">    <span class="kw">def</span> isAnagram(<span class="va">self</span>, s: <span class="bu">str</span>, t: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="bu">bool</span>:</span>
+<span id="cb20-3">        sort_s <span class="op">=</span> <span class="st">""</span>.join(<span class="bu">sorted</span>(s))</span>
+<span id="cb20-4">        sort_t <span class="op">=</span> <span class="st">""</span>.join(<span class="bu">sorted</span>(t))</span>
+<span id="cb20-5">        <span class="cf">if</span> sort_s <span class="op">==</span> sort_t:</span>
+<span id="cb20-6">            <span class="cf">return</span> <span class="va">True</span></span>
+<span id="cb20-7">        <span class="cf">return</span> <span class="va">False</span></span></code></pre></div>
+<p>Two strings are anagrams if they contain the same letters in any order, so sorting both and comparing gives the answer. Time O(n log n) because of the sort, space O(n) for the sorted copies. The final <code>if</code> could simply be <code>return sort_s == sort_t</code>. The hash-map approach (count each character with a dictionary or <code>collections.Counter</code>) reaches O(n) time, with O(1) extra space for a fixed alphabet.</p>
+<p><strong>3. Two Sum (brute force).</strong></p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><span class="kw">class</span> Solution:</span>
+<span id="cb21-2">    <span class="kw">def</span> twoSum(<span class="va">self</span>, nums: List[<span class="bu">int</span>], target: <span class="bu">int</span>) <span class="op">-&gt;</span> List[<span class="bu">int</span>]:</span>
+<span id="cb21-3">        <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="bu">len</span>(nums) <span class="op">-</span> <span class="dv">1</span>):</span>
+<span id="cb21-4">            <span class="cf">for</span> j <span class="kw">in</span> <span class="bu">range</span>(i<span class="op">+</span><span class="dv">1</span>, <span class="bu">len</span>(nums)):</span>
+<span id="cb21-5">                <span class="cf">if</span> nums[i] <span class="op">+</span> nums[j] <span class="op">==</span> target:</span>
+<span id="cb21-6">                    <span class="cf">return</span> [i, j]</span></code></pre></div>
+<p>This tries every pair once (<code>j</code> always starts after <code>i</code>), so it is O(n^2) time and O(1) space. Both synced submissions use this approach. The standard improvement is a single pass with a dictionary from value to index: for each number, check whether <code>target - number</code> is already in the dictionary. That is O(n) time and O(n) space, and it is the solution most interviewers expect.</p>
+<p><strong>4. Remove Element (two pointers, in place).</strong></p>
+<div class="sourceCode" id="cb22"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb22-1"><span class="kw">class</span> Solution:</span>
+<span id="cb22-2">    <span class="kw">def</span> removeElement(<span class="va">self</span>, nums: List[<span class="bu">int</span>], val: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="bu">int</span>:</span>
+<span id="cb22-3">        k <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb22-4">        <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="bu">len</span>(nums)):</span>
+<span id="cb22-5">            <span class="cf">if</span> nums[i] <span class="op">!=</span> val:</span>
+<span id="cb22-6">                nums[k] <span class="op">=</span> nums[i]</span>
+<span id="cb22-7">                k <span class="op">=</span> k <span class="op">+</span> <span class="dv">1</span></span>
+<span id="cb22-8">        <span class="cf">return</span> k</span></code></pre></div>
+<p>This is the read/write pointer pattern. <code>i</code> reads every element; <code>k</code> marks where the next kept element should be written. Each element that is not <code>val</code> is copied forward, so after one pass the first <code>k</code> positions hold the answer. Time O(n), space O(1), and the relative order of kept elements is preserved.</p>
+<p><strong>5. Max Consecutive Ones (running counter).</strong></p>
+<p>The solution counts the current run of 1s in <code>r</code>, appends it to a list <code>seen</code> whenever a 0 breaks the run, appends the final run after the loop, and returns <code>max(seen)</code>. Time O(n). Space is O(n) in the worst case because of the <code>seen</code> list. Keeping a single <code>best = max(best, r)</code> variable instead would bring space down to O(1).</p>
+<p><strong>6. Replace Elements with Greatest Element on Right Side (slicing).</strong></p>
+<div class="sourceCode" id="cb23"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb23-1"><span class="kw">class</span> Solution:</span>
+<span id="cb23-2">    <span class="kw">def</span> replaceElements(<span class="va">self</span>, arr: List[<span class="bu">int</span>]) <span class="op">-&gt;</span> List[<span class="bu">int</span>]:</span>
+<span id="cb23-3">        <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="bu">len</span>(arr)<span class="op">-</span><span class="dv">1</span>):</span>
+<span id="cb23-4">            arr[i] <span class="op">=</span> <span class="bu">max</span>(arr[i<span class="op">+</span><span class="dv">1</span>:])</span>
+<span id="cb23-5">        arr[<span class="bu">len</span>(arr)<span class="op">-</span><span class="dv">1</span>] <span class="op">=</span> <span class="op">-</span><span class="dv">1</span></span>
+<span id="cb23-6">        <span class="cf">return</span> arr</span></code></pre></div>
+<p>For each position it takes the maximum of everything to its right. This is correct, but <code>arr[i+1:]</code> copies the rest of the list every time and <code>max</code> scans it, so the total work is O(n^2) time with O(n) temporary space per step. The intended solution walks from the right end with a running maximum: save the current value, write the running max into this slot, then update the running max. That is O(n) time and O(1) space. This problem is a good example of the "scan from the other end" idea.</p>
+</section>
+<section id="key-design-decisions-and-trade-offs-54" class="level3">
+<h3>Key Design Decisions and Trade-offs</h3>
+<ul>
+<li><strong>Automatic sync over a hand-curated repo.</strong> No effort is needed to keep the repo current, at the cost of no README per problem and no notes on why a solution works.</li>
+<li><strong>Every attempt kept.</strong> Storing each submission as its own file preserves the history of re-solves. It also means the repo shows first, simple solutions (brute-force Two Sum, slice-based maximum) next to optimal ones, which honestly reflects where the practice is.</li>
+<li><strong>Python only.</strong> The platform supports many languages; using one keeps attention on patterns rather than syntax.</li>
+</ul>
+</section>
+<section id="challenges-and-how-they-were-solved-54" class="level3">
+<h3>Challenges and How They Were Solved</h3>
+<p>The repo has no commit messages beyond the sync tool's own, so challenges have to be read from the code. The clearest signal is the progression from O(n^2) to O(n) ideas within the "Arrays and Hashing" group: Contains Duplicate already uses a hash set, while Two Sum and Replace Elements still use quadratic approaches whose linear versions use the same "remember what you have seen" and "keep a running value" ideas.</p>
+</section>
+<section id="how-to-run-it-54" class="level3">
+<h3>How to Run It</h3>
+<p>The files are written for NeetCode's judge, which provides <code>List</code> and calls the <code>Solution</code> method. To run one locally, add <code>from typing import List</code> at the top and call it directly:</p>
+<div class="sourceCode" id="cb24"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb24-1"><span class="im">from</span> typing <span class="im">import</span> List</span>
+<span id="cb24-2"><span class="co"># ... paste the Solution class ...</span></span>
+<span id="cb24-3"><span class="bu">print</span>(Solution().hasDuplicate([<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">1</span>]))   <span class="co"># True</span></span></code></pre></div>
+</section>
+<section id="learn-more-54" class="level3">
+<h3>Learn More</h3>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://neetcode.io/roadmap" target="_blank" rel="noopener noreferrer">NeetCode roadmap</a></li>
+<li><a href="https://wiki.python.org/moin/TimeComplexity" target="_blank" rel="noopener noreferrer">Python docs: Time complexity of built-in operations (wiki)</a></li>
+<li><a href="https://docs.python.org/3/library/stdtypes.html#set-types-set-frozenset" target="_blank" rel="noopener noreferrer">Python docs: Set types</a></li>
+<li><a href="https://docs.python.org/3/howto/sorting.html" target="_blank" rel="noopener noreferrer">Python docs: Sorting HOW TO</a></li>
+<li><a href="https://www.bigocheatsheet.com/" target="_blank" rel="noopener noreferrer">Big-O Cheat Sheet</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=3OamzN90kPg" target="_blank" rel="noopener noreferrer">Contains Duplicate - Leetcode 217 - Python</a> (NeetCode)</li>
+<li><a href="https://www.youtube.com/watch?v=KLlXCFG5TnA" target="_blank" rel="noopener noreferrer">Two Sum - Leetcode 1 - HashMap - Python</a> (NeetCode)</li>
+<li><a href="https://www.youtube.com/watch?v=9UtInBqnCgA" target="_blank" rel="noopener noreferrer">Valid Anagram - Leetcode 242 - Python</a> (NeetCode)</li>
+<li><a href="https://www.youtube.com/watch?v=ZHjKhUjcsaU" target="_blank" rel="noopener noreferrer">Leetcode 1299 - REPLACE ELEMENTS WITH GREATEST ELEMENT ON RIGHT SIDE</a> (NeetCode)</li>
+<li><a href="https://www.youtube.com/watch?v=Z0bH0cMY0E8" target="_blank" rel="noopener noreferrer">Big O Notation: Calculating Time Complexity</a> (the roadmap)</li>
+<li><a href="https://www.youtube.com/watch?v=g1nAxNKcP0M" target="_blank" rel="noopener noreferrer">Big-O Notation in 8 Minutes</a> (AlgoMasterIO)</li>
+</ul>
+</section>
+</section>
+<section id="vault-private" class="level2">
+<h2>Vault (private)</h2>
+<section id="at-a-glance-55" class="level3">
+<h3>At a Glance</h3>
+<p><code>Vault</code> is a private repository holding the author's personal Obsidian knowledge base: Markdown notes for journaling, study planning, coursework, career planning and project notes, plus attachments. It is personal data, not a software project, so this section describes only its structure and tooling and does not cover its contents.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language(s)</td>
+<td>Markdown, with a small Bash/Python maintenance script</td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>Obsidian (core plugins only: daily notes, templates, backlinks, graph, canvas)</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>macOS, synced to a private GitHub repo</td>
+</tr>
+<tr>
+<td>Repo</td>
+<td>Private (github.com/VijaysinghPuwar/Vault)</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Active; committed automatically every few minutes ("Auto-sync" commits)</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="how-it-works" class="level3">
+<h3>How It Works</h3>
+<p>The notable engineering is how the vault is maintained. A <code>CLAUDE.md</code> and <code>AGENTS.md</code> at the root describe the vault as an "LLM wiki": a knowledge base that an AI agent keeps compiled and current, rather than one re-derived on every question. A <code>SessionStart</code> hook (configured for both Claude Code and Codex) runs <code>.claude/vault-check.sh</code> before the agent's first reply and puts its output into the agent's context.</p>
+<p>That script is a mechanical staleness detector. Its header states the principle: "Everything here is a thing that has actually gone stale at least once. Adding a check is cheaper than remembering." The checks include: a daily note exists for today, the dashboard note is dated today, checklists have been reset, embedded media are actually downloaded, there are no empty stray notes or blank canvas files, no two notes share a filename (which would break <code>[[wikilinks]]</code>), and no wikilink contains <code>#</code> (which Obsidian reads as a heading anchor). The <code>#</code> check is written in Python so it can skip fenced code blocks, because, as its comment says, "a checker with false positives is a checker that gets ignored."</p>
+<p>The <code>CLAUDE.md</code> names the root cause these checks address: the same fact written in several places with nothing comparing them. Its two rules are to prefer deleting a duplicate over maintaining it, and to add a check in the same change whenever a duplicate must exist. The <code>.gitignore</code> keeps per-machine Obsidian UI state, caches and <code>node_modules</code> out of the repo.</p>
+<p>This pattern of a small, cheap consistency checker that runs before any work starts carries over well to codebases, and it reflects the same approach as the CI gates in the other projects in this chapter.</p>
+</section>
+</section>
+</section>

@@ -1,0 +1,294 @@
+<section id="chapter-1-how-to-use-this-book" class="level1">
+<h1><span class="header-section-number">1</span> How to Use This Book</h1>
+<p>This book explains every software project in Vijaysingh Puwar's GitHub account and local workspace. Each chapter was written by reading the real source code, commit history, and design notes, so the explanations match how the code actually works today, including where the code and the README disagree. Every chapter ends with reference material and verified YouTube videos, so a reader can go from "what is this?" to "I can build this" without hunting for resources.</p>
+<section id="reading-guide" class="level2">
+<h2>Reading Guide</h2>
+<section id="how-each-project-section-is-organized" class="level3">
+<h3>How Each Project Section Is Organized</h3>
+<p>Every project follows the same layout, so you can jump straight to the depth you need:</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Section</th>
+<th>What you get</th>
+<th>Read it if you want to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>At a Glance</td>
+<td>What it is, the problem, the tech stack table</td>
+<td>Decide quickly whether the project matters to you</td>
+</tr>
+<tr>
+<td>How It Works (Simple Version)</td>
+<td>An analogy or a step-by-step story</td>
+<td>Understand the idea without code</td>
+</tr>
+<tr>
+<td>Architecture</td>
+<td>Components and an ASCII diagram</td>
+<td>See how the pieces connect</td>
+</tr>
+<tr>
+<td>Deep Dive</td>
+<td>Modules, data flow, algorithms, real code excerpts</td>
+<td>Understand the engineering in detail</td>
+</tr>
+<tr>
+<td>Key Design Decisions and Trade-offs</td>
+<td>Why it was built this way</td>
+<td>Learn the reasoning, not just the result</td>
+</tr>
+<tr>
+<td>Challenges and How They Were Solved</td>
+<td>Real bugs and fixes from history</td>
+<td>Learn from problems already solved</td>
+</tr>
+<tr>
+<td>Security and Performance Notes</td>
+<td>Risks, hardening, speed work</td>
+<td>Review or extend the project safely</td>
+</tr>
+<tr>
+<td>How to Run It</td>
+<td>Commands taken from the repo</td>
+<td>Run it yourself</td>
+</tr>
+<tr>
+<td>Learn More</td>
+<td>Docs, specs, articles, YouTube videos</td>
+<td>Study the underlying technology</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="suggested-paths" class="level3">
+<h3>Suggested Paths</h3>
+<ul>
+<li><strong>New to programming:</strong> read the "At a Glance" and "How It Works" sections of each project first, then Chapter 10 (coursework) for the foundations: statistics, assembly, and how a CPU runs code.</li>
+<li><strong>Interested in systems and performance:</strong> Chapter 2 (spoonstill, Rust and FFmpeg), then the SetupTTS section in Chapter 5, then TOC Extractor in Chapter 8.</li>
+<li><strong>Interested in full-stack web:</strong> Chapter 3 (Web Audio TV), Chapter 4 (BreachScope), Recap Verse in Chapter 6, and TrustKart in Chapter 7.</li>
+<li><strong>Interested in security:</strong> Chapter 9 and Chapter 11, then the "Security and Performance Notes" of every other chapter. Several projects document real issues found in the code, which make good case studies.</li>
+<li><strong>Interested in AI applications:</strong> Chapter 5 (neural text to speech) and Chapter 6 (manga recap, subtitles, image to video).</li>
+</ul>
+</section>
+</section>
+<section id="project-map" class="level2">
+<h2>Project Map</h2>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr>
+<th>Project</th>
+<th>Chapter</th>
+<th>Main technology</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>spoonstill</td>
+<td>2</td>
+<td>Rust, FFmpeg, Tauri</td>
+<td>Turns still images plus narration into one MP4 with Ken Burns motion</td>
+</tr>
+<tr>
+<td>Web Audio TV</td>
+<td>3</td>
+<td>React, Supabase, Cloudflare R2 and Workers</td>
+<td>Audiobook streaming site with subscriptions, XP, and signed playback</td>
+</tr>
+<tr>
+<td>BreachScope</td>
+<td>4</td>
+<td>Go, React, MapLibre, Postgres</td>
+<td>Live threat intelligence map built on public feeds, with provenance on every record</td>
+</tr>
+<tr>
+<td>SetupTTS</td>
+<td>5</td>
+<td>Python, PySide6, Edge neural voices, Piper</td>
+<td>Desktop text to speech app for macOS and Windows</td>
+</tr>
+<tr>
+<td>KokoroTTS and TTS workspace</td>
+<td>5</td>
+<td>Python, ONNX Runtime, Kokoro</td>
+<td>Local neural voice apps and experiments</td>
+</tr>
+<tr>
+<td>LocalTTSVideoStudio</td>
+<td>5</td>
+<td>Flask, FFmpeg, multiple TTS engines</td>
+<td>Turns text into narrated video with subtitles</td>
+</tr>
+<tr>
+<td>Cutmox</td>
+<td>6</td>
+<td>ffmpeg.wasm, Whisper on WebGPU</td>
+<td>Generates subtitles fully inside the browser</td>
+</tr>
+<tr>
+<td>Recap Verse</td>
+<td>6</td>
+<td>Next.js, FastAPI, MongoDB, OpenCV</td>
+<td>Turns manga pages into narrated recap videos</td>
+</tr>
+<tr>
+<td>manga-recap-studio, panel-narrate-ai</td>
+<td>6</td>
+<td>Streamlit, Supabase, GPT-4o</td>
+<td>Earlier and hosted versions of the manga recap idea</td>
+</tr>
+<tr>
+<td>Novelsin</td>
+<td>6</td>
+<td>Next.js, Supabase</td>
+<td>Serialized web novel platform</td>
+</tr>
+<tr>
+<td>Image to Video (fal.ai), Motion Scene Studio</td>
+<td>6</td>
+<td>Tkinter, FastAPI, fal.ai, Veo</td>
+<td>Animate a still image into long looping video</td>
+</tr>
+<tr>
+<td>Audio-Video-Studio</td>
+<td>6</td>
+<td>faster-whisper, Pillow, FFmpeg</td>
+<td>Narration to story video with karaoke subtitles</td>
+</tr>
+<tr>
+<td>Portfolio Website</td>
+<td>7</td>
+<td>React, Vite, Supabase</td>
+<td>Terminal-themed personal site with an e-book reader</td>
+</tr>
+<tr>
+<td>ZELQORIX</td>
+<td>7</td>
+<td>React, Vite, Vercel</td>
+<td>Static corporate site with a strict Content Security Policy</td>
+</tr>
+<tr>
+<td>CardioCommand</td>
+<td>7</td>
+<td>FastAPI, LangGraph, WebSockets</td>
+<td>Hackathon cardiac monitoring dashboard with AI triage</td>
+</tr>
+<tr>
+<td>TrustKart</td>
+<td>7</td>
+<td>Spring Boot, React, PostgreSQL</td>
+<td>Technology store with a virtual wallet and safe checkout</td>
+</tr>
+<tr>
+<td>Blender House, India Budget, react-labs, calculator</td>
+<td>7</td>
+<td>Blender Python, spreadsheets, ES modules</td>
+<td>Smaller design, data, and learning projects</td>
+</tr>
+<tr>
+<td>TOC Extractor</td>
+<td>8</td>
+<td>C#, .NET, Avalonia, Python</td>
+<td>Saves web novel chapters as TXT or PDF, politely</td>
+</tr>
+<tr>
+<td>txttranslation, JEE Test Simulator, JobRadar</td>
+<td>8</td>
+<td>Next.js, AI APIs</td>
+<td>Bring-your-own-key AI tools</td>
+</tr>
+<tr>
+<td>VAULTSNAKE, SplitForge, FFmpeg Web GUI, others</td>
+<td>8</td>
+<td>FastAPI, Web Workers, Flask</td>
+<td>Utilities and developer tools</td>
+</tr>
+<tr>
+<td>WinSecKit, AWS security, Nmap NSE, Ansible, Windows bootstrap</td>
+<td>9</td>
+<td>PowerShell, Terraform, Lua, Ansible</td>
+<td>Security automation and hardening</td>
+</tr>
+<tr>
+<td>RIP, inter-VLAN, Rapid PVST+ labs</td>
+<td>9</td>
+<td>Cisco Packet Tracer</td>
+<td>Routing and switching labs</td>
+</tr>
+<tr>
+<td>Statistics projects, PaceLab, assembly lab</td>
+<td>10</td>
+<td>R, Python, x86-64 assembly</td>
+<td>Academic work explained from first principles</td>
+</tr>
+<tr>
+<td>Dual-ISP assessment, iptables, hardened-static-page</td>
+<td>11</td>
+<td>PowerShell, iptables, CSP, CI</td>
+<td>Network diagnosis, firewalling, and a hardened site</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="ideas-that-appear-across-many-projects" class="level2">
+<h2>Ideas That Appear Across Many Projects</h2>
+<p>Some techniques show up again and again. Learning them once makes every chapter easier.</p>
+<section id="ffmpeg-as-a-media-engine" class="level3">
+<h3>FFmpeg as a Media Engine</h3>
+<p>FFmpeg is a command line program that can read, convert, cut, join, and filter almost any audio or video file. spoonstill, LocalTTSVideoStudio, Audio-Video-Studio, Image to Video, Cutmox (through its WebAssembly build), and the FFmpeg Web GUI all drive it. The safe pattern used throughout is to build the command as a list of arguments and never as one shell string, which prevents a file name from being interpreted as a command.</p>
+</section>
+<section id="row-level-security-in-postgres" class="level3">
+<h3>Row Level Security in Postgres</h3>
+<p>Supabase projects (Web Audio TV, Novelsin, the Portfolio Website, panel-narrate-ai) rely on Postgres Row Level Security (RLS). RLS means the database itself checks every query against a policy such as "a user may only read their own rows", so a bug in the front end cannot leak another user's data. Several chapters show both correct policies and policies that are too open, which is the most common mistake with this tool.</p>
+</section>
+<section id="bring-your-own-key-byok" class="level3">
+<h3>Bring Your Own Key (BYOK)</h3>
+<p>Many AI tools here let users paste their own API key instead of paying for a shared one. The key is encrypted with AES-256-GCM before storage. AES-GCM is an encryption mode that also detects tampering, so a modified ciphertext fails to decrypt instead of producing garbage.</p>
+</section>
+<section id="work-off-the-main-thread" class="level3">
+<h3>Work Off the Main Thread</h3>
+<p>Desktop and browser apps stay responsive by moving heavy work elsewhere: Web Workers in the browser (Cutmox, SplitForge), worker threads in Qt (SetupTTS), and bounded thread pools in Rust (spoonstill). The user interface thread only draws and reacts to clicks.</p>
+</section>
+<section id="honest-engineering-notes" class="level3">
+<h3>Honest Engineering Notes</h3>
+<p>Many repositories contain decision logs, findings files, and audits. The chapters quote them where useful. Where a README claims more than the code does, the chapter says so, because knowing the real state of a system is part of understanding it.</p>
+</section>
+</section>
+<section id="general-learning-resources" class="level2">
+<h2>General Learning Resources</h2>
+<p><strong>Reference material:</strong></p>
+<ul>
+<li><a href="https://developer.mozilla.org/" target="_blank" rel="noopener noreferrer">MDN Web Docs</a></li>
+<li><a href="https://doc.rust-lang.org/book/" target="_blank" rel="noopener noreferrer">The Rust Programming Language (the Book)</a></li>
+<li><a href="https://docs.python.org/3/" target="_blank" rel="noopener noreferrer">Python Official Documentation</a></li>
+<li><a href="https://ffmpeg.org/documentation.html" target="_blank" rel="noopener noreferrer">FFmpeg Documentation</a></li>
+<li><a href="https://www.postgresql.org/docs/" target="_blank" rel="noopener noreferrer">PostgreSQL Documentation</a></li>
+<li><a href="https://owasp.org/www-project-top-ten/" target="_blank" rel="noopener noreferrer">OWASP Top Ten</a></li>
+<li><a href="https://roadmap.sh/" target="_blank" rel="noopener noreferrer">roadmap.sh developer roadmaps</a></li>
+</ul>
+<p><strong>YouTube videos:</strong></p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=RGOj5yH7evk" target="_blank" rel="noopener noreferrer">Git and GitHub for Beginners - Crash Course</a> (freeCodeCamp.org)</li>
+<li><a href="https://www.youtube.com/watch?v=iYM2zFP3Zn0" target="_blank" rel="noopener noreferrer">HTTP Crash Course &amp; Exploration</a> (Traversy Media)</li>
+<li><a href="https://www.youtube.com/watch?v=aircAruvnKk" target="_blank" rel="noopener noreferrer">But what is a neural network? Deep learning chapter 1</a> (3Blue1Brown)</li>
+<li><a href="https://www.youtube.com/watch?v=O4xNJsjtN6E" target="_blank" rel="noopener noreferrer">AES Explained (Advanced Encryption Standard) - Computerphile</a> (Computerphile)</li>
+<li><a href="https://www.youtube.com/watch?v=MijmeoH9LT4" target="_blank" rel="noopener noreferrer">Characters, Symbols and the Unicode Miracle - Computerphile</a> (Computerphile)</li>
+<li><a href="https://www.youtube.com/watch?v=g1nAxNKcP0M" target="_blank" rel="noopener noreferrer">Big-O Notation in 8 Minutes</a> (AlgoMasterIO)</li>
+<li><a href="https://www.youtube.com/watch?v=4gwYkEK0gOk" target="_blank" rel="noopener noreferrer">Assembly Language in 100 Seconds</a> (Fireship)</li>
+</ul>
+</section>
+</section>
