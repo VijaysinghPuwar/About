@@ -1,0 +1,148 @@
+<section id="ch-16" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">16</span> Retries, Cancellation, and Idempotency</h1>
+<p>A request can fail before it leaves the machine, fail on the server, succeed and lose its response, or stop moving, and a user can press Cancel at any moment. This chapter covers when R2Dock tries again, how Cancel reaches an HTTP connection or an FFmpeg process, and idempotency: which operations can safely be repeated when the outcome is unknown. It builds on Tokio cancellation from <a href="/books/r2dock/read/ch010#ch-05">Chapter 5</a> (Tokio and Asynchronous Execution), the job states of <a href="/books/r2dock/read/ch020#ch-13">Chapter 13</a> (Transfer State Machines), and the error mapping of <a href="/books/r2dock/read/ch014#ch-08">Chapter 8</a> (The S3-Compatible Protocol).</p>
+<section id="two-layers-of-retry" class="level3">
+<h2>Two Layers of Retry</h2>
+<p>R2Dock retries at two levels. The lower level belongs to the AWS software development kit (SDK) for Rust, R2Dock’s S3 client. <code>crates/r2dock-r2/src/client.rs</code> builds every client with <code>RetryConfig::standard().with_max_attempts(3)</code>, a connect timeout, and stalled stream protection. The AWS guide <a href="https://docs.aws.amazon.com/sdk-for-rust/latest/dg/retries.html" target="_blank" rel="noopener noreferrer">Configuring retries in the AWS SDK for Rust</a> states that three attempts is the default (“By default, a call will be tried three times”), that “socket timeouts”, “service-side throttling”, and “transient service errors like HTTP 5XX responses” are retried while “authentication/security errors” are not, and that the capped exponential delay has “random jitter”. R2Dock keeps the documented backoff (one second initial, twenty maximum) but writes the attempt count down, following PLAN.md section 8.1 (“never rely on SDK defaults”).</p>
+<p>SDK retries happen inside one <code>send().await</code>, invisible to the engine. To resend a body, <code>range_body</code> in <code>crates/r2dock-transfer/src/body.rs</code> uses <code>SdkBody::retryable</code>: each rebuild reopens the source with an identity check, seeks to the part offset, and subtracts the bytes the failed attempt counted from progress.</p>
+<p>The upper level is the job. When a whole attempt fails with a retryable error, the job waits and runs again, using the policy in <code>crates/r2dock-transfer/src/retry.rs</code>.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/retry.rs#L9-L21" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/retry.rs, lines 9 to 21</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">/// Maximum attempts per job, including the first.</span></span>
+<span id="cb1-2"><span class="kw">pub</span> <span class="kw">const</span> MAX_ATTEMPTS<span class="op">:</span> <span class="dt">u32</span> <span class="op">=</span> <span class="dv">3</span><span class="op">;</span></span>
+<span id="cb1-3"></span>
+<span id="cb1-4"><span class="co">// ...</span></span>
+<span id="cb1-5"><span class="kw">pub</span> <span class="kw">fn</span> backoff(attempt<span class="op">:</span> <span class="dt">u32</span>) <span class="op">-&gt;</span> Duration <span class="op">{</span></span>
+<span id="cb1-6">    <span class="kw">let</span> base <span class="op">=</span> <span class="cf">match</span> attempt <span class="op">{</span></span>
+<span id="cb1-7">        <span class="dv">0</span><span class="op">..=</span><span class="dv">2</span> <span class="op">=&gt;</span> <span class="dv">2.0</span><span class="op">,</span></span>
+<span id="cb1-8">        <span class="dv">3</span> <span class="op">=&gt;</span> <span class="dv">8.0</span><span class="op">,</span></span>
+<span id="cb1-9">        _ <span class="op">=&gt;</span> <span class="dv">30.0</span><span class="op">,</span></span>
+<span id="cb1-10">    <span class="op">};</span></span>
+<span id="cb1-11">    <span class="kw">let</span> jitter<span class="op">:</span> <span class="dt">f64</span> <span class="op">=</span> <span class="pp">rand::random::</span><span class="op">&lt;</span><span class="dt">f64</span><span class="op">&gt;</span>() <span class="op">*</span> <span class="dv">0.4</span> <span class="op">+</span> <span class="dv">0.8</span><span class="op">;</span></span>
+<span id="cb1-12">    <span class="pp">Duration::</span>from_secs_f64(base <span class="op">*</span> jitter)</span>
+<span id="cb1-13"><span class="op">}</span></span></code></pre></div>
+<p>Jitter multiplies the base by a factor between 0.8 and 1.2 (checked by <code>backoff_ranges</code>), so jobs that all failed when the network dropped do not retry in the same instant. <code>run_job</code> calls <code>backoff(attempt + 1)</code> with <code>attempt</code> starting at one and retries only while <code>attempt &lt; MAX_ATTEMPTS</code>, so the waits are about two and eight seconds. The 30 second step that PLAN.md section 8.11 lists is never reached unless the limit is raised.</p>
+<p>The layers multiply: a small upload can send up to nine HTTP attempts. PLAN.md section 8.11 says “total retry budget per part is capped”; the code bounds it only through the two constants. For multipart uploads a job retry is cheap, because it resumes from saved parts.</p>
+</section>
+<section id="deciding-what-is-retryable" class="level3">
+<h2>Deciding What Is Retryable</h2>
+<p><code>R2Error::from_sdk</code> in <code>crates/r2dock-r2/src/error.rs</code> separates failures on the way (<code>TimeoutError</code>, <code>DispatchFailure</code>, <code>ResponseError</code>) from service errors with a status and S3 code. <code>R2Error::is_retryable</code> accepts five variants: rate limiting (<code>SlowDown</code>, <code>TooManyRequests</code>, or status 429), server errors (any 5xx), network failures, timeouts, and unreadable responses (<code>Protocol</code>). Access denied, missing bucket or object, failed preconditions, other 4xx errors (<code>Service</code>), unbuildable requests, and cancellation are final. A separate <code>is_auth_failure</code> marks <code>InvalidAccessKey</code> and <code>SignatureMismatch</code>. The test <code>retry_classes</code> checks a sample.</p>
+<p>The engine’s <code>JobError</code> refines this in its <code>From&lt;R2Error&gt;</code> implementation: <code>BadDigest</code> or <code>InvalidDigest</code> means the file changed between hashing and sending, so it becomes a final “file changed” error. <code>JobError::io</code> retries only <code>Interrupted</code>, <code>TimedOut</code>, and <code>WouldBlock</code>, because “Disk full and permission problems do not fix themselves.” The engine also raises retryable errors itself, for example when a download stream breaks or ends short.</p>
+<p>The code agrees with PLAN.md’s retry table except on one row. The plan says a TLS failure should not be retried, but <code>from_sdk</code> maps every non-timeout dispatch failure to the retryable <code>R2Error::Network</code>. Unless the SDK reports TLS failures elsewhere, a broken proxy certificate costs a few seconds of futile retries before the job fails.</p>
+</section>
+<section id="what-the-engine-does-with-a-failure" class="level3">
+<h2>What the Engine Does With a Failure</h2>
+<p>The retry loop at the end of <code>run_job</code> in <code>crates/r2dock-transfer/src/engine/mod.rs</code> does three things. A rate limit or server error starts a 60 second slowdown during which <code>effective_concurrency</code> halves the jobs the scheduler runs, with a minimum of one (<a href="/books/r2dock/read/ch012#ch-07">Chapter 7</a>, Backpressure and Resource Management). The plan says concurrency should “recover gradually”; the code restores it all at once. Because the check uses the user-facing <code>ErrorCode</code>, and <code>to_app_error</code> maps unrecognized service and protocol errors to <code>ServerError</code>, a non-retryable unknown 4xx also triggers the slowdown.</p>
+<p>An authentication failure is never retried. <code>fail_connection</code> fails every queued job on that connection and an <code>AuthFailed</code> event asks for new credentials, preventing a retry storm against a revoked token. The test <code>wrong_credentials_fail_without_retry_storm</code> in <code>crates/r2dock-transfer/tests/engine.rs</code> checks this.</p>
+<p>Otherwise, a retryable error with attempts left sets the job to <code>Retrying</code> and waits for <code>backoff</code> inside a <code>tokio::select!</code> that also watches the job’s cancellation token, so Pause or Cancel during “Retrying” does not wait for the timer.</p>
+</section>
+<section id="timeouts-1" class="level3">
+<h2>Timeouts</h2>
+<p>A retry needs a detected failure. <code>client.rs</code> sets three limits. <code>CONNECT_TIMEOUT</code> is 10 seconds; the AWS guide <a href="https://docs.aws.amazon.com/sdk-for-rust/latest/dg/timeouts.html" target="_blank" rel="noopener noreferrer">Configuring timeouts</a> lists 3.1 seconds as the default. <code>METADATA_ATTEMPT_TIMEOUT</code> is 30 seconds per attempt, applied by <code>metadata_timeouts</code> to <code>HeadObject</code>, listings, and the bucket list. <code>STALL_GRACE</code> is 60 seconds of stalled stream protection, which the same page describes as an error “when a stream is idle for longer than the acceptable period”; the SDK default is 20 seconds.</p>
+<p>Transfers have no total time limit: a 50 GB download on a slow line may take a day, and a stall, not a clock, should end it. The AWS guide notes that “Operation and attempt timeouts do not apply to streaming data consumed after the SDK for Rust has returned a response,” so stall protection guards the download body. The multipart create, complete, and abort calls have only the connect timeout, though an abort after cancel is bounded at 60 seconds.</p>
+</section>
+<section id="cancellation-from-a-click-to-a-closed-connection" class="level3">
+<h2>Cancellation: From a Click to a Closed Connection</h2>
+<p>A cancel crosses three boundaries, shown in Figure 16.1.</p>
+<figure id="fig-16-cancel-propagation">
+<img src="/books/r2dock/media/file20.webp" alt="A sequence diagram with four participants: UI, Engine, Job, and R2 or FFmpeg. The UI calls transfer_control; the engine calls request_cancel on the job and returns at once. The job&#x27;s select sees the token, drops the HTTP request or kills FFmpeg, deletes its partial file, starts an abort in the background, and finishes as Cancelled. The engine then sends the Cancelled state to the UI." width="1400" height="1414" loading="lazy" decoding="async">
+<figcaption>Figure 16.1. Cancellation path: the interface calls transfer_control, the engine fires the job’s cancellation tokens and returns, the running task drops its request or kills FFmpeg, cleans up, and the Cancelled state is emitted back to the interface.</figcaption>
+</figure>
+<p>The first boundary is Inter-Process Communication (IPC; <a href="/books/r2dock/read/ch036#ch-26">Chapter 26</a>, React and Tauri IPC): <code>transferControl</code> in <code>src/ipc/commands.ts</code> invokes the <code>transfer_control</code> command in <code>src-tauri/src/commands/transfers.rs</code>, which calls <code>Engine::control</code> and returns without waiting for the job to stop.</p>
+<p>Inside <code>Engine::control</code>, the state check and change happen under the jobs lock, so the scheduler cannot start the job in between. A job that is not running becomes <code>Cancelled</code> at once, and <code>discard_partial</code> aborts any saved multipart upload and deletes partial files (tested by <code>cancel_queued_job_is_final</code>). A running or compressing job is only asked to stop.</p>
+<p><code>RunControl</code> in <code>crates/r2dock-transfer/src/ctx.rs</code>, created for every run, holds an atomic stop flag and two <code>CancellationToken</code>s. <code>request_cancel</code> sets the flag and cancels both. <code>request_pause</code> cancels only <code>stopping</code> (stop starting new parts), plus <code>cancel</code> (drop work in flight) for downloads, <code>Retrying</code> jobs, and compression. The <a href="https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html" target="_blank" rel="noopener noreferrer">CancellationToken documentation</a> guarantees that <code>cancelled()</code> “completes immediately if the token is already cancelled”, so a late check never misses an early cancel. R2Dock uses no child tokens.</p>
+<p>At the third boundary, every long wait is a <code>tokio::select!</code> with the token as one branch. A single-request upload races the whole request.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/upload.rs#L206-L212" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/upload.rs, lines 206 to 212</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="kw">let</span> result <span class="op">=</span> <span class="pp">tokio::select!</span> <span class="op">{</span></span>
+<span id="cb2-2">    () <span class="op">=</span> ctx<span class="op">.</span>control<span class="op">.</span>cancel<span class="op">.</span>cancelled() <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb2-3">        settle(<span class="op">&amp;</span>ctx<span class="op">.</span>counter<span class="op">,</span> <span class="op">&amp;</span>sent<span class="op">,</span> <span class="cn">None</span>)<span class="op">;</span></span>
+<span id="cb2-4">        <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">JobError::</span>cancelled())<span class="op">;</span></span>
+<span id="cb2-5">    <span class="op">}</span></span>
+<span id="cb2-6">    r <span class="op">=</span> req<span class="op">.</span>send() <span class="op">=&gt;</span> r<span class="op">.</span>map_err(<span class="pp">R2Error::</span>from_sdk)<span class="op">,</span></span>
+<span id="cb2-7"><span class="op">};</span></span></code></pre></div>
+<p>When the cancel branch wins, the <code>send()</code> future is dropped, and with it the body stream and the HTTP connection; in Rust, dropping a future is how async work is cancelled. The same pattern guards the download’s <code>GetObject</code> and every body chunk, the retry backoff, and the multipart loop, where <code>drop(in_flight)</code> drops every part request at once. The compressed copy check runs on a blocking thread, so it polls the stop flag between one mebibyte reads. For compression the token reaches the FFmpeg runner, which kills the process (<a href="/books/r2dock/read/ch025#ch-17">Chapter 17</a>, How FFmpeg Integrates with Rust).</p>
+<p>Two places do not listen. <code>CompleteMultipartUpload</code> is awaited without a select, after a check commented “Last chance to honour a cancel before the object becomes visible”; a visible object cannot be un-cancelled. And a cancel that wins the race against a single PUT whose body already arrived may leave the object stored while the job reads Cancelled; the code does not check afterwards.</p>
+</section>
+<section id="aborting-multipart-uploads" class="level3">
+<h2>Aborting Multipart Uploads</h2>
+<p>A cancelled multipart upload leaves parts that cost storage. <code>abort_in_background</code> in <code>upload.rs</code> spawns the abort as its own task with a 60 second limit (<code>ABORT_TIMEOUT</code>) and logs failures at debug level. Its doc comment explains that a cancelled job “should read ‘Cancelled’ at once. An abort that never succeeds is cleaned up by R2”, which aborts incomplete uploads after seven days by default per Cloudflare’s <a href="https://developers.cloudflare.com/r2/objects/multipart-objects/" target="_blank" rel="noopener noreferrer">multipart documentation</a>. As recorded in <code>docs/benchmarks/2026-10-18-compression-at-scale.md</code> (not re-run for this book), with 100 jobs and a test server delaying aborts by five seconds, “Cancel all” fell from 5.0 seconds to 21 milliseconds. The test <code>cancel_multipart_leaves_nothing</code> checks that no object appears.</p>
+<p>PLAN.md section 12.5 describes “an RAII guard that calls <code>AbortMultipartUpload</code> on drop” (Resource Acquisition Is Initialization, cleanup in a destructor). The code instead aborts explicitly: in the background on cancel, awaited when the source or destination changed underneath the upload, and spawned by <code>discard_resume</code> for dismissed jobs. A pause never aborts, since the parts are needed. Explicit calls suit this case: a destructor cannot run async code and would fire on pause too.</p>
+</section>
+<section id="did-the-request-apply" class="level3">
+<h2>Did the Request Apply?</h2>
+<p>A timeout after a request was sent says nothing about whether the server acted, and an SDK retry may be the second execution of a successful operation. The table shows what a repeat does for each operation the transfer code sends.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Repeat after success</th>
+<th>R2Dock handling</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PutObject, Replace</td>
+<td>Same object written again</td>
+<td>Harmless</td>
+</tr>
+<tr>
+<td>PutObject, If-None-Match</td>
+<td>412 for its own object</td>
+<td>Reported as conflict or skip</td>
+</tr>
+<tr>
+<td>UploadPart</td>
+<td>Same part replaced</td>
+<td>ETag recorded per success</td>
+</tr>
+<tr>
+<td>CreateMultipartUpload</td>
+<td>Second upload ID</td>
+<td>First orphaned until R2 aborts</td>
+</tr>
+<tr>
+<td>CompleteMultipartUpload</td>
+<td>Not verified</td>
+<td>Retry path detects completed object</td>
+</tr>
+<tr>
+<td>AbortMultipartUpload</td>
+<td>Upload already gone</td>
+<td>Error ignored</td>
+</tr>
+<tr>
+<td>GetObject, HeadObject, ListParts</td>
+<td>Read only</td>
+<td>Harmless</td>
+</tr>
+</tbody>
+</table></div>
+<p>Two rows are subtle. Under “Ask” and “Skip”, single PUTs send <code>If-None-Match: *</code>. If the first attempt succeeds and its response is lost, the SDK retry gets 412 from the job’s own object, and <code>single</code> reports <code>NeedsDecision</code> or <code>Skipped</code> for a correctly uploaded file. Nothing is lost, but the outcome is confusing. This is an analysis of code and documented SDK behavior, not a tested case.</p>
+<p>For <code>CompleteMultipartUpload</code>, the repository does not record how R2 answers a repeat, and this book did not verify it. If it is <code>NoSuchUpload</code>, <code>from_service</code> maps the 404 to the non-retryable <code>R2Error::NoSuchKey</code>, and the job fails with “File no longer exists” while the object is complete. The resume state survives because <code>finish</code> keeps it for failed jobs, so a manual Retry finds the upload gone, runs <code>finished_before_restart</code>, and completes without sending data (<a href="/books/r2dock/read/ch022#ch-15">Chapter 15</a>, Crash Consistency and Recovery).</p>
+<p>Downloads are naturally repeatable: they write to a job-specific partial moved into place only at the end, and <code>If-Match</code> keeps two object versions from mixing. Parts are recorded with the ETag of the attempt that succeeded, so completion lists only ETags actually received.</p>
+</section>
+<section id="working-on-this-code-15" class="level3">
+<h2>Working on This Code</h2>
+<p><code>crates/r2dock-r2/src/error.rs</code> maps SDK errors and decides <code>is_retryable</code> and <code>is_auth_failure</code>; <code>crates/r2dock-transfer/src/retry.rs</code> holds <code>MAX_ATTEMPTS</code>, <code>backoff</code>, and <code>JobError</code>; the retry loop is at the end of <code>run_job</code> in <code>engine/mod.rs</code>; timeouts are constants in <code>client.rs</code>; cancellation starts in <code>RunControl</code> in <code>ctx.rs</code> and is consumed by the selects in <code>upload.rs</code>, <code>download.rs</code>, the engine, and <code>crates/r2dock-media/src/ffmpeg/run.rs</code>.</p>
+<p>Give every new error variant a deliberate retry class and add it to <code>retry_classes</code> and <code>classification</code>. Every new long wait must select on the job’s token, or poll the stop flag on a blocking thread, or Pause and Cancel will seem to hang. Never make a cancel wait on the network.</p>
+<p>Run <code>cargo test -p r2dock-r2</code> and <code>cargo test -p r2dock-transfer</code>, which include <code>wrong_credentials_fail_without_retry_storm</code>, <code>cancel_multipart_leaves_nothing</code>, and <code>cancel_queued_job_is_final</code>. Also test cancellation while a job is <code>Retrying</code>, waiting for a part slot, and compressing.</p>
+</section>
+<section id="further-reading-15" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li>AWS SDK for Rust, <a href="https://docs.aws.amazon.com/sdk-for-rust/latest/dg/retries.html" target="_blank" rel="noopener noreferrer">Configuring retries</a> and <a href="https://docs.aws.amazon.com/sdk-for-rust/latest/dg/timeouts.html" target="_blank" rel="noopener noreferrer">Configuring timeouts</a>.</li>
+<li>tokio-util, <a href="https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html" target="_blank" rel="noopener noreferrer"><code>CancellationToken</code></a>.</li>
+<li><code>crates/r2dock-r2/src/error.rs</code> and <code>crates/r2dock-transfer/src/retry.rs</code>.</li>
+<li><code>crates/r2dock-transfer/src/ctx.rs</code> (<code>RunControl</code>) and <code>upload.rs</code> (<code>abort_in_background</code>).</li>
+<li>Cloudflare R2, <a href="https://developers.cloudflare.com/r2/objects/multipart-objects/" target="_blank" rel="noopener noreferrer">Multipart upload objects</a>.</li>
+</ul>
+</section>
+</section>

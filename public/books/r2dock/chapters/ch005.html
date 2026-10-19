@@ -1,0 +1,41 @@
+<section id="ch-01" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">1</span> The Engineering Problem R2Dock Solves</h1>
+<p>R2Dock is a desktop file manager for Cloudflare R2, an object storage service that speaks the Amazon S3 protocol. This chapter states the problem: who uses the program, which constraints shape the design, and why the answer is a native desktop application.</p>
+<section id="object-storage-looks-like-a-drive-but-is-not-one" class="level3">
+<h2>Object Storage Looks Like a Drive but Is Not One</h2>
+<p>R2 stores objects in buckets. An object is a blob of bytes with a key such as <code>Podcasts/Season 2/Episode 01.mp3</code>, some metadata, and an entity tag (ETag). The slashes are just characters: R2 has no folders, no rename, no atomic move, no versioning, and no trash. Clients sign every S3 Application Programming Interface (API) request with an access key ID and a secret access key.</p>
+<p>Users still think in folders. The user table in <code>PLAN.md</code> section 3 includes someone uploading 195 audiobook chapters, someone downloading a 2.4 GB backup over unstable Wi-Fi, and a beginner who wants a first upload within minutes. A file manager must therefore invent folders from key prefixes, implement rename as copy then delete, report partial failures honestly, and split large files into retryable parts, without implying guarantees the storage lacks. The README’s Limitations section says it plainly: moving a folder copies and then deletes every file, and deletes are permanent.</p>
+</section>
+<section id="requirements-in-priority-order" class="level3">
+<h2>Requirements in Priority Order</h2>
+<p><code>PLAN.md</code> sections 4 and 5 list functional (F) and nonfunctional (N) requirements, and <code>CONTRIBUTING.md</code> ranks them: secure, then stable, then easy for beginners, then fast.</p>
+<p>Security comes first because the app holds credentials that can delete a bucket. N1 says secrets never reach the user interface after entry, are never logged, and live only in the operating system’s credential store. N2 limits the interface to an allowlist of commands with no generic file system, shell, or HTTP access, and N3 demands a strict Content Security Policy (CSP). Object keys are untrusted: a key such as <code>../../.ssh/authorized_keys</code> must never make a download write outside the chosen folder.</p>
+<p>Stability comes second. N4 forbids silent overwrites, N5 forbids a partial file at a download’s final path after a crash, and N6 forbids completing a multipart upload from a file that changed meanwhile. Pause and resume (F14) and recovery after restart (F15) protect long transfers. Ease of use comes third (N10, N11). Performance comes last but has hard rules: transfer memory is bounded by configuration, not file size (N7), and idle processor use is near zero, which rules out polling (N9).</p>
+</section>
+<section id="constraints-that-shape-the-design" class="level3">
+<h2>Constraints That Shape the Design</h2>
+<p>There is no server: no backend, no account, no telemetry (<code>PLAN.md</code> section 1). N12 lists the only hosts the app may contact: R2 endpoints, an update endpoint if enabled (no updater exists yet), the pinned FFmpeg download, and <code>api.cloudflare.com</code> when an optional API token is saved. Queueing, retrying, and remembering state across restarts all happen on the client.</p>
+<p>The S3 protocol has its own rules. Multipart upload allows at most 10,000 parts with a 5 MiB minimum part size except for the last part (<code>crates/r2dock-core/src/parts.rs</code>), and an ETag is a full-file MD5 digest only for a single-part upload without customer-provided encryption; <a href="/books/r2dock/read/ch014#ch-08">Chapter 8</a> (The S3-Compatible Protocol) and <a href="/books/r2dock/read/ch015#ch-09">Chapter 9</a> (Multipart Uploads in Depth) cover these. The network drops and rate limits, so the app must separate retryable from permanent errors and stop retrying revoked credentials. Windows, macOS, and Linux differ in credential stores, file name rules (Windows reserves <code>CON</code> and forbids <code>:</code>), and case sensitivity. Since version 0.3.0 the app compresses audio, and since 0.4.0 video, with FFmpeg as a separate process; a file that cannot be made smaller is uploaded unchanged.</p>
+</section>
+<section id="why-a-desktop-application" class="level3">
+<h2>Why a Desktop Application</h2>
+<p>A web page would hold the S3 secret in JavaScript memory and need cross-origin configuration on every bucket, a hosted service would put credentials on someone else’s server, and a command line client fails the beginner requirement. A native application can keep secrets in the credential store, read local files with careful path checks, and run long transfers with an on-disk journal. <code>docs/adr/0001-architecture.md</code> records the choice: Tauri 2 with a Rust core and a React frontend, where all R2 traffic, credentials, file access, and transfers live in Rust crates that do not depend on Tauri. <a href="/books/r2dock/read/ch006#ch-02">Chapter 2</a> (Complete Software Architecture) explains that structure.</p>
+</section>
+<section id="what-version-0.5.0-delivers" class="level3">
+<h2>What Version 0.5.0 Delivers</h2>
+<p>According to the README and <code>CHANGELOG.md</code>, version 0.5.0 browses buckets, shows public links, uploads with parallel multipart transfers, downloads with resume, pauses and recovers transfers after a restart, renames, moves, and deletes with confirmation, writes a daily comma-separated values (CSV) activity log, and optionally compresses audio and video. <code>PLAN.md</code> section 17.1 lists what is missing: code signing, notarization, an updater, and every <strong>[Verify]</strong> item about real R2 behavior, because automated tests use a local S3-compatible server. Two documents lag the code: the plan’s status line and section 17.1 still say 0.4.0, and its section 14 says no benchmarks exist, while <code>docs/benchmarks/</code> holds three reports.</p>
+</section>
+<section id="working-on-this-code" class="level3">
+<h2>Working on This Code</h2>
+<p>Read <code>README.md</code>, <code>CONTRIBUTING.md</code>, <code>PLAN.md</code> sections 1 to 5, and <code>docs/adr/</code> first. Weakening any invariant here is a design change: secrets never reach the interface or logs, local paths come only from native pickers or drag and drop, nothing is overwritten without a conflict policy, transfers stream with bounded memory, and bulk deletes are confirmed by the backend. Pull requests must pass the checks in <code>.github/workflows/ci.yml</code> on all three systems: <code>cargo fmt --all -- --check</code>, <code>cargo clippy --workspace --all-targets -- -D warnings</code>, <code>cargo test --workspace</code>, and <code>npm run lint &amp;&amp; npm run typecheck &amp;&amp; npm test &amp;&amp; npm run build</code>.</p>
+</section>
+<section id="further-reading" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>PLAN.md</code>, sections 1 to 5 and 17.1</li>
+<li><code>docs/adr/0001-architecture.md</code></li>
+<li><code>CONTRIBUTING.md</code></li>
+<li><a href="https://v2.tauri.app/concept/process-model/" target="_blank" rel="noopener noreferrer">Tauri 2 process model</a></li>
+</ul>
+</section>
+</section>

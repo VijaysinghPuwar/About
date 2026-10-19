@@ -1,0 +1,182 @@
+<section id="ch-17" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">17</span> How FFmpeg Integrates with Rust</h1>
+<p>R2Dock compresses audio and video with FFmpeg, a large C media toolkit that parses untrusted files for a living. This chapter explains how R2Dock installs and verifies it, starts it without a shell (a command interpreter such as <code>sh</code>), reads its output, follows progress, stops it on cancel or hang, and cleans up. The media decisions belong to <a href="/books/r2dock/read/ch026#ch-18">Chapter 18</a> (Audio Compression Internals) and <a href="/books/r2dock/read/ch027#ch-19">Chapter 19</a> (Video Compression Internals). The code lives in the <code>r2dock-media</code> crate, which does not depend on Tauri, plus a thin service in <code>src-tauri/src/compression.rs</code>.</p>
+<section id="why-ffmpeg-runs-as-a-separate-program" class="level3">
+<h2>Why FFmpeg Runs as a Separate Program</h2>
+<p>R2Dock runs the <code>ffmpeg</code> program as a child process instead of linking its libraries. A child process is an isolation boundary: if a malformed file crashes FFmpeg, R2Dock sees a non-zero exit status and keeps running, whereas a linked library would corrupt R2Dock’s own memory. PLAN.md’s threat model row “Malicious media file attacks FFmpeg or the probe” lists the mitigations (separate process, fixed argument array, <code>file:</code> inputs with a protocol whitelist, watchdog, kill on exit) and the residual risk: an FFmpeg vulnerability could still run code as the user during compression, one reason compression is off by default.</p>
+<p>Licensing points the same way: the downloaded builds use the GNU Lesser General Public License (LGPL) version 3, and THIRD_PARTY_NOTICES.md states that FFmpeg runs as a separate program not included in the installers, so R2Dock stays MIT licensed. Everything R2Dock learns from FFmpeg arrives as text and an exit code. Simple audio probing is the exception: it runs in process with the pure Rust Symphonia library (<a href="/books/r2dock/read/ch026#ch-18">Chapter 18</a>).</p>
+</section>
+<section id="finding-the-tools" class="level3">
+<h2>Finding the Tools</h2>
+<p>R2Dock never runs a bare <code>ffmpeg</code> from <code>PATH</code>. The <code>ToolsSource</code> enum in <code>crates/r2dock-media/src/tools/mod.rs</code> has two cases: <code>Bundled</code>, the pinned package R2Dock downloaded and verified, and <code>System</code>, a binary the user chose with a native file picker (<code>pick_ffmpeg</code> in <code>src-tauri/src/dialogs.rs</code>), so the path never comes from a string typed in the web view.</p>
+<p><code>CompressionService::refresh</code> in <code>src-tauri/src/compression.rs</code> validates the chosen tools (<code>detect::use_system</code> or <code>install::check_installed</code>, then <code>detect::inspect</code>) at startup, after install or removal, and when the source changes. <code>detect::inspect</code> runs <code>-version</code> and <code>-encoders</code>, and <code>parse_license</code> classifies the build as LGPL, GPL, or nonfree for Settings to show; a system FFmpeg must also include <code>libmp3lame</code> and have <code>ffprobe</code> beside it. On success the engine receives a <code>MediaRuntime</code> holding an <code>Ffmpeg</code> value; on failure it gets none, and files that asked for compression upload as originals with <code>Unchanged::ToolsMissing</code>.</p>
+<section id="the-pinned-manifest" class="level4">
+<h3>The Pinned Manifest</h3>
+<p><code>crates/r2dock-media/src/tools/manifest.rs</code> compiles the package description into the app. Each platform has an <code>ffmpeg</code> and an <code>ffprobe</code> <code>Asset</code> with a file name, a download size, and two SHA-256 sums (a cryptographic hash: any change to the bytes changes the 256 bit value), one of the compressed download and one of the unpacked binary. <code>PACKAGES</code> covers Windows and Linux on x86_64 and macOS on both architectures; other platforms get <code>ToolsError::UnsupportedPlatform</code>. <code>VERSION</code> is <code>9.0.2</code>, and <code>RELEASE_URL</code> points at the tag <code>tools-ffmpeg-9.0.2-2</code> on the project’s GitHub repository, with the rule that a new build gets a new tag and assets are never replaced.</p>
+</section>
+<section id="downloading-without-trusting-the-network" class="level4">
+<h3>Downloading Without Trusting the Network</h3>
+<p><code>crates/r2dock-media/src/tools/install.rs</code> assumes the network, a proxy, or a redirect could deliver the wrong bytes. <code>HttpFetch::new</code> builds a <code>reqwest</code> client with <code>https_only(true)</code>, 20 and 60 second connect and read timeouts, and a redirect policy that stops after five hops or at any host outside <code>ALLOWED_HOSTS</code>: <code>github.com</code> plus the <code>objects.githubusercontent.com</code> and <code>release-assets.githubusercontent.com</code> storage hosts that release downloads redirect to. The final URL is checked against the list again.</p>
+<p>The body is streamed, hashed, and written in one loop, so the binary never sits whole in memory. Anything more than 1 MiB over the pinned size is rejected at once, so a hostile server cannot fill the disk. A <code>tokio::select!</code> with <code>biased;</code> checks cancellation before each chunk (the Tokio <a href="https://docs.rs/tokio/latest/tokio/macro.select.html" target="_blank" rel="noopener noreferrer"><code>select!</code></a> documentation explains that <code>biased;</code> polls branches in written order). The download sum is compared before decompression, so a tampered archive never reaches the zstd decoder.</p>
+<p><code>unpack</code> then streams the <code>.zst</code> file through a zstd decoder into a <code>HashingWriter</code> on a blocking thread and deletes a binary whose sum differs from <code>binary_sha256</code>. Everything happens in a <code>.staging-</code> folder from <code>tempfile::Builder</code>, which deletes itself on any error or cancel. When both binaries and an <code>installed.json</code> record are ready, <code>swap_in</code> renames the folder into place; an older install is first renamed aside under <code>.old-</code> and restored if the swap fails. <code>rename_retry</code> retries renames that a Windows virus scanner can briefly block. Tests in <code>crates/r2dock-media/src/tools/install/tests.rs</code> use an in-memory fetcher, including <code>refuses_a_tampered_download_before_unpacking</code>, <code>refuses_an_oversized_download</code>, <code>cancel_leaves_nothing</code>, and <code>a_failed_swap_keeps_the_old_install</code>. Figure 17.1 summarizes the path.</p>
+<figure id="fig-17-tools-install">
+<img src="/books/r2dock/media/file21.webp" alt="A top to bottom flow. A pinned HTTPS URL on GitHub hosts is downloaded and hashed while streaming; if the download sum does not match, the file is deleted and refused. Otherwise it is unpacked in a staging folder and the binary sum is checked, again refusing on a mismatch. On success installed.json is written and the folder renamed into place, and check_installed validates the tools before use." width="781" height="1208" loading="lazy" decoding="async">
+<figcaption>Figure 17.1. The tools install path: a pinned HTTPS download is hashed while streaming, unpacked and hashed again in a staging folder, then renamed into place and checked before use.</figcaption>
+</figure>
+</section>
+<section id="checking-before-use" class="level4">
+<h3>Checking Before Use</h3>
+<p>Installed binaries could later be replaced by another program or malware. <code>check_installed</code> in <code>install.rs</code> validates every binary that <code>installed.json</code> names, without trusting the record blindly. A recorded name with a path separator or a leading dot is refused. <code>symlink_metadata</code> does not follow links, so a planted link is not a plain file. If size and modification time match the record, the binary is not rehashed, which keeps startup fast; otherwise its full SHA-256 must match. Finally the recorded sum must equal the compiled-in sum, so editing both binary and record still fails. The tests <code>detects_a_replaced_binary</code>, <code>pinned_sums_win_over_the_record</code>, <code>edited_records_are_refused</code>, and <code>symlinked_binaries_are_refused</code> cover each rule.</p>
+<p>CHANGELOG.md for 0.3.0 overstates this, saying the tools are “checked by SHA-256 before it is unpacked and before each use”. The code checks at each <code>refresh</code>, not before each encode, so a binary replaced while the app runs is noticed only at the next refresh, and a replacement that preserves size and modification time is not rehashed. The plan’s wording (“re-checked if their size or modification time changes”) is the accurate one.</p>
+</section>
+<section id="provenance-where-the-bytes-come-from" class="level4">
+<h3>Provenance: Where the Bytes Come From</h3>
+<p>The packages come from <code>.github/workflows/tools.yml</code>, run only by hand (<code>workflow_dispatch</code>) with a build number. For Windows and Linux it mirrors a specific BtbN FFmpeg-Builds release (<code>autobuild-2026-09-30-13-08</code>, LGPL variant of the 9.0 branch), checking each archive against a SHA-256 written in the workflow. For macOS, where BtbN publishes nothing, <code>tools/ffmpeg/build-macos.sh</code> compiles FFmpeg 9.0.2, LAME 3.100, Opus 1.5.2, and SVT-AV1 4.2.0 from source archives each pinned by SHA-256. Its configure line uses <code>--enable-version3</code>, <code>--disable-autodetect</code>, and <code>--disable-network</code> (the binary cannot open network URLs), and the script fails if <code>otool -L</code> shows a non-system library, if the build is GPL, or if <code>libsvtav1</code> is missing. The Windows and Linux jobs run the same GPL check and an encoding smoke test.</p>
+<p>A <code>publish</code> job writes a <code>MANIFEST.txt</code> with the sums and sizes copied into <code>manifest.rs</code>, refuses to reuse a tag, and creates a pre-release with <code>--latest=false</code>. Per PLAN.md’s row “Tampered or replaced FFmpeg download”, a compromised GitHub account could publish new assets, but the app accepts only its compiled-in sums. Two limits remain: BtbN binaries are trusted as BtbN built them, and nothing shows the macOS build is reproducible.</p>
+</section>
+</section>
+<section id="building-a-command-line-without-a-shell" class="level3">
+<h2>Building a Command Line Without a Shell</h2>
+<p>A command string handed to a shell turns a file name containing a quote or <code>$(...)</code> into code. The Rust documentation for <a href="https://doc.rust-lang.org/std/process/struct.Command.html" target="_blank" rel="noopener noreferrer"><code>Command::arg</code></a> states that “the argument is not passed through a shell, but given literally to the program.” Every FFmpeg invocation is a <code>Vec&lt;OsString&gt;</code>, one element per argument, so even a non UTF-8 file name passes through unchanged.</p>
+<p>FFmpeg has its own mini language in arguments, though. An input named <code>concat:a|b.mp3</code> would use the concat protocol, which the <a href="https://ffmpeg.org/ffmpeg-protocols.html" target="_blank" rel="noopener noreferrer">FFmpeg protocols documentation</a> describes as reading “many resources in sequence”; <code>http:</code> could open a connection; <code>-i.mp3</code> could look like an option. Two habits close these holes.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-media/src/ffmpeg/args.rs#L72-L87" target="_blank" rel="noopener noreferrer">crates/r2dock-media/src/ffmpeg/args.rs, lines 72 to 87</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">/// `file:` URL for an absolute path.</span></span>
+<span id="cb1-2"><span class="kw">pub</span> <span class="kw">fn</span> file_url(path<span class="op">:</span> <span class="op">&amp;</span><span class="dt">Path</span>) <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span>OsString<span class="op">,</span> ArgsError<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb1-3">    <span class="cf">if</span> <span class="op">!</span>path<span class="op">.</span>is_absolute() <span class="op">{</span></span>
+<span id="cb1-4">        <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">ArgsError::</span>RelativePath)<span class="op">;</span></span>
+<span id="cb1-5">    <span class="op">}</span></span>
+<span id="cb1-6">    <span class="kw">let</span> <span class="kw">mut</span> s <span class="op">=</span> <span class="pp">OsString::</span>from(<span class="st">"file:"</span>)<span class="op">;</span></span>
+<span id="cb1-7">    s<span class="op">.</span>push(path<span class="op">.</span>as_os_str())<span class="op">;</span></span>
+<span id="cb1-8">    <span class="cn">Ok</span>(s)</span>
+<span id="cb1-9"><span class="op">}</span></span>
+<span id="cb1-10"></span>
+<span id="cb1-11"><span class="kw">fn</span> common_start() <span class="op">-&gt;</span> <span class="dt">Vec</span><span class="op">&lt;</span>OsString<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb1-12">    [<span class="st">"-hide_banner"</span><span class="op">,</span> <span class="st">"-nostdin"</span><span class="op">,</span> <span class="st">"-y"</span><span class="op">,</span> <span class="st">"-loglevel"</span><span class="op">,</span> <span class="st">"error"</span>]</span>
+<span id="cb1-13">        <span class="op">.</span>into_iter()</span>
+<span id="cb1-14">        <span class="op">.</span>map(<span class="pp">OsString::</span>from)</span>
+<span id="cb1-15">        <span class="op">.</span>collect()</span>
+<span id="cb1-16"><span class="op">}</span></span></code></pre></div>
+<p>Every path is absolute, so it cannot start with <code>-</code>, and carries the <code>file:</code> protocol prefix. Every input is preceded by <code>-protocol_whitelist file</code>, so even nested protocols are unreachable. The unit test <code>hostile_names_stay_files</code> checks the arrays, and the integration test <code>hostile_file_names_are_plain_files</code> in <code>crates/r2dock-media/tests/ffmpeg.rs</code> encodes files named <code>concat:a|b.mp3</code>, <code>http:x.mp3</code>, and <code>-i.mp3</code> and checks the output is real MP3.</p>
+<p>The common prefix removes every way FFmpeg could wait for a human. Per the <a href="https://ffmpeg.org/ffmpeg.html" target="_blank" rel="noopener noreferrer">ffmpeg documentation</a>, <code>-y</code> means “overwrite output files without asking” and <code>-nostdin</code> disables interaction on standard input; <code>-loglevel error</code> keeps stderr to real errors. The output format is always named with <code>-f</code>, and outputs always go into R2Dock’s work folder under a name derived from the job identifier, so the original is never an output.</p>
+</section>
+<section id="spawning-the-process" class="level3">
+<h2>Spawning the Process</h2>
+<p>Almost every line of the spawning function answers a failure mode.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-media/src/ffmpeg/run.rs#L100-L133" target="_blank" rel="noopener noreferrer">crates/r2dock-media/src/ffmpeg/run.rs, lines 100 to 133</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="kw">fn</span> command(bin<span class="op">:</span> <span class="op">&amp;</span><span class="dt">Path</span><span class="op">,</span> args<span class="op">:</span> <span class="op">&amp;</span>[OsString]) <span class="op">-&gt;</span> CommandWrap <span class="op">{</span></span>
+<span id="cb2-2">    <span class="co">// A missing FFmpeg is started directly, so it fails as a spawn error</span></span>
+<span id="cb2-3">    <span class="co">// and not as an exit code from `nice`.</span></span>
+<span id="cb2-4">    <span class="at">#[</span>cfg<span class="at">(</span>unix<span class="at">)]</span></span>
+<span id="cb2-5">    <span class="kw">let</span> <span class="kw">mut</span> cmd <span class="op">=</span> <span class="cf">match</span> NICE</span>
+<span id="cb2-6">        <span class="op">.</span>iter()</span>
+<span id="cb2-7">        <span class="op">.</span>map(<span class="dt">Path</span><span class="pp">::</span>new)</span>
+<span id="cb2-8">        <span class="op">.</span>find(<span class="op">|</span>p<span class="op">|</span> p<span class="op">.</span>is_file())</span>
+<span id="cb2-9">        <span class="op">.</span>filter(<span class="op">|</span>_<span class="op">|</span> bin<span class="op">.</span>is_file())</span>
+<span id="cb2-10">    <span class="op">{</span></span>
+<span id="cb2-11">        <span class="cn">Some</span>(nice) <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb2-12">            <span class="kw">let</span> <span class="kw">mut</span> c <span class="op">=</span> <span class="pp">tokio::process::Command::</span>new(nice)<span class="op">;</span></span>
+<span id="cb2-13">            c<span class="op">.</span>args([<span class="st">"-n"</span><span class="op">,</span> <span class="st">"10"</span>])<span class="op">.</span>arg(bin)<span class="op">;</span></span>
+<span id="cb2-14">            c</span>
+<span id="cb2-15">        <span class="op">}</span></span>
+<span id="cb2-16">        <span class="cn">None</span> <span class="op">=&gt;</span> <span class="pp">tokio::process::Command::</span>new(bin)<span class="op">,</span></span>
+<span id="cb2-17">    <span class="op">};</span></span>
+<span id="cb2-18">    <span class="at">#[</span>cfg<span class="at">(</span>not<span class="at">(</span>unix<span class="at">))]</span></span>
+<span id="cb2-19">    <span class="kw">let</span> <span class="kw">mut</span> cmd <span class="op">=</span> <span class="pp">tokio::process::Command::</span>new(bin)<span class="op">;</span></span>
+<span id="cb2-20">    cmd<span class="op">.</span>args(args)</span>
+<span id="cb2-21">        <span class="op">.</span>stdin(<span class="pp">Stdio::</span>null())</span>
+<span id="cb2-22">        <span class="op">.</span>stdout(<span class="pp">Stdio::</span>piped())</span>
+<span id="cb2-23">        <span class="op">.</span>stderr(<span class="pp">Stdio::</span>piped())<span class="op">;</span></span>
+<span id="cb2-24">    <span class="co">// CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS</span></span>
+<span id="cb2-25">    <span class="at">#[</span>cfg<span class="at">(</span>windows<span class="at">)]</span></span>
+<span id="cb2-26">    cmd<span class="op">.</span>creation_flags(<span class="dv">0x0800_0000</span> <span class="op">|</span> <span class="dv">0x0000_4000</span>)<span class="op">;</span></span>
+<span id="cb2-27">    <span class="kw">let</span> <span class="kw">mut</span> wrap <span class="op">=</span> <span class="pp">CommandWrap::</span>from(cmd)<span class="op">;</span></span>
+<span id="cb2-28">    <span class="at">#[</span>cfg<span class="at">(</span>unix<span class="at">)]</span></span>
+<span id="cb2-29">    wrap<span class="op">.</span>wrap(<span class="pp">process_wrap::tokio::ProcessGroup::</span>leader())<span class="op">;</span></span>
+<span id="cb2-30">    <span class="at">#[</span>cfg<span class="at">(</span>windows<span class="at">)]</span></span>
+<span id="cb2-31">    wrap<span class="op">.</span>wrap(<span class="pp">process_wrap::tokio::</span>JobObject)<span class="op">;</span></span>
+<span id="cb2-32">    wrap<span class="op">.</span>wrap(KillOnDrop)<span class="op">;</span></span>
+<span id="cb2-33">    wrap</span>
+<span id="cb2-34"><span class="op">}</span></span></code></pre></div>
+<p>Encoding is CPU heavy, so on macOS and Linux the command runs through <code>nice -n 10</code> from a fixed path (<code>/usr/bin/nice</code> or <code>/bin/nice</code>), never from <code>PATH</code>; <code>nice</code> replaces itself with FFmpeg through <code>exec</code>, so the process and group belong to FFmpeg. The Linux-only test <code>runs_below_normal_priority</code> checks this (its comment notes the macOS CI runner reports 0 for the child). On Windows the flags request below normal priority and no console window. CHANGELOG.md for 0.5.0 records that macOS and Linux gained lower priority in that release, and the benchmark notes say “the effect under contention was not measured.” PLAN.md’s threat model row still says “below-normal priority on Windows” only, which is out of date.</p>
+<p>The <a href="https://docs.rs/process-wrap/latest/process_wrap/" target="_blank" rel="noopener noreferrer"><code>process-wrap</code></a> wrappers put FFmpeg in its own process group on Unix, so a kill reaches the whole group, and in a Job Object on Windows. <code>KillOnDrop</code> matters because, as the Tokio documentation warns, “a spawned process will, by default, continue to execute even after the <code>Child</code> handle has been dropped.”</p>
+<p>If R2Dock itself crashes, Windows closes the Job Object and kills its processes. Unix has no equivalent without <code>unsafe</code> code, which the project avoids, so FFmpeg exits at its next write to the progress pipe, which has lost its reader; the plan’s Progress table puts that at about twice a second.</p>
+</section>
+<section id="reading-two-pipes-at-once" class="level3">
+<h2>Reading Two Pipes at Once</h2>
+<p>A child writing to a pipe nobody reads blocks forever once the small kernel buffer fills, so reading only stdout while FFmpeg fills stderr would hang both. The function <code>forward</code> in <code>run.rs</code> spawns one task per pipe that reads raw bytes up to each newline, converts them with <code>from_utf8_lossy</code> (so a non UTF-8 name in an error cannot break parsing), and sends them into one bounded channel of 256 lines tagged <code>Line::Out</code> or <code>Line::Err</code>. Each task exits when its pipe closes or the receiver is gone. Stderr lines go into a ring of <code>keep_lines</code> entries (50 by default), so the last error is available without an unbounded log.</p>
+</section>
+<section id="parsing-progress" class="level3">
+<h2>Parsing Progress</h2>
+<p>R2Dock passes <code>-progress pipe:1 -nostats</code>. The <a href="https://ffmpeg.org/ffmpeg.html" target="_blank" rel="noopener noreferrer">ffmpeg documentation</a> says progress is written as <code>key=value</code> lines whose blocks end with <code>progress=continue</code> or <code>progress=end</code>; <code>pipe:1</code> is standard output, and <code>-nostats</code> keeps stderr for real errors. The parser in <code>crates/r2dock-media/src/ffmpeg/progress.rs</code> accumulates fields and, at each <code>progress</code> key, returns the block and resets with <code>std::mem::take</code>. It reads <code>out_time_us</code> and the historically misnamed <code>out_time_ms</code> both as microseconds, and tolerates <code>N/A</code>, negative times, <code>speed=infx</code>, and Windows line endings (tests <code>parses_blocks</code>, <code>tolerates_missing_and_odd_values</code>, <code>windows_line_endings</code>).</p>
+<p><code>Ffmpeg::encode</code> divides the output time by the probed duration and clamps it to 0 to 1; the engine throttles these updates to one per 250 milliseconds per job (<code>PROGRESS_EVERY</code>).</p>
+</section>
+<section id="timeouts-cancellation-and-exit-status" class="level3">
+<h2>Timeouts, Cancellation, and Exit Status</h2>
+<p>The runner’s main loop waits for a cancel request, the next line from either pipe, or too long without any line.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-media/src/ffmpeg/run.rs#L155-L183" target="_blank" rel="noopener noreferrer">crates/r2dock-media/src/ffmpeg/run.rs, lines 155 to 183</a></p>
+</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb3-1"><span class="cf">loop</span> <span class="op">{</span></span>
+<span id="cb3-2">    <span class="pp">tokio::select!</span> <span class="op">{</span></span>
+<span id="cb3-3">        biased<span class="op">;</span></span>
+<span id="cb3-4">        () <span class="op">=</span> cancel<span class="op">.</span>cancelled() <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb3-5">            <span class="kw">let</span> _ <span class="op">=</span> <span class="dt">Box</span><span class="pp">::</span>into_pin(child<span class="op">.</span>kill())<span class="op">.</span><span class="kw">await</span><span class="op">;</span></span>
+<span id="cb3-6">            <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">RunError::</span>Cancelled)<span class="op">;</span></span>
+<span id="cb3-7">        <span class="op">}</span></span>
+<span id="cb3-8">        line <span class="op">=</span> <span class="pp">tokio::time::</span>timeout(opts<span class="op">.</span>watchdog<span class="op">,</span> rx<span class="op">.</span>recv()) <span class="op">=&gt;</span></span>
+<span id="cb3-9">            <span class="cf">match</span> line <span class="op">{</span></span>
+<span id="cb3-10">            <span class="cn">Err</span>(_) <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb3-11">                <span class="kw">let</span> _ <span class="op">=</span> <span class="dt">Box</span><span class="pp">::</span>into_pin(child<span class="op">.</span>kill())<span class="op">.</span><span class="kw">await</span><span class="op">;</span></span>
+<span id="cb3-12">                <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">RunError::</span>Stalled)<span class="op">;</span></span>
+<span id="cb3-13">            <span class="op">}</span></span>
+<span id="cb3-14">            <span class="cn">Ok</span>(<span class="cn">None</span>) <span class="op">=&gt;</span> <span class="cf">break</span><span class="op">,</span></span>
+<span id="cb3-15">            <span class="cn">Ok</span>(<span class="cn">Some</span>(<span class="pp">Line::</span>Out(l))) <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb3-16">                <span class="cf">if</span> <span class="kw">let</span> <span class="cn">Some</span>(p) <span class="op">=</span> parser<span class="op">.</span>line(<span class="op">&amp;</span>l) <span class="op">{</span></span>
+<span id="cb3-17">                    on_progress(p)<span class="op">;</span></span>
+<span id="cb3-18">                <span class="op">}</span></span>
+<span id="cb3-19">            <span class="op">}</span></span>
+<span id="cb3-20">            <span class="cn">Ok</span>(<span class="cn">Some</span>(<span class="pp">Line::</span><span class="cn">Err</span>(l))) <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb3-21">                <span class="cf">if</span> <span class="op">!</span>l<span class="op">.</span>trim()<span class="op">.</span>is_empty() <span class="op">{</span></span>
+<span id="cb3-22">                    <span class="cf">if</span> tail<span class="op">.</span>len() <span class="op">==</span> opts<span class="op">.</span>keep_lines <span class="op">{</span></span>
+<span id="cb3-23">                        tail<span class="op">.</span>pop_front()<span class="op">;</span></span>
+<span id="cb3-24">                    <span class="op">}</span></span>
+<span id="cb3-25">                    tail<span class="op">.</span>push_back(l)<span class="op">;</span></span>
+<span id="cb3-26">                <span class="op">}</span></span>
+<span id="cb3-27">            <span class="op">}</span></span>
+<span id="cb3-28">        <span class="op">},</span></span>
+<span id="cb3-29">    <span class="op">}</span></span>
+<span id="cb3-30"><span class="op">}</span></span></code></pre></div>
+<p>With <code>biased;</code> the cancellation token (<a href="/books/r2dock/read/ch010#ch-05">Chapter 5</a>, Tokio and Asynchronous Execution) is checked first, so a flood of progress lines cannot starve a cancel. The Tokio <a href="https://docs.rs/tokio/latest/tokio/process/struct.Child.html" target="_blank" rel="noopener noreferrer"><code>Child</code></a> documentation says <code>kill</code> “forces the child to exit” and waits for it, so no zombie remains, and the process group carries the signal to the group. The plan originally proposed sending <code>q</code> and waiting 3 seconds; its Progress table explains the immediate kill: the output is deleted anyway, and <code>-nostdin</code> means FFmpeg would never read the key. The test <code>cancel_stops_ffmpeg_and_removes_the_output</code> cancels an hour long encode and checks the output is gone within 30 seconds.</p>
+<p>Each <code>recv</code> is wrapped in <code>tokio::time::timeout</code>, so any line resets the watchdog. Since FFmpeg writes progress regularly, 120 seconds of silence (the <code>RunOptions</code> default) means it is stuck, perhaps on a corrupt file or a hung hardware encoder, and the runner kills it with <code>RunError::Stalled</code>. The test <code>watchdog_stops_a_silent_process</code> covers it. When both pipes close, the runner waits for the exit status, again racing cancel and the watchdog. Success returns the kept stderr lines; failure becomes <code>RunError::Failed</code> with the exit code (or <code>None</code> for a signal) and the last stderr line. Figure 17.2 shows the lifecycle.</p>
+<figure id="fig-17-ffmpeg-process">
+<img src="/books/r2dock/media/file22.webp" alt="A sequence diagram with three participants: Pipeline, Runner, and FFmpeg. The pipeline calls run with arguments and a cancel token. The runner spawns FFmpeg in its own process group, receives stdout and stderr lines, and reports progress. Then one of three things happens: a cancel kills the process, 120 seconds of silence kills it as stalled, or the pipes close and the runner waits for the exit. The runner returns the result or error." width="1368" height="1890" loading="lazy" decoding="async">
+<figcaption>Figure 17.2. One FFmpeg run: the runner spawns the process in its own group, receives lines from both pipes, and ends by cancel, watchdog, or normal exit.</figcaption>
+</figure>
+<p>Short helper runs (<code>ffprobe</code> with a 60 second limit, and version and encoder checks with 20 seconds) use plain <code>tokio::process::Command</code> with <code>kill_on_drop(true)</code>, bypassing <code>nice</code> and the process group wrapper.</p>
+</section>
+<section id="safe-messages-and-cleanup" class="level3">
+<h2>Safe Messages and Cleanup</h2>
+<p>An FFmpeg error line usually contains the full input path, and R2Dock’s rules forbid showing or logging full local paths. <code>Ffmpeg::run_clean</code> passes the last line through <code>sanitize</code> in <code>run.rs</code>, which replaces each known input and output path with its bare file name, giving messages like “FFmpeg exited with 1: part 1.mp3: Invalid data found”. The test <code>failures_are_reported_without_folders</code> checks that a folder named <code>private folder</code> never appears. The limit: only paths it was given, in the exact form <code>display()</code> produces, are removed.</p>
+<p>The runner never deletes files; its callers do. <code>Ffmpeg::encode</code> deletes its output on any error, including cancel and failed verification; <code>Ffmpeg::sample_saving</code> always deletes its sample, as does <code>video::run::encode_once</code>. Outputs are named <code>&lt;job id&gt;.&lt;ext&gt;</code> or <code>&lt;job id&gt;.sample.&lt;ext&gt;</code> in <code>compress</code> inside the app cache folder. A killed process cannot clean up, so a crash can leave a partial file; the startup sweep and the life of a finished copy belong to <a href="/books/r2dock/read/ch028#ch-20">Chapter 20</a> (Compression Scheduling and Data Integrity).</p>
+</section>
+<section id="working-on-this-code-16" class="level3">
+<h2>Working on This Code</h2>
+<p>Audio arguments are in <code>crates/r2dock-media/src/ffmpeg/args.rs</code> and video arguments in <code>crates/r2dock-media/src/video/args.rs</code>; update their snapshot tests (<code>speech_mp3_snapshot</code>, <code>av1_snapshot_parts</code>) deliberately rather than loosening them. Process behavior is in <code>ffmpeg/run.rs</code>, parsing in <code>progress.rs</code>, installation in <code>tools/install.rs</code>, and pinned values in <code>manifest.rs</code>. A new FFmpeg build means running <code>tools.yml</code> with a new build number, copying every sum from <code>MANIFEST.txt</code>, and running <code>manifest_is_consistent</code>.</p>
+<p>Run <code>cargo test -p r2dock-media</code>. The integration tests in <code>tests/ffmpeg.rs</code> need a real FFmpeg via <code>R2DOCK_TEST_FFMPEG</code> or <code>PATH</code> (tests only) and skip otherwise, so check <code>cargo test -p r2dock-media --test ffmpeg</code> output for “skipping” lines.</p>
+<p>Never build a command string or call a shell. Pass every path through <code>file_url</code> and every input after <code>-protocol_whitelist file</code>. Never let FFmpeg write outside the work folder. Keep both pipes drained, keep the watchdog fed, and never drop a child without the kill wrappers. Never put a full local path in a message, never fall back to <code>PATH</code>, and never loosen the host allowlist or skip a hash check.</p>
+</section>
+<section id="further-reading-16" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><a href="https://ffmpeg.org/ffmpeg.html" target="_blank" rel="noopener noreferrer">ffmpeg command line documentation</a>, for <code>-progress</code>, <code>-nostdin</code>, and <code>-y</code>.</li>
+<li><a href="https://ffmpeg.org/ffmpeg-protocols.html" target="_blank" rel="noopener noreferrer">FFmpeg protocols documentation</a>, for <code>file:</code>, <code>pipe:</code>, and <code>protocol_whitelist</code>.</li>
+<li><a href="https://docs.rs/tokio/latest/tokio/process/struct.Command.html" target="_blank" rel="noopener noreferrer">tokio::process::Command</a> and <a href="https://docs.rs/tokio/latest/tokio/process/struct.Child.html" target="_blank" rel="noopener noreferrer">tokio::process::Child</a>.</li>
+<li><a href="https://docs.rs/process-wrap/latest/process_wrap/" target="_blank" rel="noopener noreferrer">process-wrap crate documentation</a>.</li>
+<li><code>crates/r2dock-media/src/ffmpeg/run.rs</code> and <code>crates/r2dock-media/src/tools/install.rs</code>.</li>
+</ul>
+</section>
+</section>

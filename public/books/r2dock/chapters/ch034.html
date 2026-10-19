@@ -1,0 +1,129 @@
+<section id="ch-25" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">25</span> Threat Modeling and Remaining Risks</h1>
+<p>The four previous chapters described individual defenses: credential storage, the Tauri boundary, the path guard, and the preview scheme. A list of defenses is not a security argument. The argument comes from asking what is worth protecting, who can attack it, through which doors, and what still gets through. This chapter builds that model from the audited code, compares it with the threat model in PLAN.md section 9.8, and states plainly where the two disagree and which risks remain.</p>
+<section id="scope-assets-and-attackers" class="level3">
+<h2>Scope, Assets, and Attackers</h2>
+<p><code>SECURITY.md</code> defines the scope. In scope are leaks of secrets, path traversal or overwrite through object keys, the webview gaining access it should not have, and unsafe rendering of names or previews. Out of scope are “a compromised operating system or user account, malware running as the same user, and issues in Cloudflare R2 itself”. No user-space design can defend against a program running as the same user. PLAN.md section 9.8 says of the store: “Malware running as the same user can usually query the store or memory. Not defended.”</p>
+<p>The most valuable asset is the R2 secret access key with its access key ID: together they grant read, overwrite, and delete on everything the key reaches, from anywhere. The optional Cloudflare API token is a second credential; R2Dock needs only read access to bucket domain settings. PLAN.md says the form recommends a read-only token, but the audited Connect form’s helper text does not mention read-only access, so that advice lives only in the plan. The other assets are bucket data (R2 has no trash or versioning, so a delete is final), the user’s local files, privacy (account IDs, bucket names, keys, and local paths stay out of logs and exports), and the app’s availability against memory or disk exhaustion.</p>
+<p>The five trust boundaries are the webview to Rust core (<a href="/books/r2dock/read/ch031#ch-22">Chapter 22</a>, Tauri Security Architecture), the core to the network (R2, the Cloudflare REST API, GitHub for FFmpeg), the core to the local file system, the core to FFmpeg as a child process (<a href="/books/r2dock/read/ch025#ch-17">Chapter 17</a>, How FFmpeg Integrates with Rust), and the operating system credential store. The attackers are a bucket content author who chooses keys, bytes, and metadata (the most realistic, since buckets are shared and filled by other tools); a network attacker; a local co-tenant or sync client with write access to the download folder; and a supply chain attacker. A compromised webview is not a separate attacker but an escalation: a content author who found a script injection could call R2Dock’s commands.</p>
+<p>Figure 25.1 maps these attackers to the defenses they meet and the assets behind them.</p>
+<figure id="fig-25-attack-surface">
+<img src="/books/r2dock/media/file30.webp" alt="Four attackers at the top: a bucket content author, a network attacker, a local co-tenant or sync tool, and a supply chain attacker. Each reaches one defended entry point: keys and bytes, the TLS connection, the download folder, or FFmpeg and dependencies. A dashed path shows a bypassed first defense leading to a webview compromise, which meets the IPC allowlist: bucket data can still be read or deleted, but no command returns credentials." width="1400" height="1238" loading="lazy" decoding="async">
+<figcaption>Figure 25.1. Each attacker reaches R2Dock through one defended entry point; a bypassed first defense leads to a webview compromise, which still meets the IPC allowlist.</figcaption>
+</figure>
+</section>
+<section id="entry-points-and-their-defenses" class="level3">
+<h2>Entry Points and Their Defenses</h2>
+<p>The table below lists each entry point, who controls it, and its main defense; the subsections explain each.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Entry point</th>
+<th>Controlled by</th>
+<th>Main defense</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Object keys in listings</td>
+<td>Content author</td>
+<td>Text rendering, path guard</td>
+</tr>
+<tr>
+<td>Object bytes in previews</td>
+<td>Content author</td>
+<td>Media scheme limits, type allowlist</td>
+</tr>
+<tr>
+<td>Object bytes in downloads</td>
+<td>Content author</td>
+<td>No-clobber placement, no auto-open</td>
+</tr>
+<tr>
+<td>IPC command arguments</td>
+<td>Compromised webview</td>
+<td>Allowlist, validators, opaque ids</td>
+</tr>
+<tr>
+<td>Download folder contents</td>
+<td>Local co-tenant</td>
+<td>Symlink checks, O_NOFOLLOW</td>
+</tr>
+<tr>
+<td>R2 and Cloudflare traffic</td>
+<td>Network attacker</td>
+<td>HTTPS, no certificate override</td>
+</tr>
+<tr>
+<td>FFmpeg download</td>
+<td>Supply chain</td>
+<td>Pinned SHA-256 sums</td>
+</tr>
+</tbody>
+</table></div>
+<section id="object-keys-and-bytes" class="level4">
+<h3>Object Keys and Bytes</h3>
+<p>Names are rendered as React text nodes; the audited <code>src/</code> has no <code>dangerouslySetInnerHTML</code>. Invisible and bidirectional control characters become visible placeholders through <code>display_name</code> in <code>crates/r2dock-core/src/keys.rs</code>. Every key-to-path mapping goes through the path guard (<a href="/books/r2dock/read/ch032#ch-23">Chapter 23</a>, Filesystem Security). In the activity log, the CSV writer in <code>src-tauri/src/activity/csv.rs</code> neutralizes formula-like cells (test <code>formula_injection_is_neutralized</code>) and writes names as short hashes unless the user opts in. The residual risk is heuristic: the collision check uses Unicode normalization and lowercase mapping, which may miss rare case-folding pairs, and under the <code>Replace</code> policy such a pair leaves one file instead of two.</p>
+<p>Preview bytes pass through the defenses of <a href="/books/r2dock/read/ch033#ch-24">Chapter 24</a> (The Custom Media Preview Protocol). Text previews come from <code>preview_text</code>, which reads at most 1 MiB (<code>TEXT_PREVIEW_BYTES</code>) and is shown as text in a <code>&lt;pre&gt;</code>. What remains is the browser engine’s own image and audio decoders parsing hostile bytes; R2Dock relies on the operating system to patch its webview, a choice the <a href="https://v2.tauri.app/security/" target="_blank" rel="noopener noreferrer">Tauri security overview</a> defends because platform maintainers patch faster. Downloaded bytes are written to disk and never opened. PLAN.md section 9.6 plans to apply the platform download marker (the macOS quarantine attribute and the Windows Mark of the Web), but the audited code does not, so a hostile executable downloaded through R2Dock carries no operating system warning.</p>
+</section>
+<section id="what-a-compromised-webview-can-do" class="level4">
+<h3>What a Compromised Webview Can Do</h3>
+<p>If an attacker ran script in the webview, the IPC boundary is what remains. The capability allows 56 application commands and five core permissions, no plugins, and no command accepts a local path. PLAN.md section 9.8 says such an attacker “could still delete one object per call within confirmation rules”. The code allows more. Deletes take two steps: <code>delete_preview</code> enumerates the objects and stores a pending delete under a single-use token, and <code>delete_execute</code> performs it. The preview’s return value is the key detail.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src-tauri/src/commands/manage.rs#L73-L80" target="_blank" rel="noopener noreferrer">src-tauri/src/commands/manage.rs, lines 73 to 80</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1">    <span class="cn">Ok</span>(DeletePreview <span class="op">{</span></span>
+<span id="cb1-2">        token<span class="op">,</span></span>
+<span id="cb1-3">        objects<span class="op">:</span> count<span class="op">,</span></span>
+<span id="cb1-4">        bytes<span class="op">,</span></span>
+<span id="cb1-5">        needs_typed<span class="op">,</span></span>
+<span id="cb1-6">        typed_phrase<span class="op">:</span> phrase<span class="op">,</span></span>
+<span id="cb1-7">        sample<span class="op">,</span></span>
+<span id="cb1-8">    <span class="op">}</span>)</span></code></pre></div>
+<p>The token and the typed confirmation phrase both go to the page, because the page must show the phrase. Page code can therefore read the phrase and send it back. <code>check_sources</code> refuses an empty prefix, but any non-empty prefix is allowed, and a loop over a listing’s prefixes would reach most of a bucket. The token defends against interface mistakes, double clicks, and stale dialogs; it cannot defend against a compromised page without a confirmation step outside the webview.</p>
+<p>Such an attacker could also read any object through <code>preview_text</code>, <code>media_token</code>, or a download into the configured folder; open any <code>https://</code> URL through <code>open_external</code>; write up to 1 MiB to the clipboard; and set the conflict policy to <code>Replace</code>. They could not read the secret, read local files beyond what the user selected in the last 15 minutes, or choose where files are written. The honest residual risk is “a compromised webview can read and delete bucket data”, not “one object per call”.</p>
+</section>
+<section id="local-races-network-and-supply-chain" class="level4">
+<h3>Local Races, Network, and Supply Chain</h3>
+<p>A co-tenant can plant symbolic links or files in the download folder. The path guard checks each folder below the root without following links, re-checks just before placement, and places with <code>persist_noclobber</code>; on Unix the temporary file is opened with <code>O_NOFOLLOW</code>. The remaining windows are narrow: Windows opens the temporary file without a no-follow flag, and a folder could be swapped between the final check and the rename.</p>
+<p>R2Dock connects only over HTTPS. The S3 client uses the AWS SDK’s default HTTPS client (the <code>default-https-client</code> feature in the workspace <code>Cargo.toml</code>), and the Cloudflare client in <code>crates/r2dock-r2/src/cfapi.rs</code> builds <code>reqwest</code> with redirects disabled and with <code>https_only</code> whenever its base URL is an <code>https://</code> address (always, outside local tests), capping bodies at 1 MiB and validating domain names (<a href="/books/r2dock/read/ch018#ch-12">Chapter 12</a>, Public URLs and Cloudflare REST API Integration). No code uses <code>danger_accept_invalid_certs</code>. As PLAN.md states, an organization root certificate for traffic inspection can still read traffic, and a domain the account owner configured is trusted as theirs.</p>
+<p>FFmpeg is downloaded from a pinned release and checked against SHA-256 sums compiled into the app, with redirects limited to GitHub hosts and binaries re-hashed when size or modification time changes (<a href="/books/r2dock/read/ch025#ch-17">Chapter 17</a>). What remains is an FFmpeg decoder vulnerability, running with the user’s privileges, and the integrity of the R2Dock build itself.</p>
+</section>
+</section>
+<section id="code-compared-with-plan.md-section-9.8" class="level3">
+<h2>Code Compared With PLAN.md Section 9.8</h2>
+<p>Most rows match the code. The differences below were found while auditing commit 2bdc8a6. None is a demonstrated exploitable vulnerability within scope, but several are places where documentation promises more than the code delivers.</p>
+<p>The “Updates” row describes Tauri updater signature verification. The code has no updater plugin in <code>src-tauri/Cargo.toml</code>, and <code>.github/workflows/release.yml</code> publishes what its release notes call an “Unsigned preview build” with a <code>SHA256SUMS.txt</code> file. Published beside the installers, that file catches corruption but not a compromised release, so the real risk is the integrity of the GitHub account and release process, plus users learning to click through unsigned-app warnings. The “IPC” row understates the delete exposure, as shown above.</p>
+<p>PLAN.md section 9.2 says types holding secrets do not implement <code>Debug</code> without redaction, yet <code>ConnectionInput</code> in <code>src-tauri/src/dto.rs</code> derives <code>Debug</code> with the secret and API token as plain strings. Nothing formats it today, but the type does not enforce the rule. The same section says the secret is cleared from React state “immediately after the call”; the code clears it after a successful save and keeps it after a failure so the user can retry (<a href="/books/r2dock/read/ch030#ch-21">Chapter 21</a>, Credential Storage and Authentication).</p>
+<p>Section 9.4 lists dialog, notification, clipboard, opener, and updater permissions; the code grants the page no plugin permissions, which is stricter. Conversely, it grants <code>core:app:allow-version</code>, <code>core:window:allow-is-focused</code>, and <code>core:path:default</code>, which the frontend does not appear to use; the last lets page code resolve paths such as the home folder. Section 9.6 plans download markers and marks Windows long paths “[Verify]”; neither is implemented. Range handling (9.5) and SVG scripts in <code>&lt;img&gt;</code> (9.4) remain “[Verify]” with no real-webview test. Section 9.7 describes log rotation as “5 files, 5 MB each”; the code rotates daily and keeps five files with no size limit.</p>
+<p>Two observations are absent from the plan. Values loaded from <code>connections.json</code> are not re-validated, including the account ID that becomes part of the endpoint host; editing that file needs the user’s own privileges, but re-validation would be cheap defense in depth. And <code>style-src 'unsafe-inline'</code>, which the plan says to “try to remove”, is still present.</p>
+</section>
+<section id="remaining-risks-ranked" class="level3">
+<h2>Remaining Risks, Ranked</h2>
+<p>The highest risk is the user’s own key management. R2Dock cannot enforce least privilege; the Connect form advises a bucket-scoped token, but a broad key stolen from anywhere gives full access until revoked in the Cloudflare dashboard, and deleting a connection in R2Dock does not revoke it.</p>
+<p>Second is a webview compromise through a decoder vulnerability in the browser engine, reached by previewing a hostile object. Its impact includes reading and deleting bucket data, but not reading the secret or arbitrary local files.</p>
+<p>Third is an FFmpeg decoder vulnerability during optional compression. Compression is off by default and runs only on selected files, but the process is not sandboxed. Fourth are the narrow download folder races and the missing download markers. Lowest are log leaks: the redaction filter, typed errors, and hashed activity names make them unlikely, leaving mainly future code printing a secret in a form the pattern filter does not recognize.</p>
+<p>Possible future improvements, not committed plans, follow from these gaps: a native Rust confirmation dialog for bulk deletes, a redacting <code>Debug</code> for <code>ConnectionInput</code>, removing unused core permissions, download markers, re-validating configuration on load, signed releases with a verifying updater, and a real-webview test for ranges and SVG.</p>
+</section>
+<section id="working-on-this-code-24" class="level3">
+<h2>Working on This Code</h2>
+<p>The project rule is that a change affecting the threat model updates PLAN.md section 9.8 in the same change. When you add a command, write in the pull request what a compromised page could do with it. When remote data gains a new route to disk, the webview, or a child process, add a row and route it through the existing defenses: the path guard, the preview scheme, text rendering, and <code>AppError</code>.</p>
+<p>The tests that guard the model live in <code>crates/r2dock-core/src/path_guard.rs</code>, <code>crates/r2dock-core/src/redact.rs</code>, <code>src-tauri/src/logging.rs</code>, <code>src-tauri/src/connections/tests.rs</code>, <code>src-tauri/src/media.rs</code>, and <code>src-tauri/src/activity/csv.rs</code>; <code>cargo test --workspace</code> runs them, as continuous integration does on all three platforms. CI also runs <code>cargo audit</code> and <code>npm audit --omit=dev</code>. PLAN.md mentions <code>cargo deny</code>, but there is no <code>deny.toml</code> and no workflow runs it.</p>
+<p>The invariants: secrets never cross back over IPC; local paths come only from Rust pickers and drag and drop; remote content is never rendered as HTML; the CSP never gains <code>unsafe-eval</code>, remote scripts, or a broad <code>connect-src</code>; every fan-out is bounded; nothing is overwritten or deleted without policy or confirmation. Weakening any of these needs an ADR. Report vulnerabilities privately through the repository’s Security tab, as <code>SECURITY.md</code> describes.</p>
+</section>
+<section id="further-reading-24" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>SECURITY.md</code> and PLAN.md section 9.8 in the repository.</li>
+<li><code>src-tauri/capabilities/main.json</code> and <code>src-tauri/src/commands/manage.rs</code>.</li>
+<li>Tauri security overview: <a href="https://v2.tauri.app/security/" target="_blank" rel="noopener noreferrer">v2.tauri.app/security</a>.</li>
+<li>Tauri capabilities: <a href="https://v2.tauri.app/security/capabilities/" target="_blank" rel="noopener noreferrer">v2.tauri.app/security/capabilities</a>.</li>
+<li>OWASP path traversal: <a href="https://community.owasp.org/attacks/Path_Traversal" target="_blank" rel="noopener noreferrer">community.owasp.org/attacks/Path_Traversal</a>.</li>
+</ul>
+</section>
+</section>

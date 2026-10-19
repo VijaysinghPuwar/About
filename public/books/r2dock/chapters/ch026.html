@@ -1,0 +1,137 @@
+<section id="ch-18" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">18</span> Audio Compression Internals</h1>
+<p><a href="/books/r2dock/read/ch025#ch-17">Chapter 17</a> (How FFmpeg Integrates with Rust) showed how R2Dock runs FFmpeg safely. This chapter covers what it asks FFmpeg to do with audio and, just as important, when it does nothing. The rule from <code>docs/plans/media-compression.md</code> is that the original file is never modified and nothing is compressed unless the saving is real. A low bitrate spoken word recording can often lose half its size harmlessly; a well encoded MP3 song would only get worse. The code must tell these apart cheaply before spending minutes of CPU.</p>
+<section id="audio-concepts-you-need" class="level3">
+<h2>Audio Concepts You Need</h2>
+<p>The <strong>sample rate</strong> is samples per second: 44,100 Hz is CD quality and 22,050 Hz suffices for clear speech, since a signal holds frequencies up to half its sample rate. <strong>Channels</strong> are separate signals: one for mono, two for stereo, six for 5.1. The <strong>bitrate</strong> is measured in kilobits per second (kbps); uncompressed CD quality PCM (pulse code modulation) in WAV needs about 1,411 kbps.</p>
+<p>A <strong>lossless</strong> codec such as FLAC (Free Lossless Audio Codec) returns the exact samples at roughly half the size. A <strong>lossy</strong> codec such as MP3, AAC (Advanced Audio Coding), or Opus discards what the ear is unlikely to notice, but every re-encode loses a little more, so R2Dock is reluctant to re-encode lossy files. <strong>Constant bitrate</strong> (CBR) spends the same bits every second; <strong>variable bitrate</strong> (VBR) targets a quality level, so its header bitrate can mislead and R2Dock computes the <strong>real bitrate</strong> from size and duration. Loudness is measured in <strong>dBFS</strong>, decibels relative to full scale: 0 is the loudest sample value and digital silence is negative infinity.</p>
+<p>RFC 6716, the <a href="https://www.rfc-editor.org/rfc/rfc6716" target="_blank" rel="noopener noreferrer">Opus specification</a>, says it “scales from low bitrate narrowband speech at 6 kbit/s to very high quality stereo music at 510 kbit/s” and that its music layer “always operates internally at a sample rate of 48 kHz”, which is why R2Dock never sets an Opus sample rate.</p>
+</section>
+<section id="probing-in-process-with-symphonia" class="level3">
+<h2>Probing in Process with Symphonia</h2>
+<p>Starting FFmpeg per file would be slow, so <code>probe_audio</code> in <code>crates/r2dock-media/src/probe.rs</code> reads container headers in process with Symphonia, a pure Rust library (Mozilla Public License 2.0, listed in THIRD_PARTY_NOTICES.md). It blocks, so callers use <code>spawn_blocking</code> (<a href="/books/r2dock/read/ch010#ch-05">Chapter 5</a>). The codec comes from the content, never the extension: the test <code>content_decides_not_the_name</code> writes WAV data as <code>really-wav.mp3</code>, <code>UPPER.WAV</code>, and <code>no-extension</code> and expects PCM each time. The <code>AudioProbe</code> result also counts audio tracks, notes any video track, sums embedded picture bytes, and records R2Dock’s marker tag.</p>
+<p>Symphonia reports no bitrate, so <code>real_bitrate</code> computes audio bytes times eight over duration, after subtracting cover art; a 1 MB cover would otherwise add about 7 percent to a one hour 32 kbps book.</p>
+<p>Two plan statements disagree with the code. The plan says Symphonia “cannot read Opus” and that unreadable files “fall back to ffprobe.” In fact the <code>ogg</code> feature is enabled, <code>codec_of</code> maps <code>CODEC_ID_OPUS</code>, and <code>wav_to_mp3_flac_and_opus</code> probes Opus output with <code>probe_audio</code>. And <code>pipeline::prepare</code> reports an unreadable file as <code>Unchanged::NotAudio</code> unless its extension suggests video, which goes to the ffprobe video path; audio has no ffprobe fallback.</p>
+</section>
+<section id="speech-or-music" class="level3">
+<h2>Speech or Music</h2>
+<p>Speech survives low bitrates; music does not. R2Dock guesses which it has.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-media/src/classify.rs#L27-L50" target="_blank" rel="noopener noreferrer">crates/r2dock-media/src/classify.rs, lines 27 to 50</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">/// Highest sample rate that still counts as speech.</span></span>
+<span id="cb1-2"><span class="kw">const</span> SPEECH_MAX_RATE<span class="op">:</span> <span class="dt">u32</span> <span class="op">=</span> <span class="dv">24_000</span><span class="op">;</span></span>
+<span id="cb1-3"><span class="co">/// Highest real bitrate that still counts as speech.</span></span>
+<span id="cb1-4"><span class="kw">const</span> SPEECH_MAX_BPS<span class="op">:</span> <span class="dt">u64</span> <span class="op">=</span> <span class="dv">64_000</span><span class="op">;</span></span>
+<span id="cb1-5"></span>
+<span id="cb1-6"><span class="co">// ...</span></span>
+<span id="cb1-7"><span class="kw">pub</span> <span class="kw">fn</span> classify(probe<span class="op">:</span> <span class="op">&amp;</span>AudioProbe<span class="op">,</span> choice<span class="op">:</span> ContentOverride) <span class="op">-&gt;</span> Content <span class="op">{</span></span>
+<span id="cb1-8">    <span class="cf">match</span> choice <span class="op">{</span></span>
+<span id="cb1-9">        <span class="pp">ContentOverride::</span>Speech <span class="op">=&gt;</span> <span class="cf">return</span> <span class="pp">Content::</span>Speech<span class="op">,</span></span>
+<span id="cb1-10">        <span class="pp">ContentOverride::</span>Music <span class="op">=&gt;</span> <span class="cf">return</span> <span class="pp">Content::</span>Music<span class="op">,</span></span>
+<span id="cb1-11">        <span class="pp">ContentOverride::</span>Auto <span class="op">=&gt;</span> <span class="op">{}</span></span>
+<span id="cb1-12">    <span class="op">}</span></span>
+<span id="cb1-13">    <span class="kw">let</span> mono <span class="op">=</span> probe<span class="op">.</span>channels <span class="op">==</span> <span class="cn">Some</span>(<span class="dv">1</span>)<span class="op">;</span></span>
+<span id="cb1-14">    <span class="kw">let</span> low_rate <span class="op">=</span> probe<span class="op">.</span>sample_rate<span class="op">.</span>is_some_and(<span class="op">|</span>r<span class="op">|</span> r <span class="op">&lt;=</span> SPEECH_MAX_RATE)<span class="op">;</span></span>
+<span id="cb1-15">    <span class="kw">let</span> low_bitrate <span class="op">=</span> <span class="op">!</span>probe<span class="op">.</span>codec<span class="op">.</span>is_lossless()</span>
+<span id="cb1-16">        <span class="op">&amp;&amp;</span> probe<span class="op">.</span>real_bitrate()<span class="op">.</span>is_some_and(<span class="op">|</span>b<span class="op">|</span> b <span class="op">&lt;=</span> SPEECH_MAX_BPS)<span class="op">;</span></span>
+<span id="cb1-17">    <span class="cf">if</span> mono <span class="op">||</span> low_rate <span class="op">||</span> low_bitrate <span class="op">{</span></span>
+<span id="cb1-18">        <span class="pp">Content::</span>Speech</span>
+<span id="cb1-19">    <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb1-20">        <span class="pp">Content::</span>Music</span>
+<span id="cb1-21">    <span class="op">}</span></span>
+<span id="cb1-22"><span class="op">}</span></span></code></pre></div>
+<p>This is a heuristic, not sound analysis: a file already stored in mono, at 24 kHz or less, or at 64 kbps or less has accepted speech grade quality. Lossless files skip the bitrate rule, since quiet FLAC music can have a low bitrate. Mono music is misclassified, so the user can override per upload, and the override wins first (<code>decision_table</code>).</p>
+</section>
+<section id="the-bitrate-ladder" class="level3">
+<h2>The Bitrate Ladder</h2>
+<p><code>ladder</code> in <code>crates/r2dock-media/src/plan.rs</code> picks the target from settings stored in <code>crates/r2dock-core/src/compression.rs</code>: <code>Mode</code> (<code>KeepFormat</code> by default, or <code>Smallest</code>), <code>SpeechQuality</code> (32 or 48 kbps, default 32), <code>MusicQuality</code> (<code>Standard</code> or <code>Smaller</code>), <code>LosslessAction</code> (MP3 by default, FLAC, or keep), a minimum saving (default 15 percent, clamped to 5 to 50), and <code>allow_downmix</code> (off).</p>
+<p>Targets are defined per output layout, so stereo gets about twice the mono bitrate and keeping both channels never costs quality. Speech becomes CBR MP3 at 32 kbps mono or 64 stereo (48 or 96 at the higher setting). Music becomes VBR MP3 at LAME quality 4 or 6; the <a href="https://ffmpeg.org/ffmpeg-codecs.html" target="_blank" rel="noopener noreferrer">FFmpeg codecs documentation</a> calls the <code>libmp3lame</code> <code>q</code> option the “constant quality setting for VBR”, with lower numbers meaning higher quality, and <code>approx_kbps</code> stores the expected average (about 165 or 115 kbps stereo) for estimates. Opus targets are 24 and 48 kbps for mono and stereo speech, 64 and 96 for music.</p>
+<p>The second half of <code>ladder</code> chooses by source codec and mode, returning the encoding and a new extension, or none when the key keeps its name. In “Keep format”, an MP3 stays an MP3 and an Opus file stays Opus under the same key, so links keep working. In “Smallest”, MP3, AAC, and Opus sources become <code>.opus</code>, which changes the key; in R2 that is a new object, not a rename (<a href="/books/r2dock/read/ch017#ch-11">Chapter 11</a>). Lossless sources become MP3 (or Opus in “Smallest”), FLAC, or are kept with <code>LosslessKept</code>. Vorbis and unknown codecs get <code>UnsupportedFormat</code>. AAC stays AAC at 64 or 128 kbps only to keep the format, because the plan measured FFmpeg’s native AAC encoder as weak at low bitrates (20 percent saved at 48 kbps on speech). Opus uses <code>-application voip</code> for speech, which the codecs documentation says will “favor improved speech intelligibility”, and <code>audio</code> for music.</p>
+<p>On a 10 minute slice of a 64 kbps mono spoken word MP3 on an Apple silicon Mac, the plan records MP3 at 32 kbps saving 50 percent in 1.2 seconds and Opus at 24 kbps saving 64 percent in 3.6 seconds (single measurements, not re-run for this book). MP3 is the default because it plays everywhere and keeps keys unchanged.</p>
+</section>
+<section id="channels-never-lose-sound-silently" class="level3">
+<h2>Channels: Never Lose Sound Silently</h2>
+<p>Folding stereo to mono halves the bitrate but alters or erases anything that differs between left and right. <code>decide</code> reduces channels only when that loses nothing or the user allows it.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-media/src/plan.rs#L236-L256" target="_blank" rel="noopener noreferrer">crates/r2dock-media/src/plan.rs, lines 236 to 256</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1">    <span class="kw">let</span> source_channels <span class="op">=</span> probe<span class="op">.</span>channels<span class="op">.</span>unwrap_or(<span class="dv">2</span>)<span class="op">;</span></span>
+<span id="cb2-2">    <span class="co">// Channels are only reduced when that loses nothing (left and right</span></span>
+<span id="cb2-3">    <span class="co">// proven identical) or the user allows it: a mono mix erases sound that</span></span>
+<span id="cb2-4">    <span class="co">// differs between channels. With permission, speech becomes mono and</span></span>
+<span id="cb2-5">    <span class="co">// anything else at most stereo.</span></span>
+<span id="cb2-6">    <span class="kw">let</span> mono <span class="op">=</span> source_channels <span class="op">==</span> <span class="dv">1</span></span>
+<span id="cb2-7">        <span class="op">||</span> (source_channels <span class="op">==</span> <span class="dv">2</span> <span class="op">&amp;&amp;</span> inputs<span class="op">.</span>identical_channels)</span>
+<span id="cb2-8">        <span class="op">||</span> (s<span class="op">.</span>allow_downmix <span class="op">&amp;&amp;</span> content <span class="op">==</span> <span class="pp">Content::</span>Speech)<span class="op">;</span></span>
+<span id="cb2-9">    <span class="kw">let</span> (encoding<span class="op">,</span> extension) <span class="op">=</span> ladder(probe<span class="op">,</span> content<span class="op">,</span> mono<span class="op">,</span> s)<span class="op">?;</span></span>
+<span id="cb2-10">    <span class="kw">let</span> channels <span class="op">=</span> <span class="cf">match</span> encoding <span class="op">{</span></span>
+<span id="cb2-11">        <span class="co">// Lossless output keeps every channel.</span></span>
+<span id="cb2-12">        <span class="pp">Encoding::</span>Flac <span class="op">=&gt;</span> source_channels<span class="op">,</span></span>
+<span id="cb2-13">        <span class="co">// The veto comes before any other channel decision.</span></span>
+<span id="cb2-14">        _ <span class="cf">if</span> source_channels <span class="op">&gt;</span> <span class="dv">2</span> <span class="op">&amp;&amp;</span> <span class="op">!</span>s<span class="op">.</span>allow_downmix <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb2-15">            <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">SkipReason::</span>Multichannel <span class="op">{</span></span>
+<span id="cb2-16">                channels<span class="op">:</span> source_channels<span class="op">,</span></span>
+<span id="cb2-17">            <span class="op">}</span>)<span class="op">;</span></span>
+<span id="cb2-18">        <span class="op">}</span></span>
+<span id="cb2-19">        _ <span class="cf">if</span> mono <span class="op">=&gt;</span> <span class="dv">1</span><span class="op">,</span></span>
+<span id="cb2-20">        _ <span class="op">=&gt;</span> source_channels<span class="op">.</span>min(<span class="dv">2</span>)<span class="op">,</span></span>
+<span id="cb2-21">    <span class="op">};</span></span></code></pre></div>
+<p>A mono source stays mono. Stereo becomes mono only if <code>identical_channels</code> is proven or the user allows downmixing for speech. More than two channels, such as 5.1, is uploaded unchanged with <code>SkipReason::Multichannel</code> unless downmixing is allowed, since lossy targets hold at most two channels; FLAC keeps every channel. The comment “The veto comes before any other channel decision” records a fixed bug: the plan’s notes after 0.4.1 describe six channel 22.05 kHz audio once planned as mono because the speech rule ran first. The test <code>multichannel_veto_comes_before_speech</code> guards the order.</p>
+<section id="proving-two-channels-are-identical" class="level4">
+<h3>Proving Two Channels Are Identical</h3>
+<p>Many spoken word files are “fake stereo”. <code>args::channel_difference</code> builds an FFmpeg filter graph that splits the first audio track with <code>asplit</code>; one copy goes through <code>pan</code> to <code>c0-c1</code> (left minus right), the other to the mix <code>0.5*c0+0.5*c1</code>, and each ends in <code>volumedetect</code>, which the <a href="https://ffmpeg.org/ffmpeg-filters.html" target="_blank" rel="noopener noreferrer">FFmpeg filters documentation</a> says reports the “maximum volume (on a per-sample basis)”. Identical channels subtract to silence, a peak of negative infinity.</p>
+<p>Lossy decoding leaves tiny differences even for identical channels, so <code>channels_match</code> in <code>crates/r2dock-media/src/ffmpeg/mod.rs</code> requires the difference to be at most <code>IDENTICAL_CHANNELS_DB</code> (-60 dBFS) and also at least <code>SIGNAL_MARGIN_DB</code> (40 dB) below the mix’s peak, unless it is exact silence. The second rule catches quiet recordings with opposite channels, whose difference can fall near -68 dBFS while the mix is almost silent because the channels cancel. A missing measurement never counts as identical. The plan’s calibration with synthetic speech found -91 dB for identical channels in WAV or 128 kbps MP3, but -31 dB for AAC at 96 kbps and -51 dB for Opus at 64 kbps, which therefore stay stereo (<code>channel_match_rules</code>).</p>
+<p>The check covers the whole stream. An earlier version sampled 30 seconds from the middle and folded a file whose opposite phase introduction then vanished; the tests <code>speech_that_only_matches_in_the_middle_stays_stereo</code> and <code>stereo_that_only_looks_mono_in_the_middle_stays_stereo</code> in <code>tests/preserve.rs</code> reproduce that trap. Because a full decode costs time, <code>wants_channel_check</code> runs it only for a stereo source planned as stereo, lossy speech; music is excluded (<code>identical_stereo_music_is_not_folded_to_mono</code>). A check that fails for any reason except cancellation leaves the file stereo; success re-plans with <code>identical_channels</code> set. The plan reports 2.1 seconds per hour of 64 kbps stereo MP3. The upload review estimate skips this check, so real results can be smaller.</p>
+</section>
+</section>
+<section id="sample-rates" class="level3">
+<h2>Sample Rates</h2>
+<p>For MP3, <code>mp3_rate</code> picks the highest of the nine MP3 rates (8 to 48 kHz) at or below both the wanted rate (22.05 kHz for speech, 44.1 kHz for music) and the source. A 16 kHz source therefore stays at 16 kHz instead of being upsampled, while 24 kHz drops to 22.05 kHz (<code>audiobook_48k_24khz</code>, <code>never_raises_sample_rate</code>). AAC and FLAC keep the source rate, and Opus is left to its native 48 kHz.</p>
+</section>
+<section id="when-compression-is-skipped" class="level3">
+<h2>When Compression Is Skipped</h2>
+<p><code>decide</code> starts with the cheapest facts. A video track belongs to <a href="/books/r2dock/read/ch027#ch-19">Chapter 19</a> (<code>Video</code>). More than one audio track gets <code>UnsupportedStreams</code>, because the audio path maps only the first and would lose a commentary or second language. A file carrying R2Dock’s marker is never compressed again. Files under 1 MB (<code>MIN_SIZE</code>, 1,000,000 bytes) or 10 seconds are not worth it, and a file without a readable duration cannot be verified afterwards.</p>
+<p>The marker is a tag <code>R2DOCK_COMPRESSED</code> whose value is the preset, such as <code>mp3-32k</code>, read by <code>marker_of</code> from ID3 frames, tags, or comments. MP4 based outputs get no marker, because FFmpeg writes custom MP4 tags only with <code>-movflags use_metadata_tags</code>, which moves title and author into a form many players ignore. For them the bitrate check below prevents a second compression, as <code>aac_m4b_keeps_chapters</code> confirms.</p>
+<p>After the ladder runs, two more cheap checks in <code>decide</code> follow. The first never raises the bitrate: a lossy source whose real bitrate is within 3 percent of the target (headers add a little) is <code>AlreadyCompressed</code> (<code>header_overhead_still_counts_as_at_target</code>). The second estimates the output (duration times target bitrate, plus 0.5 percent overhead and the cover art, or 55 percent of PCM for FLAC) and skips with a message such as “Would save only 6%” below the user’s minimum; <code>margin_check</code> shows a 64 kbps book passing at the default and failing at 30 percent.</p>
+<p>If <code>ffprobe</code> is available, <code>streams::audio_only_supported</code> also accepts only one audio track plus cover art and a few harmless data tracks such as <code>tmcd</code> and chapter <code>text</code>; anything else gives <code>UnsupportedStreams</code>. All reasons are in the <code>SkipReason</code> enum, shown on each transfer row.</p>
+</section>
+<section id="the-sample-test" class="level3">
+<h2>The Sample Test</h2>
+<p>Real encodes differ from nominal bitrates, especially VBR music. For lossy files longer than <code>SAMPLE_TEST_MIN_SECS</code> (300 seconds), <code>Ffmpeg::sample_saving</code> encodes 30 seconds from the middle (<code>middle_window</code>, starting at <code>(duration - 30) / 2</code> to avoid unrepresentative intros and credits), deletes the sample, and scales its size by full duration over window length. Passing <code>-ss</code> and <code>-t</code> before <code>-i</code> makes them input options that seek and limit reading, so FFmpeg does not decode up to the middle. The plan records a 23 hour spoken word file where the sample predicted 49.8 percent in 0.4 seconds and the full encode delivered 50.0 percent in 172 seconds (not re-run for this book). The test <code>sample_test_predicts_the_saving</code> expects 40 to 60 percent on a synthetic file.</p>
+</section>
+<section id="building-the-encode-command" class="level3">
+<h2>Building the Encode Command</h2>
+<p><code>args::encode_audio</code> maps only the first audio track (<code>-map 0:a:0</code>). Cover art, stored as a video stream with the “attached picture” disposition, is copied with <code>-map 0:v?</code> for containers that hold it (the <a href="https://ffmpeg.org/ffmpeg.html" target="_blank" rel="noopener noreferrer">ffmpeg documentation</a> explains that a trailing <code>?</code> makes the map optional); Opus and samples get <code>-vn</code>. <code>-map_metadata 0</code> and <code>-map_chapters 0</code> copy tags and chapters. FLAC uses <code>-compression_level 8</code>. MP3 gets ID3 version 2.3 and a Xing/LAME header for gapless playback and accurate VBR duration; MP4 gets <code>+faststart</code> so a browser can play an R2 object before it fully downloads.</p>
+<p>The plan says “a file whose chapters would be lost is uploaded unchanged unless the user allows it.” The code copies chapters and <code>aac_m4b_keeps_chapters</code> confirms they survive in M4B, but nothing compares chapter counts and no such setting exists. Whether chapters survive in MP3 depends on FFmpeg’s muxer; this book did not verify it.</p>
+</section>
+<section id="verifying-the-output" class="level3">
+<h2>Verifying the Output</h2>
+<p><code>verify_audio</code> in <code>crates/r2dock-media/src/verify.rs</code> re-probes the output with Symphonia and requires it to open, be non-empty, hold the expected codec, and match the source duration within 1 second or 0.5 percent, whichever is larger (432 seconds for a full day, per the <code>tolerance</code> test), so a truncated output is caught. A failure deletes the output and the failure policy of <a href="/books/r2dock/read/ch028#ch-20">Chapter 20</a> applies.</p>
+<p><code>pipeline.rs</code> then checks that nothing was dropped: exactly one audio track with the planned channels, confirmed by ffprobe when available. A copy that lost something is deleted and reported as unchanged with <code>TracksNotKept</code>, so the original is always uploaded regardless of the failure policy; <code>a_copy_that_lost_something_uploads_the_original</code> forces this with a lying fake ffprobe. Finally a real saving below the minimum gives <code>ResultSavedTooLittle</code>. Figure 18.1 puts the whole path in order.</p>
+<figure id="fig-18-audio-decision">
+<img src="/books/r2dock/media/file23.webp" alt="A top to bottom flowchart. The probe checks for video, extra tracks, a marker, or a tiny or short file; any of these uploads the original. Next the ladder picks a target, and a source already at the target or a too small saving uploads the original. Stereo speech gets a whole stream channel check. A long lossy file gets a 30 second sample test that must save enough. Then the file is encoded and verified; passing uploads the compressed copy, failing leads to the original." width="1099" height="1526" loading="lazy" decoding="async">
+<figcaption>Figure 18.1. The audio decision path: cheap probe checks, the ladder and margin, a whole stream channel check for stereo speech, a sample test for long lossy files, then encode and verification, each failure leading to the original.</figcaption>
+</figure>
+</section>
+<section id="compare-quality" class="level3">
+<h2>Compare Quality</h2>
+<p>“Compare quality” in Settings (<code>preview::compare</code> in <code>preview.rs</code>) encodes the same 30 second middle window at each preset plus a FLAC reference, played through the media scheme of <a href="/books/r2dock/read/ch033#ch-24">Chapter 24</a> (The Custom Media Preview Protocol). Labels come from the encoding actually produced (<code>compare_quality_on_aac_is_labeled_aac</code>).</p>
+</section>
+<section id="working-on-this-code-17" class="level3">
+<h2>Working on This Code</h2>
+<p>In <code>crates/r2dock-media/src</code>, <code>classify.rs</code> holds the speech rule, <code>plan.rs</code> the ladder and skip checks, <code>ffmpeg/args.rs</code> the arguments, and <code>pipeline.rs</code> the sequence from probe to verify. A new settings field in <code>crates/r2dock-core/src/compression.rs</code> needs a <code>serde</code> default so older preferences load.</p>
+<p>Run <code>cargo test -p r2dock-media</code> for the decision tables and snapshots, and with FFmpeg installed <code>cargo test -p r2dock-media --test ffmpeg</code> and <code>--test preserve</code>, checking for skip messages. A ladder change should update a table test deliberately and record its measurement in the plan.</p>
+<p>Never raise bitrate, sample rate, or channel count above the source. Never reduce channels without proof or permission, and keep the multichannel veto before the speech rule. Never compress a file whose extra tracks would be lost, treat a copy that lost something as unchanged, and never write the marker into MP4. Do not test ladder changes only on sine waves, which encode very differently from speech.</p>
+</section>
+<section id="further-reading-17" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><a href="https://ffmpeg.org/ffmpeg-codecs.html" target="_blank" rel="noopener noreferrer">FFmpeg codecs documentation</a>, for <code>libmp3lame</code>, <code>libopus</code>, <code>aac</code>, and <code>flac</code>.</li>
+<li><a href="https://ffmpeg.org/ffmpeg-filters.html" target="_blank" rel="noopener noreferrer">FFmpeg filters documentation</a>, for <code>pan</code>, <code>asplit</code>, and <code>volumedetect</code>.</li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc6716" target="_blank" rel="noopener noreferrer">RFC 6716: Definition of the Opus Audio Codec</a>.</li>
+<li><code>crates/r2dock-media/src/plan.rs</code> and <code>crates/r2dock-media/src/plan/tests.rs</code>.</li>
+<li><code>docs/plans/media-compression.md</code>, especially the Progress table.</li>
+</ul>
+</section>
+</section>

@@ -1,0 +1,113 @@
+<section id="ch-35" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">35</span> Source-Code Study Roadmap</h1>
+<p>R2Dock’s tracked source is a few hundred files, and reading them in directory order is a slow way to understand it. This chapter gives an ordered path instead: which files to open first, what single concept to look for in each, and which chapter of this book explains it. Each stage builds on the previous one, moving from rules without input or output, through the network and the engine, to the application shell and the interface. A reader who follows it with the book open should be able to change any subsystem with confidence after about ten sessions.</p>
+<section id="stage-1-the-shape-of-the-system" class="level3">
+<h2>Stage 1: The Shape of the System</h2>
+<p>Start with the documents, not the code. Read README.md for what the app promises and the sections of PLAN.md on architecture and the threat model, keeping <a href="/books/r2dock/read/ch043#ch-32">Chapter 32</a> (Engineering Trade-offs and Future Improvements) beside you, because PLAN.md predates parts of the code. Then read the five Architecture Decision Records (ADRs) in <code>docs/adr/</code>; each is short and explains one foundational choice (Tauri with a Rust core, the keyring crate, ts-rs for types, the frontend libraries, the local S3 test server). Finally open the workspace <code>Cargo.toml</code> and each crate’s <code>Cargo.toml</code> to see which crate depends on which. Chapters 1 to 3 cover this stage.</p>
+</section>
+<section id="stage-2-rules-without-input-or-output" class="level3">
+<h2>Stage 2: Rules Without Input or Output</h2>
+<p>Open <code>crates/r2dock-core</code>. Its modules contain decisions with no network or disk access, which makes them the easiest code to read and test. Read <code>app_error.rs</code> first: <code>AppError</code> is the one error shape that crosses into the webview, and every later layer maps into it (<a href="/books/r2dock/read/ch009#ch-04">Chapter 4</a>, Rust Concepts Used in R2Dock). Read <code>keys.rs</code> for how object keys are validated and displayed, then <code>parts.rs</code> for <code>part_size_for</code>, <code>plan_parts</code>, and <code>use_multipart</code> (<a href="/books/r2dock/read/ch015#ch-09">Chapter 9</a>, Multipart Uploads in Depth). Read <code>path_guard.rs</code> slowly; it turns untrusted keys into safe local paths and is the security core of downloads (<a href="/books/r2dock/read/ch032#ch-23">Chapter 23</a>, Filesystem Security). Finish with <code>settings.rs</code> and <code>storage.rs</code>, the latter for <code>write_bytes_atomic</code> (<a href="/books/r2dock/read/ch021#ch-14">Chapter 14</a>, Journals and Persistent Queues). The unit and property tests at the bottom of each file are the best specification.</p>
+</section>
+<section id="stage-3-secrets-and-the-r2-client" class="level3">
+<h2>Stage 3: Secrets and the R2 Client</h2>
+<p>Read <code>crates/r2dock-secrets/src/lib.rs</code> to see how secrets go to the operating system’s credential store or session memory and never to a file (<a href="/books/r2dock/read/ch030#ch-21">Chapter 21</a>, Credential Storage and Authentication). Then open <code>crates/r2dock-r2</code>: <code>client.rs</code> for how the AWS software development kit (SDK) is configured (path style, checksums, retries, stall protection), <code>error.rs</code> for how SDK failures become typed, classified errors, and <code>list.rs</code> for paged listing with its defensive guards (<a href="/books/r2dock/read/ch014#ch-08">Chapter 8</a>, The S3-Compatible Protocol). Read <code>ops.rs</code> and <code>bulk.rs</code> for copy, delete, and the copy, verify, delete move (<a href="/books/r2dock/read/ch017#ch-11">Chapter 11</a>, Object Management and Consistency), and <code>cfapi.rs</code> for the optional Cloudflare API (<a href="/books/r2dock/read/ch018#ch-12">Chapter 12</a>, Public URLs and Cloudflare REST API Integration).</p>
+</section>
+<section id="stage-4-the-transfer-engine" class="level3">
+<h2>Stage 4: The Transfer Engine</h2>
+<p>This is the heart of the application and deserves the most time. Read <code>crates/r2dock-transfer/src/model.rs</code> first for <code>JobSpec</code>, <code>JobState</code>, and <code>TransferEvent</code>, the vocabulary of everything that follows (<a href="/books/r2dock/read/ch020#ch-13">Chapter 13</a>, Transfer State Machines). Then <code>ctx.rs</code> for <code>JobCtx</code>, <code>RunControl</code>, <code>ResumeState</code>, and the <code>JobHooks</code> boundary.</p>
+<p>Next read <code>engine/mod.rs</code> in this order: <code>EngineConfig</code> and <code>Engine::start</code>, then <code>enqueue</code>, <code>Inner::schedule</code>, <code>run_job</code>, <code>finish</code>, and <code>progress_ticker</code> (<a href="/books/r2dock/read/ch011#ch-06">Chapter 6</a>, The Transfer Scheduler), and finally <code>restore</code> and <code>control</code>. With that in mind, <code>upload.rs</code> (single and multipart paths, <code>reconcile</code>, <code>finished_before_restart</code>) and <code>download.rs</code> (range resume, verification, finalization) read naturally (Chapters 9 and 10). <code>body.rs</code>, <code>source.rs</code>, and <code>progress.rs</code> are short supporting files for streaming, file identity, and byte counting. Then read <code>journal.rs</code> and <code>history.rs</code> (<a href="/books/r2dock/read/ch021#ch-14">Chapter 14</a>), and <code>retry.rs</code> (<a href="/books/r2dock/read/ch023#ch-16">Chapter 16</a>, Retries, Cancellation, and Idempotency). Read <code>engine/compress.rs</code> last in this stage; it only makes sense once the scheduler is familiar (Chapters 7 and 20).</p>
+<p><a href="/books/r2dock/read/ch044#ch-33">Chapter 33</a> (Complete End-to-End Execution Walkthrough) is the companion to this stage: it follows one upload through these files in execution order.</p>
+</section>
+<section id="stage-5-media-processing" class="level3">
+<h2>Stage 5: Media Processing</h2>
+<p>Open <code>crates/r2dock-media</code> only if you will work on compression. Start with <code>ffmpeg/run.rs</code> for how an external process is started, watched, and stopped (<a href="/books/r2dock/read/ch025#ch-17">Chapter 17</a>, How FFmpeg Integrates with Rust), then <code>tools/manifest.rs</code> and <code>tools/install.rs</code> for pinned, hashed tool downloads. The audio path is <code>probe.rs</code>, <code>classify.rs</code>, <code>plan.rs</code>, and <code>verify.rs</code> (<a href="/books/r2dock/read/ch026#ch-18">Chapter 18</a>, Audio Compression Internals); the video path is the <code>video/</code> module (<a href="/books/r2dock/read/ch027#ch-19">Chapter 19</a>, Video Compression Internals); <code>pipeline.rs</code> ties a plan to an encode and its checks (<a href="/books/r2dock/read/ch028#ch-20">Chapter 20</a>).</p>
+</section>
+<section id="stage-6-the-application-shell" class="level3">
+<h2>Stage 6: The Application Shell</h2>
+<p>Now open <code>src-tauri</code>. Read <code>src/lib.rs</code> from top to bottom: it is the startup sequence, building services, starting the engine and activity log, registering commands, and flushing on exit (<a href="/books/r2dock/read/ch006#ch-02">Chapter 2</a>, Complete Software Architecture). Read <code>state.rs</code> for <code>AppState</code> and the opaque-identifier <code>Registry</code>. Then read <code>build.rs</code> and <code>capabilities/main.json</code> together with <code>tauri.conf.json</code>, which define the command allowlist and the Content Security Policy (<a href="/books/r2dock/read/ch031#ch-22">Chapter 22</a>, Tauri Security Architecture).</p>
+<p>Read the commands next, starting with <code>commands/mod.rs</code> for the argument validators and <code>with_client</code>, then <code>commands/transfers.rs</code> with <code>planning.rs</code>, <code>dialogs.rs</code>, and <code>dragdrop.rs</code>. Read <code>connections.rs</code> for the client cache and credential lifecycle (<a href="/books/r2dock/read/ch030#ch-21">Chapter 21</a>), <code>media.rs</code> for the custom preview protocol (<a href="/books/r2dock/read/ch033#ch-24">Chapter 24</a>, The Custom Media Preview Protocol), and the <code>activity/</code> folder for the comma-separated values (CSV) log and its bounded writer thread (<a href="/books/r2dock/read/ch010#ch-05">Chapter 5</a>, Tokio and Asynchronous Execution).</p>
+</section>
+<section id="stage-7-the-frontend" class="level3">
+<h2>Stage 7: The Frontend</h2>
+<p>In <code>src/</code>, begin with <code>src/ipc/commands.ts</code>, the only module that calls <code>invoke</code>, and glance at <code>src/ipc/bindings/</code>, which is generated from Rust (<a href="/books/r2dock/read/ch036#ch-26">Chapter 26</a>, React and Tauri IPC). Read <code>src/app/App.tsx</code> and <code>src/app/queries.ts</code> for the query keys and the cache of Rust answers, then <code>src/app/objectChanges.ts</code> for invalidation (<a href="/books/r2dock/read/ch037#ch-27">Chapter 27</a>, Frontend State Management). Read <code>src/features/transfers/subscription.ts</code> and <code>transferStore.ts</code> for the event batching and the reducer, then <code>src/features/browser/useExplorerData.ts</code> and <code>FileTable.tsx</code> for ghost rows and virtualization (<a href="/books/r2dock/read/ch038#ch-28">Chapter 28</a>, UI Performance and Large Queues). Feature folders such as <code>connections</code>, <code>manage</code>, and <code>preview</code> can be read on demand.</p>
+</section>
+<section id="stage-8-tests-benchmarks-and-releases" class="level3">
+<h2>Stage 8: Tests, Benchmarks, and Releases</h2>
+<p>Finish with the evidence. Read <code>crates/r2dock-testkit/src/lib.rs</code> for the in-process S3 server and network shaping, then <code>crates/r2dock-transfer/tests/engine.rs</code> and <code>recovery.rs</code>, and <code>crates/r2dock-r2/tests/move_races.rs</code> with its request-boundary mock (<a href="/books/r2dock/read/ch040#ch-29">Chapter 29</a>, Automated Testing Strategy). Read the three files in <code>docs/benchmarks/</code> and the tests that produce them (<a href="/books/r2dock/read/ch041#ch-30">Chapter 30</a>, Performance Benchmarking). Last, read <code>.github/workflows/ci.yml</code>, <code>release.yml</code>, and <code>tools.yml</code> (<a href="/books/r2dock/read/ch042#ch-31">Chapter 31</a>, CI/CD and Desktop Releases).</p>
+</section>
+<section id="the-path-at-a-glance" class="level3">
+<h2>The Path at a Glance</h2>
+<p>The table restates the stages with their main files and chapters.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Start with</th>
+<th>Chapters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 Shape</td>
+<td>README.md, PLAN.md, <code>docs/adr/</code></td>
+<td>1 to 3</td>
+</tr>
+<tr>
+<td>2 Core rules</td>
+<td><code>app_error.rs</code>, <code>parts.rs</code>, <code>path_guard.rs</code></td>
+<td>4, 9, 23</td>
+</tr>
+<tr>
+<td>3 Secrets, R2</td>
+<td><code>r2dock-secrets</code>, <code>client.rs</code>, <code>bulk.rs</code></td>
+<td>8, 11, 12, 21</td>
+</tr>
+<tr>
+<td>4 Engine</td>
+<td><code>model.rs</code>, <code>engine/mod.rs</code>, <code>upload.rs</code></td>
+<td>5 to 7, 9, 10, 13 to 16, 33</td>
+</tr>
+<tr>
+<td>5 Media</td>
+<td><code>ffmpeg/run.rs</code>, <code>plan.rs</code>, <code>video/</code></td>
+<td>17 to 20</td>
+</tr>
+<tr>
+<td>6 Shell</td>
+<td><code>src-tauri/src/lib.rs</code>, <code>state.rs</code>, <code>build.rs</code></td>
+<td>2, 21, 22, 24</td>
+</tr>
+<tr>
+<td>7 Frontend</td>
+<td><code>commands.ts</code>, <code>subscription.ts</code></td>
+<td>26 to 28</td>
+</tr>
+<tr>
+<td>8 Evidence</td>
+<td><code>r2dock-testkit</code>, <code>tests/</code>, workflows</td>
+<td>29 to 31</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="working-on-this-code-34" class="level3">
+<h2>Working on This Code</h2>
+<p>Read actively. At each stage, run that area’s tests before and after a small experiment: <code>cargo test -p r2dock-core</code> for stage 2, <code>cargo test -p r2dock-r2</code> for stage 3, <code>cargo test -p r2dock-transfer</code> for stage 4, <code>cargo test -p r2dock-media</code> for stage 5 (media tests skip without FFmpeg), <code>cargo test -p r2dock</code> for stage 6, and <code>npm test</code> for stage 7. Changing one constant, such as the progress interval or the part size floor, and watching which tests fail is a fast way to learn what depends on it. Keep the invariants from earlier chapters in mind while exploring: secrets and local paths stay in Rust, every fan-out is bounded, large data is streamed, and blocking work runs off the async runtime. Revert experiments before starting real work, and follow <a href="/books/r2dock/read/ch046#ch-34">Chapter 34</a> (Your First Contribution) for the checks before a pull request.</p>
+</section>
+<section id="further-reading-34" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>docs/adr/</code> (all five ADRs).</li>
+<li><code>crates/r2dock-transfer/src/engine/mod.rs</code>.</li>
+<li><code>src-tauri/src/lib.rs</code>.</li>
+<li><code>src/features/transfers/subscription.ts</code>.</li>
+<li>PLAN.md, read with <a href="/books/r2dock/read/ch043#ch-32">Chapter 32</a>’s discrepancy table.</li>
+</ul>
+</section>
+</section>

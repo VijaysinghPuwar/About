@@ -1,0 +1,127 @@
+<section id="ch-12" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">12</span> Public URLs and Cloudflare REST API Integration</h1>
+<p>Users want links they can paste into a web page or a chat. R2 can serve objects publicly, but not through the S3 endpoint, and a bucket’s public address cannot be learned through the S3 protocol at all. This chapter covers the second credential R2Dock may hold, how it resolves a bucket’s public address, how it builds a correct link for any key, and how it avoids leaking the token, trusting hostile API data, or hammering the Cloudflare application programming interface (API). <a href="/books/r2dock/read/ch030#ch-21">Chapter 21</a> (Credential Storage and Authentication) owns secret storage.</p>
+<section id="two-doors-into-the-same-bucket" class="level3">
+<h2>Two Doors Into the Same Bucket</h2>
+<p>All object operations go to the account’s S3 endpoint from <code>endpoint_url</code> in <code>crates/r2dock-core/src/connections.rs</code>, which always requires signed requests (PLAN.md section 8.9); a browser following a plain link there is refused. Cloudflare’s <a href="https://developers.cloudflare.com/r2/buckets/public-buckets/" target="_blank" rel="noopener noreferrer">public buckets documentation</a> describes two independent public options, both enabled in the dashboard rather than through S3 calls. A custom domain must be “added as a zone in the same account as the R2 bucket” and can use Cloudflare’s cache. A managed <code>r2.dev</code> subdomain is “for non-production use cases,” rate limited, and lacks caching and access controls. An object might be reachable as <code>https://media.example.com/covers/cover%20art.webp</code>, through <code>r2.dev</code>, or not at all, and PLAN.md says plainly: “The app cannot reliably know whether a bucket is public using S3 credentials.” Presigned URLs, a third kind of link, are not created in this version.</p>
+</section>
+<section id="two-credentials-with-different-jobs" class="level3">
+<h2>Two Credentials With Different Jobs</h2>
+<p>Cloudflare’s <a href="https://developers.cloudflare.com/r2/api/tokens/" target="_blank" rel="noopener noreferrer">R2 API token page</a> explains that the Access Key ID is the token’s <code>id</code> and the Secret Access Key is “the SHA-256 hash of the API token <code>value</code>.” The S3 secret never leaves the machine; only Signature Version 4 signatures do (<a href="/books/r2dock/read/ch014#ch-08">Chapter 8</a>). The optional second credential is the token value itself, which Cloudflare’s Representational State Transfer (REST) API accepts as <code>Authorization: Bearer &lt;token&gt;</code>. The connection stores it as <code>api_token: Option&lt;SecretLocation&gt;</code>, a reference into the operating system credential store or a session-memory marker, never the token, next to a per-bucket <code>public_base_urls</code> map. The Connect form clears it from React state after saving, and <code>validate_api_token</code> accepts printable ASCII up to 256 characters.</p>
+<p>The token value is more sensitive than the S3 secret, which is only its hash. The token page states that Object permissions “work only with the S3-compatible API, not the Cloudflare REST API,” while Admin Read can “view bucket configuration.” The fetched domain endpoint references list no required permission, so a user who pastes an Object Read &amp; Write token, the kind R2Dock’s help recommends for S3 access, should expect the domain lookup to be refused. PLAN.md marks this <strong>[Verify]</strong>, and the hint in <code>src/features/preview/publicLink.ts</code> says “an Admin Read token can.”</p>
+</section>
+<section id="resolving-a-link" class="level3">
+<h2>Resolving a Link</h2>
+<p>Figure 12.1 shows the order in which R2Dock resolves a link.</p>
+<figure id="fig-12-link-resolution">
+<img src="/books/r2dock/media/file15.webp" alt="A top to bottom flowchart. A manual base URL for the bucket gives a Public URL link. Otherwise, with no API token the status is NotConfigured. With a token, domains come from a cache or a coalesced fetch; a failure gives TokenDenied, TokenMissing, NoDomain, or Unavailable. Found domains give a custom domain link if one is enabled, preferring active ones, else an r2.dev link if enabled, else NoDomain." width="1143" height="1295" loading="lazy" decoding="async">
+<figcaption>Figure 12.1. Public link resolution: a manual base URL wins; otherwise, with an API token, R2Dock looks up domains and prefers an enabled custom domain, then an enabled r2.dev domain; every other case returns a status without a link.</figcaption>
+</figure>
+<p>The order lives in <code>resolve_base</code> in <code>crates/r2dock-core/src/public_domain.rs</code>, a pure function. A base URL typed in Bucket settings always wins, since the user may front the bucket with something the API knows nothing about. Next comes the first enabled custom domain whose ownership and certificate are <code>active</code>, else the first enabled one, and <code>r2.dev</code> last. The link carries a <code>PublicLinkSource</code> so the Details panel can label it.</p>
+<p><code>resolve</code> in <code>src-tauri/src/public_links.rs</code> returns a manual link without any network call, returns <code>NotConfigured</code> without a token, and only then looks up domains; <code>manual_url_wins_and_needs_no_api_call</code> asserts the mock API received nothing. Each of the six statuses maps, in <code>publicLinkHint</code>, to one calm sentence pointing to Bucket settings.</p>
+</section>
+<section id="building-the-url-from-a-key" class="level3">
+<h2>Building the URL From a Key</h2>
+<p>The link is the base, a slash, and the key, but the key cannot go in raw. A <code>#</code> would turn the rest into a fragment browsers never send, a <code>?</code> would start a query, and a literal <code>%</code> would start an escape.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-core/src/keys.rs#L198-L210" target="_blank" rel="noopener noreferrer">crates/r2dock-core/src/keys.rs, lines 198 to 210</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">/// Encode a key for use in a URL path, keeping `/` separators.</span></span>
+<span id="cb1-2"><span class="kw">pub</span> <span class="kw">fn</span> percent_encode_key(key<span class="op">:</span> <span class="op">&amp;</span><span class="dt">str</span>) <span class="op">-&gt;</span> <span class="dt">String</span> <span class="op">{</span></span>
+<span id="cb1-3">    <span class="kw">let</span> <span class="kw">mut</span> out <span class="op">=</span> <span class="dt">String</span><span class="pp">::</span>with_capacity(key<span class="op">.</span>len())<span class="op">;</span></span>
+<span id="cb1-4">    <span class="cf">for</span> b <span class="kw">in</span> key<span class="op">.</span>bytes() <span class="op">{</span></span>
+<span id="cb1-5">        <span class="cf">match</span> b <span class="op">{</span></span>
+<span id="cb1-6">            <span class="ch">b'A'</span><span class="op">..=</span><span class="ch">b'Z'</span></span>
+<span id="cb1-7">            <span class="op">|</span> <span class="ch">b'a'</span><span class="op">..=</span><span class="ch">b'z'</span></span>
+<span id="cb1-8">            <span class="op">|</span> <span class="ch">b'0'</span><span class="op">..=</span><span class="ch">b'9'</span></span>
+<span id="cb1-9">            <span class="op">|</span> <span class="ch">b'-'</span></span>
+<span id="cb1-10">            <span class="op">|</span> <span class="ch">b'_'</span></span>
+<span id="cb1-11">            <span class="op">|</span> <span class="ch">b'.'</span></span>
+<span id="cb1-12">            <span class="op">|</span> <span class="ch">b'~'</span></span>
+<span id="cb1-13">            <span class="op">|</span> <span class="ch">b'/'</span> <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb1-14">                out<span class="op">.</span>push(b <span class="kw">as</span> <span class="dt">char</span>)</span>
+<span id="cb1-15">            <span class="op">}</span></span>
+<span id="cb1-16">            _ <span class="op">=&gt;</span> out<span class="op">.</span>push_str(<span class="op">&amp;</span><span class="pp">format!</span>(<span class="st">"%{b:02X}"</span>))<span class="op">,</span></span>
+<span id="cb1-17">        <span class="op">}</span></span>
+<span id="cb1-18">    <span class="op">}</span></span>
+<span id="cb1-19">    out</span>
+<span id="cb1-20"><span class="op">}</span></span></code></pre></div>
+<p>It works on bytes, so non-ASCII characters are encoded as UTF-8. It keeps the unreserved characters of <a href="https://www.rfc-editor.org/rfc/rfc3986#section-2.3" target="_blank" rel="noopener noreferrer">RFC 3986 section 2.3</a> plus <code>/</code>, and encodes everything else, including <code>+</code> (which form decoders read as a space), <code>%</code>, and space. The test <code>links_encode_each_segment</code> checks that <code>a+b/100%.txt</code> becomes <code>a%2Bb/100%25.txt</code>. The same function encodes the copy source in <a href="/books/r2dock/read/ch017#ch-11">Chapter 11</a> (Object Management and Consistency).</p>
+<p>One edge is open. R2 allows keys with <code>.</code> or <code>..</code> segments, and <code>validate_key</code> does not reject them. RFC 3986 section 5.2.4 removes dot segments during resolution, and the WHATWG URL Standard treats percent-encoded forms such as <code>%2e%2e</code> as a <a href="https://url.spec.whatwg.org/#single-dot-path-segment" target="_blank" rel="noopener noreferrer">double-dot path segment</a>, so encoding would not help. A link for <code>a/../b.txt</code> would likely be normalized to <code>/b.txt</code>. This was not tested against a browser or Cloudflare and is recorded as an open question.</p>
+<p>A manual base URL passes <code>validate_public_base_url</code>: it must start with <code>https://</code>, its host may contain only ASCII letters, digits, dots, hyphens, and colons, and it may not contain <code>?</code>, <code>#</code>, spaces, or <code>@</code>. The <code>@</code> rule blocks user-info tricks like <code>https://media.example.com@evil.example</code>.</p>
+</section>
+<section id="talking-to-the-cloudflare-api" class="level3">
+<h2>Talking to the Cloudflare API</h2>
+<p>With no manual URL and a saved token, R2Dock calls two read-only endpoints from the <a href="https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/domains/subresources/custom/methods/list/" target="_blank" rel="noopener noreferrer">Cloudflare API reference</a>: <code>GET /accounts/{account_id}/r2/buckets/{bucket_name}/domains/custom</code> and <code>.../domains/managed</code>, which return custom domains with <code>enabled</code> and <code>status</code> fields and the <code>r2.dev</code> domain with its <code>enabled</code> flag. The client is <code>CfApiClient</code> in <code>crates/r2dock-r2/src/cfapi.rs</code>, a small <code>reqwest</code> wrapper independent of the AWS software development kit (SDK).</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-r2/src/cfapi.rs#L79-L92" target="_blank" rel="noopener noreferrer">crates/r2dock-r2/src/cfapi.rs, lines 79 to 92</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="kw">pub</span> <span class="kw">fn</span> with_base_url(</span>
+<span id="cb2-2">    base<span class="op">:</span> <span class="op">&amp;</span><span class="dt">str</span><span class="op">,</span></span>
+<span id="cb2-3">    timeout<span class="op">:</span> Duration</span>
+<span id="cb2-4">) <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span><span class="dt">Self</span><span class="op">,</span> CfApiError<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb2-5">    <span class="kw">let</span> http <span class="op">=</span> <span class="pp">reqwest::Client::</span>builder()</span>
+<span id="cb2-6">        <span class="op">.</span>https_only(base<span class="op">.</span>starts_with(<span class="st">"https://"</span>))</span>
+<span id="cb2-7">        <span class="op">.</span>redirect(<span class="pp">reqwest::redirect::Policy::</span>none())</span>
+<span id="cb2-8">        <span class="op">.</span>user_agent(<span class="pp">concat!</span>(<span class="st">"R2Dock/"</span><span class="op">,</span> <span class="pp">env!</span>(<span class="st">"CARGO_PKG_VERSION"</span>)))</span>
+<span id="cb2-9">        <span class="op">.</span>connect_timeout(timeout)</span>
+<span id="cb2-10">        <span class="op">.</span>timeout(timeout)</span>
+<span id="cb2-11">        <span class="op">.</span>build()</span>
+<span id="cb2-12">        <span class="op">.</span>map_err(<span class="op">|</span>_<span class="op">|</span> <span class="pp">CfApiError::</span>Network)<span class="op">?;</span></span>
+<span id="cb2-13">    <span class="cn">Ok</span>(<span class="dt">Self</span> <span class="op">{</span></span>
+<span id="cb2-14">        http<span class="op">,</span></span>
+<span id="cb2-15">        base<span class="op">:</span> base<span class="op">.</span>trim_end_matches(<span class="ch">'/'</span>)<span class="op">.</span>to_string()<span class="op">,</span></span>
+<span id="cb2-16">    <span class="op">}</span>)</span>
+<span id="cb2-17"><span class="op">}</span></span></code></pre></div>
+<p>Each setting removes a way to misuse the token. The production constructor <code>cloudflare()</code> uses the fixed base <code>https://api.cloudflare.com/client/v4</code>, so <code>https_only</code> is on. Redirects are off, so a redirect cannot carry the <code>Authorization</code> header to another host. A 15 second timeout covers the whole request. This <code>#[doc(hidden)]</code> constructor also lets tests use an <code>http://</code> loopback mock.</p>
+<p><code>bucket_domains</code> first checks the path values: the account ID may hold only ASCII letters, digits, and hyphens, the bucket name only letters, digits, hyphens, and dots (tested by <code>unsafe_path_values_are_refused_before_any_request</code>). Both calls run with <code>tokio::join!</code>; a custom domain failure fails the lookup, but a managed domain failure only omits <code>r2.dev</code>. Responses over 1 MiB are refused. Statuses become a typed <code>CfApiError</code> with fixed messages, and a test asserts the token appears in neither its display nor debug form. In <code>fetch</code>, permission errors become <code>TokenDenied</code>, <code>NotFound</code> becomes <code>NoDomain</code>, and the rest <code>Unavailable</code>; a credential store entry deleted outside the app becomes <code>TokenMissing</code>. The store read runs in <code>spawn_blocking</code>. The <code>cf-r2-jurisdiction</code> header is sent only for <code>eu</code> and <code>fedramp</code>.</p>
+</section>
+<section id="domain-names-are-untrusted-input" class="level3">
+<h2>Domain Names Are Untrusted Input</h2>
+<p>A returned domain ends up in a shared link, the UI, and the operating system’s browser opener. A spoofed response with markup, a port, user info, or a carriage return could attempt injection or disguise a host. <code>validate_domain_host</code> accepts only plain DNS names: at most 253 characters, labels of 1 to 63 lowercase letters, digits, or hyphens without a hyphen at either end, at least one dot, and a final label that is not all digits, which excludes IPv4 literals. The table test <code>domain_validation</code> covers the failures. <code>parse_managed</code> also requires the <code>.r2.dev</code> suffix. The scheme never comes from the API; links are always <code>https://</code> plus a validated host. Refusing non-ASCII names costs internationalized domains but avoids look-alike characters.</p>
+</section>
+<section id="caching-and-request-coalescing" class="level3">
+<h2>Caching and Request Coalescing</h2>
+<p>Every file in a bucket shares its domains, and users click through files quickly. <code>PublicLinks</code> caches lookups per connection and bucket: found results for five minutes (<code>FOUND_TTL</code>), failures for 30 seconds (<code>FAILED_TTL</code>), at most 256 buckets. Each entry stores a connection generation that increases when the connection is saved or its credentials prove bad, so an edited token never reuses old results. Caching alone does not stop a burst of simultaneous misses, so <code>domains</code> coalesces them.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src-tauri/src/public_links.rs#L113-L127" target="_blank" rel="noopener noreferrer">src-tauri/src/public_links.rs, lines 113 to 127</a></p>
+</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb3-1"><span class="kw">let</span> key<span class="op">:</span> CacheKey <span class="op">=</span> (id<span class="op">,</span> bucket<span class="op">.</span>to_string())<span class="op">;</span></span>
+<span id="cb3-2"><span class="cf">if</span> <span class="kw">let</span> <span class="cn">Some</span>(hit) <span class="op">=</span> <span class="kw">self</span><span class="op">.</span>cached(<span class="op">&amp;</span>key<span class="op">,</span> connections<span class="op">.</span>generation_of(id)) <span class="op">{</span></span>
+<span id="cb3-3">    <span class="cf">return</span> hit<span class="op">;</span></span>
+<span id="cb3-4"><span class="op">}</span></span>
+<span id="cb3-5"><span class="kw">let</span> gate <span class="op">=</span> <span class="kw">self</span><span class="op">.</span>inflight<span class="op">.</span>lock()<span class="op">.</span>entry(key<span class="op">.</span>clone())<span class="op">.</span>or_default()<span class="op">.</span>clone()<span class="op">;</span></span>
+<span id="cb3-6"><span class="kw">let</span> _turn <span class="op">=</span> gate<span class="op">.</span>lock()<span class="op">.</span><span class="kw">await</span><span class="op">;</span></span>
+<span id="cb3-7"><span class="co">// Another request may have finished the lookup while this one waited.</span></span>
+<span id="cb3-8"><span class="kw">let</span> generation <span class="op">=</span> connections<span class="op">.</span>generation_of(id)<span class="op">;</span></span>
+<span id="cb3-9"><span class="cf">if</span> <span class="kw">let</span> <span class="cn">Some</span>(hit) <span class="op">=</span> <span class="kw">self</span><span class="op">.</span>cached(<span class="op">&amp;</span>key<span class="op">,</span> generation) <span class="op">{</span></span>
+<span id="cb3-10">    <span class="cf">return</span> hit<span class="op">;</span></span>
+<span id="cb3-11"><span class="op">}</span></span>
+<span id="cb3-12"><span class="kw">let</span> lookup <span class="op">=</span> <span class="kw">self</span><span class="op">.</span>fetch(connections<span class="op">,</span> id<span class="op">,</span> bucket)<span class="op">.</span><span class="kw">await</span><span class="op">;</span></span>
+<span id="cb3-13"><span class="kw">self</span><span class="op">.</span>store(key<span class="op">.</span>clone()<span class="op">,</span> generation<span class="op">,</span> lookup<span class="op">.</span>clone())<span class="op">;</span></span>
+<span id="cb3-14"><span class="kw">self</span><span class="op">.</span>inflight<span class="op">.</span>lock()<span class="op">.</span>remove(<span class="op">&amp;</span>key)<span class="op">;</span></span>
+<span id="cb3-15">lookup</span></code></pre></div>
+<p>This is double-checked locking in async code. Each key gets an <code>Arc&lt;tokio::sync::Mutex&lt;()&gt;&gt;</code>; the first caller fetches while others wait without blocking a runtime thread, then find the fresh entry. A short <code>parking_lot::Mutex</code> guards the maps and is never held across an <code>.await</code>. Reading the generation before fetching means a connection changed mid-lookup leaves an entry the next request ignores. The frontend adds a 60 second TanStack Query cache, and nothing polls, as PLAN.md section 8.9 requires.</p>
+</section>
+<section id="security-properties-and-limits" class="level3">
+<h2>Security Properties and Limits</h2>
+<p>No command returns the token; the webview sees only a <code>has_api_token</code> boolean. In Rust it is a <code>secrecy::SecretString</code>, exposed only in <code>bearer_auth</code> and sent only to the fixed host. PLAN.md section 9.8 names the residual risk: “The token’s own permissions decide what it could do if stolen.” The <code>object_public_url</code> command logs status and source but “The link itself is never written to the activity log,” and <code>open_external</code> refuses anything not starting with <code>https://</code>, containing whitespace or control characters, or 4,096 bytes or longer, recording only the host.</p>
+<p>Cloudflare’s <a href="https://developers.cloudflare.com/r2/api/s3/presigned-urls/" target="_blank" rel="noopener noreferrer">presigned URL documentation</a> says presigned URLs work only on the S3 endpoint and are bearer tokens: “Anyone with the URL can perform the specified operation until it expires.” PLAN.md plans them for a later version with an explicit expiry and a warning; media previews use a custom protocol instead (<a href="/books/r2dock/read/ch033#ch-24">Chapter 24</a>), and log redaction already strips <code>X-Amz-Signature</code>.</p>
+<p>Two evidence limits remain. PLAN.md says the REST endpoints were “Confirmed against the API reference 2026-10-18; not yet tested live,” and tests use only the mock in <code>crates/r2dock-testkit/src/cloudflare.rs</code>. And the API reference lists <code>us</code> and <code>fedramp-high</code> jurisdictions that R2Dock’s <code>Jurisdiction</code> enum lacks.</p>
+</section>
+<section id="working-on-this-code-11" class="level3">
+<h2>Working on This Code</h2>
+<p>Pure decisions live in <code>crates/r2dock-core/src/public_domain.rs</code> and <code>keys.rs</code>; the HTTP client in <code>crates/r2dock-r2/src/cfapi.rs</code>; caching and status mapping in <code>src-tauri/src/public_links.rs</code>; the UI in <code>src/features/preview/</code>. A new link source means extending <code>PublicLinkSource</code> and <code>resolve_base</code>, a <code>resolution_order</code> test row, regenerated bindings, and a <code>SOURCE_LABEL</code> entry. A new endpoint should reuse <code>CfApiClient::get</code> to inherit the size cap, status mapping, and bearer header, and must validate every path value first. Run <code>cargo test -p r2dock-core public_domain</code>, <code>cargo test -p r2dock-r2 cfapi</code>, <code>cargo test -p r2dock public_links</code>, and <code>npm test</code>.</p>
+<p>Never return, log, or embed the token in an error; send it only to the fixed host over HTTPS with redirects off. Validate every domain with <code>validate_domain_host</code>, always build <code>https://</code> links, encode keys with <code>percent_encode_key</code>, keep lookups on demand, and never hold the <code>parking_lot</code> mutex across an <code>.await</code>.</p>
+</section>
+<section id="further-reading-11" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>src-tauri/src/public_links.rs</code> and <code>crates/r2dock-r2/src/cfapi.rs</code>, with their tests.</li>
+<li><code>PLAN.md</code> sections 8.9 and 9.8.</li>
+<li><a href="https://developers.cloudflare.com/r2/buckets/public-buckets/" target="_blank" rel="noopener noreferrer">R2 public buckets</a> and <a href="https://developers.cloudflare.com/r2/api/tokens/" target="_blank" rel="noopener noreferrer">R2 API tokens</a>.</li>
+<li>Cloudflare API reference: <a href="https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/domains/subresources/custom/methods/list/" target="_blank" rel="noopener noreferrer">list custom domains</a>.</li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc3986" target="_blank" rel="noopener noreferrer">RFC 3986</a> and the <a href="https://url.spec.whatwg.org/" target="_blank" rel="noopener noreferrer">WHATWG URL Standard</a>.</li>
+</ul>
+</section>
+</section>

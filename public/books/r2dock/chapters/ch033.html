@@ -1,0 +1,130 @@
+<section id="ch-24" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">24</span> The Custom Media Preview Protocol</h1>
+<p>A file manager is expected to show a picture when the user clicks it and to play a sound file without downloading it first. For a cloud file manager this creates a hard security problem: the webview must display bytes from a private bucket without ever holding the credentials that unlock the bucket. R2Dock solves it with a custom URI scheme, <code>r2dock-media</code>, served entirely by Rust. The general mechanics of ranged downloads are taught in <a href="/books/r2dock/read/ch016#ch-10">Chapter 10</a> (Downloads and HTTP Range Requests).</p>
+<section id="why-not-a-presigned-url-or-a-local-server" class="level3">
+<h2>Why Not a Presigned URL or a Local Server</h2>
+<p>A presigned URL, whose query string carries a signature granting temporary read access, is itself a credential while valid, and would linger in page memory, caches, and error messages. PLAN.md section 9.5 rejects it explicitly: “No presigned URL or credential reaches the webview.” It would also force the Content Security Policy (CSP) to allow images from <code>*.r2.cloudflarestorage.com</code>, which injected content could use too.</p>
+<p>A local HTTP proxy on <code>127.0.0.1</code> keeps credentials native, but its socket is reachable by every local process and, through Domain Name System (DNS) rebinding, sometimes by pages in the user’s browser.</p>
+<p>A custom scheme avoids both. The webview routes requests for the scheme directly to a Rust callback inside the process: no socket, no signature in the URL. The <a href="https://docs.rs/tauri/latest/tauri/struct.Builder.html" target="_blank" rel="noopener noreferrer">Tauri <code>Builder</code> documentation</a> describes <code>register_asynchronous_uri_scheme_protocol</code> as taking “an asynchronous responder that allows you to process the request in a separate thread”, and documents the URLs as <code>&lt;scheme_name&gt;://localhost/&lt;path&gt;</code> on macOS and Linux and <code>http://&lt;scheme_name&gt;.localhost/&lt;path&gt;</code> on Windows and Android.</p>
+<p>R2Dock registers the scheme in <code>src-tauri/src/lib.rs</code>. The callback spawns a Tokio task that runs <code>media::serve</code> and hands the finished <code>http::Response</code> to the responder, then returns at once so the webview’s networking layer is never blocked. In <code>src-tauri/tauri.conf.json</code>, both spellings of the scheme appear in <code>img-src</code> and <code>media-src</code> and nowhere else; <code>connect-src</code> allows only the IPC transport, so page script cannot <code>fetch</code> the scheme. Tauri’s general file-serving asset protocol, which the <a href="https://v2.tauri.app/reference/javascript/api/namespacecore/" target="_blank" rel="noopener noreferrer"><code>convertFileSrc</code> documentation</a> treats as its default, is not enabled. <a href="/books/r2dock/read/ch031#ch-22">Chapter 22</a> (Tauri Security Architecture) covers the policy as a whole.</p>
+</section>
+<section id="opaque-tokens-as-capabilities" class="level3">
+<h2>Opaque Tokens as Capabilities</h2>
+<p>The URL contains nothing but a token. The <code>media_token</code> command in <code>src-tauri/src/commands/browse.rs</code> validates the bucket and key with the same validators as every other command, checks that the connection exists, and asks the registry to issue a token.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src-tauri/src/media.rs#L36-L64" target="_blank" rel="noopener noreferrer">src-tauri/src/media.rs, lines 36 to 64</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="at">#[</span>derive<span class="at">(</span><span class="bu">Default</span><span class="at">)]</span></span>
+<span id="cb1-2"><span class="kw">pub</span> <span class="kw">struct</span> MediaRegistry <span class="op">{</span></span>
+<span id="cb1-3">    map<span class="op">:</span> Mutex<span class="op">&lt;</span>HashMap<span class="op">&lt;</span><span class="dt">String</span><span class="op">,</span> (Instant<span class="op">,</span> MediaTarget)<span class="op">&gt;&gt;,</span></span>
+<span id="cb1-4"><span class="op">}</span></span>
+<span id="cb1-5"></span>
+<span id="cb1-6"><span class="kw">impl</span> MediaRegistry <span class="op">{</span></span>
+<span id="cb1-7">    <span class="kw">pub</span> <span class="kw">fn</span> issue(<span class="op">&amp;</span><span class="kw">self</span><span class="op">,</span> target<span class="op">:</span> MediaTarget) <span class="op">-&gt;</span> <span class="dt">String</span> <span class="op">{</span></span>
+<span id="cb1-8">        <span class="kw">let</span> token <span class="op">=</span> <span class="pp">Uuid::</span>new_v4()<span class="op">.</span>simple()<span class="op">.</span>to_string()<span class="op">;</span></span>
+<span id="cb1-9">        <span class="kw">let</span> <span class="kw">mut</span> map <span class="op">=</span> <span class="kw">self</span><span class="op">.</span>map<span class="op">.</span>lock()<span class="op">;</span></span>
+<span id="cb1-10">        <span class="kw">let</span> now <span class="op">=</span> <span class="pp">Instant::</span>now()<span class="op">;</span></span>
+<span id="cb1-11">        map<span class="op">.</span>retain(<span class="op">|</span>_<span class="op">,</span> (t<span class="op">,</span> _)<span class="op">|</span> now<span class="op">.</span>duration_since(<span class="op">*</span>t) <span class="op">&lt;</span> MEDIA_TTL)<span class="op">;</span></span>
+<span id="cb1-12">        <span class="cf">if</span> map<span class="op">.</span>len() <span class="op">&gt;=</span> MAX_TOKENS</span>
+<span id="cb1-13">            <span class="op">&amp;&amp;</span> <span class="kw">let</span> <span class="cn">Some</span>(k) <span class="op">=</span> map</span>
+<span id="cb1-14">                <span class="op">.</span>iter()</span>
+<span id="cb1-15">                <span class="op">.</span>min_by_key(<span class="op">|</span>(_<span class="op">,</span> (t<span class="op">,</span> _))<span class="op">|</span> <span class="op">*</span>t)</span>
+<span id="cb1-16">                <span class="op">.</span>map(<span class="op">|</span>(k<span class="op">,</span> _)<span class="op">|</span> k<span class="op">.</span>clone())</span>
+<span id="cb1-17">        <span class="op">{</span></span>
+<span id="cb1-18">            map<span class="op">.</span>remove(<span class="op">&amp;</span>k)<span class="op">;</span></span>
+<span id="cb1-19">        <span class="op">}</span></span>
+<span id="cb1-20">        map<span class="op">.</span>insert(token<span class="op">.</span>clone()<span class="op">,</span> (now<span class="op">,</span> target))<span class="op">;</span></span>
+<span id="cb1-21">        token</span>
+<span id="cb1-22">    <span class="op">}</span></span>
+<span id="cb1-23"></span>
+<span id="cb1-24">    <span class="kw">pub</span> <span class="kw">fn</span> resolve(<span class="op">&amp;</span><span class="kw">self</span><span class="op">,</span> token<span class="op">:</span> <span class="op">&amp;</span><span class="dt">str</span>) <span class="op">-&gt;</span> <span class="dt">Option</span><span class="op">&lt;</span>MediaTarget<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb1-25">        <span class="kw">let</span> map <span class="op">=</span> <span class="kw">self</span><span class="op">.</span>map<span class="op">.</span>lock()<span class="op">;</span></span>
+<span id="cb1-26">        <span class="kw">let</span> (t<span class="op">,</span> target) <span class="op">=</span> map<span class="op">.</span>get(token)<span class="op">?;</span></span>
+<span id="cb1-27">        (t<span class="op">.</span>elapsed() <span class="op">&lt;</span> MEDIA_TTL)<span class="op">.</span>then(<span class="op">||</span> target<span class="op">.</span>clone())</span>
+<span id="cb1-28">    <span class="op">}</span></span>
+<span id="cb1-29"><span class="op">}</span></span></code></pre></div>
+<p>A token is a random version 4 UUID (122 random bits) written as 32 lowercase hexadecimal characters, mapping to a <code>MediaTarget</code>, either <code>R2 { connection, bucket, key }</code> or <code>Local { path }</code>. Tokens expire after one hour (<code>MEDIA_TTL</code>); the registry holds at most 2,000 (<code>MAX_TOKENS</code>) and evicts expired, then oldest, entries on each <code>issue</code>.</p>
+<p>A token is a capability: possessing it is the permission. Only R2Dock’s own webview can request the scheme, and it could ask for the same token anyway; the safety comes from what a token is not. It is not a credential, so a leak exposes one object for at most an hour, through R2Dock only; it names no path, so the webview cannot forge a local target; and it reveals nothing about the key. Tokens are reusable until expiry, unlike the single-use plan tokens in <code>src-tauri/src/state.rs</code>, because an audio element issues many range requests for one source. Tokens are not revoked when a connection is removed, but <code>serve</code> builds the client through <code>ConnectionService::client</code>, which then fails, so such tokens stop working immediately; after an edit they use the new credentials because the client cache is invalidated (<a href="/books/r2dock/read/ch030#ch-21">Chapter 21</a>, Credential Storage and Authentication).</p>
+</section>
+<section id="the-request-path-in-rust" class="level3">
+<h2>The Request Path in Rust</h2>
+<p><code>serve</code> first extracts the token with <code>token_from_path</code>, which accepts only a path segment of exactly 32 hexadecimal characters; anything else, such as <code>/../etc/passwd</code>, yields 404. The test <code>tokens_parse_strictly</code> covers these cases. For an R2 target, <code>serve</code> then obtains a client, takes a fetch slot from a semaphore, and sends <code>HEAD</code> to learn the object’s size and entity tag (ETag). Every failure becomes a bare status code with an empty body (404 for an unknown token or a missing key, 502 Bad Gateway for most R2 failures, 503 in rare internal cases), so no error text naming a key or endpoint reaches the page.</p>
+</section>
+<section id="http-range-support" class="level3">
+<h2>HTTP Range Support</h2>
+<p>Audio elements request byte ranges with the <code>Range</code> header (for example <code>bytes=1048576-</code>) and ask for more as the user seeks; the server answers <code>206 Partial Content</code> with a <code>Content-Range</code> header naming the bytes sent and the total size. Without ranges, seeking in a long audiobook would require downloading it first. R2Dock supports exactly one range per request, parsed by <code>parse_range</code> in <code>media.rs</code>. The three single-range forms are accepted: <code>bytes=a-b</code>, <code>bytes=a-</code>, and <code>bytes=-n</code> (the last <code>n</code> bytes). Multiple ranges, other units, reversed ranges, and malformed numbers return <code>None</code>, treated as “no range”. All arithmetic saturates, so a header such as <code>bytes=18446744073709551615-</code> cannot overflow. The key step is the clamp: whatever was asked, the reply covers at most <code>RANGE_CHUNK</code> (2 MiB) from the start. Players handle short replies by asking for the next range. The test <code>ranges</code> checks each form.</p>
+<p>Without a <code>Range</code> header, <code>fetch_object</code> serves an object of at most <code>MAX_WHOLE</code> (64 MiB) whole with status 200, and serves the first 2 MiB of anything larger as a 206. A start at or beyond the end returns 416 Range Not Satisfiable with <code>Content-Range: bytes */&lt;size&gt;</code>.</p>
+</section>
+<section id="bounding-memory-even-against-a-misbehaving-server" class="level3">
+<h2>Bounding Memory, Even Against a Misbehaving Server</h2>
+<p>The handler returns a complete <code>http::Response&lt;Vec&lt;u8&gt;&gt;</code>, because the responder takes a whole response rather than a stream. Every body therefore sits in memory, which makes bounds essential. The first bound is the per-response limit above. The second is a pair of process-wide Tokio semaphores: <code>FETCHES</code> with six permits (<code>MAX_FETCHES</code>) and <code>BYTES</code> with 128 (<code>BUDGET_MIB</code>), where <code>budget_permits</code> charges one permit per started MiB of expected body, clamped to between 1 and <code>BUDGET_MIB</code>. So at most six R2 previews are in flight, holding at most 128 MiB together. A 64 MiB image takes 64 permits, so two can load at once and a third waits. The upper clamp guarantees any single request can eventually acquire its permits, so the budget cannot deadlock. The test <code>budget_permits_are_bounded</code> checks the arithmetic and that the budget is at least <code>MAX_WHOLE</code>.</p>
+<p>The third bound covers a reply that disagrees with <code>HEAD</code>: the object may have been replaced by a larger one, or a server may ignore <code>Range</code> and send everything.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src-tauri/src/media.rs#L302-L327" target="_blank" rel="noopener noreferrer">src-tauri/src/media.rs, lines 302 to 327</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="co">/// Read a body that must be exactly `want` bytes. Reading stops as soon as</span></span>
+<span id="cb2-2"><span class="co">/// it would go past `want`, so a response can never use more memory than</span></span>
+<span id="cb2-3"><span class="co">/// expected, whatever its headers say.</span></span>
+<span id="cb2-4"><span class="kw">async</span> <span class="kw">fn</span> read_exact_capped<span class="op">&lt;</span>S<span class="op">,</span> B<span class="op">,</span> E<span class="op">&gt;</span>(</span>
+<span id="cb2-5">    stream<span class="op">:</span> S<span class="op">,</span></span>
+<span id="cb2-6">    want<span class="op">:</span> <span class="dt">u64</span></span>
+<span id="cb2-7">) <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span><span class="dt">Vec</span><span class="op">&lt;</span><span class="dt">u8</span><span class="op">&gt;,</span> BodyError<span class="op">&gt;</span></span>
+<span id="cb2-8"><span class="kw">where</span></span>
+<span id="cb2-9">    S<span class="op">:</span> <span class="pp">futures_util::</span>Stream<span class="op">&lt;</span>Item <span class="op">=</span> <span class="dt">Result</span><span class="op">&lt;</span>B<span class="op">,</span> E<span class="op">&gt;&gt;,</span></span>
+<span id="cb2-10">    B<span class="op">:</span> <span class="bu">AsRef</span><span class="op">&lt;</span>[<span class="dt">u8</span>]<span class="op">&gt;,</span></span>
+<span id="cb2-11"><span class="op">{</span></span>
+<span id="cb2-12">    <span class="kw">use</span> <span class="pp">futures_util::</span>StreamExt<span class="op">;</span></span>
+<span id="cb2-13">    <span class="kw">let</span> <span class="kw">mut</span> stream <span class="op">=</span> <span class="pp">std::pin::pin!</span>(stream)<span class="op">;</span></span>
+<span id="cb2-14">    <span class="kw">let</span> cap <span class="op">=</span> <span class="dt">usize</span><span class="pp">::</span>try_from(want)<span class="op">.</span>map_err(<span class="op">|</span>_<span class="op">|</span> <span class="pp">BodyError::</span>TooLong)<span class="op">?;</span></span>
+<span id="cb2-15">    <span class="kw">let</span> <span class="kw">mut</span> out <span class="op">=</span> <span class="dt">Vec</span><span class="pp">::</span>with_capacity(cap)<span class="op">;</span></span>
+<span id="cb2-16">    <span class="cf">while</span> <span class="kw">let</span> <span class="cn">Some</span>(chunk) <span class="op">=</span> stream<span class="op">.</span>next()<span class="op">.</span><span class="kw">await</span> <span class="op">{</span></span>
+<span id="cb2-17">        <span class="kw">let</span> chunk <span class="op">=</span> chunk<span class="op">.</span>map_err(<span class="op">|</span>_<span class="op">|</span> <span class="pp">BodyError::</span><span class="bu">Read</span>)<span class="op">?;</span></span>
+<span id="cb2-18">        <span class="kw">let</span> chunk <span class="op">=</span> chunk<span class="op">.</span>as_ref()<span class="op">;</span></span>
+<span id="cb2-19">        <span class="cf">if</span> chunk<span class="op">.</span>len() <span class="op">&gt;</span> cap <span class="op">-</span> out<span class="op">.</span>len() <span class="op">{</span></span>
+<span id="cb2-20">            <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">BodyError::</span>TooLong)<span class="op">;</span></span>
+<span id="cb2-21">        <span class="op">}</span></span>
+<span id="cb2-22">        out<span class="op">.</span>extend_from_slice(chunk)<span class="op">;</span></span>
+<span id="cb2-23">    <span class="op">}</span></span>
+<span id="cb2-24">    <span class="cf">if</span> out<span class="op">.</span>len() <span class="op">==</span> cap <span class="op">{</span></span>
+<span id="cb2-25">        <span class="cn">Ok</span>(out)</span>
+<span id="cb2-26">    <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb2-27">        <span class="cn">Err</span>(<span class="pp">BodyError::</span>TooShort)</span>
+<span id="cb2-28">    <span class="op">}</span></span>
+<span id="cb2-29"><span class="op">}</span></span></code></pre></div>
+<p>The buffer is allocated once at the expected size; a chunk that would overflow it ends the read with <code>TooLong</code> before it is copied, and a short body fails with <code>TooShort</code>. Both become 502 with no body, so the webview never gets bytes mixed from two object versions. The test <code>body_reads_stop_at_the_expected_length</code> feeds an endless stream and checks that it is cut off. Before reading, <code>fetch_object</code> also rejects the reply if the <code>HEAD</code> and <code>GET</code> ETags differ, or if <code>Content-Range</code> does not name exactly the requested start, end, and total (<code>range_matches</code>). The test <code>changed_objects_are_never_served_past_the_expected_size</code> runs a stale size, a larger size, a mismatched range reply, and a changed ETag against the local S3 server in <code>r2dock-testkit</code>, each answered with 502.</p>
+<p>PLAN.md section 9.5 notes that abandoned requests are not cancelled early; they finish within these bounds and are discarded. Section 9.8 adds that bytes handed to the webview stay in its memory until it releases them.</p>
+</section>
+<section id="content-types-and-response-headers" class="level3">
+<h2>Content Types and Response Headers</h2>
+<p><code>content_type_for</code> in <code>media.rs</code> picks the content type from the key’s extension using a fixed allowlist: PNG, JPEG, WebP, GIF, AVIF, BMP, ICO and SVG images, and MP3, M4A, AAC, Ogg/Opus, WAV and FLAC audio. Everything else, including <code>.html</code>, becomes <code>application/octet-stream</code>, and the object’s stored <code>Content-Type</code>, which an uploader could set to <code>text/html</code>, is ignored. The test <code>content_types_are_allowlisted</code> checks both directions.</p>
+<p>Every successful reply also carries <code>X-Content-Type-Options: nosniff</code>, so an HTML file named <code>photo.png</code> is a broken image rather than a page; <code>Cache-Control: no-store</code>, keeping private objects out of the disk cache; <code>Accept-Ranges: bytes</code>; and a response CSP of <code>default-src 'none'; style-src 'unsafe-inline'; sandbox</code>, so a response loaded as a document could load nothing and run no script. The test <code>responses_have_safe_headers</code> checks them. SVG is the one allowlisted format that can contain script; R2Dock shows images only through <code>&lt;img&gt;</code> (<code>MediaImage</code> in <code>src/features/preview/PreviewBodies.tsx</code>), where engines do not run SVG scripts, with the response CSP as a second layer. PLAN.md section 9.4 marks this “[Verify per webview]”, and the code does not record that verification.</p>
+</section>
+<section id="local-targets-compression-samples" class="level3">
+<h2>Local Targets: Compression Samples</h2>
+<p>The scheme also serves the 30 second samples of “Compare quality” (<a href="/books/r2dock/read/ch026#ch-18">Chapter 18</a>, Audio Compression Internals). <code>compression_preview</code> in <code>src-tauri/src/commands/compression.rs</code> writes them under the cache folder <code>preview/&lt;random id&gt;/</code> and issues <code>MediaTarget::Local</code> tokens; the webview never supplies a path. <code>serve_local</code> reads the file on a blocking thread with the same range rules and headers (test <code>local_samples_are_served_with_ranges</code>). Unlike the R2 path, it takes no semaphore permits and opens files with <code>std::fs::File::open</code>, which follows symbolic links. That relies on the cache folder being private to the user, as the out-of-scope rules in <code>SECURITY.md</code> assume.</p>
+</section>
+<section id="tracing-one-request" class="level3">
+<h2>Tracing One Request</h2>
+<p>Figure 24.1 follows one audio preview.</p>
+<figure id="fig-24-preview-sequence">
+<img src="/books/r2dock/media/file29.webp" alt="Four participants: page, webview, Rust, and R2. The page calls media_token and receives a token, then sets the audio source. The webview sends GET with a byte range to Rust, which resolves the token, sends HEAD to R2 and gets size and ETag, then sends a GET for a 2 MiB range and receives a 206 with the body. Rust checks and caps the reply and returns 206 audio/mpeg to the webview." width="1400" height="1664" loading="lazy" decoding="async">
+<figcaption>Figure 24.1. One audio preview: the page gets a token over IPC, the audio element requests a range through the scheme, and Rust performs HEAD and a ranged GET against R2 before replying 206.</figcaption>
+</figure>
+<p>On the page, the <code>useMediaUrl</code> hook calls <code>media_token</code> through TanStack Query, keyed by connection, bucket, and key, so reopening a preview reuses the token, and <code>mediaUrl</code> in <code>src/lib/media.ts</code> builds the URL with <code>convertFileSrc(token, "r2dock-media")</code>. For a 48,000,000 byte MP3, the first request is clamped to bytes 0 to 2,097,151 and takes two byte permits; seeking to the middle produces <code>bytes=24000000-</code>.</p>
+<p>Each range costs two billable R2 requests. The fresh <code>HEAD</code> is what detects a changed object and caps the body; caching it per token is a possible future optimization with weaker change detection. PLAN.md section 9.5 also marks as “[Verify]” whether all three platform webviews handle ranges correctly through the asynchronous scheme; the tests exercise the Rust handler directly, so that remains a manual check.</p>
+</section>
+<section id="working-on-this-code-23" class="level3">
+<h2>Working on This Code</h2>
+<p>Everything lives in <code>src-tauri/src/media.rs</code>. Tokens come from <code>media_token</code> in <code>src-tauri/src/commands/browse.rs</code> and <code>compression_preview</code> in <code>src-tauri/src/commands/compression.rs</code>; the frontend side is <code>src/lib/media.ts</code> and <code>src/features/preview/useMediaUrl.ts</code>; the CSP entries are in <code>src-tauri/tauri.conf.json</code>. The unit tests and the local S3 integration test run with <code>cargo test -p r2dock</code>. When changing range handling, extend the <code>ranges</code> table and <code>changed_objects_are_never_served_past_the_expected_size</code>, then check audio seeking by hand on each platform.</p>
+<p>The invariants: no presigned URL, credential, or local path reaches the webview; tokens are unguessable and map only to targets Rust created; content types come from the allowlist with <code>nosniff</code> on every reply; every R2 body is read with <code>read_exact_capped</code> under both semaphores. A new previewable type must be unable to execute script in its element; HTML or PDF would need a design review and probably an ADR. The classic pitfall is streaming the body through without the cap, or trusting <code>Content-Length</code>.</p>
+</section>
+<section id="further-reading-23" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>src-tauri/src/media.rs</code> and its tests, the complete implementation.</li>
+<li>Tauri <code>Builder::register_asynchronous_uri_scheme_protocol</code>: <a href="https://docs.rs/tauri/latest/tauri/struct.Builder.html" target="_blank" rel="noopener noreferrer">docs.rs/tauri</a>.</li>
+<li>Tauri <code>convertFileSrc</code>: <a href="https://v2.tauri.app/reference/javascript/api/namespacecore/" target="_blank" rel="noopener noreferrer">v2.tauri.app JavaScript core API</a>.</li>
+<li>PLAN.md sections 9.5 and 9.8 for the stated bounds and residual risks.</li>
+</ul>
+</section>
+</section>

@@ -1,0 +1,132 @@
+<section id="ch-22" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">22</span> Tauri Security Architecture</h1>
+<p>A Tauri application pairs a Rust core with full operating system access and a web page rendered by the system webview. R2Dock’s page is not hostile by design, but it renders data R2Dock does not control (object names, image bytes, text files, server error messages), and web pages have a long history of being turned against their hosts. This chapter explains where R2Dock draws the line: which commands the page may call, which plugins are reachable, what the Content Security Policy (CSP) permits, and how commands treat arguments as untrusted. How the frontend calls commands is taught in <a href="/books/r2dock/read/ch036#ch-26">Chapter 26</a> (React and Tauri IPC).</p>
+<section id="two-trust-groups-and-one-bridge" class="level3">
+<h2>Two Trust Groups and One Bridge</h2>
+<p>The <a href="https://v2.tauri.app/security/" target="_blank" rel="noopener noreferrer">Tauri security overview</a> says Tauri’s model “differentiates between Rust code written for the application’s core and frontend code”. Core code can use system resources freely; webview code “has only access to exposed system resources via the well-defined IPC layer”, the Inter-Process Communication (IPC) layer that “is the bridge for communication between these two trust groups”. Capabilities decide which commands the webview may invoke, and each command enforces finer rules itself.</p>
+<p><code>SECURITY.md</code> states R2Dock’s consequences: secrets live only in Rust, no command returns a secret, the webview has no file system, shell, or HTTP plugin access, commands are allowlisted, and local paths are opaque identifiers. Read the rest of this chapter with one question in mind: if an attacker ran arbitrary JavaScript in the webview, what could they do? Figure 22.1 shows the boundary.</p>
+<figure id="fig-22-trust-boundaries">
+<img src="/books/r2dock/media/file27.webp" alt="Two dashed regions. The untrusted webview holds the React app, which renders remote data as text. Two arrows cross into the trusted Rust region: invoke calls through a capability check of 56 commands to the command handlers, and image and audio requests to the r2dock-media handler. Inside Rust, handlers use plugins and the services; services send events back to the page. Below Rust are the credential store, local files, and HTTPS to R2 and Cloudflare." width="1076" height="1384" loading="lazy" decoding="async">
+<figcaption>Figure 22.1. The trust boundary between the R2Dock webview and the Rust core, with the channels that cross it and the operating system services only Rust can reach.</figcaption>
+</figure>
+<p>Only <code>invoke</code> calls, <code>r2dock-media</code> requests (<a href="/books/r2dock/read/ch033#ch-24">Chapter 24</a>, The Custom Media Preview Protocol), and events cross it; the credential store, file system, and network are reachable only from Rust.</p>
+</section>
+<section id="the-command-allowlist" class="level3">
+<h2>The Command Allowlist</h2>
+<p>By default every command registered with <code>tauri::generate_handler!</code> can be called by every window; the <a href="https://v2.tauri.app/security/capabilities/" target="_blank" rel="noopener noreferrer">capabilities documentation</a> points to <code>AppManifest::commands</code> in the build script to restrict this, and R2Dock uses it.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src-tauri/build.rs#L63-L70" target="_blank" rel="noopener noreferrer">src-tauri/build.rs, lines 63 to 70</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="kw">fn</span> main() <span class="op">{</span></span>
+<span id="cb1-2">    <span class="kw">let</span> attributes <span class="op">=</span> <span class="pp">tauri_build::Attributes::</span>new()</span>
+<span id="cb1-3">        <span class="op">.</span>app_manifest(<span class="pp">tauri_build::AppManifest::</span>new()<span class="op">.</span>commands(COMMANDS))<span class="op">;</span></span>
+<span id="cb1-4">    <span class="cf">if</span> <span class="kw">let</span> <span class="cn">Err</span>(e) <span class="op">=</span> <span class="pp">tauri_build::</span>try_build(attributes) <span class="op">{</span></span>
+<span id="cb1-5">        <span class="pp">println!</span>(<span class="st">"cargo:warning=tauri build failed: {e}"</span>)<span class="op">;</span></span>
+<span id="cb1-6">        <span class="pp">std::process::</span>exit(<span class="dv">1</span>)<span class="op">;</span></span>
+<span id="cb1-7">    <span class="op">}</span></span>
+<span id="cb1-8"><span class="op">}</span></span></code></pre></div>
+<p><code>COMMANDS</code> lists 56 names. From it <code>tauri-build</code> generates, under <code>src-tauri/permissions/autogenerated/</code>, one committed TOML file per command defining <code>allow-&lt;name&gt;</code> and <code>deny-&lt;name&gt;</code> permissions “without any pre-configured scope”. Tauri scopes can restrict command arguments such as allowed paths; R2Dock’s commands use none and check arguments themselves. A permission grants nothing until, per the <a href="https://v2.tauri.app/security/permissions/" target="_blank" rel="noopener noreferrer">permissions documentation</a>, it is referenced in a capability.</p>
+<p>Three lists must therefore agree: the handlers in <code>src-tauri/src/lib.rs</code>, <code>COMMANDS</code> in <code>build.rs</code>, and the capability file, as the module comment in <code>src-tauri/src/commands/mod.rs</code> reminds contributors. In the audited commit all three contain the same 56 names.</p>
+</section>
+<section id="the-capability-file" class="level3">
+<h2>The Capability File</h2>
+<p>R2Dock has one capability for one window.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src-tauri/capabilities/main.json#L1-L16" target="_blank" rel="noopener noreferrer">src-tauri/capabilities/main.json, lines 1 to 16</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><span class="fu">{</span></span>
+<span id="cb2-2">  <span class="dt">"$schema"</span><span class="fu">:</span> <span class="st">"../gen/schemas/desktop-schema.json"</span><span class="fu">,</span></span>
+<span id="cb2-3">  <span class="dt">"identifier"</span><span class="fu">:</span> <span class="st">"main"</span><span class="fu">,</span></span>
+<span id="cb2-4">  <span class="er">//</span> <span class="er">...</span></span>
+<span id="cb2-5">  <span class="dt">"windows"</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb2-6">    <span class="st">"main"</span></span>
+<span id="cb2-7">  <span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb2-8">  <span class="dt">"permissions"</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb2-9">    <span class="st">"core:app:allow-version"</span><span class="ot">,</span></span>
+<span id="cb2-10">    <span class="st">"core:event:allow-listen"</span><span class="ot">,</span></span>
+<span id="cb2-11">    <span class="st">"core:event:allow-unlisten"</span><span class="ot">,</span></span>
+<span id="cb2-12">    <span class="st">"core:window:allow-is-focused"</span><span class="ot">,</span></span>
+<span id="cb2-13">    <span class="st">"core:path:default"</span><span class="ot">,</span></span>
+<span id="cb2-14">    <span class="st">"allow-app-info"</span><span class="ot">,</span></span>
+<span id="cb2-15">    <span class="st">"allow-clipboard-write"</span><span class="ot">,</span></span>
+<span id="cb2-16">    <span class="er">//</span> <span class="er">...</span></span></code></pre></div>
+<p>The elided description promises “only the listed app commands and minimal core features” and “no fs, shell, or http plugin access”; the rest of the array is the 56 <code>allow-</code> entries. The capability is bound to <code>main</code>, the only window in <code>tauri.conf.json</code>. There is no <code>remote</code> section, which the capabilities documentation says is needed to give a remote origin command access; even a webview somehow navigated to a remote page would have none.</p>
+<p>Of the five core permissions, the <a href="https://v2.tauri.app/reference/acl/core-permissions/" target="_blank" rel="noopener noreferrer">core permissions reference</a> shows <code>core:event:allow-listen</code> and <code>allow-unlisten</code> enable event subscriptions, which the drag and drop bridge in <code>src/features/browser/useDragDrop.ts</code> needs. The other three enable <code>version</code>, <code>is_focused</code>, and the path helpers (<code>resolve_directory</code>, <code>join</code>, <code>basename</code>, and others). The audited <code>src/</code> imports only <code>@tauri-apps/api/core</code> and <code>@tauri-apps/api/event</code>, so those three appear unused. They grant no file access, but <code>core:path:default</code> lets page code learn directory paths such as the home folder, which contains the account name. Removing them would be a possible least-privilege improvement, not a demonstrated vulnerability, and should be confirmed with a build.</p>
+<p><code>src-tauri/src/lib.rs</code> initializes single instance, dialog, notification, clipboard manager, and opener plugins, but grants none of their permissions to the page. Dialogs, clipboard writes, notifications, and URL opening happen only through R2Dock’s own commands, which call the plugins from Rust after validation; pickers in <code>src-tauri/src/dialogs.rs</code> keep their paths in Rust. PLAN.md section 9.4 lists plugin permissions and an updater in the capability; the code is stricter, and there is no updater in <code>src-tauri/Cargo.toml</code> at all, so the plan’s threat model row for updater signature verification describes a feature that does not exist in this version. The dangerous <code>fs</code>, <code>shell</code>, and <code>http</code> plugins are not even dependencies.</p>
+</section>
+<section id="the-webview-configuration-and-csp" class="level3">
+<h2>The Webview Configuration and CSP</h2>
+<p><code>tauri.conf.json</code> sets <code>withGlobalTauri</code> to <code>false</code>, so the API is not injected as <code>window.__TAURI__</code> (per the <a href="https://v2.tauri.app/reference/config/" target="_blank" rel="noopener noreferrer">configuration reference</a>) and script injected through cross-site scripting (XSS) has a harder time finding it. <code>freezePrototype</code> is <code>true</code>, running <code>Object.freeze(Object.prototype)</code> to block prototype pollution. And it defines the CSP.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src-tauri/tauri.conf.json#L27-L42" target="_blank" rel="noopener noreferrer">src-tauri/tauri.conf.json, lines 27 to 42</a></p>
+</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode json"><code class="sourceCode json"><span id="cb3-1">    <span class="st">"security"</span><span class="er">:</span> <span class="fu">{</span></span>
+<span id="cb3-2">      <span class="dt">"csp"</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb3-3">        <span class="dt">"default-src"</span><span class="fu">:</span> <span class="st">"'self'"</span><span class="fu">,</span></span>
+<span id="cb3-4">        <span class="dt">"script-src"</span><span class="fu">:</span> <span class="st">"'self'"</span><span class="fu">,</span></span>
+<span id="cb3-5">        <span class="dt">"style-src"</span><span class="fu">:</span> <span class="st">"'self' 'unsafe-inline'"</span><span class="fu">,</span></span>
+<span id="cb3-6">        <span class="er">//</span> <span class="er">...</span></span>
+<span id="cb3-7">        <span class="dt">"media-src"</span><span class="fu">:</span> <span class="st">"'self' r2dock-media: http://r2dock-media.localhost"</span><span class="fu">,</span></span>
+<span id="cb3-8">        <span class="dt">"font-src"</span><span class="fu">:</span> <span class="st">"'self' data:"</span><span class="fu">,</span></span>
+<span id="cb3-9">        <span class="dt">"connect-src"</span><span class="fu">:</span> <span class="st">"ipc: http://ipc.localhost"</span><span class="fu">,</span></span>
+<span id="cb3-10">        <span class="dt">"object-src"</span><span class="fu">:</span> <span class="st">"'none'"</span><span class="fu">,</span></span>
+<span id="cb3-11">        <span class="dt">"frame-src"</span><span class="fu">:</span> <span class="st">"'none'"</span><span class="fu">,</span></span>
+<span id="cb3-12">        <span class="dt">"base-uri"</span><span class="fu">:</span> <span class="st">"'none'"</span><span class="fu">,</span></span>
+<span id="cb3-13">        <span class="dt">"form-action"</span><span class="fu">:</span> <span class="st">"'none'"</span></span>
+<span id="cb3-14">      <span class="fu">},</span></span>
+<span id="cb3-15">      <span class="dt">"freezePrototype"</span><span class="fu">:</span> <span class="kw">true</span></span>
+<span id="cb3-16">    <span class="fu">}</span></span></code></pre></div>
+<p>The elided <code>img-src</code> allows <code>'self'</code>, <code>blob:</code>, <code>data:</code>, and both media scheme spellings. A CSP tells the engine which origins may supply scripts, images, styles, and connections, limiting the damage of an injection bug. Scripts come only from the bundle, with no <code>unsafe-eval</code>, so injected text cannot become code. Connections are limited to the IPC transport (<code>ipc:</code> and <code>http://ipc.localhost</code>), so page code cannot <code>fetch</code> data to an attacker’s server. The <a href="https://v2.tauri.app/security/csp/" target="_blank" rel="noopener noreferrer">Tauri CSP guide</a> says Tauri adds hashes and nonces at build time (“local scripts are hashed, styles and external scripts are referenced using a cryptographic nonce”), which R2Dock does not disable, and its advice to “avoid loading remote content such as scripts served over a CDN” is followed.</p>
+<p>Two relaxations remain. <code>style-src</code> includes <code>'unsafe-inline'</code>, which PLAN.md section 9.4 says to “try to remove”; inline styles cannot run script, so the risk is CSS tricks such as overlaying interface elements. How it interacts with Tauri’s injected style nonces was not verified; under the CSP specification a nonce makes browsers ignore <code>'unsafe-inline'</code>, so the effective policy may be stricter. <code>data:</code> and <code>blob:</code> in <code>img-src</code> do not allow script in an image context. The code also differs from the plan’s policy by adding <code>data:</code> to <code>font-src</code> and the <code>http://r2dock-media.localhost</code> spelling. The latter is required: the <a href="https://docs.rs/tauri/latest/tauri/struct.Builder.html" target="_blank" rel="noopener noreferrer">Tauri <code>Builder</code> documentation</a> says custom schemes are served as <code>http://&lt;scheme&gt;.localhost/</code> on Windows and Android, so previews would otherwise break on Windows.</p>
+<p>PLAN.md requires developer tools off in release builds. The configuration reference says <code>devtools</code> “requires <code>devtools</code> feature flag to enable it in release builds”, and <code>src-tauri/Cargo.toml</code> enables no Tauri features, so release builds have no inspector.</p>
+</section>
+<section id="validating-every-argument" class="level3">
+<h2>Validating Every Argument</h2>
+<p>Capabilities say nothing about arguments; the capabilities documentation says they do not protect against “incorrect scope checks in commands”. R2Dock’s handlers are thin: “validate input, call a service, map errors”. Serde deserialization is the first filter, so an invalid <code>Uuid</code> or an unknown <code>ConflictPolicy</code> variant never reaches R2Dock code, and <code>Preferences::sanitized</code> in <code>crates/r2dock-core/src/settings.rs</code> clamps numbers (concurrency to 1 to 8). Strings get dedicated validators in <code>src-tauri/src/commands/mod.rs</code>: <code>bucket_arg</code> (3 to 63 lowercase letters, digits, and hyphens), <code>key_arg</code> (non-empty, at most 1,024 bytes, no control characters), and <code>prefix_arg</code> (empty or ending in <code>/</code>). These keep S3 requests well formed; local path safety is a separate matter for <a href="/books/r2dock/read/ch032#ch-23">Chapter 23</a> (Filesystem Security).</p>
+<p>Higher-risk strings get specific treatment. Opening arbitrary URLs is dangerous on a desktop, since <code>file:</code> and custom scheme handlers can launch applications.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src-tauri/src/commands/app.rs#L77-L87" target="_blank" rel="noopener noreferrer">src-tauri/src/commands/app.rs, lines 77 to 87</a></p>
+</div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb4-1"><span class="kw">fn</span> open_external_inner(</span>
+<span id="cb4-2">    app<span class="op">:</span> <span class="op">&amp;</span><span class="pp">tauri::</span>AppHandle<span class="op">,</span></span>
+<span id="cb4-3">    url<span class="op">:</span> <span class="dt">String</span></span>
+<span id="cb4-4">) <span class="op">-&gt;</span> CmdResult<span class="op">&lt;</span>()<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb4-5">    <span class="kw">let</span> ok <span class="op">=</span> url<span class="op">.</span>starts_with(<span class="st">"https://"</span>)</span>
+<span id="cb4-6">        <span class="op">&amp;&amp;</span> url<span class="op">.</span>len() <span class="op">&lt;</span> <span class="dv">4096</span></span>
+<span id="cb4-7">        <span class="op">&amp;&amp;</span> <span class="op">!</span>url<span class="op">.</span>chars()<span class="op">.</span>any(<span class="op">|</span>c<span class="op">|</span> c<span class="op">.</span>is_control() <span class="op">||</span> c<span class="op">.</span>is_whitespace())<span class="op">;</span></span>
+<span id="cb4-8">    <span class="cf">if</span> <span class="op">!</span>ok <span class="op">{</span></span>
+<span id="cb4-9">        <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">AppError::</span>invalid_input(</span>
+<span id="cb4-10">            <span class="st">"Only https links can be opened."</span></span>
+<span id="cb4-11">        ))<span class="op">;</span></span>
+<span id="cb4-12">    <span class="op">}</span></span>
+<span id="cb4-13">    app<span class="op">.</span>opener()</span>
+<span id="cb4-14">        <span class="op">.</span>open_url(url<span class="op">,</span> <span class="cn">None</span><span class="pp">::</span><span class="op">&lt;&amp;</span><span class="dt">str</span><span class="op">&gt;</span>)</span>
+<span id="cb4-15">        <span class="op">.</span>map_err(<span class="op">|</span>_<span class="op">|</span> <span class="pp">AppError::</span>internal(<span class="st">"Could not open the link."</span>))</span>
+<span id="cb4-16"><span class="op">}</span></span></code></pre></div>
+<p>The host is not restricted, so a compromised page could open any HTTPS site in the browser, a phishing aid at most. <code>clipboard_write</code> caps text at 1 MiB and logs only its length. <code>open_log_folder</code>, <code>open_activity_folder</code>, and <code>transfer_show</code> take no path; Rust already knows it, or looks up a job by UUID. <code>validate_public_base_url</code> accepts only <code>https://</code> plus a host of letters, digits, dots, hyphens, and colons, rejecting <code>?</code>, <code>#</code>, spaces, and <code>@</code>; the unit test <code>public_urls</code> checks that <code>https://user@evil.com</code> is refused. The <code>@</code> rule blocks a trick such as <code>https://trusted.example@evil.example</code>, which looks like one host but connects to another.</p>
+</section>
+<section id="local-paths-never-come-from-the-page" class="level3">
+<h2>Local Paths Never Come From the Page</h2>
+<p>If a command accepted a path from the page, a compromised page could upload <code>~/.ssh/id_ed25519</code> or download over a startup script. The <a href="https://community.owasp.org/attacks/Path_Traversal" target="_blank" rel="noopener noreferrer">OWASP path traversal guidance</a> recommends to “use indexes rather than actual portions of file names”, and R2Dock applies the same idea to local paths. Local paths come only from native pickers in <code>src-tauri/src/dialogs.rs</code>, operating system drag and drop (<code>WindowEvent::DragDrop</code> in <code>src-tauri/src/dragdrop.rs</code>), and the Settings folder pickers, all in Rust. <code>register_selection</code> in <code>src-tauri/src/commands/transfers.rs</code> stores the paths and gives the page an identifier, a count, and up to three display names (with control characters shown as placeholders), never a full path. Uploads go from selection identifier to <code>upload_prepare</code> to a plan identifier to <code>upload_start</code>; downloads go to the configured folder or one picked at that moment.</p>
+<p>The identifiers live in a generic <code>Registry</code> in <code>src-tauri/src/state.rs</code>: random UUIDs that expire after 15 minutes (<code>TOKEN_TTL</code>), at most 256 per kind (<code>REGISTRY_CAP</code>, oldest evicted). <code>take</code> makes plans and delete confirmations single use, while <code>get</code> lets selections be retried; <code>registry_is_single_use_and_capped</code> tests both. Page code cannot forge an identifier, only use ones created for a real dialog or drop. <code>settings_get</code> returns folders with the home directory shown as <code>~</code> (<code>redact_path</code>), <code>Preferences</code> has no path fields, and “Copy path” is performed by Rust.</p>
+</section>
+<section id="what-remains-in-reach-of-a-compromised-page" class="level3">
+<h2>What Remains in Reach of a Compromised Page</h2>
+<p>Such an attacker could not read local files, run programs, contact arbitrary hosts, obtain stored secrets, or write to chosen paths. They could still call any of the 56 commands with valid arguments: listing and previewing objects, downloading into the configured folder, uploading files selected in the last 15 minutes, and deleting objects. <code>delete_preview</code> returns both the confirmation token and the typed phrase, because the page must display the phrase, so tokens guard against interface mistakes, not a compromised page. PLAN.md section 9.8 says a compromised webview “could still delete one object per call within confirmation rules”; in fact the bulk path could delete whatever <code>delete_preview</code> enumerates, including whole prefixes. <a href="/books/r2dock/read/ch034#ch-25">Chapter 25</a> (Threat Modeling and Remaining Risks) weighs this. The defenses against compromise itself are the CSP, no remote content, rendering remote data as React text (the frontend has no <code>dangerouslySetInnerHTML</code>), and showing SVG only through <code>&lt;img&gt;</code>.</p>
+</section>
+<section id="working-on-this-code-21" class="level3">
+<h2>Working on This Code</h2>
+<p>A new command touches four places: the handler under <code>src-tauri/src/commands/</code>, <code>generate_handler!</code> in <code>src-tauri/src/lib.rs</code>, <code>COMMANDS</code> in <code>src-tauri/build.rs</code>, and <code>allow-&lt;name&gt;</code> in <code>src-tauri/capabilities/main.json</code>; commit the regenerated permission file. A forgotten capability entry fails safely at runtime. Validate every string with the helpers in <code>commands/mod.rs</code> or <code>r2dock-core</code>, never accept a local path from the page, and never return a secret or full path (use <code>AppState::display_path</code>).</p>
+<p>Review <code>tauri.conf.json</code> changes closely: no <code>unsafe-eval</code>, remote script hosts, broad <code>connect-src</code>, or <code>withGlobalTauri</code>; no <code>fs</code>, <code>shell</code>, or <code>http</code> plugins; no plugin permissions for the page when a Rust command can do the job; and a stated reason for any new permission. <code>cargo test -p r2dock</code> covers the registry and settings, <code>cargo test -p r2dock-core</code> the validators, and <code>npm test</code> the frontend; CI also runs clippy with <code>-D warnings</code> and checks that the TypeScript bindings in <code>src/ipc/bindings</code> are current.</p>
+</section>
+<section id="further-reading-21" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>src-tauri/capabilities/main.json</code>, <code>src-tauri/build.rs</code>, and <code>src-tauri/tauri.conf.json</code>.</li>
+<li><a href="https://v2.tauri.app/security/" target="_blank" rel="noopener noreferrer">Tauri security overview</a>.</li>
+<li>Tauri <a href="https://v2.tauri.app/security/capabilities/" target="_blank" rel="noopener noreferrer">capabilities</a> and <a href="https://v2.tauri.app/security/permissions/" target="_blank" rel="noopener noreferrer">permissions</a>.</li>
+<li><a href="https://v2.tauri.app/security/csp/" target="_blank" rel="noopener noreferrer">Tauri CSP guide</a>.</li>
+<li><a href="https://community.owasp.org/attacks/Path_Traversal" target="_blank" rel="noopener noreferrer">OWASP path traversal</a>.</li>
+</ul>
+</section>
+</section>

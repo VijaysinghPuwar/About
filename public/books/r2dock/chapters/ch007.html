@@ -1,0 +1,115 @@
+<section id="ch-03" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">3</span> A Guided Tour Through the Repository</h1>
+<p>The R2Dock repository holds about 450 tracked files. This chapter walks through each directory and Rust module, shows how they depend on each other, and ends with a reading order. Line counts come from <code>wc -l</code> on the audited commit.</p>
+<section id="the-top-level" class="level3">
+<h2>The Top Level</h2>
+<p><code>Cargo.toml</code> declares the Rust workspace: seven members, version 0.5.0, edition 2024, minimum Rust 1.94, shared dependency versions, lints, and the release profile. <code>package.json</code> defines the frontend, which uses npm (<code>docs/adr/0004-frontend-libraries.md</code>). <code>.cargo/config.toml</code> sets <code>TS_RS_EXPORT_DIR</code> so generated TypeScript types land in <code>src/ipc/bindings</code>. The workspace lints shape all the Rust code you will read.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/Cargo.toml#L59-L67" target="_blank" rel="noopener noreferrer">Cargo.toml, lines 59 to 67</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode toml"><code class="sourceCode toml"><span id="cb1-1"><span class="kw">[workspace.lints.rust]</span></span>
+<span id="cb1-2"><span class="dt">unsafe_code</span> <span class="op">=</span> <span class="st">"forbid"</span></span>
+<span id="cb1-3"></span>
+<span id="cb1-4"><span class="kw">[workspace.lints.clippy]</span></span>
+<span id="cb1-5"><span class="dt">unwrap_used</span> <span class="op">=</span> <span class="st">"warn"</span></span>
+<span id="cb1-6"><span class="dt">expect_used</span> <span class="op">=</span> <span class="st">"warn"</span></span>
+<span id="cb1-7"><span class="dt">panic</span> <span class="op">=</span> <span class="st">"warn"</span></span>
+<span id="cb1-8"><span class="dt">dbg_macro</span> <span class="op">=</span> <span class="st">"warn"</span></span>
+<span id="cb1-9"><span class="dt">todo</span> <span class="op">=</span> <span class="st">"warn"</span></span></code></pre></div>
+<p>Per Cargo’s <a href="https://doc.rust-lang.org/cargo/reference/workspaces.html" target="_blank" rel="noopener noreferrer">workspace documentation</a>, members opt in with <code>[lints] workspace = true</code>; every crate except the test kit does. <code>forbid</code> cannot be overridden locally, so those crates contain no <code>unsafe</code> block. The Clippy warnings become errors in continuous integration (CI), which runs with <code>-D warnings</code>; library crates relax them only for tests with <code>#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]</code>.</p>
+<p><code>PLAN.md</code> (about 1,100 lines) is the technical plan and <code>DESIGN.md</code> (about 1,000 lines) specifies the interface; <code>SECURITY.md</code>, <code>CONTRIBUTING.md</code>, and <code>CHANGELOG.md</code> cover reporting, ground rules, and releases. The license is MIT.</p>
+</section>
+<section id="documentation-tools-and-workflows" class="level3">
+<h2>Documentation, Tools, and Workflows</h2>
+<p><code>docs/adr/</code> holds five Architecture Decision Records: the Tauri architecture, the keyring crate, ts-rs for IPC types, the frontend libraries, and testing against a local S3 server. <code>docs/plans/</code> holds two approved feature plans, <code>media-compression.md</code> and <code>logs-and-csv.md</code>, each with a progress table listing deviations.</p>
+<p><code>tools/ffmpeg/build-macos.sh</code> builds a static FFmpeg for macOS under the GNU Lesser General Public License (LGPL) from pinned, checksummed sources. The manually triggered <code>.github/workflows/tools.yml</code> runs it and publishes the packages the app downloads, and the URLs and SHA-256 sums the app trusts live in <code>crates/r2dock-media/src/tools/manifest.rs</code> (<a href="/books/r2dock/read/ch025#ch-17">Chapter 17</a>, How FFmpeg Integrates with Rust).</p>
+<p><code>.github/workflows/ci.yml</code> runs the frontend and Rust checks on Ubuntu, macOS, and Windows for every push to <code>main</code> and every pull request, plus a live check of the platform’s FFmpeg package, a Linux check that generated bindings are committed, and <code>npm audit</code> and <code>cargo audit</code>. <code>.github/workflows/release.yml</code> builds installers for <code>v*</code> tags (<a href="/books/r2dock/read/ch042#ch-31">Chapter 31</a>, CI/CD and Desktop Releases).</p>
+</section>
+<section id="the-rust-crates-module-by-module" class="level3">
+<h2>The Rust Crates, Module by Module</h2>
+<p><a href="/books/r2dock/read/ch006#ch-02">Chapter 2</a> (Complete Software Architecture) introduced the crates and their dependency graph. Here we open each one.</p>
+<section id="r2dock-core" class="level4">
+<h3>r2dock-core</h3>
+<p>Its twelve modules are small. <code>app_error.rs</code> defines the IPC error type and <code>io_error</code>, which describes a local I/O error without the path. <code>keys.rs</code> validates object keys (at most 1,024 bytes, no control characters) and provides helpers such as <code>parent_prefix</code> and <code>keep_both_name</code>. <code>path_guard.rs</code> (477 lines, the largest here) maps untrusted keys to safe local paths. <code>parts.rs</code> plans multipart part sizes, <code>policy.rs</code> defines <code>ConflictPolicy</code>, and <code>settings.rs</code> holds versioned settings. <code>storage.rs</code> writes JSON atomically (temporary file, flush, rename) and backs up corrupt files. <code>redact.rs</code> strips secrets, signatures, account hosts, and home paths from text. With no network I/O and no async runtime, this is where property tests live: <code>parts.rs</code> and <code>path_guard.rs</code> use <code>proptest</code>.</p>
+</section>
+<section id="r2dock-secrets-and-r2dock-r2" class="level4">
+<h3>r2dock-secrets and r2dock-r2</h3>
+<p><code>r2dock-secrets</code> is one file, <code>src/lib.rs</code> (225 lines), defining the <code>SecretStore</code> trait (<code>set</code>, <code>get</code>, <code>delete</code>), <code>SecretError</code>, <code>KeyringStore</code> for the operating system store, and <code>MemoryStore</code> for the session-only fallback. <a href="/books/r2dock/read/ch030#ch-21">Chapter 21</a> (Credential Storage and Authentication) owns it.</p>
+<p>In <code>r2dock-r2</code>, <code>client.rs</code> builds an <code>aws_sdk_s3::Client</code> for R2: region <code>auto</code>, path-style addressing, checksums only when required, three attempts per request in the AWS software development kit (SDK), a 10 second connect timeout, and stalled stream protection with a 60 second grace period. <code>error.rs</code> maps SDK errors to <code>R2Error</code> and then <code>AppError</code>, <code>list.rs</code> paginates listings, and <code>ops.rs</code> (488 lines) covers single-object operations and ranged reads. <code>bulk.rs</code> (462 lines) implements bulk delete and the copy, verify, then delete move. <code>cfapi.rs</code> is the read-only Cloudflare REST client. Tests run against the local S3 server, a mock that reproduces move races (<code>move_races.rs</code>), and, only with credentials in environment variables, a real bucket read-only (<code>live_r2.rs</code>, ignored by default).</p>
+</section>
+<section id="r2dock-media" class="level4">
+<h3>r2dock-media</h3>
+<p>This crate has the most files (34 tracked). <code>probe.rs</code> reads audio metadata in process with the Symphonia library, <code>plan.rs</code> holds the bitrate ladder and reasons to skip, <code>streams.rs</code> and <code>verify.rs</code> check that an encoded copy dropped nothing promised, and <code>pipeline.rs</code> runs the whole decision for one file, cheapest checks first. <code>ffmpeg/</code> holds fixed argument arrays (never a shell), a progress parser, and the runner with cancellation and a watchdog; <code>tools/</code> installs and detects FFmpeg; <code>video/</code> holds the video equivalents. Part V covers this crate.</p>
+</section>
+<section id="r2dock-transfer" class="level4">
+<h3>r2dock-transfer</h3>
+<p>This is the heart of the application, and its public surface is a short <code>lib.rs</code>.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/lib.rs#L9-L24" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/lib.rs, lines 9 to 24</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="kw">mod</span> body<span class="op">;</span></span>
+<span id="cb2-2"><span class="kw">pub</span> <span class="kw">mod</span> ctx<span class="op">;</span></span>
+<span id="cb2-3"><span class="kw">mod</span> download<span class="op">;</span></span>
+<span id="cb2-4"><span class="kw">pub</span> <span class="kw">mod</span> engine<span class="op">;</span></span>
+<span id="cb2-5"><span class="kw">pub</span> <span class="kw">mod</span> history<span class="op">;</span></span>
+<span id="cb2-6"><span class="kw">pub</span> <span class="kw">mod</span> journal<span class="op">;</span></span>
+<span id="cb2-7"><span class="kw">pub</span> <span class="kw">mod</span> model<span class="op">;</span></span>
+<span id="cb2-8"><span class="kw">pub</span> <span class="kw">mod</span> progress<span class="op">;</span></span>
+<span id="cb2-9"><span class="kw">pub</span> <span class="kw">mod</span> retry<span class="op">;</span></span>
+<span id="cb2-10"><span class="kw">pub</span> <span class="kw">mod</span> scan<span class="op">;</span></span>
+<span id="cb2-11"><span class="kw">pub</span> <span class="kw">mod</span> source<span class="op">;</span></span>
+<span id="cb2-12"><span class="kw">mod</span> upload<span class="op">;</span></span>
+<span id="cb2-13"></span>
+<span id="cb2-14"><span class="kw">pub</span> <span class="kw">use</span> <span class="pp">download::</span>human_bytes<span class="op">;</span></span>
+<span id="cb2-15"><span class="kw">pub</span> <span class="kw">use</span> <span class="pp">engine::</span><span class="op">{</span>BoxFuture<span class="op">,</span> ClientProvider<span class="op">,</span> Engine<span class="op">,</span> EngineConfig<span class="op">,</span></span>
+<span id="cb2-16">    EventSink<span class="op">};</span></span>
+<span id="cb2-17"><span class="kw">pub</span> <span class="kw">use</span> <span class="pp">model::</span><span class="op">*;</span></span></code></pre></div>
+<p>The modules without <code>pub</code> (<code>body</code>, <code>download</code>, <code>upload</code>) are private, so the application cannot call <code>upload::run</code> directly; it must enqueue a job with <code>Engine::enqueue</code>. That privacy is a design statement: every transfer goes through the queue, the journal, and the concurrency limits.</p>
+<p><code>model.rs</code> defines jobs, states, and frontend events. <code>engine/mod.rs</code> (1,272 lines, the largest Rust file) holds the queue, scheduler, controls, progress ticker, and job runner, and <code>engine/compress.rs</code> (714 lines) schedules compression. <code>upload.rs</code> and <code>download.rs</code> implement the two directions, <code>body.rs</code> builds streaming, retryable request bodies, <code>source.rs</code> opens local files and remembers their identity, <code>journal.rs</code> persists resumable state, and <code>retry.rs</code> classifies failures.</p>
+<p>Two plan discrepancies live here. <code>scan.rs</code> walks a local selection, skipping links and special files, and collects it into memory in one pass up to <code>MAX_FILES</code> (200,000), while <code>PLAN.md</code> section 12.3 describes a lazy walk with child jobs added in batches; <a href="/books/r2dock/read/ch010#ch-05">Chapter 5</a> (Tokio and Asynchronous Execution) discusses this. <code>PLAN.md</code> section 12.6 also proposed separate <code>queue</code>, <code>scheduler</code>, <code>upload_single</code>, and <code>upload_multipart</code> modules, but the code keeps the queue and scheduler in <code>engine/mod.rs</code> and both upload kinds in <code>upload.rs</code>, a reasonable target for a future split.</p>
+<p>Its integration tests in <code>tests/</code> range from <code>engine.rs</code> (end-to-end transfers) and <code>recovery.rs</code> (restarts) to <code>stress.rs</code> (thousands of transfers, partly ignored by default).</p>
+</section>
+<section id="r2dock-testkit" class="level4">
+<h3>r2dock-testkit</h3>
+<p><code>crates/r2dock-testkit/src/lib.rs</code> starts an S3-compatible server built on the <code>s3s</code> and <code>s3s-fs</code> crates, on a random local port backed by a temporary folder. Its <code>Network</code> type can throttle request bodies and delay multipart aborts to imitate a slow uplink, and <code>cloudflare.rs</code> mocks the Cloudflare domain endpoints. <code>cargo run -p r2dock-testkit --bin local-s3 -- &lt;port&gt; &lt;bucket&gt;...</code> runs the server for manual testing, and a debug build of the app can target it through <code>R2DOCK_DEV_ENDPOINT</code>; per <code>setup</code> in <code>src-tauri/src/lib.rs</code>, only <code>http://127.0.0.1:</code> addresses are accepted and the override is compiled out of release builds.</p>
+</section>
+</section>
+<section id="the-tauri-application-src-tauri" class="level3">
+<h2>The Tauri Application: src-tauri</h2>
+<p><code>src-tauri/</code> holds the <code>r2dock</code> package, its <code>build.rs</code>, <code>tauri.conf.json</code>, <code>capabilities/main.json</code>, and generated permissions. In <code>src-tauri/src/</code>, <code>main.rs</code> calls <code>r2dock_lib::run()</code>, <code>lib.rs</code> (293 lines) performs startup wiring, <code>state.rs</code> defines <code>AppState</code>, the expiring <code>Registry&lt;T&gt;</code>, and <code>commit_json</code> (save settings atomically before publishing them), and <code>commands/</code> holds the seven command modules.</p>
+<p>The other modules are app services: <code>connections.rs</code> (998 lines) for connection lifecycle and the client cache, <code>planning.rs</code> for turning selections into jobs, <code>compression.rs</code> for the pinned FFmpeg, <code>media.rs</code> for the preview protocol, <code>public_links.rs</code> for public URLs with caching and request coalescing, <code>logging.rs</code> for rotating redacted logs, and <code>activity/</code> for the comma-separated values (CSV) activity log, whose background writer thread has a bounded queue (stressed by <code>src-tauri/tests/activity_stress.rs</code>).</p>
+</section>
+<section id="the-frontend-src" class="level3">
+<h2>The Frontend: src</h2>
+<p><code>src/app/</code> holds the shell, the TanStack Query client (<code>queries.ts</code>), and Zustand stores. <code>src/ipc/</code> holds <code>commands.ts</code>, the only module that calls <code>invoke</code>, and <code>bindings/</code>, 74 generated type files; never edit a binding by hand. <code>src/features/</code> groups screens by domain: <code>browser/</code>, <code>connections/</code>, <code>manage/</code>, <code>preview/</code>, <code>settings/</code>, and <code>transfers/</code> (dock, event subscription, store, compression notices). <code>src/components/</code> holds shared Radix-based components and <code>src/styles/tokens.css</code> the design tokens; Vitest tests sit beside their code. Part VII covers the frontend.</p>
+</section>
+<section id="how-the-pieces-depend-on-each-other" class="level3">
+<h2>How the Pieces Depend on Each Other</h2>
+<p>The Rust crates form the strict layering of Figure 2.2, so a type change in <code>r2dock-core</code> causes compile errors in the crates above it and nowhere else. The frontend depends on Rust through exactly two artifacts, the generated bindings and the command names in <code>commands.ts</code>, so <code>npm run typecheck</code> finds every component affected by a changed Rust type.</p>
+<p>Other files must agree by convention rather than compiler. The command list appears in <code>src-tauri/src/lib.rs</code>, <code>src-tauri/build.rs</code>, <code>src-tauri/capabilities/main.json</code>, and <code>src/ipc/commands.ts</code>. The version appears in the workspace <code>Cargo.toml</code>, <code>package.json</code>, and <code>src-tauri/tauri.conf.json</code>. The FFmpeg sums in <code>manifest.rs</code> must match what <code>tools.yml</code> published. Some strings are matched across languages: <code>failure_error</code> in <code>engine/compress.rs</code> notes that the interface matches its “Compression failed:” prefix in <code>compressionNotice.ts</code>.</p>
+</section>
+<section id="a-recommended-reading-order" class="level3">
+<h2>A Recommended Reading Order</h2>
+<p>Reading in dependency order means each step uses only what earlier steps introduced. Figure 3.1 summarizes the order.</p>
+<figure id="fig-03-reading-order">
+<img src="/books/r2dock/media/file4.webp" alt="Eight boxes in a vertical chain. One: README, PLAN.md sections 1 to 7, and the ADRs. Two: r2dock-core errors, keys, parts, and paths. Three: r2dock-secrets and r2dock-r2. Four: src-tauri wiring in lib.rs, state.rs, and commands. Five, highlighted: r2dock-transfer model, engine, upload, download, and journal. Six: r2dock-media and engine/compress.rs. Seven: the frontend entry points and src/ipc. Eight: tests and the test kit." width="613" height="1842" loading="lazy" decoding="async">
+<figcaption>Figure 3.1. A recommended reading order through the repository in eight steps, from the README and plan, through r2dock-core, the secrets and R2 crates, the Tauri wiring, the transfer engine, the media crate, the frontend, and finally the tests.</figcaption>
+</figure>
+<p>In <code>r2dock-core</code>, read <code>app_error.rs</code>, <code>keys.rs</code>, <code>parts.rs</code>, <code>storage.rs</code>, then <code>path_guard.rs</code>, using the tests at the bottom of each file to learn edge cases. Read <code>r2dock-r2</code> in the order <code>client.rs</code>, <code>error.rs</code>, <code>list.rs</code>, <code>ops.rs</code>, <code>bulk.rs</code>. For the wiring, read <code>src-tauri/src/lib.rs</code>, <code>state.rs</code>, <code>commands/mod.rs</code>, <code>commands/browse.rs</code>, and <code>connections.rs</code>.</p>
+<p>The engine is the most demanding step: read <code>model.rs</code> and <code>ctx.rs</code>, then <code>engine/mod.rs</code> from <code>Engine::start</code> through <code>scheduler</code> and <code>run_job</code>, then <code>upload.rs</code>, <code>body.rs</code>, <code>download.rs</code>, and <code>journal.rs</code>; Chapters 5, 6, 9, 10, 13, and 14 accompany it. Then read <code>r2dock-media/src/pipeline.rs</code> with <code>engine/compress.rs</code>, the frontend entry points with <code>src/ipc/commands.ts</code>, and finally the tests as specifications, starting with <code>crates/r2dock-transfer/tests/engine.rs</code> and <code>recovery.rs</code>.</p>
+</section>
+<section id="working-on-this-code-2" class="level3">
+<h2>Working on This Code</h2>
+<p>A rule with no I/O (a key format, a size limit) belongs in <code>r2dock-core</code> with a table or property test. S3 requests belong in <code>r2dock-r2</code>, anything that queues, retries, or persists a transfer in <code>r2dock-transfer</code>, and FFmpeg work in <code>r2dock-media</code>. Code that needs Tauri types belongs in <code>src-tauri</code> and stays thin, and interface work calls Rust only through <code>src/ipc/commands.ts</code>.</p>
+<p>Each crate tests on its own: <code>cargo test -p r2dock-core</code>, <code>-p r2dock-secrets</code>, <code>-p r2dock-r2</code>, <code>-p r2dock-media</code>, <code>-p r2dock-transfer</code>, and <code>-p r2dock</code>, plus <code>npm test</code> and <code>npm run typecheck</code>. Some media tests need FFmpeg; on Windows, CI supplies it through <code>R2DOCK_TEST_FFMPEG</code>. The usual pitfalls are the convention links above. <code>engine/mod.rs</code> and <code>connections.rs</code> are already candidates for splitting, so avoid growing them.</p>
+</section>
+<section id="further-reading-2" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>Cargo.toml</code> (workspace members, dependencies, lints)</li>
+<li><code>CONTRIBUTING.md</code></li>
+<li><code>PLAN.md</code> section 16 (the proposed layout, for comparison)</li>
+<li><a href="https://doc.rust-lang.org/cargo/reference/workspaces.html" target="_blank" rel="noopener noreferrer">The Cargo Book: workspaces</a></li>
+</ul>
+</section>
+</section>

@@ -1,0 +1,259 @@
+<section id="ch-32" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">32</span> Engineering Trade-offs and Future Improvements</h1>
+<p>Every chapter so far described what R2Dock does. This one collects what it deliberately does not do, why, and what the evidence in the repository suggests changing. The chapter keeps two kinds of statement strictly apart. Sections about compromises describe current behavior at the audited commit, verified in the source. The final section lists proposals; none of them is implemented or committed to in the repository unless the text says so. Between the two sits one consolidated list of places where the project’s documents and its code disagree, since those are the first thing a new contributor trips over.</p>
+<section id="intentional-compromises-in-the-current-code" class="level3">
+<h2>Intentional Compromises in the Current Code</h2>
+<p>The project’s stated priority order, in CONTRIBUTING.md and PLAN.md, is “secure, then stable, then easy for beginners, then fast”. Most compromises below follow from it: they trade some speed, generality, or theoretical durability for code that is small, auditable, and hard to misuse.</p>
+<section id="job-slots-are-counts-not-a-semaphore" class="level4">
+<h3>Job slots are counts, not a semaphore</h3>
+<p>The engine limits concurrent jobs without a semaphore. <code>Inner::schedule</code> in <code>crates/r2dock-transfer/src/engine/mod.rs</code> recounts the active jobs (<code>Preparing</code>, <code>Running</code>, <code>Retrying</code>, <code>Verifying</code>) under the jobs lock on every pass and starts queued jobs until the count reaches the limit. <a href="/books/r2dock/read/ch011#ch-06">Chapter 6</a> (The Transfer Scheduler) explains why: a semaphore only answers whether someone may proceed, while the scheduler must choose who, skipping jobs waiting for the encoder, keys already being written, and groups that already have running jobs, and must change the limit at runtime or halve it for 60 seconds after overload. A count derived from job states cannot drift out of sync with them.</p>
+<p>The cost is a pass whose time grows linearly with the number of jobs, and approximate fairness: only the first 256 eligible jobs are considered, and all ungrouped jobs share one bucket. No benchmark measures the pass. The only semaphore, <code>part_slots</code> with 8 permits, covers multipart parts; single uploads and downloads are bounded by job slots alone, which are clamped to at most 8.</p>
+</section>
+<section id="a-json-snapshot-and-log-instead-of-a-database" class="level4">
+<h3>A JSON snapshot and log instead of a database</h3>
+<p>Transfer state lives in <code>journal.json</code> (a resume journal rewritten atomically on each save) and in <code>queue.json</code> plus an append-only <code>queue.log</code> (<a href="/books/r2dock/read/ch021#ch-14">Chapter 14</a>, Journals and Persistent Queues). An embedded database would give transactions, checksums, and indexed updates. The project chose plain files: no new dependency, human-readable state, and one small module, <code>journal.rs</code>, that a reviewer can read in full. The benchmark <code>docs/benchmarks/2026-10-18-compression-at-scale.md</code> records that this design cut the bytes written while draining 50,000 jobs from a 100,000-job queue from about 636 MB to about 45 MB (single run, release build, an Apple silicon Mac, bytes estimated by polling file sizes; not re-run for this book).</p>
+<p>The price is paid in edge cases: log lines carry no checksum, so replay stops at the first unreadable line; <code>JOURNAL_VERSION</code> is written but never checked; tagged enums cannot hold 128-bit integers or numeric map keys; and a corrupt snapshot is backed up while its log is discarded.</p>
+</section>
+<section id="batched-durability-and-no-directory-sync" class="level4">
+<h3>Batched durability and no directory sync</h3>
+<p>Journal changes reach the disk in batches, within 200 milliseconds for the resume journal and one second for the queue. Only <code>persist_now</code>, just before a finished download is moved, writes synchronously. A new upload ID, or the record of a multipart upload’s last part, can therefore be lost to a crash, and recovery then repeats work under the conflict policy (<a href="/books/r2dock/read/ch022#ch-15">Chapter 15</a>, Crash Consistency and Recovery). The alternative is an <code>fsync</code> per part; the project accepts a short window because recovery re-checks every hint against R2 and the file system.</p>
+<p>No code syncs a directory after a rename, and the queue log is truncated after the snapshot rename without a sync. After a process crash this is harmless; after a power loss, a file system that kept the truncation but not the rename would bring back the old snapshot with an empty log. This is analysis, not an observed failure.</p>
+</section>
+<section id="a-1-mib-margin-instead-of-verified-resume" class="level4">
+<h3>A 1 MiB margin instead of verified resume</h3>
+<p>A resumed download drops the last mebibyte of its partial file (<code>RESUME_BACKOFF</code> in <code>download.rs</code>), because after a power loss a file can be longer than the data that reached the disk. The margin is a heuristic, not a bound. Single-part objects get a final MD5 check against the entity tag (ETag); multipart objects get only a length check, so a hole earlier in the file would pass. Partials are synced only at the end, not while streaming.</p>
+</section>
+<section id="moves-are-copy-verify-then-delete" class="level4">
+<h3>Moves are copy, verify, then delete</h3>
+<p>R2 has no rename, atomic move, or conditional delete. <code>move_one</code> in <code>crates/r2dock-r2/src/bulk.rs</code> copies the inspected source version, confirms the copy’s ETag at the destination and that the source is unchanged, and only then deletes, four objects at a time (<a href="/books/r2dock/read/ch017#ch-11">Chapter 11</a>, Object Management and Consistency). A source change in the one request before the delete can still be lost, as the code comment and the README’s Limitations admit, and moves are not journaled, so an interrupted move is not resumed.</p>
+</section>
+<section id="simple-overload-handling-and-bounded-retries" class="level4">
+<h3>Simple overload handling and bounded retries</h3>
+<p>On a <code>RateLimited</code> or <code>ServerError</code> result, <code>run_job</code> halves effective concurrency for a fixed 60 seconds. The AWS software development kit (SDK) makes up to 3 attempts per request, and the engine runs a job at most <code>MAX_ATTEMPTS</code> (3) times, the first attempt included; since <code>run_job</code> calls <code>backoff(attempt + 1)</code> for attempts 1 and 2, the waits are about 2 and 8 seconds and the 30 second step is unreachable. The scheme cannot oscillate, but it treats one stray 503 like sustained throttling, and <code>ServerError</code> also covers non-overload errors such as unrecognized 4xx responses.</p>
+</section>
+<section id="logs-that-may-lose-rows" class="level4">
+<h3>Logs that may lose rows</h3>
+<p>History and activity records are deliberately weaker than the journals. <code>history.jsonl</code> is appended without a sync. The activity log’s writer thread in <code>src-tauri/src/activity/writer.rs</code> holds at most 200,000 rows or 64 MiB, drops and counts rows beyond that rather than making a transfer wait, and gets at most two seconds at exit. Both describe the past, so the project trades completeness for never blocking a transfer.</p>
+</section>
+<section id="unsigned-builds-without-an-updater" class="level4">
+<h3>Unsigned builds without an updater</h3>
+<p>Release builds are not signed or notarized: <code>release.yml</code> publishes an “Unsigned preview build” with <code>SHA256SUMS.txt</code>, and there is no updater. Signing would need paid certificates and an Apple Developer account (<a href="/books/r2dock/read/ch042#ch-31">Chapter 31</a>, CI/CD and Desktop Releases). As a result the operating system cannot identify the publisher, checksums help only users who check them, and fixes arrive only when users download them.</p>
+</section>
+<section id="other-compromises-worth-knowing" class="level4">
+<h3>Other compromises worth knowing</h3>
+<p>Restored jobs never restart on their own, costing a click after every crash. Originals are identified by size, modification time, and file identity, not hashed, while compressed copies are verified by SHA-256 lazily before each attempt so startup reads nothing. A failed job with resume state returns as <code>Interrupted</code> after a restart, so “failed” is not final across restarts.</p>
+</section>
+</section>
+<section id="where-the-documents-and-the-code-disagree" class="level3">
+<h2>Where the Documents and the Code Disagree</h2>
+<p>The table consolidates the discrepancies found while writing this book, from status lines to the continuous integration (CI) setup. The third column is current behavior. Many document entries are plans written before the code, and PLAN.md marks some of them as provisional; they are listed because the text alone does not say that the code went another way.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Area</th>
+<th>Document says</th>
+<th>Code at 0.5.0</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Version</td>
+<td>PLAN.md status: 0.4.0</td>
+<td>Manifests and CHANGELOG: 0.5.0</td>
+</tr>
+<tr>
+<td>Benchmarks</td>
+<td>PLAN 14: no numbers exist</td>
+<td>Three reports in <code>docs/benchmarks</code></td>
+</tr>
+<tr>
+<td>Multipart abort</td>
+<td>PLAN 8.4, 12.5: a guard aborts on drop</td>
+<td>Explicit abort calls on each exit path</td>
+</tr>
+<tr>
+<td>Module layout</td>
+<td>PLAN 12.6: queue, scheduler, upload modules</td>
+<td><code>engine/mod.rs</code> and <code>upload.rs</code></td>
+</tr>
+<tr>
+<td>Folder scan</td>
+<td>PLAN 12.3: lazy walk, batched children</td>
+<td>Whole scan at once, events in 500s</td>
+</tr>
+<tr>
+<td>State model</td>
+<td>PLAN 12.2: <code>Cancelling</code> state</td>
+<td>UI label only; no such <code>JobState</code></td>
+</tr>
+<tr>
+<td>Fairness</td>
+<td>PLAN 12.3: round robin between groups</td>
+<td>Fewest active per group, 256 window</td>
+</tr>
+<tr>
+<td>Progress</td>
+<td>PLAN 12.4: per job, ETA hidden on variance</td>
+<td>One batched event; no variance check</td>
+</tr>
+<tr>
+<td>Partial name</td>
+<td>PLAN 8.5: <code>.&lt;name&gt;.r2dock-part</code></td>
+<td>Adds an 8 hex character job tag</td>
+</tr>
+<tr>
+<td>Upload body</td>
+<td>PLAN 8.4: <code>ByteStream</code> from path</td>
+<td>Custom retryable <code>SdkBody</code> in <code>body.rs</code></td>
+</tr>
+<tr>
+<td>TLS errors</td>
+<td>PLAN 8.11: not retried</td>
+<td>Mapped to <code>Network</code>, retryable</td>
+</tr>
+<tr>
+<td>Backoff</td>
+<td>PLAN 8.11: 2, 8, 30 s; per part budget</td>
+<td>2 and 8 s only; no separate budget</td>
+</tr>
+<tr>
+<td>Overload</td>
+<td>PLAN 8.11: halve, recover gradually</td>
+<td>Halve for 60 s, then restore at once</td>
+</tr>
+<tr>
+<td>Orphan uploads</td>
+<td>PLAN 13: ListMultipartUploads cleanup</td>
+<td>Not implemented</td>
+</tr>
+<tr>
+<td>Moves</td>
+<td>PLAN 8.7: journal, “Finish move”</td>
+<td>No move journal</td>
+</tr>
+<tr>
+<td>Move conflicts</td>
+<td>PLAN 8.7: list destination first</td>
+<td><code>HeadObject</code> per item</td>
+</tr>
+<tr>
+<td>Retry delete</td>
+<td>PLAN 8.7: offered after partial move</td>
+<td>No flow passes a retry handler</td>
+</tr>
+<tr>
+<td>Migrations</td>
+<td>PLAN 10: run at startup</td>
+<td>Journal version never checked</td>
+</tr>
+<tr>
+<td>Delete tokens</td>
+<td>SECURITY.md: bulk and folder deletes</td>
+<td>Every delete, even one file</td>
+</tr>
+<tr>
+<td>Webview risk</td>
+<td>PLAN 9.8: one object per call</td>
+<td>Preview returns token and phrase</td>
+</tr>
+<tr>
+<td>Capability</td>
+<td>PLAN 9.4: plugin and updater permissions</td>
+<td>No plugin permissions granted</td>
+</tr>
+<tr>
+<td>Secret types</td>
+<td>PLAN 9.2: no unredacted <code>Debug</code></td>
+<td><code>ConnectionInput</code> derives <code>Debug</code></td>
+</tr>
+<tr>
+<td>Log rotation</td>
+<td>PLAN 9.7: 5 files of 5 MB</td>
+<td>Daily, 5 files, no size cap</td>
+</tr>
+<tr>
+<td>Supply chain</td>
+<td>PLAN 9.8, 18: <code>cargo deny</code></td>
+<td>No <code>deny.toml</code>; CI runs only <code>cargo audit</code></td>
+</tr>
+<tr>
+<td>Release</td>
+<td>PLAN 19: tauri-action, signing, updater</td>
+<td><code>gh release create</code>, unsigned</td>
+</tr>
+<tr>
+<td>CI matrix</td>
+<td>PLAN 19: <code>ubuntu-latest</code></td>
+<td><code>ubuntu-22.04</code></td>
+</tr>
+<tr>
+<td>Tool hashes</td>
+<td>CHANGELOG 0.3.0: checked before each use</td>
+<td>Checked on refresh, rehash if changed</td>
+</tr>
+<tr>
+<td>FFmpeg stop</td>
+<td>Media plan: send q, wait 3 s</td>
+<td>Killed at once (plan table notes it)</td>
+</tr>
+<tr>
+<td>Chapters</td>
+<td>Media plan: keep or skip if lost</td>
+<td>Always mapped, never verified</td>
+</tr>
+<tr>
+<td>Video skips</td>
+<td>Media plan: skip HDR or 10-bit, HEVC</td>
+<td>Skips PQ and HLG; HEVC re-encoded only to AV1</td>
+</tr>
+<tr>
+<td>UI prefs</td>
+<td>PLAN 6.6: Zustand</td>
+<td>TanStack Query <code>settings</code> cache</td>
+</tr>
+<tr>
+<td>Polling</td>
+<td>PLAN 14: no polling</td>
+<td>Two local polls, commented</td>
+</tr>
+<tr>
+<td>Code split</td>
+<td>PLAN 14: lazy screens</td>
+<td>No dynamic imports</td>
+</tr>
+</tbody>
+</table></div>
+<p>In the video row, HDR (high dynamic range) is what the PQ and HLG transfer characteristics that FFmpeg reports signal, and HEVC is the H.265 codec (<a href="/books/r2dock/read/ch027#ch-19">Chapter 19</a>, Video Compression Internals).</p>
+<p>A few smaller mismatches sit in comments rather than documents. The <code>JobState::Compressing</code> doc comment in <code>model.rs</code> says “Audio” though video is compressed too. The <code>load</code> doc in <code>journal.rs</code> says a corrupt file is backed up, which is true only for the snapshot. The comment in the test <code>finished_jobs_are_not_restored</code> says a failed job is not restored, which holds only without resume state. The <code>queue_scale.rs</code> header still mentions only <code>queue.json</code>. In <code>src/lib/errors.ts</code>, <code>isCredentialError</code> and <code>isOfflineError</code> are exported but never imported. The <code>Jurisdiction</code> enum supports default, EU, and FedRAMP, while Cloudflare’s documentation also lists a US jurisdiction. A multipart ETag mismatch after completion only logs a warning, and <code>R2Error::Protocol</code> (including pagination guard failures) is classified as retryable. Three of the four quick tests in <code>compress_scale.rs</code> need <code>R2DOCK_TEST_FFMPEG</code>, which CI sets only on Windows, so on Linux and macOS they return early, and the one marked <code>#[cfg(unix)]</code> never runs with FFmpeg in CI. Finally, CI tests only stable Rust, never the declared <code>rust-version</code> of 1.94, and the release workflow runs no tests of its own.</p>
+<p>Two rows deserve emphasis because they are security relevant. The delete flow is stricter than SECURITY.md says, which is good, but PLAN.md’s threat model understates what a compromised webview can do: <code>delete_preview</code> returns both the token and the typed phrase, so such a page could confirm a folder delete by itself (<a href="/books/r2dock/read/ch034#ch-25">Chapter 25</a>, Threat Modeling and Remaining Risks). And <code>ConnectionInput</code> holds the secret as a plain <code>Option&lt;String&gt;</code> in a type that derives <code>Debug</code>; nothing logs it today, but a future debug statement would.</p>
+</section>
+<section id="improvements-the-evidence-supports" class="level3">
+<h2>Improvements the Evidence Supports</h2>
+<p>Everything in this section is a proposal by the book’s authors, derived from the analysis above. None is implemented at the audited commit, and none is a plan the project has recorded unless stated.</p>
+<p>For durability, the cheapest fix is to sync the parent directory after each snapshot rename and before truncating <code>queue.log</code>, closing the power-loss gap in compaction. Calling <code>persist_now</code> after <code>CreateMultipartUpload</code> and before <code>CompleteMultipartUpload</code> would close the two upload windows at the cost of two small synchronous writes per large upload. A startup sweep of <code>.r2dock-*.tmp</code> files and the <code>ListMultipartUploads</code> cleanup that PLAN.md section 13 already proposes would remove the remaining orphans. Checking <code>JOURNAL_VERSION</code> on load, and backing up <code>queue.log</code> with a corrupt snapshot, would make future format changes and manual repair safer.</p>
+<p>For data integrity, downloads of multipart objects could be verified fully by recomputing per-part MD5s when the part size can be inferred, covering what the 1 MiB margin cannot. A move journal would make interrupted folder moves resumable, as PLAN.md 8.7 describes.</p>
+<p>For security, a native confirmation dialog shown by Rust for prefix deletes would make the delete token meaningful against a compromised page. A redacting <code>Debug</code> implementation, or a secret wrapper type, for <code>ConnectionInput</code> would enforce PLAN.md 9.2 in the type system. Removing the unused core permissions (<code>core:app:allow-version</code>, <code>core:window:allow-is-focused</code>, <code>core:path:default</code>) would shrink the page’s reach. Adding <code>deny.toml</code> and a <code>cargo deny</code> step would match the plan. Signing and notarizing releases, then adding an updater with signed manifests, are already listed as Phase 7 deliverables in PLAN.md.</p>
+<p>For performance, measure first: no benchmark records a scheduling pass or interface responsiveness (the CHANGELOG’s 0.4.1 numbers have no benchmark file). A gradual recovery restricted to genuine 429 and 503 responses would match PLAN.md 8.11. For testing, a CI job on Rust 1.94, <code>R2DOCK_TEST_FFMPEG</code> on Linux and macOS, and a test that kills a real process mid-upload would turn analysis into evidence.</p>
+<p>For documentation, updating PLAN.md’s status line, the benchmark statement, the state diagram, and the text about a Resource Acquisition Is Initialization (RAII) abort guard would remove most of the table above in one change.</p>
+</section>
+<section id="working-on-this-code-31" class="level3">
+<h2>Working on This Code</h2>
+<p>Most items here are good first or second contributions because they are small and well bounded. Documentation fixes touch only <code>PLAN.md</code>, <code>SECURITY.md</code>, and comments in <code>engine/mod.rs</code>, <code>model.rs</code>, and <code>journal.rs</code>; keep the project rule that documents never describe planned features as done. Durability changes belong in <code>crates/r2dock-transfer/src/journal.rs</code> and <code>crates/r2dock-core/src/storage.rs</code>, whose helper is shared with settings and connection files, so test with <code>cargo test -p r2dock-core</code> and <code>cargo test -p r2dock-transfer</code>, and add a reload test next to the existing ones. Security changes in <code>src-tauri</code> need <code>cargo test -p r2dock</code> and must keep <code>build.rs</code>, <code>capabilities/main.json</code>, and <code>src/ipc/commands.ts</code> in agreement. A change that contradicts an Architecture Decision Record (ADR) needs a new ADR in <code>docs/adr/</code>.</p>
+<p>The invariants to protect while improving any of this: recovery may only finish work it can prove; no change may block the async runtime or the event sink; and nothing may weaken the path guard, the rule that no secret crosses Inter-Process Communication (IPC), or the bounded concurrency described in earlier chapters.</p>
+</section>
+<section id="further-reading-31" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li>PLAN.md sections 8.11, 9.8, 12, and 13, read alongside the table above.</li>
+<li><code>crates/r2dock-transfer/src/journal.rs</code> and <code>crates/r2dock-r2/src/bulk.rs</code>.</li>
+<li><code>docs/benchmarks/2026-10-18-compression-at-scale.md</code>.</li>
+<li>tempfile, <a href="https://docs.rs/tempfile/latest/tempfile/struct.NamedTempFile.html#method.persist" target="_blank" rel="noopener noreferrer"><code>NamedTempFile::persist</code></a>, on directory synchronization.</li>
+<li><a href="https://v2.tauri.app/distribute/sign/macos/" target="_blank" rel="noopener noreferrer">Tauri: macOS code signing</a>.</li>
+</ul>
+</section>
+</section>

@@ -34,6 +34,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CATALOGUE = ROOT / "src" / "data" / "books.json"
 WORDS_PER_MINUTE = 220
+MAX_FIGURE_WIDTH = 1400
 
 NS = {
     "opf": "http://www.idpf.org/2007/opf",
@@ -163,7 +164,13 @@ class Book:
         size = image_size(src)
         if src.suffix.lower() == ".png":
             dest = dest_dir / (src.stem + ".webp")
-            subprocess.run(["cwebp", "-quiet", "-q", "82", "-m", "6", str(src), "-o", str(dest)], check=True)
+            # A page is never wider than about 700 CSS px, so 1400 covers a
+            # 2x screen; anything wider is bytes nobody sees.
+            resize = []
+            if size and size[0] > MAX_FIGURE_WIDTH:
+                resize = ["-resize", str(MAX_FIGURE_WIDTH), "0"]
+                size = (MAX_FIGURE_WIDTH, round(size[1] * MAX_FIGURE_WIDTH / size[0]))
+            subprocess.run(["cwebp", "-quiet", "-q", "82", "-m", "6", *resize, str(src), "-o", str(dest)], check=True)
         elif src.suffix.lower() in {".svg", ".jpg", ".jpeg", ".webp", ".gif"}:
             dest = dest_dir / src.name
             shutil.copyfile(src, dest)
@@ -273,6 +280,14 @@ class Book:
         for href in docs:
             root = ET.parse(self.base / href).getroot()
             body = root.find("x:body", NS)
+            # Some books put chapters at h2 (h1 is kept for part dividers).
+            # Lift every heading a level so a chapter opens on an h1 like the
+            # rest of the library, and its sections land on h2.
+            if body.find(".//x:h1", NS) is None and body.find(".//x:h2[@class='chapter']", NS) is not None:
+                for el in body.iter():
+                    m = re.fullmatch(r"\{%s\}h([2-6])" % re.escape(NS["x"]), el.tag)
+                    if m:
+                        el.tag = f"{{{NS['x']}}}h{int(m.group(1)) - 1}"
             h1 = body.find(".//x:h1", NS)
             title_el = h1
             number = None
@@ -287,12 +302,16 @@ class Book:
             spelled = re.match(r"^Chapter\s+(\d+)\s*[:.–—-]\s*(.+)$", title)
             if not number and spelled:
                 number, title = spelled.group(1), spelled.group(2).strip()
-                if len(h1) == 0:
+                # A bare string, or the chapnum/sep/chaptitle spans some
+                # templates split it into; any other markup is left alone.
+                if all(c.get("class") in {"chapnum", "sep", "chaptitle"} for c in h1):
                     # Rewrite it as pandoc would have, so the reader styles the
                     # number the same way in every book.
                     num = ET.Element(f"{{{NS['x']}}}span", {"class": "header-section-number"})
                     num.text, num.tail = number, " " + title
                     h1.text = None
+                    for c in list(h1):
+                        h1.remove(c)
                     h1.append(num)
 
             classes = (h1.get("class") or "") if h1 is not None else ""
@@ -301,6 +320,9 @@ class Book:
                 # Part dividers are a heading and nothing else. They become a
                 # group label in the contents, not a page to turn through.
                 part = title
+                continue
+            if title == meta["title"] and words < 40:
+                # A half-title page: the book's name again, before the contents.
                 continue
 
             # Appendices follow the last part divider in the spine but are not

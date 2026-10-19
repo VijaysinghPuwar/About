@@ -1,0 +1,186 @@
+<section id="ch-15" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">15</span> Crash Consistency and Recovery</h1>
+<p><a href="/books/r2dock/read/ch021#ch-14">Chapter 14</a> (Journals and Persistent Queues) described the files R2Dock writes so that work survives a restart. Crash consistency is the stronger property that, whatever instant the process or the machine stops, the state on disk and on the server can be brought back to something correct without losing user data and without silently doing the wrong thing. This chapter checks that property scenario by scenario at the audited commit, condenses the results into a failure matrix, and lists the remaining gaps. Job states such as <code>Interrupted</code> are defined in <a href="/books/r2dock/read/ch020#ch-13">Chapter 13</a> (Transfer State Machines).</p>
+<section id="two-kinds-of-crash" class="level3">
+<h2>Two Kinds of Crash</h2>
+<p>In a process crash (a panic, a forced quit, <code>kill -9</code>) the operating system keeps running, so every byte passed to <code>write</code> survives in the page cache. Only process memory is lost, such as pending journal changes, and the Tauri <code>RunEvent::Exit</code> handler that calls <code>Engine::flush</code> is skipped.</p>
+<p>In a power loss or operating system crash, the page cache is lost too. The Rust documentation for <a href="https://doc.rust-lang.org/std/fs/struct.File.html#method.sync_all" target="_blank" rel="noopener noreferrer"><code>File::sync_all</code></a> says it “will attempt to ensure that all in-memory data reaches the filesystem before returning”; without it, a recent file can come back shorter, with a tail of zeros, or not at all. R2Dock’s recovery mostly avoids caring which kind of crash happened: it re-checks evidence instead of trusting it.</p>
+</section>
+<section id="where-r2dock-forces-data-to-disk" class="level3">
+<h2>Where R2Dock Forces Data to Disk</h2>
+<p>The non-test transfer code has exactly three sync points. <code>Journal::flush</code> appends the queue log and calls <code>sync_data</code>. Every snapshot of <code>queue.json</code> and <code>journal.json</code> is written to a temporary file, synced with <code>sync_all</code>, and renamed into place by <code>write_bytes_atomic</code> in <code>crates/r2dock-core/src/storage.rs</code>. A finished download’s partial file is synced in <code>download.rs</code> before verification.</p>
+<p>Not synced are a streaming partial download, compressed copies, the history and activity logs, and every directory after a create, rename, or delete; the <a href="https://docs.rs/tempfile/latest/tempfile/struct.NamedTempFile.html#method.persist" target="_blank" rel="noopener noreferrer">tempfile documentation for <code>persist</code></a> warns that “neither the file contents nor the containing directory are synchronized” by a rename.</p>
+</section>
+<section id="the-startup-sequence" class="level3">
+<h2>The Startup Sequence</h2>
+<p><code>Engine::start</code> loads and replays both journals, and <code>Engine::restore</code> merges them, marks every job <code>Interrupted</code>, and computes bytes already done: recorded parts for a multipart upload, the partial file’s length for a download. A compressed copy that is missing, or lacks a digest from an older version, sends the job back to compressing. Hashing the copy is deferred until upload because, as PLAN.md section 12.5 says, “Nothing is read at startup, so a restart with many copies is instant.”</p>
+<p>No job restarts automatically; the user chooses to resume or discard. That is a safety property: files may have changed since the crash, and an unrequested transfer could overwrite something or spend bandwidth. A resumed job runs the normal code path, which consults its saved resume state first. Figure 15.1 summarizes the decisions.</p>
+<figure id="fig-15-recovery-flow">
+<img src="/books/r2dock/media/file19.webp" alt="A top to bottom decision chart. A resumed job branches on its saved resume state. A download whose partial file exists resumes from its length minus one mebibyte; without a partial, a matching finalization record completes the job. A multipart upload still found by ListParts keeps its matching parts; if the upload is gone but HEAD and the ETag match, the job completes. Every other case, including no resume state, starts over under the conflict policy." width="1394" height="1202" loading="lazy" decoding="async">
+<figcaption>Figure 15.1. Decision flow when a restored job is resumed: downloads use their partial file or a matching finalization record, multipart uploads reconcile parts or detect an upload that already completed, and anything without usable evidence starts over under the conflict policy.</figcaption>
+</figure>
+</section>
+<section id="partial-downloads" class="level3">
+<h2>Partial Downloads</h2>
+<p>A download streams into a hidden file beside the target, named by <code>temp_path_for</code>: a dot, the file name, eight hex characters of the job identifier, and <code>.r2dock-part</code>. PLAN.md section 8.5 gives the name as <code>.&lt;name&gt;.r2dock-part</code>; the code adds the job tag so two jobs never share a partial. <a href="/books/r2dock/read/ch016#ch-10">Chapter 10</a> (Downloads and HTTP Range Requests) owns the request mechanics.</p>
+<p>Recovery does not trust the partial’s length. The doc comment on <code>RESUME_BACKOFF</code> (one mebibyte) says: “After a crash or power loss the file can be longer than the data that reached the disk (the tail reads as zeros), so the last stretch is fetched again.” <code>open_temp</code> truncates to the length minus one mebibyte, and the request sends <code>Range</code> with <code>If-Match</code> set to the recorded entity tag (ETag), so a changed object (412 Precondition Failed) or an ignored range restarts the download from zero.</p>
+<p>The margin is a heuristic, not a file system guarantee. At the end, the file’s MD5 is compared with the ETag only when the ETag is a single-part MD5 and the object is not encrypted with a customer key (SSE-C). For multipart objects only the length is checked, so after a power loss a zero-filled hole before the last mebibyte would go undetected. This is an analysis of the code, not an observed failure.</p>
+<p>The resume state naming the partial is saved through the 200 millisecond journal batch. If the process dies first, a resume still picks the same temporary name (it depends only on target and job) and truncates the orphan. It survives only if the user dismisses the job or “Keep both” picks another target; nothing scans for stray <code>.r2dock-part</code> files.</p>
+</section>
+<section id="finishing-a-download-exactly-once" class="level3">
+<h2>Finishing a Download Exactly Once</h2>
+<p>The rename that moves a finished file into place is the delicate moment. If the process stops right after it, the next start finds a resume entry whose partial is gone, and a file of the right size at the destination proves nothing: it could be one the user had all along. R2Dock writes a finalization record synchronously before the rename.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/download.rs#L362-L385" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/download.rs, lines 362 to 385</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">// Record the finished, synced file before moving it, so recovery can</span></span>
+<span id="cb1-2"><span class="co">// tell this file from any other one at the destination.</span></span>
+<span id="cb1-3"><span class="kw">let</span> check <span class="op">=</span> temp<span class="op">.</span>clone()<span class="op">;</span></span>
+<span id="cb1-4"><span class="kw">let</span> written <span class="op">=</span> blocking(<span class="kw">move</span> <span class="op">||</span> <span class="op">{</span></span>
+<span id="cb1-5">    <span class="pp">std::fs::</span>symlink_metadata(<span class="op">&amp;</span>check)</span>
+<span id="cb1-6">        <span class="op">.</span>map(<span class="op">|</span>m<span class="op">|</span> <span class="pp">WrittenFile::</span>of(<span class="op">&amp;</span>m))</span>
+<span id="cb1-7">        <span class="op">.</span>map_err(<span class="op">|</span>e<span class="op">|</span> <span class="pp">JobError::</span>io(<span class="op">&amp;</span>e<span class="op">,</span> <span class="st">"save the download"</span>))</span>
+<span id="cb1-8"><span class="op">}</span>)</span>
+<span id="cb1-9"><span class="op">.</span><span class="kw">await</span><span class="op">?;</span></span>
+<span id="cb1-10">ctx<span class="op">.</span>save_resume(<span class="pp">ResumeState::</span>Download(DownloadState <span class="op">{</span></span>
+<span id="cb1-11">    etag<span class="op">:</span> remote_etag<span class="op">.</span>clone()<span class="op">,</span></span>
+<span id="cb1-12">    temp<span class="op">:</span> temp<span class="op">.</span>clone()<span class="op">,</span></span>
+<span id="cb1-13">    final_path<span class="op">:</span> final_path<span class="op">.</span>clone()<span class="op">,</span></span>
+<span id="cb1-14">    finalized<span class="op">:</span> <span class="cn">Some</span>(written)<span class="op">,</span></span>
+<span id="cb1-15"><span class="op">}</span>))<span class="op">;</span></span>
+<span id="cb1-16"><span class="co">// On disk before the move, not in the next batched save: after a crash</span></span>
+<span id="cb1-17"><span class="co">// right after the move, this record is what tells the moved file apart</span></span>
+<span id="cb1-18"><span class="co">// from someone else's file at the destination.</span></span>
+<span id="cb1-19"><span class="kw">let</span> hooks <span class="op">=</span> ctx<span class="op">.</span>hooks<span class="op">.</span>clone()<span class="op">;</span></span>
+<span id="cb1-20">blocking(<span class="kw">move</span> <span class="op">||</span> <span class="op">{</span></span>
+<span id="cb1-21">    hooks<span class="op">.</span>persist_now()<span class="op">;</span></span>
+<span id="cb1-22">    <span class="cn">Ok</span>(())</span>
+<span id="cb1-23"><span class="op">}</span>)</span>
+<span id="cb1-24"><span class="op">.</span><span class="kw">await</span><span class="op">?;</span></span></code></pre></div>
+<p><code>WrittenFile</code> (in <code>source.rs</code>) holds the length, the modification time in nanoseconds, and on Unix the device and inode numbers, all preserved by a rename; on Windows only length and time exist, which can collide for two quick writes. <code>persist_now</code> performs a full atomic snapshot with <code>sync_all</code>, the one place in the engine that follows the write-ahead rule from <a href="/books/r2dock/read/ch021#ch-14">Chapter 14</a>: intent is durable before the effect.</p>
+<p>On resume, a present partial means the move never happened, so the download resumes. If the partial is gone and <code>find_finalized</code> matches the record against the target or one of up to 1,000 “Keep both” names, the job completes with no network traffic. Otherwise it starts over through <code>resolve_target</code>, and an existing file meets the conflict policy: “Ask” yields <code>NeedsDecision</code>, “Skip” skips, only “Replace” overwrites. Tests in <code>crates/r2dock-transfer/tests/recovery.rs</code> pin this, including <code>finalized_download_completes_after_restart</code>, <code>finalization_record_must_match_the_file</code> (a same-size record from another file forces a repeat), and <code>missing_partial_without_proof_keeps_a_user_file</code>.</p>
+<p>One residual case: non-Replace placement uses <code>persist_noclobber</code>, which per its <a href="https://docs.rs/tempfile/latest/tempfile/struct.NamedTempFile.html#method.persist_noclobber" target="_blank" rel="noopener noreferrer">documentation</a> may leave a second hard link if the process “crashes mid-operation”. Recovery would then resume from the partial, and “Keep both” could create a duplicate. This is inferred, not tested.</p>
+</section>
+<section id="uploads-that-completed-but-were-not-recorded" class="level3">
+<h2>Uploads That Completed but Were Not Recorded</h2>
+<p>Uploads have the mirror problem. A single-request upload (below the 100 MiB default multipart threshold) has no resume state, and its queue entry is removed through the one second queue batch. After a crash in that window it returns as <code>Interrupted</code> and runs again: “Replace” writes the same bytes, “Ask” or “Skip” find the job’s own object and report a conflict or skip, and “Keep both” creates a second copy. PLAN.md section 12.3 calls this safe “because the conflict policy and verification apply”; safe means nothing is overwritten without permission, not that no duplicate appears.</p>
+<p>A multipart upload records its upload ID, part size, source fingerprint, and each part’s ETag and MD5. On resume, <code>upload::multipart</code> first runs <code>reconcile</code>, which calls <code>ListParts</code> (<a href="/books/r2dock/read/ch015#ch-09">Chapter 9</a>, Multipart Uploads in Depth). If the upload no longer exists, <code>finished_before_restart</code> decides whether “the object is already ours”, in the words of the code comment, and if so the job completes. It requires that every planned part was recorded, that the object has the source’s size, and that its ETag equals the multipart ETag computed from the recorded part MD5s (PLAN.md section 8.10). The weak spot is the first condition: parts are recorded through the batched journal, and there is no <code>persist_now</code> before <code>CompleteMultipartUpload</code>. If the last part was not yet recorded, the job starts over under the conflict policy as if the object were someone else’s. The steps between the last part and completion usually take longer than 200 milliseconds, but nothing enforces it.</p>
+</section>
+<section id="multipart-uploads-interrupted-midway" class="level3">
+<h2>Multipart Uploads Interrupted Midway</h2>
+<p>With parts in flight at a crash, <code>reconcile</code> keeps only parts that the journal and server both hold with the same ETag; the rest are sent again under the same part number, which replaces them. A source whose fingerprint (size and modification time) changed aborts the old upload. The test <code>paused_multipart_resumes_after_restart</code> in <code>tests/engine.rs</code> covers a restart.</p>
+<p><code>Inner::finish</code> removes the resume entry only for <code>Completed</code>, <code>Cancelled</code>, and <code>Skipped</code>, but removes the queue entry for <code>Failed</code> too. A multipart upload that exhausted its retries keeps its parts in <code>journal.json</code>, so after a restart <code>restore</code> brings it back as <code>Interrupted</code>. That supports Retry from saved parts, but “failed” is not terminal across restarts. The test <code>finished_jobs_are_not_restored</code> covers only a failed download without resume state.</p>
+<p>The upload ID from <code>CreateMultipartUpload</code> is also saved through the batch. A crash before it lands leaves an unknown upload on R2, and the job creates a new one. Cloudflare’s <a href="https://developers.cloudflare.com/r2/objects/multipart-objects/" target="_blank" rel="noopener noreferrer">multipart documentation</a> states that “incomplete multipart uploads are automatically aborted after 7 days by default”. PLAN.md section 13 proposes a <code>ListMultipartUploads</code> cleanup tool; no code calls that operation.</p>
+</section>
+<section id="orphans-and-interrupted-compression" class="level3">
+<h2>Orphans and Interrupted Compression</h2>
+<p>Snapshot temporaries (<code>.r2dock-&lt;random&gt;.tmp</code>) left by a crash are never removed, but they are small and never read. Compressed copies are the only orphans with an explicit sweep: <code>Engine::sweep_work_dir</code> in <code>engine/compress.rs</code> deletes every regular file in R2Dock’s own work folder that no restored job references. Its doc comment says “Call once at startup, before any encode”, yet the app starts the FFmpeg check that enables encoding in parallel and does not wait for the sweep. A compressed upload added within moments of launch could, in principle, race a slow sweep; the code does not settle that.</p>
+<p>After a crash mid-encode, on Windows a Job Object ends FFmpeg with R2Dock; on macOS and Linux it “exits on the next progress write after R2Dock is gone (the pipe is closed)”, per <code>crates/r2dock-media/src/ffmpeg/run.rs</code> (<a href="/books/r2dock/read/ch025#ch-17">Chapter 17</a>, How FFmpeg Integrates with Rust). The sweep deletes the partial output, and a resume encodes from the start.</p>
+<p>A finished encode is recorded by <code>Hooks::checkpoint</code> (path, size, time, SHA-256 in the resume journal) and <code>save_intent</code> (updated spec in the queue), so it is not repeated. The copy was never synced, so before every upload attempt <code>gate_copy</code> runs <code>check_copy</code>, which re-verifies the original and the copy’s length, time, and SHA-256. A mismatch sends the job back to be recompressed or uploaded as the original: a damaged copy costs time, never a corrupted upload. <a href="/books/r2dock/read/ch028#ch-20">Chapter 20</a> (Compression Scheduling and Data Integrity) covers the digest.</p>
+</section>
+<section id="crash-during-compaction" class="level3">
+<h2>Crash During Compaction</h2>
+<p>Queue compaction writes and syncs a snapshot, renames it over <code>queue.json</code>, and truncates <code>queue.log</code>. A process crash at any step is safe: before the rename the old files are intact, after it the old log’s generation is skipped. Power loss leaves a theoretical gap, because neither the directory nor the truncation is synced: a file system that persisted the truncation but not the rename would yield the old snapshot and an empty log, losing every change since. This book did not test whether any file system reorders them that way. The resume journal has no log, so a lost rename there only restores an older snapshot, which recovery re-checks.</p>
+</section>
+<section id="the-failure-matrix" class="level3">
+<h2>The Failure Matrix</h2>
+<p>The table lists each scenario, what recovery does, and the result for the user.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Recovery does</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Kill mid-download</td>
+<td>Drop 1 MiB, Range with If-Match</td>
+<td>Resumes</td>
+</tr>
+<tr>
+<td>Power loss mid-download</td>
+<td>Same; MD5 if single-part ETag</td>
+<td>Resumes; multipart hole possible</td>
+</tr>
+<tr>
+<td>Crash after placing download</td>
+<td>Match finalization record</td>
+<td>Completed, no transfer</td>
+</tr>
+<tr>
+<td>Crash mid multipart upload</td>
+<td>ListParts, keep matching parts</td>
+<td>Sends missing parts</td>
+</tr>
+<tr>
+<td>Multipart done, fully recorded</td>
+<td>HEAD size and multipart ETag</td>
+<td>Completed, no transfer</td>
+</tr>
+<tr>
+<td>Done, last part unrecorded</td>
+<td>Start over under policy</td>
+<td>Conflict, skip, or duplicate</td>
+</tr>
+<tr>
+<td>Single PUT done, unrecorded</td>
+<td>Run again under policy</td>
+<td>Same bytes, conflict, or duplicate</td>
+</tr>
+<tr>
+<td>Crash before upload ID saved</td>
+<td>New multipart upload</td>
+<td>R2 aborts orphan later</td>
+</tr>
+<tr>
+<td>Crash mid-encode</td>
+<td>Sweep deletes output</td>
+<td>Encode runs again</td>
+</tr>
+<tr>
+<td>Crash after encode recorded</td>
+<td>SHA-256 check before upload</td>
+<td>Uses copy or re-encodes</td>
+</tr>
+<tr>
+<td>Power loss in compaction</td>
+<td>Nothing detects it</td>
+<td>Recent changes may be lost</td>
+</tr>
+<tr>
+<td>Corrupt queue snapshot</td>
+<td>Empty queue, log discarded</td>
+<td>Queued jobs lost</td>
+</tr>
+</tbody>
+</table></div>
+<p>The pattern is consistent. Where the server or file system can prove what happened (a matching ETag, file identity, or digest), recovery completes or continues the job without waste. Without proof, the work is repeated under the conflict policy, which may waste bandwidth, prompt, or duplicate, but never silently overwrites. State is lost only in the last two rows, which concern the queue file itself.</p>
+</section>
+<section id="gaps-and-possible-improvements" class="level3">
+<h2>Gaps and Possible Improvements</h2>
+<p>These are suggestions, not plans in the repository. Syncing the parent directory after each snapshot rename closes the compaction gap. Calling <code>persist_now</code> after <code>CreateMultipartUpload</code> and before <code>CompleteMultipartUpload</code> closes both upload windows. Cleaning up <code>.r2dock-*.tmp</code> files and stale multipart uploads at startup removes the remaining orphans. Keeping <code>queue.log</code> beside a corrupt <code>queue.json</code> preserves evidence. Recomputing per-part MD5s for multipart downloads, when the part size is known, covers the hole the margin cannot.</p>
+</section>
+<section id="working-on-this-code-14" class="level3">
+<h2>Working on This Code</h2>
+<p>Startup recovery is <code>Engine::start</code> and <code>Engine::restore</code> in <code>crates/r2dock-transfer/src/engine/mod.rs</code>. Download recovery is at the top of <code>run</code> in <code>download.rs</code> with <code>find_finalized</code> and <code>place</code>; multipart recovery is <code>reconcile</code> and <code>finished_before_restart</code> in <code>upload.rs</code>; <code>check_copy</code> and <code>sweep_work_dir</code> are in <code>engine/compress.rs</code>; <code>WrittenFile</code> is in <code>source.rs</code>.</p>
+<p>Recovery tests build a crashed state by hand: write a journal with <code>Journal::load</code> and <code>flush</code>, then start a fresh engine on the same folder against the in-process S3 server from <code>r2dock-testkit</code>. That is far more reliable than killing a process at the right moment. Run <code>cargo test -p r2dock-transfer --test recovery</code> and <code>cargo test -p r2dock-transfer --test engine</code>.</p>
+<p>Never replace a file at a download destination unless the policy is Replace, even in recovery; a shortcut must prove the file is the job’s own. Re-validate destinations through the path guard (<code>revalidate</code>, <a href="/books/r2dock/read/ch032#ch-23">Chapter 23</a>) before reusing a partial or moving a file. Never start transfers automatically. Give every new temporary file an owner that removes it, or a sweep that proves it is unreferenced.</p>
+</section>
+<section id="further-reading-14" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>crates/r2dock-transfer/tests/recovery.rs</code> and the restart tests in <code>tests/engine.rs</code>.</li>
+<li><code>crates/r2dock-transfer/src/download.rs</code> (finalization record) and <code>upload.rs</code>.</li>
+<li>Rust standard library, <a href="https://doc.rust-lang.org/std/fs/struct.File.html#method.sync_all" target="_blank" rel="noopener noreferrer"><code>File::sync_all</code></a>.</li>
+<li>tempfile, <a href="https://docs.rs/tempfile/latest/tempfile/struct.NamedTempFile.html#method.persist" target="_blank" rel="noopener noreferrer"><code>persist</code> and <code>persist_noclobber</code></a>.</li>
+<li>Cloudflare R2, <a href="https://developers.cloudflare.com/r2/objects/multipart-objects/" target="_blank" rel="noopener noreferrer">Multipart upload objects</a>.</li>
+</ul>
+</section>
+</section>

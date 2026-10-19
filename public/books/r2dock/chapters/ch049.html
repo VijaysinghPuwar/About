@@ -1,0 +1,209 @@
+<section id="glossary" class="level2 chapter">
+<h1 class="chapter">Glossary</h1>
+<section id="a" class="level3">
+<h2>A</h2>
+<p><strong>Active state.</strong> A job state that holds a job slot: <code>Preparing</code>, <code>Running</code>, <code>Retrying</code>, or <code>Verifying</code>, as defined by <code>JobState::is_active</code>.</p>
+<p><strong>Activity log.</strong> R2Dock’s daily CSV file of user actions and transfer outcomes, written by a dedicated thread with a bounded queue so that no caller waits on the disk.</p>
+<p><strong>AppError.</strong> R2Dock’s serializable error type that crosses the IPC boundary, carrying a code, a message, an optional detail, and a retryable flag.</p>
+<p><strong>AppState.</strong> The struct of shared services (connections, engine, registries, activity log, compression) that the Tauri application registers at startup and passes to commands.</p>
+<p><strong>Arc.</strong> An atomically reference-counted shared pointer from the Rust standard library, used to share one value between threads and tasks.</p>
+<p><strong>Atomic.</strong> An integer or flag updated indivisibly without a lock, with a memory ordering that defines what other threads observe.</p>
+</section>
+<section id="b" class="level3">
+<h2>B</h2>
+<p><strong>Backend confirmation token.</strong> A single-use, expiring identifier returned by a preview command that names the exact work a later execute command may perform, used for deletes and moves.</p>
+<p><strong>Backpressure.</strong> A design in which a slow consumer makes its producer slow down, instead of buffering the surplus without limit or dropping it.</p>
+<p><strong>Bitrate.</strong> The number of bits used per second of media; R2Dock computes a file’s real bitrate as its size minus any cover art, times eight, divided by its duration.</p>
+</section>
+<section id="c" class="level3">
+<h2>C</h2>
+<p><strong>Cancellation safety.</strong> Whether dropping an unfinished future loses data or a queue position; it matters for every branch of <code>select!</code>.</p>
+<p><strong>CancellationToken.</strong> A cloneable signal from tokio-util whose <code>cancel</code> wakes every task waiting on it.</p>
+<p><strong>Canonical equivalence.</strong> Unicode’s notion that different code point sequences, such as a precomposed letter and a base letter plus a combining mark, represent the same text.</p>
+<p><strong>Capability (Tauri).</strong> A configuration file that grants a set of permissions to named windows; R2Dock’s is <code>src-tauri/capabilities/main.json</code>.</p>
+<p><strong>Capability token (media token).</strong> An unguessable identifier whose possession alone grants access to one resource, in R2Dock one object for one hour through the preview protocol.</p>
+<p><strong>Channel (Tauri).</strong> An ordered, fast stream of messages from Rust to a JavaScript <code>Channel</code> object passed as a command argument; R2Dock uses one for transfer events.</p>
+<p><strong>Code signing.</strong> Attaching a cryptographic signature that identifies the publisher of a program and detects tampering; R2Dock’s releases are not yet signed.</p>
+<p><strong>Command (Tauri).</strong> A Rust function marked <code>#[tauri::command]</code> that the frontend calls by name with <code>invoke</code>; R2Dock has 56.</p>
+<p><strong>Common prefix.</strong> A ListObjectsV2 result that rolls up all keys sharing a prefix up to the next delimiter; R2Dock shows each as a folder.</p>
+<p><strong>Compaction.</strong> Folding a change log into a new snapshot with the next generation and truncating the log; the queue compacts when the log reaches 1 MiB and the snapshot’s size, after a failed snapshot, and at load.</p>
+<p><strong>Compressed copy.</strong> The verified encode in R2Dock’s work folder that replaces the original in an upload, tracked with a SHA-256 digest and checked before each upload attempt.</p>
+<p><strong>Conditional request.</strong> A request carrying a precondition, such as <code>If-None-Match</code> or <code>x-amz-copy-source-if-match</code>, that the service evaluates and rejects with 412 if it does not hold.</p>
+<p><strong>Conflict policy.</strong> The rule for an upload or download whose destination exists: Ask, Skip, Replace, or Keep both.</p>
+<p><strong>Connection generation.</strong> A counter that increases when a connection’s settings or credentials change, used to discard stale cache entries.</p>
+<p><strong>Content Security Policy (CSP).</strong> Browser-enforced rules listing which origins may supply scripts, images, styles, and connections to a page.</p>
+<p><strong>Content-MD5.</strong> A request header carrying the base64 MD5 of the body, which lets the server reject a body corrupted in transit.</p>
+<p><strong>Continuation token.</strong> An opaque token returned with a truncated ListObjectsV2 page and passed back to fetch the next page.</p>
+<p><strong>Copy on write (reducer).</strong> Copying the job map or order array at most once per batch of events, only when the batch first needs to write.</p>
+<p><strong>Copy, verify, delete.</strong> R2Dock’s move sequence: copy the inspected source version, confirm the destination copy and the unchanged source, and only then delete the source.</p>
+<p><strong>Core process.</strong> The Rust process of a Tauri application, the only component with full operating system access.</p>
+<p><strong>Counting semaphore.</strong> A counter of permits where acquiring takes one, waiting if none remain, and releasing returns one, so at most N holders exist at once.</p>
+<p><strong>Crash consistency.</strong> The property that any crash point leaves state from which recovery can reach a correct state.</p>
+<p><strong>Credential scope.</strong> The <code>date/region/service/aws4_request</code> string that binds a SigV4 signature to one day, region, and service; R2 uses the region <code>auto</code>.</p>
+<p><strong>CRF (constant rate factor).</strong> The constant-quality setting of x264 and SVT-AV1; a lower value means higher quality and larger files.</p>
+<p><strong>Custom domain (R2).</strong> A host name in the user’s Cloudflare zone connected to a bucket for public reads.</p>
+<p><strong>Custom URI scheme.</strong> An application-registered URL scheme, here <code>r2dock-media</code>, whose requests the webview routes to an in-process handler instead of the network.</p>
+</section>
+<section id="d" class="level3">
+<h2>D</h2>
+<p><strong>Debounce.</strong> Delaying an action until events stop for a set time, such as R2Dock’s 800 millisecond listing refresh after completions.</p>
+<p><strong>DeleteObjects quiet mode.</strong> A multi-object delete response mode in which only failed keys are reported.</p>
+<p><strong>Drop guard.</strong> A value whose <code>Drop</code> implementation performs cleanup on every exit path, including early returns and cancellation.</p>
+</section>
+<section id="e" class="level3">
+<h2>E</h2>
+<p><strong>Encoder gate.</strong> The condition in <code>schedule_compression</code> that starts a new encode only while running encodes, ready copies, and copy bytes stay below their limits.</p>
+<p><strong>Engine.</strong> The transfer engine in <code>crates/r2dock-transfer</code>: the job table, scheduler, progress ticker, journals, and the tasks that run uploads and downloads.</p>
+<p><strong>Enum.</strong> A Rust type whose value is one of several variants, each of which may carry data.</p>
+<p><strong>ETag.</strong> An opaque version identifier for an object; it equals the content MD5 only for single-part uploads without SSE-C.</p>
+</section>
+<section id="f" class="level3">
+<h2>F</h2>
+<p><strong>Fault injection.</strong> Deliberately causing failures, such as lost responses, slow links, or stuck processes, to test recovery paths.</p>
+<p><strong>Finalization record.</strong> The <code>finalized</code> field of a download’s resume state (length, modification time, file identity), written synchronously before the partial is moved into place so a restart can recognize the moved file.</p>
+<p><strong>Fingerprint.</strong> A file’s length plus its modification time in nanoseconds, used to detect that a source file changed.</p>
+<p><strong>Folder marker.</strong> A zero-byte object whose key ends in <code>/</code>, created so an empty folder appears in listings; R2Dock hides it from its own listing.</p>
+<p><strong>Future.</strong> A Rust value representing an asynchronous computation that makes progress only when polled.</p>
+<p><strong>FuturesUnordered.</strong> A collection that polls many futures in one task and yields their results in completion order; each multipart job keeps its parts in one.</p>
+</section>
+<section id="g" class="level3">
+<h2>G</h2>
+<p><strong>Generated bindings.</strong> The TypeScript files in <code>src/ipc/bindings/</code>, produced from Rust types by ts-rs and checked in CI with <code>git diff --exit-code</code>.</p>
+<p><strong>Generation number.</strong> A counter stored in the queue snapshot and on each log line; replay skips lines whose generation differs from the snapshot’s.</p>
+<p><strong>Ghost row.</strong> A temporary explorer row for an upload into the open folder that the listing does not show yet.</p>
+<p><strong>Group (transfer group).</strong> Jobs created from one folder or multi-file selection that share a <code>GroupInfo</code> and appear as one row; the scheduler balances slots between groups.</p>
+</section>
+<section id="h" class="level3">
+<h2>H</h2>
+<p><strong>Head of line blocking.</strong> A queue’s first item cannot proceed and items behind it wait, although they could proceed on their own.</p>
+</section>
+<section id="i" class="level3">
+<h2>I</h2>
+<p><strong>Idempotent operation.</strong> An operation whose repetition has the same effect as performing it once.</p>
+<p><strong>If-Match.</strong> An HTTP precondition that the target still has a given ETag; R2Dock uses it to pin a resumed download to one object version.</p>
+<p><strong>Ignored test.</strong> A Rust test marked <code>#[ignore]</code>, run only with <code>--ignored</code> or <code>--include-ignored</code>.</p>
+<p><strong>Inter-Process Communication (IPC).</strong> The message path between the webview running React and the Rust core; in Tauri, JSON-serialized commands, events, and channels.</p>
+<p><strong>Interrupted.</strong> The state given to every job restored at startup; nothing restarts until the user resumes or discards it.</p>
+<p><strong>Invalidation.</strong> Marking cached queries stale so mounted ones refetch; <code>resetQueries</code> instead returns them to their initial state.</p>
+</section>
+<section id="j" class="level3">
+<h2>J</h2>
+<p><strong>Job.</strong> One upload or download of exactly one file, described by a <code>JobSpec</code> and tracked by a <code>JobSnapshot</code>.</p>
+<p><strong>Job Object.</strong> A Windows mechanism that groups processes so they can be terminated together; R2Dock runs FFmpeg inside one.</p>
+<p><strong>Job slot.</strong> One of the configured number (default 3) of jobs allowed in an active state at once, computed by counting active jobs rather than held as an object.</p>
+<p><strong>JobCtx.</strong> The context handed to a running upload or download: client, run control, byte counter, part semaphore, limits, resume state, and hooks.</p>
+<p><strong>JobHooks.</strong> The trait through which upload and download code reports state, parts, renames, sizes, and checkpoints back to the engine.</p>
+<p><strong>Journal entry.</strong> One saved job (<code>JournalEntry</code>): its identifier, spec, group, resume state, creation time, and sequence number.</p>
+</section>
+<section id="k" class="level3">
+<h2>K</h2>
+<p><strong>Keep both.</strong> The conflict policy that uploads or downloads under a numbered new name when the destination exists.</p>
+</section>
+<section id="l" class="level3">
+<h2>L</h2>
+<p><strong>Logged journal.</strong> R2Dock’s queue persistence: a JSON snapshot (<code>queue.json</code>) plus an append-only JSON-lines change log (<code>queue.log</code>).</p>
+<p><strong>Lossless and lossy codec.</strong> A lossless codec (FLAC, ALAC) reproduces samples exactly; a lossy codec (MP3, AAC, Opus) discards information to save space and cannot be reversed.</p>
+</section>
+<section id="m" class="level3">
+<h2>M</h2>
+<p><strong>Marker tag.</strong> The metadata <code>R2DOCK_COMPRESSED=&lt;preset&gt;</code> written into non-MP4 compressed outputs to prevent compressing them again.</p>
+<p><strong>Multipart ETag.</strong> The MD5 of the concatenated binary part MD5s, followed by a dash and the part count.</p>
+<p><strong>Multipart upload.</strong> Uploading an object as numbered parts that the service joins on completion; R2Dock uses it at or above the 100 MiB default threshold.</p>
+<p><strong>Mutex and RwLock.</strong> Locks giving exclusive access, or shared read and exclusive write access, through guards that unlock when dropped.</p>
+</section>
+<section id="n" class="level3">
+<h2>N</h2>
+<p><strong>NeedsDecision.</strong> The job state for a transfer whose destination exists under the Ask policy, waiting for the user to choose.</p>
+<p><strong>NFC and NFD.</strong> Unicode normalization forms; NFD fully decomposes characters, NFC decomposes and then recomposes them.</p>
+<p><strong>No-clobber persist.</strong> Moving a temporary file to a name only if nothing exists there, with tempfile’s <code>persist_noclobber</code>.</p>
+<p><strong>Notarization.</strong> Apple’s service that scans a Developer ID signed app and issues a ticket so Gatekeeper accepts it.</p>
+<p><strong>Notify.</strong> A Tokio primitive that wakes a waiting task and stores one permit if nobody is waiting, so repeated notifications coalesce.</p>
+</section>
+<section id="o" class="level3">
+<h2>O</h2>
+<p><strong>oneshot and mpsc channel.</strong> Tokio channels for a single value, and for many producers sending to one consumer.</p>
+<p><strong>O_NOFOLLOW.</strong> A Unix open flag that makes opening fail if the final path component is a symbolic link.</p>
+<p><strong>Opaque identifier.</strong> A random string that stands for data kept in Rust, such as a selection or a plan, so the webview never holds the data itself.</p>
+<p><strong>Optimistic update.</strong> Writing the expected result into a cache before the server confirms it, with rollback on error.</p>
+<p><strong>Opus.</strong> An open audio codec (RFC 6716) combining a speech layer and a music layer, from 6 to 510 kbit/s.</p>
+<p><strong>OwnedSemaphorePermit.</strong> Tokio’s permit returned by <code>acquire_owned</code> on an <code>Arc&lt;Semaphore&gt;</code>; it keeps its own reference to the semaphore and releases the permit when dropped.</p>
+<p><strong>Ownership.</strong> Rust’s rule that each value has one owner and is dropped when the owner goes out of scope.</p>
+</section>
+<section id="p" class="level3">
+<h2>P</h2>
+<p><strong>Page cache.</strong> Operating system memory holding recently used file data; writes there survive a process crash but not a power loss.</p>
+<p><strong>Part permit.</strong> One of the <code>global_parts</code> (default 8) permits of the <code>part_slots</code> semaphore, required to send one multipart part request.</p>
+<p><strong>Partial file.</strong> The hidden <code>.&lt;name&gt;.&lt;tag&gt;.r2dock-part</code> file a download writes into before it is moved into place.</p>
+<p><strong>Path guard.</strong> R2Dock’s module, <code>crates/r2dock-core/src/path_guard.rs</code>, that maps untrusted object keys to safe local paths.</p>
+<p><strong>Path traversal.</strong> Making a program access files outside an intended folder by injecting <code>..</code> segments or absolute paths.</p>
+<p><strong>Path-style addressing.</strong> Putting the bucket name in the URL path instead of the host name; R2Dock forces it.</p>
+<p><strong>Permission (Tauri).</strong> A named privilege that allows or denies specific commands; it takes effect only when a capability references it.</p>
+<p><strong>Plain journal.</strong> R2Dock’s <code>journal.json</code>, a single JSON snapshot of resumable state rewritten atomically on every save.</p>
+<p><strong>Poisoning.</strong> The state of a standard library mutex after a thread panicked while holding it; parking_lot locks do not poison.</p>
+<p><strong>Presigned URL.</strong> An S3 URL with a signature in its query string that grants temporary access without other credentials.</p>
+<p><strong>Process group.</strong> A Unix mechanism for signaling a process and its children together; R2Dock starts FFmpeg in its own group.</p>
+<p><strong>Property-based test.</strong> A test that checks a rule against many generated inputs and shrinks a failing input to a minimal case; R2Dock uses proptest.</p>
+<p><strong>Public base URL.</strong> A per-bucket URL entered by the user from which R2Dock builds public links.</p>
+</section>
+<section id="q" class="level3">
+<h2>Q</h2>
+<p><strong>Query key.</strong> The array identifying a TanStack Query cache entry; R2Dock uses forms such as <code>["objects", connectionId, bucket, prefix]</code>.</p>
+</section>
+<section id="r" class="level3">
+<h2>R</h2>
+<p><strong>r2.dev domain.</strong> A Cloudflare-managed public subdomain for a bucket, rate limited and intended for development.</p>
+<p><strong>Range request.</strong> An HTTP request with a <code>Range</code> header asking for part of a resource, answered with 206 and <code>Content-Range</code>.</p>
+<p><strong>Read model.</strong> A frontend projection of state owned elsewhere, such as the transfer store rebuilt from a snapshot and patched by events.</p>
+<p><strong>Ready copy.</strong> A compressed copy whose job is queued for upload or uploading; the encoder gate limits how many exist.</p>
+<p><strong>Registry.</strong> R2Dock’s expiring map from opaque random identifiers to selections, plans, or pending operations, with a 15 minute lifetime and 256 entries at most.</p>
+<p><strong>Request-boundary hook.</strong> A callback in a mock server that runs between applying a request and responding, letting a test change state at an exact moment.</p>
+<p><strong>Resume state.</strong> The <code>ResumeState</code> saved for a job: none, a multipart upload’s ID and finished parts, or a download’s partial file and ETag.</p>
+<p><strong>Retry storm.</strong> Many clients or jobs retrying at once against a failure that retries cannot fix.</p>
+<p><strong>RunControl.</strong> The per-run object holding a job’s stop reason (none, pause, cancel) and its <code>cancel</code> and <code>stopping</code> cancellation tokens.</p>
+<p><strong>Runtime.</strong> The Tokio executor and reactor that poll tasks on worker threads.</p>
+</section>
+<section id="s" class="level3">
+<h2>S</h2>
+<p><strong>Secret Service.</strong> The freedesktop D-Bus interface for secret storage on Linux, implemented by GNOME Keyring and KWallet.</p>
+<p><strong>select!.</strong> A Tokio macro that waits on several futures, runs the branch of the first to complete, and drops the others.</p>
+<p><strong>Selection.</strong> An opaque identifier for local paths the user chose in a native picker or by drag and drop.</p>
+<p><strong>Server state.</strong> Data whose source of truth is outside the webview, such as R2 listings or Rust settings, cached in the frontend with TanStack Query.</p>
+<p><strong>Server-side copy.</strong> A copy performed inside the storage service; the client sends a request but no object bytes.</p>
+<p><strong>Session-only mode.</strong> R2Dock’s fallback when no credential store is available: secrets stay in process memory until the app quits.</p>
+<p><strong>SHA256SUMS.txt.</strong> A list of SHA-256 digests for release files, proving integrity but not authenticity.</p>
+<p><strong>Signature Version 4 (SigV4).</strong> The AWS request signing protocol, in which the client signs a canonical form of each request with a key derived from the secret, date, region, and service.</p>
+<p><strong>SmartScreen.</strong> Windows’ reputation-based warning for downloaded programs.</p>
+<p><strong>spawn_blocking.</strong> A Tokio function that runs a closure on the blocking thread pool, keeping blocking work off the async workers; it cannot be aborted once started.</p>
+<p><strong>Stalled stream protection.</strong> An AWS SDK feature that fails a body stream that moves no data for a grace period (60 seconds in R2Dock).</p>
+</section>
+<section id="t" class="level3">
+<h2>T</h2>
+<p><strong>Task.</strong> A future spawned onto the Tokio runtime and scheduled independently.</p>
+<p><strong>Tauri event.</strong> A named broadcast with a JSON payload, not meant for high throughput; R2Dock uses one for drag and drop.</p>
+<p><strong>Terminal state.</strong> <code>Completed</code>, <code>Cancelled</code>, or <code>Skipped</code>, as defined by <code>JobState::is_terminal</code>; <code>Failed</code> is not in that set.</p>
+<p><strong>thiserror.</strong> A derive macro that generates <code>std::error::Error</code> and <code>Display</code> implementations for error types.</p>
+<p><strong>TOCTOU (time of check to time of use).</strong> A race in which what a program checked changes before the program acts on it.</p>
+<p><strong>Torn write.</strong> A write cut short by a crash, leaving an incomplete record at the end of a file.</p>
+<p><strong>Trait.</strong> A named set of methods that types can implement; R2Dock uses traits as seams between layers.</p>
+<p><strong>Trait object.</strong> A value of type <code>dyn Trait</code> whose concrete type is chosen at runtime and called through a vtable.</p>
+<p><strong>Transfer function (PQ, HLG).</strong> The mapping from stored values to brightness; PQ and HLG are the high dynamic range curves.</p>
+<p><strong>ts-rs.</strong> A Rust crate that generates TypeScript type definitions from Rust types when <code>cargo test</code> runs.</p>
+<p><strong>Typed confirmation.</strong> A safeguard requiring the user to type a phrase, such as a folder name, before a large or folder delete.</p>
+</section>
+<section id="u" class="level3">
+<h2>U</h2>
+<p><strong>Upload ID.</strong> The identifier returned by <code>CreateMultipartUpload</code> that ties the parts and the final completion together.</p>
+</section>
+<section id="v" class="level3">
+<h2>V</h2>
+<p><strong>Virtualization.</strong> Rendering only the visible items of a long list, plus overscan, inside a container sized to the full list.</p>
+<p><strong>VMAF.</strong> Video Multi-Method Assessment Fusion, a perceptual quality score comparing a distorted video with a reference.</p>
+</section>
+<section id="w" class="level3">
+<h2>W</h2>
+<p><strong>Watchdog.</strong> A timer that kills FFmpeg after 120 seconds without any output line, reported as <code>RunError::Stalled</code>.</p>
+<p><strong>Webview process.</strong> The operating system webview (WebView2, WKWebView, or WebKitGTK) that renders the React interface.</p>
+<p><strong>Workspace (Cargo).</strong> A set of Cargo packages built together with one lockfile and shared settings.</p>
+<p><strong>Write-ahead logging (WAL).</strong> A database technique in which a change’s log record is made durable before the change is applied.</p>
+</section>
+</section>

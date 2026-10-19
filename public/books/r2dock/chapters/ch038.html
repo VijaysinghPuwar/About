@@ -1,0 +1,135 @@
+<section id="ch-28" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">28</span> UI Performance and Large Queues</h1>
+<p>A cloud file manager can overwhelm its own window in two ways. One is size: a folder can hold tens of thousands of objects, far more table rows than a webview can lay out smoothly. The other is rate: a folder upload enqueues thousands of jobs that each change state several times and report progress continuously, and if every change caused its own React render, the main thread would never get back to the user. R2Dock answers size with virtualization and rate with a pipeline of throttling and batching that starts in Rust and ends in a pure reducer. <a href="/books/r2dock/read/ch036#ch-26">Chapter 26</a> (React and Tauri IPC) described the channel and <a href="/books/r2dock/read/ch037#ch-27">Chapter 27</a> (Frontend State Management) the stores.</p>
+<section id="targets-without-measurements" class="level3">
+<h2>Targets Without Measurements</h2>
+<p>PLAN.md requirement N8 asks that the “UI stays responsive (no frame longer than about 100 ms from app logic) with 10,000 loaded rows and 500 queued transfers,” and section 14 targets “no long tasks over 50 ms” while scrolling 10,000 rows. Both are provisional, and section 14 opens with “No benchmark numbers exist yet.” That is still true for the frontend: the reports in <code>docs/benchmarks/</code> cover the activity log, the transfer engine (<code>2026-10-17-stress.md</code>, up to 3,012 files against an in-process S3 server, Rust only), and compression, but none measures the webview. This chapter therefore describes mechanisms and the tests that pin their behavior, not frame times.</p>
+</section>
+<section id="two-throttles-and-a-debounce" class="level3">
+<h2>Two Throttles and a Debounce</h2>
+<p>Figure 28.1 shows the path from the engine to the screen, with each stage that reduces the rate of work.</p>
+<figure id="fig-28-event-batching">
+<img src="/books/r2dock/media/file34.webp" alt="A vertical pipeline. The Rust engine sends state changes immediately and progress once per 250 ms over an ordered channel. A JavaScript buffer flushes after 50 ms into reduceTransferBatch, which copies on write once, then into useTransferStore with one set call per batch, and finally to useShallow, useMemo, and visible rows only. A dashed branch from the buffer goes to afterEvent for toasts and idle checks, and on completion to scheduleRefresh with an 800 ms debounce." width="944" height="1446" loading="lazy" decoding="async">
+<figcaption>Figure 28.1. The transfer event pipeline from the Rust engine through the channel, a 50 ms buffer, one reducer call and one store update per batch, to memoized, virtualized rendering, with a side path that debounces cache refresh by 800 ms.</figcaption>
+</figure>
+<p>On the engine side, owned by <a href="/books/r2dock/read/ch011#ch-06">Chapter 6</a> (The Transfer Scheduler), workers only increment per-job counters. <code>progress_ticker</code> in <code>crates/r2dock-transfer/src/engine/mod.rs</code> wakes when a job becomes active and every <code>progress_interval</code> (250 milliseconds by default) emits one <code>Progress</code> event listing every active job whose bytes changed or whose speed is known. Eight running uploads mean four progress events per second, not thirty-two. PLAN.md section 12.4 says “at most every 250 ms per active job”; the code is stricter. State changes are not throttled: <code>set_state</code> emits <code>Updated</code> with a full <code>JobSnapshot</code> on every transition, and <code>enqueue</code> emits <code>Added</code> in chunks of at most 500 jobs “to keep IPC messages small.” A folder of small files can therefore produce thousands of <code>Updated</code> events back to back.</p>
+<p>The frontend never applies events as they arrive.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src/features/transfers/subscription.ts#L163-L184" target="_blank" rel="noopener noreferrer">src/features/transfers/subscription.ts, lines 163 to 184</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb1-1"><span class="co">/** Subscribe to transfer events once for the app's lifetime. */</span></span>
+<span id="cb1-2"><span class="im">export</span> <span class="kw">function</span> <span class="fu">startTransferSubscription</span>(client<span class="op">:</span> QueryClient)<span class="op">:</span> <span class="dt">void</span> {</span>
+<span id="cb1-3">  <span class="cf">if</span> (started) <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb1-4">  started <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb1-5">  <span class="co">// ...</span></span>
+<span id="cb1-6">  <span class="kw">let</span> pending<span class="op">:</span> TransferEvent[] <span class="op">=</span> []<span class="op">;</span></span>
+<span id="cb1-7">  <span class="kw">const</span> flush <span class="op">=</span> () <span class="kw">=&gt;</span> {</span>
+<span id="cb1-8">    <span class="kw">const</span> events <span class="op">=</span> pending<span class="op">;</span></span>
+<span id="cb1-9">    pending <span class="op">=</span> []<span class="op">;</span></span>
+<span id="cb1-10">    <span class="kw">const</span> before <span class="op">=</span> useTransferStore<span class="op">.</span><span class="fu">getState</span>()<span class="op">.</span><span class="at">jobs</span><span class="op">;</span></span>
+<span id="cb1-11">    useTransferStore<span class="op">.</span><span class="fu">getState</span>()<span class="op">.</span><span class="fu">applyMany</span>(events)<span class="op">;</span></span>
+<span id="cb1-12">    <span class="cf">for</span> (<span class="kw">const</span> <span class="bu">event</span> <span class="kw">of</span> events) <span class="fu">afterEvent</span>(client<span class="op">,</span> before<span class="op">,</span> <span class="bu">event</span>)<span class="op">;</span></span>
+<span id="cb1-13">  }<span class="op">;</span></span>
+<span id="cb1-14">  <span class="fu">transferSubscribe</span>((<span class="bu">event</span>) <span class="kw">=&gt;</span> {</span>
+<span id="cb1-15">    <span class="cf">if</span> (pending<span class="op">.</span><span class="at">length</span> <span class="op">===</span> <span class="dv">0</span>) <span class="pp">setTimeout</span>(flush<span class="op">,</span> FLUSH_MS)<span class="op">;</span></span>
+<span id="cb1-16">    pending<span class="op">.</span><span class="fu">push</span>(<span class="bu">event</span>)<span class="op">;</span></span>
+<span id="cb1-17">  })<span class="op">.</span><span class="fu">catch</span>((e<span class="op">:</span> <span class="dt">unknown</span>) <span class="kw">=&gt;</span> {</span>
+<span id="cb1-18">    started <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb1-19">    toast<span class="op">.</span><span class="fu">danger</span>(<span class="vs">`Transfer updates are not available. </span><span class="sc">${</span><span class="fu">errorMessage</span>(e)<span class="sc">}</span><span class="vs">`</span>)<span class="op">;</span></span>
+<span id="cb1-20">  })<span class="op">;</span></span>
+<span id="cb1-21">}</span></code></pre></div>
+<p><code>FLUSH_MS</code> is 50. The first event into an empty buffer schedules a flush and every event in the next 50 milliseconds joins it. The flush swaps the buffer out, so events arriving meanwhile start a new batch, updates the store once with <code>applyMany</code>, and only then runs side effects. Added latency is at most 50 milliseconds, invisible beside a 250 millisecond progress interval, while store updates, and thus renders, stay near twenty per second whatever Rust sends. Capturing <code>before</code> gives <code>afterEvent</code> a stable previous state, so it records one completion per job rather than one per duplicate <code>Updated</code>.</p>
+<p>The code uses <code>setTimeout</code>, not <code>requestAnimationFrame</code>. Browsers pause animation frames in hidden windows, so with frames the buffer would grow without bound while a minimized app kept transferring; a timer keeps draining it. No comment states this, so treat it as the likely rationale rather than the documented one. The 0.4.1 <code>CHANGELOG.md</code> entry reports “Large queues stay responsive: transfer updates are applied in batches” with a before and after measurement, but that measurement is not in <code>docs/benchmarks/</code> and states no machine or method, so this book does not repeat its numbers.</p>
+</section>
+<section id="a-reducer-that-copies-once-per-batch" class="level3">
+<h2>A Reducer That Copies Once per Batch</h2>
+<p>Batching helps only if applying a batch is cheap. Zustand re-renders when a selected value is a new object, so updates must be immutable. Copying the job map per event costs N copies of an N-entry map for a burst of N events, which grows with the square of the queue. The comment above <code>reduceTransferBatch</code> in <code>src/features/transfers/transferStore.ts</code> records that this really happened: “copying every job for each one froze the window”. The fix is copy on write, at most once per batch.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src/features/transfers/transferStore.ts#L28-L52" target="_blank" rel="noopener noreferrer">src/features/transfers/transferStore.ts, lines 28 to 52</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb2-1"><span class="im">export</span> <span class="kw">function</span> <span class="fu">reduceTransferBatch</span>(state<span class="op">:</span> TransferState<span class="op">,</span></span>
+<span id="cb2-2">  events<span class="op">:</span> TransferEvent[])<span class="op">:</span> TransferState {</span>
+<span id="cb2-3">  <span class="kw">let</span> { jobs<span class="op">,</span> order<span class="op">,</span> authFailed } <span class="op">=</span> state<span class="op">;</span></span>
+<span id="cb2-4">  <span class="kw">let</span> ownJobs <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb2-5">  <span class="kw">let</span> ownOrder <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb2-6">  <span class="kw">let</span> changed <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb2-7">  <span class="kw">const</span> writableJobs <span class="op">=</span> () <span class="kw">=&gt;</span> {</span>
+<span id="cb2-8">    <span class="cf">if</span> (<span class="op">!</span>ownJobs) {</span>
+<span id="cb2-9">      jobs <span class="op">=</span> { <span class="op">...</span>jobs }<span class="op">;</span></span>
+<span id="cb2-10">      ownJobs <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb2-11">    }</span>
+<span id="cb2-12">    <span class="cf">return</span> jobs<span class="op">;</span></span>
+<span id="cb2-13">  }<span class="op">;</span></span>
+<span id="cb2-14">  <span class="kw">const</span> writableOrder <span class="op">=</span> () <span class="kw">=&gt;</span> {</span>
+<span id="cb2-15">    <span class="cf">if</span> (<span class="op">!</span>ownOrder) {</span>
+<span id="cb2-16">      order <span class="op">=</span> [<span class="op">...</span>order]<span class="op">;</span></span>
+<span id="cb2-17">      ownOrder <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb2-18">    }</span>
+<span id="cb2-19">    <span class="cf">return</span> order<span class="op">;</span></span>
+<span id="cb2-20">  }<span class="op">;</span></span>
+<span id="cb2-21">  <span class="kw">const</span> put <span class="op">=</span> (list<span class="op">:</span> JobSnapshot[]) <span class="kw">=&gt;</span> {</span>
+<span id="cb2-22">    <span class="cf">for</span> (<span class="kw">const</span> job <span class="kw">of</span> list) {</span>
+<span id="cb2-23">      <span class="cf">if</span> (<span class="op">!</span>(job<span class="op">.</span><span class="at">id</span> <span class="kw">in</span> jobs)) <span class="fu">writableOrder</span>()<span class="op">.</span><span class="fu">push</span>(job<span class="op">.</span><span class="at">id</span>)<span class="op">;</span></span>
+<span id="cb2-24">      <span class="fu">writableJobs</span>()[job<span class="op">.</span><span class="at">id</span>] <span class="op">=</span> job<span class="op">;</span></span>
+<span id="cb2-25">    }</span>
+<span id="cb2-26">  }<span class="op">;</span></span></code></pre></div>
+<p>The first write in a batch copies the map or the order array; later writes reuse the private copy. <code>order</code> is copied only when a new id appears, so updates to known jobs leave it as the identical array and components selecting only <code>order</code> do not re-render. A <code>snapshot</code> replaces both structures. A <code>progress</code> event replaces only the affected job objects with new byte counts, speed, time remaining, and parts done, and ignores unknown ids, which covers progress that races a <code>removed</code>. If nothing changed, the original <code>state</code> object is returned and Zustand sees no difference.</p>
+<p>The tests in <code>transferStore.test.ts</code> pin this down. “a batch gives the same result as applying events one by one” is the property that makes batching safe: an optimization, never a change in meaning. Others check that the input is not mutated, that an empty batch returns the identical object, and that “updating a known job keeps the same order array”.</p>
+</section>
+<section id="side-effects-without-per-event-cost" class="level3">
+<h2>Side Effects Without Per-Event Cost</h2>
+<p><code>afterEvent</code> runs once per event, so it must be constant time. Its main job is noticing when a batch of work finishes, so that one summary toast (“Uploaded 200 files to books.”) replaces two hundred. It keeps <code>batch</code>, the job ids seen since the queue was last idle, and <code>moving</code>, the subset still working, “so the idle check is O(1) per event”; only when <code>moving</code> empties does it walk <code>batch</code> once. Cache invalidation is debounced instead: <code>scheduleRefresh</code> collects changed objects and restarts an 800 millisecond timer (<code>REFRESH_MS</code>) on every completion, then calls <code>invalidateObjectChanges</code> and, if needed, invalidates <code>qk.history</code>.</p>
+<p>The refresh therefore fires 800 milliseconds after the last completion of a burst. Batching guarantees regular progress; debouncing waits for quiet, because invalidation triggers real <code>ListObjectsV2</code> requests. The ghost rows of <a href="/books/r2dock/read/ch037#ch-27">Chapter 27</a> cover the gap. A consequence worth knowing: with completions arriving less than 800 milliseconds apart, the open folder is not re-listed until the stream ends. The test “coalesces a burst of completions into one refresh per bucket” in <code>subscription.test.ts</code> uses Vitest fake timers to deliver 200 completions and asserts one listing invalidation and at most five <code>invalidateQueries</code> calls; “100 uploads that go up uncompressed over hours give one notice and one summary” checks the toast batching across a long queue.</p>
+</section>
+<section id="selecting-without-waste" class="level3">
+<h2>Selecting Without Waste</h2>
+<p><code>TransfersPage</code> selects jobs with <code>useTransferStore(useShallow((s) =&gt; orderedJobs(s)))</code>. The <a href="https://github.com/pmndrs/zustand" target="_blank" rel="noopener noreferrer">Zustand README</a> recommends <code>useShallow</code> “to prevent unnecessary rerenders when the selector output does not change according to shallow equal”, which matters because <code>orderedJobs</code> builds a new array each time. Be precise about the savings: a progress batch replaces every active job object, so during transfers the page still re-renders about every 250 milliseconds; <code>useShallow</code> avoids renders for changes that touch no job and keeps the array stable while the queue is quiet. Derived values (<code>filterDirection</code>, <code>countTabs</code>, and the linear-time grouping in <code>buildItems</code>) are chained through <a href="https://react.dev/reference/react/useMemo" target="_blank" rel="noopener noreferrer"><code>useMemo</code></a>, so switching tabs recomputes <code>items</code> but not <code>filtered</code>.</p>
+<p>React’s <code>memo</code> is not used anywhere at this commit, including on <code>TransferRow</code>. The <a href="https://react.dev/reference/react/memo" target="_blank" rel="noopener noreferrer">React <code>memo</code> reference</a> says it pays off only when a component “re-renders often with the same exact props”. Active rows get a new <code>job</code> object every batch, so <code>memo</code> could skip only queued and finished rows, and virtualization already limits rendering to visible rows. Whether it would help is a question for profiling, not a known problem.</p>
+</section>
+<section id="virtualization-with-tanstack-virtual" class="level3">
+<h2>Virtualization With TanStack Virtual</h2>
+<p>Virtualization renders only visible rows plus a margin, positioned inside a container as tall as the full list, so the document stays small regardless of length. R2Dock uses <code>@tanstack/react-virtual</code>, chosen in architecture decision record (ADR) 0004 over react-virtuoso. The <a href="https://tanstack.com/virtual/latest/docs/api/virtualizer" target="_blank" rel="noopener noreferrer">Virtualizer API reference</a> defines the options used: <code>count</code>, <code>getScrollElement</code>, <code>estimateSize</code>, <code>overscan</code> (default 1), <code>initialRect</code> (“The initial <code>Rect</code> of the scrollElement”), and <code>getItemKey</code>.</p>
+<p><code>FileTable</code> in <code>src/features/browser/FileTable.tsx</code> has fixed-height rows, so <code>estimateSize</code> is exact: <code>Explorer.tsx</code> passes 26 pixels for compact density and 32 for comfortable, and an Effect calls <code>measure()</code> when density changes. The same values exist as the <code>--row-h</code> token in <code>src/styles/tokens.css</code>, a harmless duplication today, but a token change alone would not change the virtualizer’s arithmetic. <code>overscan</code> is 12, hiding blank space during fast scrolling, and <code>initialRect</code> of 800 by 600 lets the first render contain rows before the container is measured. When another page exists, <code>count</code> is one more than the loaded rows; that extra item is the “Loading more…” footer, and when the last rendered index reaches the end of the loaded rows an Effect calls <code>onLoadMore</code>. Pagination is driven by scrolling, so an unscrolled folder costs one request, and the footer never states a total, following DESIGN.md section 7.3: “A count is never claimed until the full listing is loaded.”</p>
+<p>Virtualization bounds the document, not the data. Every loaded page stays cached, and <code>rowsFromPages</code>, <code>sortRows</code>, and <code>filterRows</code> in <code>src/features/browser/rows.ts</code> run over all loaded rows, memoized in <code>useExplorerData</code>; the search term is debounced by 150 milliseconds through <code>useDebounced</code>, matching PLAN.md section 11. The code does not cap the number of loaded pages. <code>FileGrid.tsx</code> virtualizes lines of tiles, with columns computed from a <code>ResizeObserver</code> width.</p>
+<p><code>TransferList.tsx</code> is the one list whose rows change height, because a row can expand to show error details, so it measures rows instead of trusting the estimate.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src/features/transfers/TransferList.tsx#L17-L30" target="_blank" rel="noopener noreferrer">src/features/transfers/TransferList.tsx, lines 17 to 30</a></p>
+</div>
+<pre class="tsx"><code>  const scrollRef = useRef&lt;HTMLDivElement&gt;(null);
+  const rowH = compact ? 52 : 56;
+  const virtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement: () =&gt; scrollRef.current,
+    estimateSize: () =&gt; rowH,
+    overscan: 8,
+    initialRect: { width: 800, height: 600 },
+    getItemKey: (i) =&gt; {
+      const it = items[i];
+      if (!it) return i;
+      return it.type === "group" ? `g:${it.group.id}` : `j:${it.job.id}`;
+    },
+  });</code></pre>
+<p>Each rendered row passes <code>ref={virtualizer.measureElement}</code> and a <code>data-index</code>. <code>getItemKey</code> matters because items move: a job leaves the Active tab when it completes, and expanding a group inserts children. With index keys, a measured height would stick to a position and the next row would inherit the wrong size; id-based keys keep measurements and component state with the right item.</p>
+</section>
+<section id="accessibility-and-testing" class="level3">
+<h2>Accessibility and Testing</h2>
+<p>Removing rows from the document can break assistive technology. DESIGN.md section 12 requires that “Virtualized lists must expose total row counts when known (<code>aria-rowcount</code>) or <code>-1</code> when unknown.” <code>FileTable</code> uses <code>role="grid"</code> with <code>aria-rowcount</code> set to rows plus header when the listing is complete, or <code>-1</code> while more pages exist, and each rendered row carries its absolute <code>aria-rowindex</code>; <code>FileTable.test.tsx</code> asserts both cases. Focus stays on the grid container and <code>aria-activedescendant</code> points at the active row, which suits virtualization because a focused row element would be destroyed when scrolled away. <code>Toaster.tsx</code> mirrors toasts into polite and assertive live regions. One divergence: DESIGN.md suggests a <code>treegrid</code> for expanded transfer groups, while <code>TransferList</code> renders <code>role="list"</code> with expand buttons carrying <code>aria-expanded</code>.</p>
+<p>jsdom performs no layout, so every element measures zero and a virtualizer renders nothing. <code>src/test/setup.ts</code> patches <code>clientHeight</code>, <code>clientWidth</code>, <code>offsetHeight</code>, and <code>offsetWidth</code> on <code>HTMLElement.prototype</code> to 800 by 1,000 pixels “so virtualized lists render rows”, and stubs <code>scrollTo</code> and <code>scrollIntoView</code>.</p>
+<p>What remains unmeasured is concrete: a scroll test with 10,000 rows against the 50 millisecond long-task target, a queue of 500 or more transfers against N8, and a transfer page profile to decide whether <code>memo</code> or per-row selectors would pay off. PLAN.md section 14 already describes the method (scripted scenarios, five repetitions, median and spread), and results belong in <code>docs/benchmarks/</code>.</p>
+</section>
+<section id="working-on-this-code-27" class="level3">
+<h2>Working on This Code</h2>
+<p>The event path is <code>src/features/transfers/subscription.ts</code> and <code>transferStore.ts</code>. A new <code>TransferEvent</code> variant in <code>crates/r2dock-transfer/src/model.rs</code> needs regenerated bindings (<code>cargo test -p r2dock-transfer</code>) and a new <code>case</code> in <code>reduceTransferBatch</code>; TypeScript narrowing points at every switch. Keep the reducer pure: copy <code>jobs</code> and <code>order</code> at most once per batch, never mutate input, and return the same state when nothing changed. Side effects go in <code>afterEvent</code> and must be constant time per event. Never add a per-event store update, an unthrottled Rust emit, an invalidation per completed job, or progress over Tauri global events instead of the channel.</p>
+<p>For lists, copy <code>FileTable.tsx</code> for fixed heights and <code>TransferList.tsx</code> for measured rows with stable keys, and keep <code>aria-rowcount</code> and <code>aria-rowindex</code> correct. Changing row heights means changing both <code>--row-h</code> and <code>Explorer.tsx</code>. Run <code>npm test</code> (notably <code>transferStore.test.ts</code>, <code>subscription.test.ts</code>, <code>TransferRow.test.tsx</code>, <code>FileTable.test.tsx</code>), <code>cargo test -p r2dock-transfer</code>, and for the engine stress run <code>cargo test -p r2dock-transfer --release --test stress -- --include-ignored</code>.</p>
+</section>
+<section id="further-reading-27" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>src/features/transfers/transferStore.ts</code>, the batch reducer.</li>
+<li><code>src/features/transfers/subscription.ts</code>, batching, summaries, and debounced refresh.</li>
+<li><a href="https://tanstack.com/virtual/latest/docs/api/virtualizer" target="_blank" rel="noopener noreferrer">TanStack Virtual: Virtualizer API</a>.</li>
+<li><a href="https://react.dev/reference/react/memo" target="_blank" rel="noopener noreferrer">React: memo</a>.</li>
+<li><a href="https://react.dev/reference/react/useMemo" target="_blank" rel="noopener noreferrer">React: useMemo</a>.</li>
+</ul>
+</section>
+</section>

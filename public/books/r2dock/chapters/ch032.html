@@ -1,0 +1,176 @@
+<section id="ch-23" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">23</span> Filesystem Security</h1>
+<p>Downloading looks like the safe direction of a file manager, yet it is where classic desktop vulnerabilities live. R2Dock turns an object key, chosen by whoever wrote the object, into a path on the user’s disk. A key like <code>../../.bashrc</code>, a planted symbolic link at the destination, or two keys differing only in case can each make a careless program write in the wrong place. This chapter covers the path guard in <code>crates/r2dock-core/src/path_guard.rs</code>, the download code in <code>crates/r2dock-transfer/src/download.rs</code> that uses it, and the upload side, where the danger is reading the wrong file. The network side of downloads belongs to <a href="/books/r2dock/read/ch016#ch-10">Chapter 10</a> (Downloads and HTTP Range Requests).</p>
+<section id="object-keys-are-untrusted-input" class="level3">
+<h2>Object Keys Are Untrusted Input</h2>
+<p>R2 has no folders: a key is one string of up to 1,024 bytes, and R2 stores keys with <code>..</code> segments, empty segments, leading slashes, colons, backslashes, right-to-left override characters, or Windows device names, from shared buckets, other tools, or an attacker with write access. The <a href="https://community.owasp.org/attacks/Path_Traversal" target="_blank" rel="noopener noreferrer">OWASP path traversal guidance</a> recommends accepting known good input and not letting the user control the whole path. The guard builds the path itself one validated component at a time, then checks it against the real file system.</p>
+<p>The module comment lists the rules, mirroring PLAN.md section 9.6. Figure 23.1 shows how they combine for one download.</p>
+<figure id="fig-23-path-guard">
+<img src="/books/r2dock/media/file28.webp" alt="A top to bottom flow. The untrusted key is split on slashes and empty or single dot segments are dropped. A double dot segment fails the job with a traversal error; other segments are sanitized. Folders are walked under the canonical download root, and a symbolic link or file in the way is refused. Otherwise a hidden temporary file is written, the path is revalidated, and the conflict policy places the file with persist_noclobber, or renames over the target only under Replace." width="1196" height="1743" loading="lazy" decoding="async">
+<figcaption>Figure 23.1. The decision flow that turns an untrusted object key into a safe destination path, from string sanitizing through folder checks to no-overwrite placement.</figcaption>
+</figure>
+</section>
+<section id="stage-one-turning-a-key-into-a-relative-path" class="level3">
+<h2>Stage One: Turning a Key Into a Relative Path</h2>
+<p><code>key_to_relative_path</code> splits the key on <code>/</code>, skips empty and <code>.</code> segments, and pushes each sanitized segment onto a fresh <code>PathBuf</code>. Splitting first defeats absolute paths: <code>/etc/passwd</code> yields an empty segment (dropped), <code>etc</code>, and <code>passwd</code>. Since no sanitized segment contains a separator, <code>PathBuf::push</code> can never replace the whole path, as it does in Rust when given an absolute path. The test <code>absolute_looking_keys_stay_relative</code> also turns <code>C:/Windows/system.ini</code> under Windows rules into a relative path starting with <code>C_</code>. The heart of the stage is <code>sanitize_component</code>.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-core/src/path_guard.rs#L126-L161" target="_blank" rel="noopener noreferrer">crates/r2dock-core/src/path_guard.rs, lines 126 to 161</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="kw">pub</span> <span class="kw">fn</span> sanitize_component(</span>
+<span id="cb1-2">    segment<span class="op">:</span> <span class="op">&amp;</span><span class="dt">str</span><span class="op">,</span></span>
+<span id="cb1-3">    platform<span class="op">:</span> Platform</span>
+<span id="cb1-4">) <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span><span class="dt">String</span><span class="op">,</span> PathGuardError<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb1-5">    <span class="cf">if</span> segment <span class="op">==</span> <span class="st">".."</span> <span class="op">{</span></span>
+<span id="cb1-6">        <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">PathGuardError::</span>Traversal)<span class="op">;</span></span>
+<span id="cb1-7">    <span class="op">}</span></span>
+<span id="cb1-8">    <span class="kw">let</span> <span class="kw">mut</span> out<span class="op">:</span> <span class="dt">String</span> <span class="op">=</span> segment</span>
+<span id="cb1-9">        <span class="op">.</span>chars()</span>
+<span id="cb1-10">        <span class="op">.</span>filter(<span class="op">|</span>c<span class="op">|</span> <span class="op">!</span>is_deceptive_char(<span class="op">*</span>c))</span>
+<span id="cb1-11">        <span class="op">.</span>map(<span class="op">|</span>c<span class="op">|</span> <span class="op">{</span></span>
+<span id="cb1-12">            <span class="cf">if</span> c<span class="op">.</span>is_control()</span>
+<span id="cb1-13">                <span class="op">||</span> (platform <span class="op">==</span> <span class="pp">Platform::</span>Windows</span>
+<span id="cb1-14">                    <span class="op">&amp;&amp;</span> WINDOWS_INVALID<span class="op">.</span>contains(<span class="op">&amp;</span>c))</span>
+<span id="cb1-15">            <span class="op">{</span></span>
+<span id="cb1-16">                <span class="ch">'_'</span></span>
+<span id="cb1-17">            <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb1-18">                c</span>
+<span id="cb1-19">            <span class="op">}</span></span>
+<span id="cb1-20">        <span class="op">}</span>)</span>
+<span id="cb1-21">        <span class="op">.</span>collect()<span class="op">;</span></span>
+<span id="cb1-22"></span>
+<span id="cb1-23">    <span class="cf">if</span> platform <span class="op">==</span> <span class="pp">Platform::</span>Windows <span class="op">{</span></span>
+<span id="cb1-24">        <span class="kw">let</span> trimmed_len <span class="op">=</span> out<span class="op">.</span>trim_end_matches([<span class="ch">'.'</span><span class="op">,</span> <span class="ch">' '</span>])<span class="op">.</span>len()<span class="op">;</span></span>
+<span id="cb1-25">        out<span class="op">.</span>truncate(trimmed_len)<span class="op">;</span></span>
+<span id="cb1-26">        <span class="kw">let</span> stem <span class="op">=</span> out<span class="op">.</span>split(<span class="ch">'.'</span>)<span class="op">.</span>next()<span class="op">.</span>unwrap_or(<span class="st">""</span>)<span class="op">;</span></span>
+<span id="cb1-27">        <span class="cf">if</span> is_windows_reserved(stem<span class="op">.</span>trim_end()) <span class="op">{</span></span>
+<span id="cb1-28">            out<span class="op">.</span>insert(<span class="dv">0</span><span class="op">,</span> <span class="ch">'_'</span>)<span class="op">;</span></span>
+<span id="cb1-29">        <span class="op">}</span></span>
+<span id="cb1-30">    <span class="op">}</span></span>
+<span id="cb1-31">    <span class="co">// ...</span></span></code></pre></div>
+<p>The elided tail rejects an empty or <code>.</code> result (<code>Empty</code>), a result that became <code>..</code> (<code>Traversal</code>), and a component over <code>MAX_COMPONENT_BYTES</code> (255 bytes) with <code>ComponentTooLong</code>. Each part answers a specific attack.</p>
+<p><strong>Traversal.</strong> A <code>..</code> segment is rejected, not dropped; silently saving <code>a/../b</code> as <code>a/b</code> would hide a strange key. The check runs again after filtering, because removing an invisible character between two dots could produce <code>..</code>. The test <code>rejects_traversal</code> covers <code>../etc/passwd</code>, <code>a/../../b</code>, and similar keys under both rule sets.</p>
+<p><strong>Characters the platform cannot store.</strong> Control characters become <code>_</code> everywhere, and on Windows so do the nine characters in <code>WINDOWS_INVALID</code> (<code>&lt;</code>, <code>&gt;</code>, <code>:</code>, <code>"</code>, <code>|</code>, <code>?</code>, <code>*</code>, <code>\</code>, <code>/</code>), matching Microsoft’s <a href="https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file" target="_blank" rel="noopener noreferrer">Naming Files, Paths, and Namespaces</a>. The backslash matters because the segment <code>..\..\x</code> would otherwise become two traversal steps on Windows; it becomes <code>.._.._x</code>. The colon matters because it introduces a drive letter or alternate data stream. On Unix both are ordinary characters; as the property test <code>never_escapes_root</code> says, “Paths are interpreted by the host, so only the host platform’s rules apply.”</p>
+<p><strong>Trailing dots, spaces, and device names.</strong> Windows silently strips trailing spaces and periods, so the guard trims them there. Microsoft’s guide also reserves device names (<code>CON</code>, <code>PRN</code>, <code>AUX</code>, <code>NUL</code>, <code>COM1</code> to <code>COM9</code>, <code>LPT1</code> to <code>LPT9</code>, and superscript digit forms), even “followed immediately by an extension” as in <code>NUL.txt</code>. <code>is_windows_reserved</code> checks the stem before the first dot and the guard prefixes an underscore (<code>_CON</code>), so the download still succeeds. The code also reserves <code>COM0</code>, <code>LPT0</code>, <code>CONIN$</code>, and <code>CONOUT$</code>, an over-match that costs only an underscore; tests include near misses such as <code>COM10</code> and <code>computer.txt</code>.</p>
+<p><strong>Invisible and deceptive characters.</strong> <code>report\u{202E}fdp.exe</code> displays as <code>reportexe.pdf</code> in many file managers, because U+202E (RIGHT-TO-LEFT OVERRIDE) reverses what follows. <code>is_deceptive_char</code> in <code>crates/r2dock-core/src/keys.rs</code> matches zero-width characters, directional marks, bidirectional embeddings, overrides, and isolates, invisible operators, the byte order mark, and the soft hyphen. The guard removes them, the interface’s <code>display_name</code> shows them as placeholders such as <code>⟨U+202E⟩</code>, and <code>strips_bidi_and_replaces_controls</code> checks the example becomes <code>reportfdp.exe</code>.</p>
+</section>
+<section id="lossy-mapping-and-the-traversal-exception" class="level3">
+<h2>Lossy Mapping and the Traversal Exception</h2>
+<p>One odd key should not fail a folder download, so <code>key_to_relative_path_lossy</code> replaces an unsanitizable segment with <code>_</code> and shortens overlong ones on a UTF-8 boundary. The planner in <code>src-tauri/src/planning.rs</code> falls back to it, except for <code>Traversal</code>, where it keeps the raw path “so the job fails in the path guard and the user sees why”: <code>ensure_dir_under_root</code> rejects the <code>ParentDir</code> component and the job fails with “The name contains”..” and cannot be saved safely”. Tests <code>traversal_keys_keep_raw_path_so_the_job_fails_safely</code> and <code>lossy_never_escapes_root</code> cover both paths.</p>
+</section>
+<section id="stage-two-walking-the-real-file-system" class="level3">
+<h2>Stage Two: Walking the Real File System</h2>
+<p>A clean string can still lead outside the root if a folder along the way is a symbolic link, so stage two walks the destination one component at a time without following links.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-core/src/path_guard.rs#L180-L194" target="_blank" rel="noopener noreferrer">crates/r2dock-core/src/path_guard.rs, lines 180 to 194</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="kw">pub</span> <span class="kw">fn</span> ensure_dir_under_root(</span>
+<span id="cb2-2">    root<span class="op">:</span> <span class="op">&amp;</span><span class="dt">Path</span><span class="op">,</span></span>
+<span id="cb2-3">    rel_dir<span class="op">:</span> <span class="op">&amp;</span><span class="dt">Path</span></span>
+<span id="cb2-4">) <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span><span class="dt">PathBuf</span><span class="op">,</span> PathGuardError<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb2-5">    <span class="kw">let</span> root <span class="op">=</span> root<span class="op">.</span>canonicalize()<span class="op">?;</span></span>
+<span id="cb2-6">    <span class="cf">if</span> <span class="op">!</span>root<span class="op">.</span>is_dir() <span class="op">{</span></span>
+<span id="cb2-7">        <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">PathGuardError::</span>NotADirectory)<span class="op">;</span></span>
+<span id="cb2-8">    <span class="op">}</span></span>
+<span id="cb2-9">    <span class="kw">let</span> <span class="kw">mut</span> current <span class="op">=</span> root<span class="op">.</span>clone()<span class="op">;</span></span>
+<span id="cb2-10">    <span class="cf">for</span> component <span class="kw">in</span> rel_dir<span class="op">.</span>components() <span class="op">{</span></span>
+<span id="cb2-11">        <span class="kw">let</span> <span class="pp">Component::</span>Normal(name) <span class="op">=</span> component <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb2-12">            <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">PathGuardError::</span>Traversal)<span class="op">;</span></span>
+<span id="cb2-13">        <span class="op">};</span></span>
+<span id="cb2-14">        current<span class="op">.</span>push(name)<span class="op">;</span></span>
+<span id="cb2-15">        <span class="cf">match</span> <span class="pp">std::fs::</span>symlink_metadata(<span class="op">&amp;</span>current) <span class="op">{</span></span>
+<span id="cb2-16">            <span class="cn">Ok</span>(meta) <span class="cf">if</span> meta<span class="op">.</span>file_type()<span class="op">.</span>is_symlink() <span class="op">=&gt;</span></span>
+<span id="cb2-17">                <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">PathGuardError::</span>SymlinkInPath)<span class="op">,</span></span>
+<span id="cb2-18">            <span class="cn">Ok</span>(meta) <span class="cf">if</span> <span class="op">!</span>meta<span class="op">.</span>is_dir() <span class="op">=&gt;</span></span>
+<span id="cb2-19">                <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">PathGuardError::</span>NotADirectory)<span class="op">,</span></span>
+<span id="cb2-20">            <span class="cn">Ok</span>(_) <span class="op">=&gt;</span> <span class="op">{}</span></span>
+<span id="cb2-21">            <span class="co">// ...</span></span></code></pre></div>
+<p>Canonicalizing the root resolves links in the user’s chosen folder itself, which is correct: the user picked it. Below the root, <code>symlink_metadata</code> reports on a link rather than its target, so a linked component fails with <code>SymlinkInPath</code> and a file in the way of a folder with <code>NotADirectory</code>. The tests <code>refuses_symlinked_directory</code> (which also checks nothing was written at the link’s target) and <code>file_in_the_way_of_folder</code> cover both.</p>
+<p>The elided remainder creates missing folders with <code>std::fs::create_dir</code> and defends against time-of-check to time-of-use (TOCTOU) races, where something changes between a check and an action. If <code>create_dir</code> fails with <code>AlreadyExists</code>, something appeared after the check, possibly a planted link, so the entry is inspected again and a link or file is refused. The function finally confirms the path still starts with the canonical root. <code>resolve_file_under_root</code> then refuses a target name that already exists as a link or directory (<code>refuses_symlinked_target_file</code>), since writing through a link at the target would overwrite whatever it points to.</p>
+</section>
+<section id="stage-three-writing-and-placing" class="level3">
+<h2>Stage Three: Writing and Placing</h2>
+<p>The download writes to a hidden temporary file beside the target, named by <code>temp_path_for</code> from a dot, the name, eight hex digits of the job ID, and <code>.r2dock-part</code>. An existing temporary path that is not a regular file is refused, and <code>open_temp</code> sets <code>O_NOFOLLOW</code> on Unix, so the operating system refuses to open a final component that is a link. That flag covers only the last component, which is why the folder walk is still needed. On Windows the audited code sets no equivalent flag on this open, so a link planted at the temporary name between the check and the open would be followed; the window is short and needs write access to the folder, but it is a platform difference.</p>
+<p>When the data is complete and verified, <code>revalidate</code> re-runs <code>resolve_file_under_root</code>, and resumed jobs revalidate saved state the same way, discarding a partial file if a folder in its path became a link. Then <code>place</code> enforces the conflict policy from <code>crates/r2dock-core/src/policy.rs</code>: <code>Ask</code> by default, or <code>Skip</code>, <code>Replace</code>, or <code>KeepBoth</code>.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/download.rs#L519-L540" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/download.rs, lines 519 to 540</a></p>
+</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb3-1">    <span class="cf">for</span> n <span class="kw">in</span> <span class="dv">0</span><span class="op">..=</span>KEEP_BOTH_LIMIT <span class="op">{</span></span>
+<span id="cb3-2">        <span class="cf">if</span> n <span class="op">&gt;</span> <span class="dv">0</span> <span class="op">{</span></span>
+<span id="cb3-3">            candidate <span class="op">=</span></span>
+<span id="cb3-4">                dir<span class="op">.</span>join(<span class="pp">r2dock_core::keys::</span>keep_both_name(<span class="op">&amp;</span>name<span class="op">,</span> n))<span class="op">;</span></span>
+<span id="cb3-5">        <span class="op">}</span></span>
+<span id="cb3-6">        <span class="kw">let</span> tmp <span class="op">=</span> <span class="pp">tempfile::TempPath::</span>try_from_path(temp)</span>
+<span id="cb3-7">            <span class="op">.</span>map_err(<span class="op">|</span>e<span class="op">|</span> <span class="pp">JobError::</span>io(<span class="op">&amp;</span>e<span class="op">,</span> <span class="st">"save the download"</span>))<span class="op">?;</span></span>
+<span id="cb3-8">        <span class="cf">match</span> tmp<span class="op">.</span>persist_noclobber(<span class="op">&amp;</span>candidate) <span class="op">{</span></span>
+<span id="cb3-9">            <span class="cn">Ok</span>(()) <span class="op">=&gt;</span> <span class="cf">return</span> <span class="cn">Ok</span>(<span class="pp">Placed::</span>Done(candidate))<span class="op">,</span></span>
+<span id="cb3-10">            <span class="cn">Err</span>(err) <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb3-11">                <span class="co">// Keep the temp file: we still need it.</span></span>
+<span id="cb3-12">                <span class="kw">let</span> _ <span class="op">=</span> err<span class="op">.</span>path<span class="op">.</span>keep()<span class="op">;</span></span>
+<span id="cb3-13">                <span class="cf">if</span> err<span class="op">.</span>error<span class="op">.</span>kind() <span class="op">!=</span> <span class="pp">io::ErrorKind::</span>AlreadyExists <span class="op">{</span></span>
+<span id="cb3-14">                    <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">JobError::</span>io(</span>
+<span id="cb3-15">                        <span class="op">&amp;</span>err<span class="op">.</span>error<span class="op">,</span></span>
+<span id="cb3-16">                        <span class="st">"save the download"</span></span>
+<span id="cb3-17">                    ))<span class="op">;</span></span>
+<span id="cb3-18">                <span class="op">}</span></span>
+<span id="cb3-19">                <span class="cf">match</span> policy <span class="op">{</span></span>
+<span id="cb3-20">                    <span class="pp">ConflictPolicy::</span>Skip <span class="op">=&gt;</span> <span class="cf">return</span> <span class="cn">Ok</span>(<span class="pp">Placed::</span>Skipped)<span class="op">,</span></span>
+<span id="cb3-21">                    <span class="pp">ConflictPolicy::</span>Ask <span class="op">=&gt;</span> <span class="cf">return</span> <span class="cn">Ok</span>(<span class="pp">Placed::</span>Ask)<span class="op">,</span></span>
+<span id="cb3-22">                    _ <span class="op">=&gt;</span> <span class="op">{}</span></span>
+<span id="cb3-23">                <span class="op">}</span></span>
+<span id="cb3-24">            <span class="op">}</span></span>
+<span id="cb3-25">        <span class="op">}</span></span>
+<span id="cb3-26">    <span class="op">}</span></span></code></pre></div>
+<p>Every policy except <code>Replace</code> uses <code>persist_noclobber</code>, whose <a href="https://docs.rs/tempfile/latest/tempfile/struct.TempPath.html" target="_blank" rel="noopener noreferrer">documentation</a> says: “If a file exists at the target path, fail.” Check and move are one file system operation, so no other program can slip a file in between. <code>Skip</code> and <code>Ask</code> stop at an existing file; <code>KeepBoth</code> tries <code>name (1).ext</code>, <code>name (2).ext</code>, and so on up to <code>KEEP_BOTH_LIMIT</code> (1,000), each attempt no-clobber. It cannot cross file systems, which never happens here because the temporary file shares the target’s folder. Only <code>Replace</code> overwrites, and earlier lines of <code>place</code> still refuse a target that is a link or directory before <code>std::fs::rename</code>. The test <code>place_never_overwrites_without_replace</code> checks contents under <code>Skip</code>, <code>KeepBoth</code>, and <code>Replace</code>.</p>
+</section>
+<section id="collisions-between-two-remote-names" class="level3">
+<h2>Collisions Between Two Remote Names</h2>
+<p>Two harmless keys can also map to one local file: <code>Cover.jpg</code> and <code>cover.jpg</code> on default APFS and NTFS volumes; <code>é</code> as one code point (U+00E9) or as <code>e</code> plus a combining accent, which <a href="https://unicode.org/reports/tr15/" target="_blank" rel="noopener noreferrer">Unicode Standard Annex 15</a> calls canonically equivalent (composed form NFC, decomposed form NFD); or <code>a:b</code> and <code>a_b</code> after Windows sanitizing. Under <code>Replace</code>, the second download would silently replace the first.</p>
+<p>R2Dock detects this at planning time with <code>collision_key</code> in <code>path_guard.rs</code>, which normalizes a path to NFC and, when <code>CASE_INSENSITIVE_BY_DEFAULT</code> is true (Windows and macOS), decomposes, lowercases, and recomposes it first. The key never touches disk or object keys. <code>rename_collisions</code> in <code>src-tauri/src/planning.rs</code> gives any later item with a taken key a “Keep both” name, so the downloads land as <code>cover.jpg</code> and <code>cover (1).jpg</code>. The tests <code>collision_keys_match_equivalent_names</code> and the property test <code>collision_key_ignores_normalization_form</code> cover this.</p>
+<p>The comparison is a heuristic. Folding may add an unneeded suffix on case-sensitive volumes, which the code accepts, and <code>to_lowercase</code> is not full case folding, so rare pairs (for example with the German sharp s) may reach <code>place</code>, where only <code>Replace</code> would lose data. Collisions with files already on disk are handled at placement. Uploads convert each component to NFC in <code>key_from_components</code>, so a folder uploaded from macOS gets the same keys as one from Windows.</p>
+</section>
+<section id="the-upload-side-reading-the-right-file" class="level3">
+<h2>The Upload Side: Reading the Right File</h2>
+<p>Uploads can read the wrong file. If <code>photos/a.jpg</code> is replaced by a link to <code>~/.ssh/id_ed25519</code> after the scan, a naive uploader would publish the private key; PLAN.md section 9.6 calls this a “swap-after-scan race”. The scanner in <code>crates/r2dock-transfer/src/scan.rs</code> walks with <code>follow_links(false)</code> and reports links as “Shortcut (symbolic link)”, and every open for upload goes through one function.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/source.rs#L42-L58" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/source.rs, lines 42 to 58</a></p>
+</div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb4-1"><span class="kw">fn</span> open_nofollow(path<span class="op">:</span> <span class="op">&amp;</span><span class="dt">Path</span>) <span class="op">-&gt;</span> <span class="pp">std::io::</span><span class="dt">Result</span><span class="op">&lt;</span>File<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb4-2">    <span class="kw">let</span> <span class="kw">mut</span> opts <span class="op">=</span> <span class="pp">OpenOptions::</span>new()<span class="op">;</span></span>
+<span id="cb4-3">    opts<span class="op">.</span>read(<span class="cn">true</span>)<span class="op">;</span></span>
+<span id="cb4-4">    <span class="at">#[</span>cfg<span class="at">(</span>unix<span class="at">)]</span></span>
+<span id="cb4-5">    <span class="op">{</span></span>
+<span id="cb4-6">        <span class="kw">use</span> <span class="pp">std::os::unix::fs::</span>OpenOptionsExt<span class="op">;</span></span>
+<span id="cb4-7">        opts<span class="op">.</span>custom_flags(<span class="pp">libc::</span>O_NOFOLLOW)<span class="op">;</span></span>
+<span id="cb4-8">    <span class="op">}</span></span>
+<span id="cb4-9">    <span class="at">#[</span>cfg<span class="at">(</span>windows<span class="at">)]</span></span>
+<span id="cb4-10">    <span class="op">{</span></span>
+<span id="cb4-11">        <span class="kw">use</span> <span class="pp">std::os::windows::fs::</span>OpenOptionsExt<span class="op">;</span></span>
+<span id="cb4-12">        <span class="co">// ...</span></span>
+<span id="cb4-13">        <span class="kw">const</span> FILE_FLAG_OPEN_REPARSE_POINT<span class="op">:</span> <span class="dt">u32</span> <span class="op">=</span> <span class="dv">0x0020_0000</span><span class="op">;</span></span>
+<span id="cb4-14">        opts<span class="op">.</span>custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)<span class="op">;</span></span>
+<span id="cb4-15">    <span class="op">}</span></span>
+<span id="cb4-16">    opts<span class="op">.</span>open(path)</span>
+<span id="cb4-17"><span class="op">}</span></span></code></pre></div>
+<p>On Unix a link fails with <code>ELOOP</code>, which <code>map_open_error</code> reports as “This is a shortcut (symbolic link), so it was skipped.” On Windows the flag opens “a link itself instead of its target”, per the elided comment, and <code>SourceFile::open</code> refuses anything that is a link or not a regular file.</p>
+<p>The second layer is identity. At scan time R2Dock records a <code>FileIdentity</code> (device and inode on Unix); a swapped file has a different inode even with the same name, size, and time. <code>SourceFile::open</code> compares it and fails with “file changed” on a mismatch, then keeps a <code>same_file::Handle</code> that <code>reopen</code>, used for every multipart part and retry, compares again. With the size and time check in <code>ensure_unchanged</code>, a file replaced during a long upload is detected rather than uploaded. On Windows <code>FileIdentity::of</code> returns <code>None</code>, so the scan-time check is skipped, but the handle comparison still applies.</p>
+</section>
+<section id="what-the-guard-does-not-do" class="level3">
+<h2>What the Guard Does Not Do</h2>
+<p>Several PLAN.md section 9.6 items are not implemented. Downloads get neither the macOS quarantine attribute nor the Windows Mark of the Web, so the usual warnings on opening a downloaded program do not appear; R2Dock itself never opens files. Total path length is not limited, only components; an overlong path fails with an I/O error, which is safe. And the guard defends against hostile names, not a hostile local user, so the TOCTOU defenses matter mainly for shared or synchronized folders.</p>
+</section>
+<section id="working-on-this-code-22" class="level3">
+<h2>Working on This Code</h2>
+<p>Key-to-name rules live in <code>crates/r2dock-core/src/path_guard.rs</code> and, for character classes, <code>keys.rs</code>; placement in <code>download.rs</code> (<code>resolve_target</code>, <code>open_temp</code>, <code>place</code>); planning and collision renaming in <code>src-tauri/src/planning.rs</code>; upload checks in <code>source.rs</code> and <code>scan.rs</code>. Run <code>cargo test -p r2dock-core</code> for the guard’s table and property tests, <code>cargo test -p r2dock-transfer</code> for placement, identity, and scanning (several Unix only, since they create links), and <code>cargo test -p r2dock</code> for planning. CI runs on Windows, macOS, and Linux, which matters because Windows rules only apply on Windows.</p>
+<p>Every key-to-path mapping goes through the guard, never <code>PathBuf::from(key)</code> or <code>join</code> on a raw key; every write below the root goes through <code>resolve_file_under_root</code>; no write follows a link below the root; and nothing is overwritten unless the policy is <code>Replace</code>. New writers should use a temporary file beside the target and <code>persist_noclobber</code>. Pitfalls: <code>std::fs::metadata</code> or <code>Path::exists</code>, which follow links (the download code has <code>exists_no_follow</code>), and “fixing” a traversal key by dropping <code>..</code>.</p>
+</section>
+<section id="further-reading-22" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>crates/r2dock-core/src/path_guard.rs</code> with its tests, and <code>crates/r2dock-transfer/src/source.rs</code>.</li>
+<li>Microsoft, <a href="https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file" target="_blank" rel="noopener noreferrer">Naming Files, Paths, and Namespaces</a>.</li>
+<li>OWASP, <a href="https://community.owasp.org/attacks/Path_Traversal" target="_blank" rel="noopener noreferrer">Path Traversal</a>.</li>
+<li><a href="https://unicode.org/reports/tr15/" target="_blank" rel="noopener noreferrer">Unicode Standard Annex 15</a>, Unicode Normalization Forms.</li>
+<li><a href="https://docs.rs/tempfile/latest/tempfile/struct.TempPath.html" target="_blank" rel="noopener noreferrer">tempfile <code>TempPath::persist_noclobber</code></a>.</li>
+</ul>
+</section>
+</section>

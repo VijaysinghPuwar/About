@@ -1,0 +1,207 @@
+<section id="ch-14" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">14</span> Journals and Persistent Queues</h1>
+<p>A user who drops ten thousand files into R2Dock and closes the laptop lid expects the work to be there in the morning. This chapter explains how transfer state is written, synced, read back, and kept small. The state machine this data feeds belongs to <a href="/books/r2dock/read/ch020#ch-13">Chapter 13</a> (Transfer State Machines), and <a href="/books/r2dock/read/ch022#ch-15">Chapter 15</a> (Crash Consistency and Recovery) uses this foundation to walk through crash scenarios.</p>
+<section id="work-that-outlives-the-process" class="level3">
+<h2>Work That Outlives the Process</h2>
+<p>Three kinds of information matter after a restart: the accepted work that has not finished; resumable progress (for a multipart upload, the multipart upload identifier, or upload ID, and the stored parts; for a download, the partial file and its object’s entity tag, or ETag), whose loss would restart a 20 GB upload from zero; and a history of what happened. Progress changes often but exists only for running jobs, the accepted list can be huge but changes rarely, and history only grows, so R2Dock uses a different strategy for each.</p>
+</section>
+<section id="three-files-under-the-transfers-folder" class="level3">
+<h2>Three Files Under the Transfers Folder</h2>
+<p><code>Engine::start</code> (lines 160 to 167 of <code>engine/mod.rs</code>) opens three files under a <code>transfers</code> folder in the application data directory. The resume journal, <code>journal.json</code>, is a “plain” <code>Journal</code>: one JSON file rewritten completely and atomically on every save. The queue, <code>queue.json</code> plus <code>queue.log</code>, is a “logged” <code>Journal</code>: a snapshot plus an append-only change log. History, <code>history.jsonl</code>, is a separate type. The module comment of <code>journal.rs</code> explains: the resume journal “changes often but stays small”, while the queue “can hold a very large number of jobs”. Each journal has a background writer with its own batch interval: <code>JOURNAL_BATCH</code> is 200 milliseconds and <code>QUEUE_BATCH</code> one second, because uploaded parts are more expensive to lose than the fact that a job exists.</p>
+</section>
+<section id="the-record-format" class="level3">
+<h2>The Record Format</h2>
+<p>Both journals store <code>JournalEntry</code>, serialized as JSON with serde and <code>serde_json</code>:</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/journal.rs#L41-L52" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/journal.rs, lines 41 to 52</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="at">#[</span>derive<span class="at">(</span><span class="bu">Debug</span><span class="op">,</span> <span class="bu">Clone</span><span class="op">,</span> <span class="bu">PartialEq</span><span class="op">,</span> <span class="bu">Eq</span><span class="op">,</span> Serialize<span class="op">,</span> Deserialize<span class="at">)]</span></span>
+<span id="cb1-2"><span class="at">#[</span>serde<span class="at">(</span>rename_all <span class="op">=</span> <span class="st">"camelCase"</span><span class="at">)]</span></span>
+<span id="cb1-3"><span class="kw">pub</span> <span class="kw">struct</span> JournalEntry <span class="op">{</span></span>
+<span id="cb1-4">    <span class="kw">pub</span> id<span class="op">:</span> JobId<span class="op">,</span></span>
+<span id="cb1-5">    <span class="kw">pub</span> spec<span class="op">:</span> JobSpec<span class="op">,</span></span>
+<span id="cb1-6">    <span class="kw">pub</span> group<span class="op">:</span> <span class="dt">Option</span><span class="op">&lt;</span>GroupInfo<span class="op">&gt;,</span></span>
+<span id="cb1-7">    <span class="kw">pub</span> resume<span class="op">:</span> ResumeState<span class="op">,</span></span>
+<span id="cb1-8">    <span class="kw">pub</span> created_at<span class="op">:</span> <span class="dt">String</span><span class="op">,</span></span>
+<span id="cb1-9">    <span class="co">/// Order the job was added in (0 in older journals).</span></span>
+<span id="cb1-10">    <span class="at">#[</span>serde<span class="at">(</span><span class="kw">default</span><span class="at">)]</span></span>
+<span id="cb1-11">    <span class="kw">pub</span> seq<span class="op">:</span> <span class="dt">u64</span><span class="op">,</span></span>
+<span id="cb1-12"><span class="op">}</span></span></code></pre></div>
+<p><code>JobSpec</code> is the full upload or download description, and <code>#[serde(default)]</code> on <code>seq</code> lets older journals without the field load with zero.</p>
+<p><code>ResumeState</code> in <code>ctx.rs</code> has three variants, <code>None</code>, <code>Multipart</code>, and <code>Download</code>, serialized as an internally tagged enum (<code>#[serde(tag = "kind")]</code>), as is <code>JobSpec</code>. Serde buffers internally tagged enums through an intermediate representation that cannot carry 128-bit integers or numeric map keys, and two code comments record the consequences: the modification time in a <code>Fingerprint</code> (<code>source.rs</code>) is a <code>u64</code> of nanoseconds rather than a <code>u128</code>, and a multipart upload’s completed parts, a <code>BTreeMap&lt;i32, PartDone&gt;</code> in memory, are serialized as a list through the custom module <code>parts_as_list</code>. The unit test <code>multipart_and_compressed_entries_reload</code> exists because, as its comment says, every journal with a multipart upload once failed to load.</p>
+<p>A snapshot (<code>JournalFile</code>) is a JSON object of the form <code>{"version":1,"generation":7,"entries":[...]}</code>. A log line (<code>LogLine</code>) is one JSON object per line: <code>{"generation":7,"id":"...","entry":{...}}</code> adds or replaces an entry, and <code>"entry":null</code> removes one. Replay is “last writer wins” per identifier. There is no per-line checksum; a line is valid if it parses. <code>JournalFile</code> uses <code>#[serde(default)]</code>, so an older pretty-printed <code>queue.json</code> without <code>generation</code> loads with generation zero (test <code>old_pretty_queue_files_still_load</code>). <code>JOURNAL_VERSION</code> is 1 and is written into every snapshot, but at the audited commit the loader never inspects it; compatibility relies entirely on serde defaults.</p>
+</section>
+<section id="batching-writes-off-the-async-runtime" class="level3">
+<h2>Batching Writes Off the Async Runtime</h2>
+<p>A blocking write on a Tokio worker would stall every task on it (<a href="/books/r2dock/read/ch010#ch-05">Chapter 5</a>, Tokio and Asynchronous Execution), so callers only change memory. <code>upsert_many</code> inserts entries into a <code>BTreeMap</code> behind a <code>parking_lot::Mutex</code>, pushes each change onto a <code>pending</code> list for a logged journal, and calls <code>dirty.notify_one()</code>. The task started by <code>spawn_writer</code> waits on <code>dirty</code>, sleeps one batch interval so a burst of updates (say, eight parts finishing within milliseconds) becomes one write, then runs <code>flush</code> on the blocking pool with <code>spawn_blocking</code>. Because <code>Notify</code> stores a permit when no one is waiting, a change arriving mid-flush triggers another flush.</p>
+<p>That creates a deliberate window: a change reaches disk up to one batch interval plus the write time after it happens in memory. <code>JobHooks::persist_now</code> flushes synchronously for code that cannot accept the window; its only caller is download finalization (<a href="/books/r2dock/read/ch022#ch-15">Chapter 15</a>). Both journals are also flushed synchronously on normal exit, from the Tauri <code>RunEvent::Exit</code> handler in <code>src-tauri/src/lib.rs</code>.</p>
+</section>
+<section id="appending-to-the-log" class="level3">
+<h2>Appending to the Log</h2>
+<p>For the queue, a flush normally appends a few lines:</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/journal.rs#L236-L279" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/journal.rs, lines 236 to 279</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="kw">pub</span> <span class="kw">fn</span> flush(<span class="op">&amp;</span><span class="kw">self</span>) <span class="op">{</span></span>
+<span id="cb2-2">    <span class="kw">let</span> <span class="cn">Some</span>(log) <span class="op">=</span> <span class="op">&amp;</span><span class="kw">self</span><span class="op">.</span>log <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb2-3">        <span class="kw">self</span><span class="op">.</span>compact()<span class="op">;</span></span>
+<span id="cb2-4">        <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb2-5">    <span class="op">};</span></span>
+<span id="cb2-6">    <span class="kw">let</span> _writing <span class="op">=</span> <span class="kw">self</span><span class="op">.</span>writing<span class="op">.</span>lock()<span class="op">;</span></span>
+<span id="cb2-7">    <span class="kw">let</span> (lines<span class="op">,</span> generation) <span class="op">=</span> <span class="op">{</span></span>
+<span id="cb2-8">        <span class="kw">let</span> <span class="kw">mut</span> state <span class="op">=</span> <span class="kw">self</span><span class="op">.</span>state<span class="op">.</span>lock()<span class="op">;</span></span>
+<span id="cb2-9">        <span class="cf">if</span> state<span class="op">.</span>needs_snapshot</span>
+<span id="cb2-10">            <span class="op">||</span> state<span class="op">.</span>log_bytes <span class="op">&gt;=</span> LOG_COMPACT_MIN<span class="op">.</span>max(state<span class="op">.</span>snapshot_bytes)</span>
+<span id="cb2-11">        <span class="op">{</span></span>
+<span id="cb2-12">            drop(state)<span class="op">;</span></span>
+<span id="cb2-13">            drop(_writing)<span class="op">;</span></span>
+<span id="cb2-14">            <span class="kw">self</span><span class="op">.</span>compact()<span class="op">;</span></span>
+<span id="cb2-15">            <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb2-16">        <span class="op">}</span></span>
+<span id="cb2-17">        (<span class="pp">std::mem::</span>take(<span class="op">&amp;</span><span class="kw">mut</span> state<span class="op">.</span>pending)<span class="op">,</span> state<span class="op">.</span>generation)</span>
+<span id="cb2-18">    <span class="op">};</span></span>
+<span id="cb2-19">    <span class="co">// ...</span></span>
+<span id="cb2-20">    <span class="kw">let</span> appended <span class="op">=</span> log</span>
+<span id="cb2-21">        <span class="op">.</span>parent()</span>
+<span id="cb2-22">        <span class="op">.</span>map_or(<span class="cn">Ok</span>(())<span class="op">,</span> <span class="pp">std::fs::</span>create_dir_all)</span>
+<span id="cb2-23">        <span class="op">.</span>and_then(<span class="op">|</span>()<span class="op">|</span> <span class="op">{</span></span>
+<span id="cb2-24">            <span class="pp">std::fs::OpenOptions::</span>new()</span>
+<span id="cb2-25">                <span class="op">.</span>create(<span class="cn">true</span>)</span>
+<span id="cb2-26">                <span class="op">.</span>append(<span class="cn">true</span>)</span>
+<span id="cb2-27">                <span class="op">.</span>open(log)</span>
+<span id="cb2-28">        <span class="op">}</span>)</span>
+<span id="cb2-29">        <span class="op">.</span>and_then(<span class="op">|</span><span class="kw">mut</span> f<span class="op">|</span> <span class="op">{</span></span>
+<span id="cb2-30">            f<span class="op">.</span>write_all(<span class="op">&amp;</span>bytes)<span class="op">?;</span></span>
+<span id="cb2-31">            f<span class="op">.</span>sync_data()</span>
+<span id="cb2-32">        <span class="op">}</span>)<span class="op">;</span></span></code></pre></div>
+<p>A plain journal has no log, so its flush is a full snapshot (<code>compact</code>). For a logged journal, the second lock, <code>writing</code>, serializes every disk write, so an append and a snapshot never overlap and, in the field comment’s words, “an older snapshot never lands after a newer one”. If compaction is not due, the pending changes are encoded as JSON lines with the current generation, written with one <code>write_all</code>, and followed by <code>sync_data</code>.</p>
+<p>That is the queue’s durability point. The Rust documentation for <a href="https://doc.rust-lang.org/std/fs/struct.File.html#method.sync_data" target="_blank" rel="noopener noreferrer"><code>File::sync_data</code></a> says it is like <code>sync_all</code> “except that it might not synchronize file metadata to the filesystem”. An appended file’s length is metadata; on Unix the data sync call is generally expected to persist it, but the Rust documentation does not promise this and this book did not verify it per platform. What the code does guarantee is that <code>log_bytes</code> grows only after the sync succeeds.</p>
+</section>
+<section id="snapshots-atomic-replace-and-fsync" class="level3">
+<h2>Snapshots, Atomic Replace, and fsync</h2>
+<p>Snapshots go through <code>write_bytes_atomic</code> in <code>r2dock-core</code>, shared with the settings and connection files:</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-core/src/storage.rs#L49-L63" target="_blank" rel="noopener noreferrer">crates/r2dock-core/src/storage.rs, lines 49 to 63</a></p>
+</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb3-1"><span class="kw">pub</span> <span class="kw">fn</span> write_bytes_atomic(</span>
+<span id="cb3-2">    path<span class="op">:</span> <span class="op">&amp;</span><span class="dt">Path</span><span class="op">,</span></span>
+<span id="cb3-3">    bytes<span class="op">:</span> <span class="op">&amp;</span>[<span class="dt">u8</span>]</span>
+<span id="cb3-4">) <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span>()<span class="op">,</span> StorageError<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb3-5">    <span class="kw">let</span> dir <span class="op">=</span> path</span>
+<span id="cb3-6">        <span class="op">.</span>parent()</span>
+<span id="cb3-7">        <span class="op">.</span>ok_or(<span class="pp">StorageError::</span>Io(<span class="pp">io::ErrorKind::</span>InvalidInput))<span class="op">?;</span></span>
+<span id="cb3-8">    <span class="pp">fs::</span>create_dir_all(dir)<span class="op">?;</span></span>
+<span id="cb3-9">    <span class="kw">let</span> <span class="kw">mut</span> tmp <span class="op">=</span> <span class="pp">tempfile::Builder::</span>new()</span>
+<span id="cb3-10">        <span class="op">.</span>prefix(<span class="st">".r2dock-"</span>)</span>
+<span id="cb3-11">        <span class="op">.</span>suffix(<span class="st">".tmp"</span>)</span>
+<span id="cb3-12">        <span class="op">.</span>tempfile_in(dir)<span class="op">?;</span></span>
+<span id="cb3-13">    tmp<span class="op">.</span>write_all(bytes)<span class="op">?;</span></span>
+<span id="cb3-14">    tmp<span class="op">.</span>as_file()<span class="op">.</span>sync_all()<span class="op">?;</span></span>
+<span id="cb3-15">    tmp<span class="op">.</span>persist(path)</span>
+<span id="cb3-16">        <span class="op">.</span>map_err(<span class="op">|</span>e<span class="op">|</span> <span class="pp">StorageError::</span>Io(e<span class="op">.</span>error<span class="op">.</span>kind()))<span class="op">?;</span></span>
+<span id="cb3-17">    <span class="cn">Ok</span>(())</span>
+<span id="cb3-18"><span class="op">}</span></span></code></pre></div>
+<p>This is the classic write, sync, rename pattern, with the temporary file in the same folder so the rename stays on one file system. The <a href="https://docs.rs/tempfile/latest/tempfile/struct.NamedTempFile.html#method.persist" target="_blank" rel="noopener noreferrer">tempfile documentation for <code>persist</code></a> states that it “will atomically replace” an existing target, and warns that “neither the file contents nor the containing directory are synchronized”. R2Dock covers the contents with <code>sync_all</code>, but no code at the audited commit syncs the parent directory after the rename. A reader therefore always sees a complete old or complete new snapshot, never a half-written one; what is not guaranteed under power loss is that the new one is permanent when <code>persist</code> returns, since on some POSIX file systems the old name can survive. <a href="/books/r2dock/read/ch022#ch-15">Chapter 15</a> considers what that means for the queue.</p>
+</section>
+<section id="generation-numbers" class="level3">
+<h2>Generation Numbers</h2>
+<p>A snapshot and its log must agree on which lines the snapshot already contains. R2Dock uses a generation counter stored in the snapshot and copied onto every log line. Each compaction of a logged journal writes a snapshot with the generation increased by one, then empties the log, and on load any line from another generation is skipped. This matters because “write snapshot, then truncate log” is two system calls, and a crash between them leaves a new snapshot next to a log full of changes it already contains. Replaying most of them would be harmless, but an old “add” line for a job later removed would resurrect it. The test <code>logged_journal_compacts_and_skips_older_lines</code> appends a stale generation-zero removal for a job that should survive and checks that it does. A plain journal’s generation never changes.</p>
+</section>
+<section id="replay-at-startup" class="level3">
+<h2>Replay at Startup</h2>
+<p>Loading reads the snapshot, replays the log, and compacts at once if the log was not empty:</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/journal.rs#L121-L172" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/journal.rs, lines 121 to 172</a></p>
+</div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb4-1"><span class="kw">let</span> file <span class="op">=</span> <span class="cf">match</span> <span class="pp">read_json::</span><span class="op">&lt;</span>JournalFile<span class="op">&gt;</span>(<span class="op">&amp;</span>path) <span class="op">{</span></span>
+<span id="cb4-2">    <span class="cn">Ok</span>(<span class="pp">Loaded::</span>Found(f)) <span class="op">=&gt;</span> f<span class="op">,</span></span>
+<span id="cb4-3">    _ <span class="op">=&gt;</span> <span class="pp">JournalFile::</span><span class="kw">default</span>()<span class="op">,</span></span>
+<span id="cb4-4"><span class="op">};</span></span>
+<span id="cb4-5"><span class="co">// ...</span></span>
+<span id="cb4-6"><span class="cf">if</span> <span class="kw">let</span> <span class="cn">Some</span>(log) <span class="op">=</span> <span class="op">&amp;</span>log</span>
+<span id="cb4-7">    <span class="op">&amp;&amp;</span> <span class="kw">let</span> <span class="cn">Ok</span>(f) <span class="op">=</span> <span class="pp">std::fs::File::</span>open(log)</span>
+<span id="cb4-8"><span class="op">{</span></span>
+<span id="cb4-9">    <span class="cf">for</span> line <span class="kw">in</span> <span class="pp">std::io::BufReader::</span>new(f)<span class="op">.</span>lines() <span class="op">{</span></span>
+<span id="cb4-10">        <span class="kw">let</span> <span class="cn">Ok</span>(line) <span class="op">=</span> line <span class="cf">else</span> <span class="op">{</span> <span class="cf">break</span> <span class="op">};</span></span>
+<span id="cb4-11">        <span class="cf">if</span> line<span class="op">.</span>trim()<span class="op">.</span>is_empty() <span class="op">{</span></span>
+<span id="cb4-12">            <span class="cf">continue</span><span class="op">;</span></span>
+<span id="cb4-13">        <span class="op">}</span></span>
+<span id="cb4-14">        <span class="co">// A line cut short by a crash ends the log.</span></span>
+<span id="cb4-15">        <span class="kw">let</span> <span class="cn">Ok</span>(change) <span class="op">=</span> <span class="pp">serde_json::from_str::</span><span class="op">&lt;</span>LogLine<span class="op">&gt;</span>(<span class="op">&amp;</span>line) <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb4-16">            <span class="cf">break</span><span class="op">;</span></span>
+<span id="cb4-17">        <span class="op">};</span></span>
+<span id="cb4-18">        <span class="cf">if</span> change<span class="op">.</span>generation <span class="op">!=</span> state<span class="op">.</span>generation <span class="op">{</span></span>
+<span id="cb4-19">            <span class="cf">continue</span><span class="op">;</span></span>
+<span id="cb4-20">        <span class="op">}</span></span>
+<span id="cb4-21">        <span class="cf">match</span> change<span class="op">.</span>entry <span class="op">{</span></span>
+<span id="cb4-22">            <span class="cn">Some</span>(e) <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb4-23">                state<span class="op">.</span>entries<span class="op">.</span>insert(change<span class="op">.</span>id<span class="op">,</span> e)<span class="op">;</span></span>
+<span id="cb4-24">            <span class="op">}</span></span>
+<span id="cb4-25">            <span class="cn">None</span> <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb4-26">                state<span class="op">.</span>entries<span class="op">.</span>remove(<span class="op">&amp;</span>change<span class="op">.</span>id)<span class="op">;</span></span>
+<span id="cb4-27">            <span class="op">}</span></span>
+<span id="cb4-28">        <span class="op">}</span></span>
+<span id="cb4-29">    <span class="op">}</span></span>
+<span id="cb4-30"><span class="op">}</span></span>
+<span id="cb4-31"><span class="co">// ...</span></span>
+<span id="cb4-32"><span class="cf">if</span> replayed <span class="op">{</span></span>
+<span id="cb4-33">    journal<span class="op">.</span>compact()<span class="op">;</span></span>
+<span id="cb4-34"><span class="op">}</span></span></code></pre></div>
+<p>A missing or unreadable snapshot counts as empty with generation zero, lines apply in order, lines from another generation are skipped, and the first unreadable line ends the replay. Figure 14.1 shows these rules.</p>
+<figure id="fig-14-journal-replay">
+<img src="/books/r2dock/media/file17.webp" alt="A top to bottom flow chart. Load the snapshot into a map. For each log line: if it does not parse, stop; if its generation differs, skip it; otherwise insert or remove the entry. After the last line, if the log was not empty, compact into a new snapshot and empty the log. Then hand the entries to the engine." width="1011" height="1412" loading="lazy" decoding="async">
+<figcaption>Figure 14.1. Replay of the queue journal at startup, from snapshot load through per-line checks to an immediate compaction.</figcaption>
+</figure>
+<p>The immediate compaction makes “stop at the first bad line” safe. Without it, new appends would follow a torn line, and the next load would stop there and silently drop the whole following session. The doc comment on <code>load_logged</code> says: “Anything in the log is folded into a new snapshot at once, so later appends never follow a line cut short by a crash.”</p>
+<p><code>Engine::restore</code> then merges the two journals. Resume journal entries win for the same identifier because they carry resumable state, and every restored job is <code>Interrupted</code> (“Nothing restarts on its own.”). Jobs are sorted by <code>(seq, created_at)</code>. The test <code>accepted_queue_survives_restart</code> in <code>tests/recovery.rs</code> enqueues 5,000 downloads, pauses, flushes, restarts, and checks all 5,000 return as <code>Interrupted</code> in their original order.</p>
+</section>
+<section id="compaction-when-and-how" class="level3">
+<h2>Compaction: When and How</h2>
+<p>The rule is the condition at the top of <code>flush</code>: compact when a previous snapshot failed (<code>needs_snapshot</code>) or when the log reaches <code>LOG_COMPACT_MIN.max(state.snapshot_bytes)</code>, with <code>LOG_COMPACT_MIN</code> at 1 MiB. So the log is folded in once it is at least 1 MiB and at least as large as the snapshot. Disk use stays under roughly twice the live data, a snapshot of size S is rewritten only after S bytes of log, and the floor keeps a nearly empty queue from compacting on every change.</p>
+<p>The function <code>compact</code> (lines 297 to 345 of <code>journal.rs</code>) takes the write lock, discards pending changes (the map already reflects them), builds a snapshot with the next generation, writes it atomically with one retry after 50 milliseconds (the comment cites antivirus or indexers briefly holding the file on Windows), records the new generation and sizes on success, and truncates the log. A failed truncation is ignored: old lines carry the old generation and will be skipped, though the next compaction then comes later than intended. Changes arriving after the state lock is released are pushed to <code>pending</code> without a generation; the later flush that encodes them needs the same write lock, so they get the new generation. Figure 14.2 shows the cycle.</p>
+<figure id="fig-14-journal-compaction">
+<img src="/books/r2dock/media/file18.webp" alt="A top to bottom diagram. Changes update memory and wake the writer, which flushes after the batch delay. If the log is small, pending lines are appended and synced. If the log is large or a snapshot is owed, a new snapshot with the next generation is written, synced, and renamed over queue.json, and queue.log is truncated. A failed write marks a snapshot as owed and retries." width="1263" height="1357" loading="lazy" decoding="async">
+<figcaption>Figure 14.2. The life cycle of the queue files: batched appends to the log, and compaction into a new snapshot once the log is large.</figcaption>
+</figure>
+</section>
+<section id="damage-and-disk-failures" class="level3">
+<h2>Damage and Disk Failures</h2>
+<p>A torn log tail ends the replay and is removed by the load-time compaction, so a crash loses at most the batch in progress plus unflushed changes. A corrupt middle line is treated the same way: without a checksum it cannot be told from a cut tail, and continuing could apply a removal without its addition. Since the code only appends, such damage needs a hardware or file system fault.</p>
+<p>A corrupt snapshot is handled by <code>read_json</code> in <code>storage.rs</code>: it is renamed to <code>queue.json.corrupt-&lt;timestamp&gt;</code> (or the <code>journal.json</code> equivalent), a warning is logged, and the journal starts empty (test <code>corrupt_journal_is_ignored</code>, for a plain journal). For the queue, the empty replacement has generation zero, so every log line written against the lost snapshot is skipped and then truncated; the log is not backed up. Any other read error, such as a permission problem, also yields an empty journal, without a backup.</p>
+<p>Persistence is best effort: a failed save never fails a transfer and is only logged with <code>tracing::warn!</code> and retried. A failed append makes <code>flush</code> release its write lock and call <code>compact</code>. The benchmark notes in <code>docs/benchmarks/2026-10-18-compression-at-scale.md</code> explain why the release matters: an earlier version fell back while holding the lock and deadlocked in a fresh data folder without a <code>transfers</code> directory. The tests <code>a_failed_append_writes_a_snapshot_without_hanging</code> and <code>logged_journal_starts_in_a_missing_folder</code> cover the fix. If the snapshot also fails, <code>compact</code> sets <code>needs_snapshot</code>, keeps the old log (still consistent with the old snapshot), and notifies the writer, so the journal retries every batch interval while memory keeps everything. The cost is that a full disk can silently leave the journals stale for as long as it stays full.</p>
+</section>
+<section id="ordering-between-memory-disk-and-the-network" class="level3">
+<h2>Ordering Between Memory, Disk, and the Network</h2>
+<p>The hard correctness questions are about ordering. First, adding versus finishing: <code>Engine::enqueue</code> saves accepted jobs to the queue while holding the jobs lock, so a job that finishes at once removes its record only after the save and “never comes back as interrupted”. The tests <code>a_job_finished_while_it_is_saved_is_not_kept</code> and <code>a_retried_job_finished_while_it_is_saved_is_not_kept</code> in <code>engine/tests.rs</code> force that race with the hook <code>before_queue_save</code>, and <code>save_intent</code> refuses to save a finished job.</p>
+<p>Second, cleanup versus announcement: <code>Inner::finish</code> removes the resume entry and compressed copy before <code>set_state</code> announces the final state and removes the queue entry. The resume entry is kept for <code>Failed</code>, so a failed download keeps its partial file for Retry (the “partial kept for retry” row in PLAN.md section 13), and, as <a href="/books/r2dock/read/ch020#ch-13">Chapter 13</a> notes, such a job returns as <code>Interrupted</code> after a restart.</p>
+</section>
+<section id="how-this-compares-with-a-write-ahead-log" class="level3">
+<h2>How This Compares With a Write-Ahead Log</h2>
+<p>The queue resembles a database write-ahead log (WAL), but a WAL makes the log record durable before the change is applied. R2Dock cannot: the changed data is mostly remote, an upload ID exists only after <code>CreateMultipartUpload</code> succeeds, and batching means changes reach the network before disk. The journal is a checkpoint of progress, not a log of intent. It is safe because recovery never trusts it alone: a resumed multipart upload lists its parts on the server and keeps only matching ETags, a download re-checks its partial file and uses <code>If-Match</code>, and a compressed copy is verified by SHA-256. With no multi-record transactions and no directory sync, the journal gives crash safety and fast recovery, not transactional durability.</p>
+</section>
+<section id="what-the-log-saves-in-practice" class="level3">
+<h2>What the Log Saves in Practice</h2>
+<p>As recorded in <code>docs/benchmarks/2026-10-18-compression-at-scale.md</code> (not re-run for this book), the ignored test <code>draining_a_huge_queue_keeps_disk_writes_small</code> in <code>tests/queue_scale.rs</code> queued 100,000 jobs and drained 50,000 over about 15 seconds on an Apple silicon Mac with release builds, estimating bytes written by polling file sizes. The earlier design, a pretty-printed <code>queue.json</code> rewritten up to once a second, wrote 59.4 MB per save and about 636 MB while draining. With snapshot and log, the first save was 50.1 MB and draining wrote about 45 MB including one compaction. These are single-run estimates; the test also checks that exactly the unfinished jobs return after a restart.</p>
+<p>The other persistent logs choose differently. History (<code>history.rs</code>) appends one JSON line per finished job without syncing and skips malformed lines when reading. The activity log in <code>src-tauri/src/activity/</code> writes daily comma-separated values (CSV) files from a dedicated thread with a bounded queue (200,000 rows and 64 MiB), dropping and counting rows when full, without syncing, because “callers never wait on disk”. The journals sync because they drive recovery; history and activity only describe the past.</p>
+</section>
+<section id="a-crash-recovery-walkthrough" class="level3">
+<h2>A Crash Recovery Walkthrough</h2>
+<p>The user enqueues 1,000 downloads, and a second later the writer appends 1,000 lines with, say, generation 4 and syncs. Three downloads start and each saves a <code>Download</code> resume state to <code>journal.json</code> within about 200 milliseconds. As downloads finish, removal lines are appended; the log stays far below 1 MiB.</p>
+<p>Then the power fails. On restart, <code>Journal::load</code> reads the last complete <code>journal.json</code> and finds three resume entries. <code>Journal::load_logged</code> reads the generation 4 snapshot and replays 1,000 additions, a few hundred removals, and perhaps half a line, where it stops. The queue is compacted at once into generation 5 and the log emptied. <code>restore</code> shows the remaining jobs as <code>Interrupted</code>, in order. Jobs that finished in the last second may reappear because their removal lines were never written; PLAN.md section 12.3 accepts this, since resuming them is safe under the conflict policy and verification. <a href="/books/r2dock/read/ch022#ch-15">Chapter 15</a> follows each resumed job.</p>
+</section>
+<section id="working-on-this-code-13" class="level3">
+<h2>Working on This Code</h2>
+<p><code>crates/r2dock-transfer/src/journal.rs</code> holds <code>Journal</code>, its formats, replay, compaction, and unit tests. <code>crates/r2dock-core/src/storage.rs</code> holds <code>write_bytes_atomic</code> and <code>read_json</code>, shared with settings and connections, so changes there reach beyond transfers. The engine’s use is in <code>engine/mod.rs</code> (<code>Engine::start</code>, <code>restore</code>, <code>enqueue</code>, <code>save_intent</code>, <code>finish</code>, <code>persist_now</code>), and resume types are in <code>ctx.rs</code>.</p>
+<p>When adding a field to <code>JobSpec</code> or <code>ResumeState</code>, give it <code>#[serde(default)]</code>, avoid <code>u128</code> and non-string map keys inside tagged enums, and add a reload test beside <code>multipart_and_compressed_entries_reload</code>. Keep queue saves under the jobs lock and cleanup before final announcements, and never call <code>flush</code> from async code without <code>spawn_blocking</code>. Run <code>cargo test -p r2dock-transfer</code>, <code>cargo test -p r2dock-transfer --test recovery</code>, and <code>cargo test -p r2dock-core</code>; the large queue measurement is <code>cargo test -p r2dock-transfer --release --test queue_scale -- --ignored --nocapture</code>. Do not test persistence only through clean shutdowns; build files by hand with stale and torn lines, as <code>logged_journal_compacts_and_skips_older_lines</code> does.</p>
+</section>
+<section id="further-reading-13" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>crates/r2dock-transfer/src/journal.rs</code> and <code>crates/r2dock-core/src/storage.rs</code></li>
+<li><code>crates/r2dock-transfer/tests/recovery.rs</code> and <code>tests/queue_scale.rs</code></li>
+<li>Rust standard library, <a href="https://doc.rust-lang.org/std/fs/struct.File.html#method.sync_all" target="_blank" rel="noopener noreferrer"><code>File::sync_all</code> and <code>File::sync_data</code></a></li>
+<li>tempfile, <a href="https://docs.rs/tempfile/latest/tempfile/struct.NamedTempFile.html#method.persist" target="_blank" rel="noopener noreferrer"><code>NamedTempFile::persist</code></a></li>
+<li><code>docs/benchmarks/2026-10-18-compression-at-scale.md</code></li>
+</ul>
+</section>
+</section>

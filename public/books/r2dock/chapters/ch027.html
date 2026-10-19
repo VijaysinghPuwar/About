@@ -1,0 +1,182 @@
+<section id="ch-19" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">19</span> Video Compression Internals</h1>
+<p>Video is where compression pays off most and where it can go wrong in the most ways: a careless conversion can turn a phone recording sideways, wash out its colors, drop an audio language, lose subtitles, or produce a file some browsers cannot play. This chapter covers how R2Dock probes a video, detects and picks an encoder, sets its options, and decides which files to leave alone. Process handling belongs to <a href="/books/r2dock/read/ch025#ch-17">Chapter 17</a> (How FFmpeg Integrates with Rust), and the skip and verification ideas reused here come from <a href="/books/r2dock/read/ch026#ch-18">Chapter 18</a> (Audio Compression Internals). The code is in <code>crates/r2dock-media/src/video/</code>.</p>
+<section id="video-concepts-for-newcomers" class="level3">
+<h2>Video Concepts for Newcomers</h2>
+<p>A video is a sequence of frames with a <strong>resolution</strong> (1920 by 1080 is “1080p”) and a <strong>frame rate</strong>. Phones and screen recorders often use a <strong>variable frame rate</strong>; forcing a fixed rate duplicates or drops frames.</p>
+<p>Codecs such as H.264 (Advanced Video Coding, AVC), HEVC (High Efficiency Video Coding), VP9, and AV1 store a few complete <strong>keyframes</strong> and describe the frames between them as changes. The span between keyframes is the <strong>group of pictures</strong> (GOP); a longer GOP saves bits but makes seeking coarser.</p>
+<p>Encoders either target a bitrate or target a quality. x264 and SVT-AV1 call their quality knob the <strong>constant rate factor</strong> (CRF), where lower means higher quality. The <a href="https://ffmpeg.org/ffmpeg-codecs.html" target="_blank" rel="noopener noreferrer">FFmpeg codecs documentation</a> gives the <code>libsvtav1</code> CRF range as 0 to 63 and its <code>preset</code> as a “quality-speed tradeoff, in the range 0 to 13,” where “higher values are faster but lower quality.”</p>
+<p><strong>Bit depth</strong> is bits per color component; <code>yuv420p</code> is the widely playable 8 bit 4:2:0 pixel format and <code>yuv420p10le</code> its 10 bit form. The <strong>transfer function</strong> maps stored numbers to brightness: standard dynamic range (SDR) uses a gamma curve, while high dynamic range (HDR) uses PQ (<code>smpte2084</code> in FFmpeg) or hybrid log gamma, HLG (<code>arib-std-b67</code>). HDR to 8 bit SDR needs tone mapping, or pictures look washed out. Phones also record the intended <strong>rotation</strong> as a “display matrix” that a converter must honor. R2Dock always writes MP4 with <code>+faststart</code>, which moves the index to the front so playback can start before the download completes.</p>
+</section>
+<section id="routing-a-file-to-the-video-path" class="level3">
+<h2>Routing a File to the Video Path</h2>
+<p><code>pipeline::prepare</code> in <code>crates/r2dock-media/src/pipeline.rs</code> is the entry point for audio and video. A file whose extension is in <code>VIDEO_EXTENSIONS</code> (defined in <code>video/run.rs</code>: <code>mp4</code>, <code>mov</code>, <code>mkv</code>, <code>webm</code>, and six others) is probed with ffprobe first, because the in-process Symphonia probe may see only the audio track of an MP4. An MP4 with no main video stream continues down the audio path.</p>
+<p><code>video::probe::probe_video</code> runs <code>ffprobe -print_format json -show_format -show_streams</code> with the usual <code>-protocol_whitelist file</code> and <code>file:</code> path rules, a 60 second timeout, and <code>kill_on_drop</code>; any failure returns <code>None</code>, meaning “not something we can compress”. <code>parse</code> uses <code>#[serde(default)]</code> so missing fields become empty or zero, and builds a <code>StreamInfo</code> per stream with codec, size, pixel format, color transfer, bitrate, channels, cover art flag, rotation (from display matrix side data, else the older <code>rotate</code> tag), frame rate, tag, and language. The unit test <code>parses_a_phone_video</code> checks an HEVC, 10 bit, HLG phone recording with a minus 90 degree rotation. <code>VideoProbe::video_bitrate</code> falls back to the container bitrate minus audio, because Matroska files often lack per stream bitrates.</p>
+</section>
+<section id="which-encoders-exist-on-this-computer" class="level3">
+<h2>Which Encoders Exist on This Computer</h2>
+<p>According to THIRD_PARTY_NOTICES.md and the plan, the pinned Windows and Linux builds include SVT-AV1, OpenH264, and the hardware H.264 encoders. The macOS build from <code>tools/ffmpeg/build-macos.sh</code> enables SVT-AV1 and VideoToolbox but not OpenH264, so a Mac has no software H.264 fallback.</p>
+<p><code>H264Encoder::PRIORITY</code> in <code>video/plan.rs</code> orders seven H.264 encoders: VideoToolbox, NVENC, Quick Sync, AMF, Media Foundation, VA-API, and the software <code>libopenh264</code>, last because, as the plan puts it, it has lower quality per bit. Being listed by <code>ffmpeg -encoders</code> does not mean an encoder works (an NVENC build runs on laptops without NVIDIA cards), so <code>video::encoders::detect</code> tests every listed candidate.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-media/src/video/encoders.rs#L26-L51" target="_blank" rel="noopener noreferrer">crates/r2dock-media/src/video/encoders.rs, lines 26 to 51</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">/// Test the listed encoders (`listed` comes from `ffmpeg -encoders`).</span></span>
+<span id="cb1-2"><span class="kw">pub</span> <span class="kw">async</span> <span class="kw">fn</span> detect(ffmpeg<span class="op">:</span> <span class="op">&amp;</span><span class="dt">Path</span><span class="op">,</span> listed<span class="op">:</span> <span class="op">&amp;</span>[<span class="dt">String</span>]) <span class="op">-&gt;</span> VideoEncoders <span class="op">{</span></span>
+<span id="cb1-3">    <span class="kw">let</span> has <span class="op">=</span> <span class="op">|</span>name<span class="op">:</span> <span class="op">&amp;</span><span class="dt">str</span><span class="op">|</span> listed<span class="op">.</span>iter()<span class="op">.</span>any(<span class="op">|</span>e<span class="op">|</span> e <span class="op">==</span> name)<span class="op">;</span></span>
+<span id="cb1-4">    <span class="kw">let</span> <span class="kw">mut</span> found <span class="op">=</span> <span class="pp">VideoEncoders::</span><span class="kw">default</span>()<span class="op">;</span></span>
+<span id="cb1-5">    <span class="cf">if</span> has(<span class="st">"libsvtav1"</span>) <span class="op">{</span></span>
+<span id="cb1-6">        found<span class="op">.</span>av1 <span class="op">=</span> works(ffmpeg<span class="op">,</span> <span class="pp">VideoEncoder::</span>SvtAv1)<span class="op">.</span><span class="kw">await</span><span class="op">;</span></span>
+<span id="cb1-7">    <span class="op">}</span></span>
+<span id="cb1-8">    <span class="cf">for</span> e <span class="kw">in</span> <span class="pp">H264Encoder::</span>PRIORITY <span class="op">{</span></span>
+<span id="cb1-9">        <span class="cf">if</span> <span class="op">!</span>has(e<span class="op">.</span>name()) <span class="op">{</span></span>
+<span id="cb1-10">            <span class="cf">continue</span><span class="op">;</span></span>
+<span id="cb1-11">        <span class="op">}</span></span>
+<span id="cb1-12">        <span class="cf">if</span> works(ffmpeg<span class="op">,</span> <span class="pp">VideoEncoder::</span>H264(e))<span class="op">.</span><span class="kw">await</span> <span class="op">{</span></span>
+<span id="cb1-13">            <span class="cf">if</span> e <span class="op">==</span> <span class="pp">H264Encoder::</span>OpenH264 <span class="op">{</span></span>
+<span id="cb1-14">                found<span class="op">.</span>openh264 <span class="op">=</span> <span class="cn">true</span><span class="op">;</span></span>
+<span id="cb1-15">            <span class="op">}</span></span>
+<span id="cb1-16">            <span class="cf">if</span> found<span class="op">.</span>h264<span class="op">.</span>is_none() <span class="op">{</span></span>
+<span id="cb1-17">                found<span class="op">.</span>h264 <span class="op">=</span> <span class="cn">Some</span>(e)<span class="op">;</span></span>
+<span id="cb1-18">            <span class="op">}</span></span>
+<span id="cb1-19">            <span class="co">// Keep looking only for the software fallback.</span></span>
+<span id="cb1-20">            <span class="cf">if</span> found<span class="op">.</span>openh264 <span class="op">||</span> <span class="op">!</span>has(<span class="pp">H264Encoder::</span>OpenH264<span class="op">.</span>name()) <span class="op">{</span></span>
+<span id="cb1-21">                <span class="cf">break</span><span class="op">;</span></span>
+<span id="cb1-22">            <span class="op">}</span></span>
+<span id="cb1-23">        <span class="op">}</span></span>
+<span id="cb1-24">    <span class="op">}</span></span>
+<span id="cb1-25">    found</span>
+<span id="cb1-26"><span class="op">}</span></span></code></pre></div>
+<p><code>VideoEncoders</code> records the best working H.264 encoder, whether OpenH264 works (for the retry described later), and whether SVT-AV1 works. On Windows with an NVIDIA card, NVENC becomes <code>h264</code>, but the loop keeps testing until OpenH264 passes, so intermediate hardware tests cost time without changing the result. On a Mac, VideoToolbox passes and the loop stops.</p>
+<p>Each test (<code>works</code>) encodes three frames of FFmpeg’s <code>testsrc2</code> pattern through the <code>lavfi</code> input to the <code>null</code> muxer, using <code>args::test_encode</code>, which shares the real job’s encoder settings. A 20 second timeout with <code>kill_on_drop</code> bounds a hung driver. Detection runs once per FFmpeg in <code>CompressionService::refresh</code> (<a href="/books/r2dock/read/ch025#ch-17">Chapter 17</a>). Figure 19.1 shows detection and the per file choice.</p>
+<figure id="fig-19-encoder-selection">
+<img src="/books/r2dock/media/file24.webp" alt="A top to bottom flowchart. Detection runs once per FFmpeg: the encoder list is read, SVT-AV1 and the H.264 encoders are test encoded in priority order, and the results are cached. Per file: if the user chose AV1 and it works, SVT-AV1 is used; otherwise, if an H.264 encoder works, it is used; otherwise the file is skipped with &#x27;no video encoder&#x27;. A hardware H.264 failure mid-file retries once with OpenH264." width="932" height="1793" loading="lazy" decoding="async">
+<figcaption>Figure 19.1. Video encoder selection: detection tests each listed encoder once, then each file uses AV1 if chosen and working, otherwise the best working H.264 encoder, with OpenH264 as a retry.</figcaption>
+</figure>
+</section>
+<section id="choosing-the-encoder-for-a-file" class="level3">
+<h2>Choosing the Encoder for a File</h2>
+<p><code>VideoSettings</code> in <code>crates/r2dock-core/src/compression.rs</code> holds a codec (<code>VideoCodec::Av1</code> by default, or <code>H264</code>, shown as “Most compatible”) and a size (<code>Small720</code>, <code>Balanced1080</code> by default, <code>Keep</code>, or <code>Off</code>). <code>plan_video</code> turns these into one choice.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-media/src/video/plan.rs#L214-L231" target="_blank" rel="noopener noreferrer">crates/r2dock-media/src/video/plan.rs, lines 214 to 231</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1">    <span class="co">// AV1 when chosen and available; otherwise H.264.</span></span>
+<span id="cb2-2">    <span class="kw">let</span> encoder <span class="op">=</span> <span class="cf">match</span> (settings<span class="op">.</span>codec<span class="op">,</span> encoders<span class="op">.</span>av1<span class="op">,</span> encoders<span class="op">.</span>h264) <span class="op">{</span></span>
+<span id="cb2-3">        (<span class="pp">VideoCodec::</span>Av1<span class="op">,</span> <span class="cn">true</span><span class="op">,</span> _) <span class="op">=&gt;</span> <span class="pp">VideoEncoder::</span>SvtAv1<span class="op">,</span></span>
+<span id="cb2-4">        (_<span class="op">,</span> _<span class="op">,</span> <span class="cn">Some</span>(h)) <span class="op">=&gt;</span> <span class="pp">VideoEncoder::</span>H264(h)<span class="op">,</span></span>
+<span id="cb2-5">        (<span class="pp">VideoCodec::</span>Av1<span class="op">,</span> <span class="cn">false</span><span class="op">,</span> <span class="cn">None</span>) <span class="op">|</span> (<span class="pp">VideoCodec::</span>H264<span class="op">,</span> _<span class="op">,</span> <span class="cn">None</span>) <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb2-6">            <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">SkipReason::</span>NoVideoEncoder)<span class="op">;</span></span>
+<span id="cb2-7">        <span class="op">}</span></span>
+<span id="cb2-8">    <span class="op">};</span></span>
+<span id="cb2-9">    <span class="kw">let</span> source <span class="op">=</span> video<span class="op">.</span>codec<span class="op">.</span>as_str()<span class="op">;</span></span>
+<span id="cb2-10">    <span class="kw">let</span> already_efficient <span class="op">=</span> <span class="cf">match</span> encoder <span class="op">{</span></span>
+<span id="cb2-11">        <span class="pp">VideoEncoder::</span>SvtAv1 <span class="op">=&gt;</span> source <span class="op">==</span> <span class="st">"av1"</span><span class="op">,</span></span>
+<span id="cb2-12">        <span class="pp">VideoEncoder::</span>H264(_) <span class="op">=&gt;</span> EFFICIENT<span class="op">.</span>contains(<span class="op">&amp;</span>source)<span class="op">,</span></span>
+<span id="cb2-13">    <span class="op">};</span></span>
+<span id="cb2-14">    <span class="cf">if</span> already_efficient <span class="op">{</span></span>
+<span id="cb2-15">        <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">SkipReason::</span>AlreadyEfficient <span class="op">{</span></span>
+<span id="cb2-16">            codec<span class="op">:</span> video<span class="op">.</span>codec<span class="op">.</span>clone()<span class="op">,</span></span>
+<span id="cb2-17">        <span class="op">}</span>)<span class="op">;</span></span>
+<span id="cb2-18">    <span class="op">}</span></span></code></pre></div>
+<p>A user who asked for AV1 on a machine where SVT-AV1 failed still gets H.264; the test <code>encoder_choice_and_fallbacks</code> covers each arm. “Already efficient” depends on the encoder: HEVC, AV1, VP9, or VVC (Versatile Video Coding) sources are skipped for H.264, which would usually grow them, while AV1 skips only AV1 sources, so an HEVC phone video can become AV1. The plan’s video section says an “HEVC or AV1 source” is uploaded unchanged; that predates AV1 as the default, and the code is narrower.</p>
+<p>AV1 is the default because of <code>docs/benchmarks/2026-10-17-video-encoders.md</code>. On a 60 second slice of a 1080p30 H.264 web video, on an Apple silicon Mac with FFmpeg 9.0.1, scored with VMAF (Video Multimethod Assessment Fusion, a perceptual metric where 95 and above is described as indistinguishable for most viewers), SVT-AV1 at CRF 35 and preset 8 produced 29.6 percent of the source size at VMAF 96.7, while VideoToolbox H.264 at <code>-q:v 60</code> produced 89.3 percent at VMAF 94.8. These are single runs on one source, as recorded in that file (not re-run for this book). The cost is compatibility: the comment in <code>compression.rs</code> says AV1 plays in current Chrome, Edge, Firefox, and Safari on recent Apple devices; older devices need “Most compatible”.</p>
+</section>
+<section id="skips-hdr-tracks-size-and-bitrate" class="level3">
+<h2>Skips: HDR, Tracks, Size, and Bitrate</h2>
+<p>Before the encoder is chosen, <code>plan_video</code> runs cheap checks.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-media/src/video/plan.rs#L183-L212" target="_blank" rel="noopener noreferrer">crates/r2dock-media/src/video/plan.rs, lines 183 to 212</a></p>
+</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb3-1"><span class="cf">if</span> settings<span class="op">.</span>size <span class="op">==</span> <span class="pp">VideoSize::</span>Off <span class="op">{</span></span>
+<span id="cb3-2">    <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">SkipReason::</span>VideoOff)<span class="op">;</span></span>
+<span id="cb3-3"><span class="op">}</span></span>
+<span id="cb3-4"><span class="kw">let</span> video <span class="op">=</span> probe<span class="op">.</span>video()<span class="op">.</span>ok_or(<span class="pp">SkipReason::</span>UnsupportedFormat)<span class="op">?;</span></span>
+<span id="cb3-5"><span class="cf">if</span> probe<span class="op">.</span>size <span class="op">&lt;</span> MIN_SIZE <span class="op">{</span></span>
+<span id="cb3-6">    <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">SkipReason::</span>TooSmall)<span class="op">;</span></span>
+<span id="cb3-7"><span class="op">}</span></span>
+<span id="cb3-8"><span class="kw">let</span> duration <span class="op">=</span> probe<span class="op">.</span>duration_secs<span class="op">.</span>ok_or(<span class="pp">SkipReason::</span>UnknownDuration)<span class="op">?;</span></span>
+<span id="cb3-9"><span class="cf">if</span> duration <span class="op">&lt;</span> MIN_DURATION_SECS <span class="op">{</span></span>
+<span id="cb3-10">    <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">SkipReason::</span>TooShort)<span class="op">;</span></span>
+<span id="cb3-11"><span class="op">}</span></span>
+<span id="cb3-12"><span class="cf">if</span> <span class="pp">matches!</span>(video<span class="op">.</span>color_transfer<span class="op">.</span>as_str()<span class="op">,</span> <span class="st">"smpte2084"</span> <span class="op">|</span> <span class="st">"arib-std-b67"</span>) <span class="op">{</span></span>
+<span id="cb3-13">    <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">SkipReason::</span>Hdr)<span class="op">;</span></span>
+<span id="cb3-14"><span class="op">}</span></span>
+<span id="cb3-15"><span class="co">// One video track is encoded; a second (another camera angle) would be</span></span>
+<span id="cb3-16"><span class="co">// lost. Cover art does not count.</span></span>
+<span id="cb3-17"><span class="cf">if</span> <span class="kw">crate</span><span class="pp">::streams::</span>video_tracks(probe) <span class="op">&gt;</span> <span class="dv">1</span> <span class="op">{</span></span>
+<span id="cb3-18">    <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">SkipReason::</span>UnsupportedStreams)<span class="op">;</span></span>
+<span id="cb3-19"><span class="op">}</span></span>
+<span id="cb3-20"><span class="cf">for</span> s <span class="kw">in</span> <span class="op">&amp;</span>probe<span class="op">.</span>streams <span class="op">{</span></span>
+<span id="cb3-21">    <span class="kw">let</span> unsupported <span class="op">=</span> <span class="cf">match</span> s<span class="op">.</span>kind <span class="op">{</span></span>
+<span id="cb3-22">        <span class="pp">StreamKind::</span>Subtitle <span class="op">=&gt;</span> <span class="op">!</span>TEXT_SUBTITLES<span class="op">.</span>contains(<span class="op">&amp;</span>s<span class="op">.</span>codec<span class="op">.</span>as_str())<span class="op">,</span></span>
+<span id="cb3-23">        <span class="pp">StreamKind::</span>Data <span class="op">=&gt;</span> <span class="op">!</span>HARMLESS_DATA<span class="op">.</span>contains(<span class="op">&amp;</span>s<span class="op">.</span>tag<span class="op">.</span>as_str())<span class="op">,</span></span>
+<span id="cb3-24">        <span class="pp">StreamKind::</span>Attachment <span class="op">|</span> <span class="pp">StreamKind::</span>Other <span class="op">=&gt;</span> <span class="cn">true</span><span class="op">,</span></span>
+<span id="cb3-25">        _ <span class="op">=&gt;</span> <span class="cn">false</span><span class="op">,</span></span>
+<span id="cb3-26">    <span class="op">};</span></span>
+<span id="cb3-27">    <span class="cf">if</span> unsupported <span class="op">{</span></span>
+<span id="cb3-28">        <span class="cf">return</span> <span class="cn">Err</span>(<span class="pp">SkipReason::</span>UnsupportedStreams)<span class="op">;</span></span>
+<span id="cb3-29">    <span class="op">}</span></span>
+<span id="cb3-30"><span class="op">}</span></span></code></pre></div>
+<p>Size and duration minimums (1 MB, 10 seconds) match audio. HDR is detected only from the transfer function name, because there is no tone mapping; <code>hdr_and_off_are_left_alone</code> expects <code>SkipReason::Hdr</code> for a file tagged <code>smpte2084</code>. So a file missing its HDR metadata is treated as SDR. And 10 bit SDR is not skipped: the plan says “HDR or 10-bit” is skipped by default, but the code keeps 10 bit for AV1 and converts to 8 bit <code>yuv420p</code> for H.264.</p>
+<p>The stream rules keep every track or leave the file alone. Subtitles must be text based (<code>TEXT_SUBTITLES</code>, such as <code>subrip</code> or <code>webvtt</code>) so they can become MP4’s <code>mov_text</code>. Data tracks are allowed only if they are timecode (<code>tmcd</code>) or Apple camera metadata (<code>mebx</code>), which are dropped safely; GoPro telemetry (<code>gpmd</code>) or Matroska font attachments cause a skip. Tests in <code>crates/r2dock-media/tests/preserve.rs</code> exercise these with real files.</p>
+</section>
+<section id="resolution-and-the-bitrate-model" class="level3">
+<h2>Resolution and the Bitrate Model</h2>
+<p><code>scaled_size</code> scales the short side down to the size setting, so portrait and landscape are treated alike; it never enlarges and rounds to even numbers, since most encoders reject odd sizes with 4:2:0 color. <code>expected_bps</code> starts from a 1080p30 reference (<code>reference_bps</code>): 1.1 Mbps for SVT-AV1, 3.5 Mbps for hardware H.264, 4 Mbps for OpenH264. The comment calls these measured; the SVT-AV1 figure matches the 1.06 Mbps in the benchmark, but the code does not show where the H.264 figures came from. The model scales by picture area to the power 0.75 (four times the pixels needs about 2.8 times the bits) and by the square root of the frame rate over 30. These exponents are heuristics with no derivation in the repository, and the plan’s Progress table says “the sample test makes the final call.”</p>
+<p>If the picture is not being scaled and the source video bitrate is at most 3 percent above the expected bitrate, the file is skipped as <code>AlreadyCompressed</code>. Otherwise the expected bitrate is capped at the source bitrate, audio and 1 percent container overhead are added, and a saving below the user’s minimum produces <code>SavingTooSmall</code>. The test <code>h264_target_is_decided_by_the_sample_test</code> shows that for “Most compatible” a typical web video is skipped at about 10 percent saving, while a 16 Mbps phone recording is planned.</p>
+</section>
+<section id="encoder-settings-and-filters" class="level3">
+<h2>Encoder Settings and Filters</h2>
+<p><code>video::args::encoder_args</code> holds the encoder settings. SVT-AV1 runs at CRF 35, preset 8, <code>-g 240</code> (a keyframe at least every 8 seconds at 30 frames per second). VideoToolbox uses <code>-q:v 60</code> with the High profile. The test <code>hardware_encoders</code> pins the others: NVENC <code>-rc vbr -cq 23 -b:v 0</code>, Quick Sync <code>-global_quality 23</code>, AMF constant quantizers, Media Foundation <code>-quality 60</code>, VA-API <code>-qp 23</code>. Apart from VideoToolbox the repository has no quality measurements for these, so their equivalence is an assumption. OpenH264 “has no constant-quality mode”, so it gets a bitrate target (at least 300 kbps) with a 1.5 times maximum and a 3 times buffer.</p>
+<p><code>video_filter</code> builds the filter chain. Its scale expression sets the short side to the target and the other side to <code>-2</code>; reading <code>-2</code> as “keep the aspect ratio, round to a multiple of 2” comes from the expression and the unit test <code>av1_snapshot_parts</code>, since this book could not fetch that section of the filters documentation. The pixel format is 10 bit for AV1 with a 10 bit SDR source, NV12 uploaded to the graphics processor (GPU) for VA-API (with the fixed device <code>/dev/dri/renderD128</code>), and <code>yuv420p</code> otherwise.</p>
+</section>
+<section id="streams-and-rotation" class="level3">
+<h2>Streams and Rotation</h2>
+<p>Every audio track is kept (<code>audio_plan</code>): mono gets 96 kbps AAC, stereo 128 kbps, surround 64 kbps per channel up to 384 kbps. No <code>-ac</code> is passed, so channel counts survive, and an AAC track within 32 kbps above its target is copied to avoid a second lossy generation.</p>
+<p>The arguments map streams by absolute input index (<code>-map 0:N</code>), so they encode only the main video stream (not cover art), then each planned audio track and text subtitle (converted with <code>-c:s mov_text</code>), and copy tags and chapters with <code>-map_metadata 0 -map_chapters 0</code>. The <a href="https://ffmpeg.org/ffmpeg.html" target="_blank" rel="noopener noreferrer">ffmpeg documentation</a> describes <code>-dn</code> as disabling “data recording”, which drops timecode and Apple metadata, and says that with <code>-fps_mode passthrough</code> “each frame is passed with its timestamp from the demuxer to the muxer,” so variable frame rate timing survives. A <code>.mov</code> or <code>.mkv</code> input gets the <code>.mp4</code> extension and therefore a new object key. Cover art inside a video is not mapped, a deliberate exception in the plan.</p>
+<p>R2Dock passes no rotation option: FFmpeg applies the display matrix while decoding, so the scale filter sees the upright picture. The test <code>phone_rotation_and_scaling</code> accepts a portrait output or a landscape one with the rotation tag kept (short side exactly 720), so which form a given FFmpeg version produces is not pinned down.</p>
+</section>
+<section id="sample-encode-retry-verify" class="level3">
+<h2>Sample, Encode, Retry, Verify</h2>
+<p><code>video::run::prepare_video</code> follows the audio sequence: files longer than 300 seconds get a 30 second sample encode from the middle (too little saving uploads the original with <code>SampleSavedTooLittle</code>), a free space check requires 1.2 times the estimate, and then the real encode runs. A hardware encoder can still fail mid-file, for example when a driver resets, so it gets one software retry.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-media/src/video/run.rs#L194-L211" target="_blank" rel="noopener noreferrer">crates/r2dock-media/src/video/run.rs, lines 194 to 211</a></p>
+</div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb4-1">    <span class="co">// A hardware encoder that fails mid-file gets one retry in software.</span></span>
+<span id="cb4-2">    <span class="cf">if</span> <span class="kw">let</span> (<span class="cn">Err</span>(e)<span class="op">,</span> <span class="pp">VideoEncoder::</span>H264(h)) <span class="op">=</span> (<span class="op">&amp;</span>size<span class="op">,</span> encoder)</span>
+<span id="cb4-3">        <span class="op">&amp;&amp;</span> <span class="op">!</span>e<span class="op">.</span>is_cancelled()</span>
+<span id="cb4-4">        <span class="op">&amp;&amp;</span> h<span class="op">.</span>is_hardware()</span>
+<span id="cb4-5">        <span class="op">&amp;&amp;</span> ff<span class="op">.</span>video<span class="op">.</span>openh264</span>
+<span id="cb4-6">    <span class="op">{</span></span>
+<span id="cb4-7">        encoder <span class="op">=</span> <span class="pp">VideoEncoder::</span>H264(<span class="pp">H264Encoder::</span>OpenH264)<span class="op">;</span></span>
+<span id="cb4-8">        size <span class="op">=</span> encode_once(</span>
+<span id="cb4-9">            ff<span class="op">,</span></span>
+<span id="cb4-10">            <span class="op">&amp;</span>job<span class="op">,</span></span>
+<span id="cb4-11">            <span class="op">&amp;</span>output<span class="op">,</span></span>
+<span id="cb4-12">            <span class="op">&amp;</span>target<span class="op">,</span></span>
+<span id="cb4-13">            encoder<span class="op">,</span></span>
+<span id="cb4-14">            cancel<span class="op">,</span></span>
+<span id="cb4-15">            <span class="op">&amp;</span><span class="kw">mut</span> on_fraction<span class="op">,</span></span>
+<span id="cb4-16">        )</span>
+<span id="cb4-17">        <span class="op">.</span><span class="kw">await</span><span class="op">;</span></span>
+<span id="cb4-18">    <span class="op">}</span></span></code></pre></div>
+<p>A cancellation never becomes a second encode, SVT-AV1 has no retry, and with the macOS tools (no OpenH264) the retry cannot happen. The test <code>broken_hardware_encoder_falls_back_to_software</code> checks for the preset <code>h264-libopenh264</code>.</p>
+<p><code>encode_once</code> deletes the output on any failure. On success, ffprobe must show the expected codec (<code>av1</code> or <code>h264</code>) and a duration within 1 second or 0.5 percent, and <code>crate::streams::check</code> must find one video track, every planned audio track with its channel count and language in order, and the planned subtitles. A mismatch uploads the original as <code>TracksNotKept</code>, which is not a failure. The recorded preset is <code>av1-crf35</code> or <code>h264-</code> plus the encoder name.</p>
+<p>The benchmark file records one full run on a real 31 minute video: 936 MB to 285 MB (69.5 percent smaller) in 355 seconds, with VMAF 97.1 on the first 30 seconds (not re-run for this book). The scale benchmark cautions that software video encoders, which can use every core, were not measured at scale.</p>
+</section>
+<section id="working-on-this-code-18" class="level3">
+<h2>Working on This Code</h2>
+<p>Decisions live in <code>video/plan.rs</code> (skips, encoder choice, bitrate model, audio plans), with arguments in <code>video/args.rs</code>, detection in <code>video/encoders.rs</code>, parsing in <code>video/probe.rs</code>, the pipeline in <code>video/run.rs</code>, and stream inventory rules in <code>crates/r2dock-media/src/streams.rs</code>. A new hardware encoder needs an <code>H264Encoder</code> variant, a place in <code>PRIORITY</code>, arguments in <code>encoder_args</code>, and an extended <code>hardware_encoders</code> test; a new kept subtitle or data format needs a real file test in <code>tests/preserve.rs</code>.</p>
+<p><code>cargo test -p r2dock-media</code> runs the unit tests. With FFmpeg and ffprobe available (through <code>R2DOCK_TEST_FFMPEG</code> or <code>PATH</code>), <code>cargo test -p r2dock-media --test video</code> runs real encodes; tests skip with a printed reason when an encoder is missing, so a green run without OpenH264 has not tested the retry.</p>
+<p>Never drop a track without returning “unchanged”, never convert HDR without tone mapping, never force a frame rate, and keep <code>test_encode</code> sharing <code>encoder_args</code>. Do not change a quality value without re-measuring; the benchmark file warns that seeking two files by time can compare frames one apart.</p>
+</section>
+<section id="further-reading-18" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><a href="https://ffmpeg.org/ffmpeg-codecs.html" target="_blank" rel="noopener noreferrer">FFmpeg codecs documentation</a>, sections on <code>libsvtav1</code> and <code>libopenh264</code>.</li>
+<li><a href="https://ffmpeg.org/ffmpeg.html" target="_blank" rel="noopener noreferrer">ffmpeg command line documentation</a>, for <code>-map</code>, <code>-dn</code>, and <code>-fps_mode</code>.</li>
+<li><a href="https://ffmpeg.org/ffprobe.html" target="_blank" rel="noopener noreferrer">ffprobe documentation</a>.</li>
+<li><code>docs/benchmarks/2026-10-17-video-encoders.md</code> for the measurements behind the defaults.</li>
+<li><code>crates/r2dock-media/src/video/plan.rs</code> and <code>crates/r2dock-media/tests/video.rs</code>.</li>
+</ul>
+</section>
+</section>

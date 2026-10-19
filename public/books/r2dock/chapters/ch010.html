@@ -1,0 +1,182 @@
+<section id="ch-05" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">5</span> Tokio and Asynchronous Execution</h1>
+<p>R2Dock spends most of its time waiting for R2, FFmpeg, or the user. This chapter owns the definitions of futures, tasks, the Tokio runtime, <code>spawn</code> and <code>spawn_blocking</code>, <code>tokio::select!</code>, cancellation tokens, channels, <code>Notify</code>, and timeouts. Semaphores in the scheduler belong to <a href="/books/r2dock/read/ch011#ch-06">Chapter 6</a> (The Transfer Scheduler).</p>
+<section id="the-problem-many-slow-things-at-once" class="level3">
+<h2>The Problem: Many Slow Things at Once</h2>
+<p>With one thread per activity, a few uploads, a download, and an encode would need about twenty threads, most blocked on a socket, and a queue of 10,000 files would invite 10,000. Asynchronous programming inverts the model: a task that would block returns control to a scheduler (“wake me when the socket is readable”), so a small thread pool drives many tasks. The price is that code must never block a thread for long, because a blocked thread cannot run the other tasks assigned to it.</p>
+</section>
+<section id="futures-computations-that-run-when-polled" class="level3">
+<h2>Futures: Computations That Run When Polled</h2>
+<p>An <code>async fn</code> or <code>async</code> block does not run when called. It returns a future, a value that makes progress only when polled. Each <code>.await</code> is a point where it may pause until the runtime polls it again. Creating a future is therefore cheap; the multipart loop creates each part’s future early and polls it later. And dropping a future cancels it: its locals are dropped at the last <code>.await</code>, running their <code>Drop</code> code. This is the foundation of cancellation in async Rust.</p>
+</section>
+<section id="the-runtime-and-its-threads" class="level3">
+<h2>The Runtime and Its Threads</h2>
+<p>R2Dock’s executor is Tokio. The <a href="https://docs.rs/tokio/latest/tokio/runtime/index.html" target="_blank" rel="noopener noreferrer">Tokio runtime documentation</a> says the multi-thread scheduler runs futures “on a thread pool, using a work-stealing strategy”, by default with “a worker thread for each CPU core”, plus extra threads for <code>spawn_blocking</code>, and that its fairness holds only when “no task is blocking the thread”.</p>
+<p>Tauri creates the runtime (<a href="https://docs.rs/tauri/latest/tauri/async_runtime/index.html" target="_blank" rel="noopener noreferrer">tauri::async_runtime</a>), and the <a href="https://v2.tauri.app/develop/calling-rust/" target="_blank" rel="noopener noreferrer">Calling Rust guide</a> says async commands are “executed on a separate async task using async_runtime::spawn”, while synchronous commands run on the main thread. <code>Engine::start</code> spawns tasks (“Must be called inside a Tokio runtime”), so the synchronous setup hook enters the runtime explicitly.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src-tauri/src/lib.rs#L95-L99" target="_blank" rel="noopener noreferrer">src-tauri/src/lib.rs, lines 95 to 99</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="kw">let</span> engine <span class="op">=</span> <span class="op">{</span></span>
+<span id="cb1-2">    <span class="kw">let</span> runtime <span class="op">=</span> <span class="pp">tauri::async_runtime::</span>handle()<span class="op">;</span></span>
+<span id="cb1-3">    <span class="kw">let</span> _guard <span class="op">=</span> runtime<span class="op">.</span>inner()<span class="op">.</span>enter()<span class="op">;</span></span>
+<span id="cb1-4">    <span class="pp">Engine::</span>start(<span class="pp">Arc::</span>new(EngineClients(connections<span class="op">.</span>clone()))<span class="op">,</span> config)</span>
+<span id="cb1-5"><span class="op">};</span></span></code></pre></div>
+<p>Per the <a href="https://docs.rs/tokio/latest/tokio/runtime/struct.Handle.html" target="_blank" rel="noopener noreferrer">Tokio Handle documentation</a>, entering the context lets <code>tokio::spawn</code> work without panicking; the guard lives to the end of the block.</p>
+</section>
+<section id="tasks-spawn-and-the-static-and-send-bounds" class="level3">
+<h2>Tasks: spawn and the ’static and Send Bounds</h2>
+<p>A task is a future the runtime polls independently, “an asynchronous green thread” in the words of the <a href="https://tokio.rs/tokio/tutorial/spawning" target="_blank" rel="noopener noreferrer">Tokio spawning tutorial</a>, which explains two bounds. A spawned future must be <code>'static</code>: it “must not contain any references to data owned outside the task”, because nobody knows how long it will run. And it must be <code>Send</code>, which “allows the Tokio runtime to move the tasks between threads while they are suspended at an <code>.await</code>”.</p>
+<p>So <code>Engine::start</code> spawns the <code>scheduler</code> and <code>progress_ticker</code> tasks with <code>engine.inner.clone()</code>, each owning its own <code>Arc&lt;Inner&gt;</code>. <code>Inner::schedule</code> spawns one <code>run_job</code> task per started job, the compression path one <code>compress_job</code> per encode, and <code>Journal::spawn_writer</code> one writer per journal.</p>
+<p>Spawning is cheap, but the count stays bounded. The scheduler starts at most the configured concurrency (3 by default, clamped to 1 to 8), encodes are limited by the encode limit, and part uploads are not tasks at all. Dropping a <code>JoinHandle</code> does not stop a task, and the engine never awaits its job handles; each task reports through shared state and events. This keeps the scheduler simple, but a panic in a job task is visible only through its effects, which the compression path covers with its <code>Finalize</code> guard (<a href="/books/r2dock/read/ch009#ch-04">Chapter 4</a>, Rust Concepts Used in R2Dock).</p>
+</section>
+<section id="spawn_blocking-where-blocking-work-goes" class="level3">
+<h2>spawn_blocking: Where Blocking Work Goes</h2>
+<p>Keychain access, hashing, directory walks, and <code>fsync</code> cannot be asynchronous, and inside a task they would block a worker. <code>spawn_blocking</code> runs a closure on a separate pool and returns a future for its result. The <a href="https://docs.rs/tokio/latest/tokio/task/fn.spawn_blocking.html" target="_blank" rel="noopener noreferrer">spawn_blocking documentation</a> adds three facts: the thread limit “is very large by default”, blocking tasks “cannot be aborted once they start running”, and “runtime shutdown will wait indefinitely for all started <code>spawn_blocking</code> to finish running”.</p>
+<p>R2Dock uses <code>spawn_blocking</code> in about thirty places: credential store calls, file opening and hashing, journal and settings writes, folder scans, and audio probing. <code>ConnectionService::client</code> shows the shape: it clones an <code>Arc</code> of itself and the configuration into a <code>'static</code> closure, runs <code>read_secret</code> on the pool (where a keychain that waits for user approval harms nothing else), and compares a generation counter before caching, so a client built from credentials that changed during the read is never stored. A cancellation-aware blocking closure looks like <code>gate_copy</code>, which passes <code>&amp;|| stop.stop() != Stop::None</code> into <code>compress::check_copy</code>, checked between 1 MiB reads, so a pause stops hashing a multi-gigabyte copy within one read.</p>
+<p><code>tokio::fs</code> looks asynchronous, but its <a href="https://docs.rs/tokio/latest/tokio/fs/index.html" target="_blank" rel="noopener noreferrer">documentation</a> says “Tokio will use ordinary blocking file operations behind the scenes” on the <code>spawn_blocking</code> pool and recommends batching. Downloads write and upload bodies read each chunk through <code>tokio::fs::File</code>, so each chunk costs a trip to the pool, while whole-file hashing runs in one blocking closure, as advised. One exception: the retryable body in <code>body.rs</code> calls <code>source.reopen()</code>, a short synchronous open and identity check, inside the body builder of the AWS software development kit (SDK), which may run on a runtime worker; the code does not move it to the blocking pool.</p>
+<p>Folder scanning shows a trade-off. <code>scan</code> in <code>crates/r2dock-transfer/src/scan.rs</code> runs in one <code>spawn_blocking</code> call from <code>upload_prepare</code> and collects the whole selection into a <code>Vec</code>, refusing more than <code>MAX_FILES</code> (200,000); <code>Engine::enqueue</code> then sends <code>Added</code> events in chunks of 500. <code>PLAN.md</code> section 12.3 describes a lazy walk that adds child jobs in batches instead. The code is simpler and bounded by the file limit, but its memory grows with the selection, so the plan describes intent, not behavior.</p>
+<p>Conversely, <code>compression_estimate</code> in <code>src-tauri/src/planning.rs</code> runs inside <code>spawn_blocking</code> and calls <code>rt.block_on(decide_video(...))</code> to run <code>ffprobe</code>. Tokio documents that <code>Handle::block_on</code> panics “from within an asynchronous context”, so the function’s comment requires a blocking thread inside the runtime; the Tokio page does not discuss blocking pool threads explicitly.</p>
+</section>
+<section id="a-dedicated-thread-for-the-activity-log" class="level3">
+<h2>A Dedicated Thread for the Activity Log</h2>
+<p><code>Writer::with_limits</code> in <code>src-tauri/src/activity/writer.rs</code> starts an operating system thread, <code>r2dock-activity</code>, fed over a standard library channel, because a session-long consumer of blocking writes would occupy a pool thread forever and delay shutdown. <code>send</code> never blocks: the channel is unbounded, and two atomic counters cap the queue at 200,000 rows and 64 MiB by default. A row that does not fit is dropped and counted in Settings, so a slow disk loses log rows rather than blocking a command. At exit, <code>shutdown</code> flushes with a two second deadline.</p>
+</section>
+<section id="notify-waking-a-sleeping-task" class="level3">
+<h2>Notify: Waking a Sleeping Task</h2>
+<p>The scheduler must sleep until something changes without polling (requirement N9). With <code>tokio::sync::Notify</code>, one side calls <code>notify_one</code> and the other awaits <code>notified()</code>. The <a href="https://docs.rs/tokio/latest/tokio/sync/struct.Notify.html" target="_blank" rel="noopener noreferrer">Notify documentation</a> says that if no task is waiting, “a permit is stored”, and “many sequential calls to <code>notify_one</code> will result in a single permit being stored”. A wake-up sent while the scheduler is busy is not lost, and a burst costs one extra pass.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/engine/mod.rs#L1009-L1028" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/engine/mod.rs, lines 1009 to 1028</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="kw">async</span> <span class="kw">fn</span> scheduler(inner<span class="op">:</span> Arc<span class="op">&lt;</span>Inner<span class="op">&gt;</span>) <span class="op">{</span></span>
+<span id="cb2-2">    <span class="cf">loop</span> <span class="op">{</span></span>
+<span id="cb2-3">        inner<span class="op">.</span>schedule()<span class="op">;</span></span>
+<span id="cb2-4">        <span class="co">// Re-check after a slowdown window ends even without other events.</span></span>
+<span id="cb2-5">        <span class="kw">let</span> wait <span class="op">=</span> inner</span>
+<span id="cb2-6">            <span class="op">.</span>slow_until</span>
+<span id="cb2-7">            <span class="op">.</span>lock()</span>
+<span id="cb2-8">            <span class="op">.</span>map(<span class="op">|</span>t<span class="op">|</span> t<span class="op">.</span>saturating_duration_since(<span class="pp">Instant::</span>now()))</span>
+<span id="cb2-9">            <span class="op">.</span>filter(<span class="op">|</span>d<span class="op">|</span> <span class="op">!</span>d<span class="op">.</span>is_zero())<span class="op">;</span></span>
+<span id="cb2-10">        <span class="cf">match</span> wait <span class="op">{</span></span>
+<span id="cb2-11">            <span class="cn">Some</span>(d) <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb2-12">                <span class="pp">tokio::select!</span> <span class="op">{</span></span>
+<span id="cb2-13">                    () <span class="op">=</span> inner<span class="op">.</span>wake<span class="op">.</span>notified() <span class="op">=&gt;</span> <span class="op">{}</span></span>
+<span id="cb2-14">                    () <span class="op">=</span> <span class="pp">tokio::time::</span>sleep(d) <span class="op">=&gt;</span> <span class="op">{}</span></span>
+<span id="cb2-15">                <span class="op">}</span></span>
+<span id="cb2-16">            <span class="op">}</span></span>
+<span id="cb2-17">            <span class="cn">None</span> <span class="op">=&gt;</span> inner<span class="op">.</span>wake<span class="op">.</span>notified()<span class="op">.</span><span class="kw">await</span><span class="op">,</span></span>
+<span id="cb2-18">        <span class="op">}</span></span>
+<span id="cb2-19">    <span class="op">}</span></span>
+<span id="cb2-20"><span class="op">}</span></span></code></pre></div>
+<p>The loop runs one scheduling pass, then waits for a notification. After a rate limit or server error the engine halves its concurrency for 60 seconds (<code>slow_until</code>), so the scheduler also wakes when that window ends. <code>schedule</code> is synchronous and recomputes from the whole job table under one lock, so it does not matter which event woke it. The same pattern drives <code>progress_ticker</code> and the journal writer, which awaits a <code>dirty</code> notification, sleeps one batch interval to absorb bursts, and flushes on the blocking pool at most every 200 milliseconds for the resume journal and every second for the queue (<a href="/books/r2dock/read/ch021#ch-14">Chapter 14</a>, Journals and Persistent Queues).</p>
+</section>
+<section id="select-waiting-for-the-first-of-several-events" class="level3">
+<h2>select!: Waiting for the First of Several Events</h2>
+<p><code>tokio::select!</code> waits on several futures and runs the branch of whichever completes first. Per its <a href="https://docs.rs/tokio/latest/tokio/macro.select.html" target="_blank" rel="noopener noreferrer">documentation</a>, it then returns, “cancelling the remaining branches” by dropping their futures. Branches are checked in random order unless <code>biased;</code> is given, and a branch with a false <code>if</code> precondition is disabled. Because losers are dropped, every <code>select!</code> raises the question of cancellation safety. The documentation lists <code>mpsc::Receiver::recv</code> as safe, and <code>Mutex::lock</code>, <code>Semaphore::acquire</code>, and <code>Notify::notified</code> as losing their queue position when dropped; the scheduler tolerates that because its next pass reads all state afresh.</p>
+<p>R2Dock uses <code>select!</code> in thirteen places, most racing work against cancellation: <code>run_job</code> selects over <code>control.cancel.cancelled()</code> and <code>inner.provider.client(connection)</code>, and the same shape guards uploads, downloads, listing, bulk operations, and backoff sleeps. Dropping an in-flight HTTP future abandons its connection, which is what a cancel should do.</p>
+<p>The multipart upload loop is the most demanding use, with four event sources, two of which depend on state.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/upload.rs#L455-L488" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/upload.rs, lines 455 to 488</a></p>
+</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb3-1"><span class="cf">while</span> failure<span class="op">.</span>is_none()</span>
+<span id="cb3-2">    <span class="op">&amp;&amp;</span> ctx<span class="op">.</span>control<span class="op">.</span>stop() <span class="op">==</span> <span class="pp">Stop::</span><span class="cn">None</span></span>
+<span id="cb3-3">    <span class="op">&amp;&amp;</span> in_flight<span class="op">.</span>len() <span class="op">&lt;</span> ctx<span class="op">.</span>parts_per_job</span>
+<span id="cb3-4"><span class="op">{</span></span>
+<span id="cb3-5">    <span class="kw">let</span> <span class="cn">Some</span>(part) <span class="op">=</span> pending<span class="op">.</span>next() <span class="cf">else</span> <span class="op">{</span> <span class="cf">break</span> <span class="op">};</span></span>
+<span id="cb3-6">    <span class="kw">let</span> slots <span class="op">=</span> ctx<span class="op">.</span>part_slots<span class="op">.</span>clone()<span class="op">;</span></span>
+<span id="cb3-7">    <span class="kw">let</span> control <span class="op">=</span> ctx<span class="op">.</span>control<span class="op">.</span>clone()<span class="op">;</span></span>
+<span id="cb3-8">    <span class="kw">let</span> fut <span class="op">=</span></span>
+<span id="cb3-9">        upload_part(ctx<span class="op">,</span> spec<span class="op">,</span> <span class="op">&amp;</span>snapshot<span class="op">,</span> source<span class="op">.</span>clone()<span class="op">,</span> part)<span class="op">;</span></span>
+<span id="cb3-10">    in_flight<span class="op">.</span>push(<span class="kw">async</span> <span class="kw">move</span> <span class="op">{</span></span>
+<span id="cb3-11">        <span class="kw">let</span> <span class="cn">Ok</span>(permit) <span class="op">=</span> slots<span class="op">.</span>acquire_owned()<span class="op">.</span><span class="kw">await</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb3-12">            <span class="cf">return</span> <span class="cn">None</span><span class="op">;</span></span>
+<span id="cb3-13">        <span class="op">};</span></span>
+<span id="cb3-14">        <span class="cf">if</span> control<span class="op">.</span>stop() <span class="op">!=</span> <span class="pp">Stop::</span><span class="cn">None</span> <span class="op">{</span></span>
+<span id="cb3-15">            <span class="cf">return</span> <span class="cn">None</span><span class="op">;</span></span>
+<span id="cb3-16">        <span class="op">}</span></span>
+<span id="cb3-17">        <span class="kw">let</span> r <span class="op">=</span> fut<span class="op">.</span><span class="kw">await</span><span class="op">;</span></span>
+<span id="cb3-18">        drop(permit)<span class="op">;</span></span>
+<span id="cb3-19">        <span class="cn">Some</span>(r)</span>
+<span id="cb3-20">    <span class="op">}</span>)<span class="op">;</span></span>
+<span id="cb3-21"><span class="op">}</span></span>
+<span id="cb3-22"><span class="co">// ...</span></span>
+<span id="cb3-23"><span class="kw">let</span> next <span class="op">=</span> <span class="pp">tokio::select!</span> <span class="op">{</span></span>
+<span id="cb3-24">    () <span class="op">=</span> ctx<span class="op">.</span>control<span class="op">.</span>cancel<span class="op">.</span>cancelled()<span class="op">,</span></span>
+<span id="cb3-25">        <span class="cf">if</span> ctx<span class="op">.</span>control<span class="op">.</span>stop() <span class="op">==</span> <span class="pp">Stop::</span>Cancel <span class="op">=&gt;</span> <span class="cn">None</span><span class="op">,</span></span>
+<span id="cb3-26">    () <span class="op">=</span> ctx<span class="op">.</span>control<span class="op">.</span>stopping<span class="op">.</span>cancelled()<span class="op">,</span></span>
+<span id="cb3-27">        <span class="cf">if</span> ctx<span class="op">.</span>control<span class="op">.</span>stop() <span class="op">==</span> <span class="pp">Stop::</span><span class="cn">None</span> <span class="op">=&gt;</span> <span class="cn">Some</span>(<span class="cn">None</span>)<span class="op">,</span></span>
+<span id="cb3-28">    () <span class="op">=</span> sleep_until_opt(pause_deadline) <span class="op">=&gt;</span> <span class="cn">None</span><span class="op">,</span></span>
+<span id="cb3-29">    r <span class="op">=</span> in_flight<span class="op">.</span>next() <span class="op">=&gt;</span> r<span class="op">,</span></span>
+<span id="cb3-30"><span class="op">};</span></span></code></pre></div>
+<p>The parts in flight are futures in a <code>FuturesUnordered</code> (from <code>futures-util</code>), which yields results in completion order, all inside the single <code>run_job</code> task, so the loop owns its bookkeeping without locks. Each first takes a permit from the engine-wide part-slot semaphore (8 by default; <a href="/books/r2dock/read/ch011#ch-06">Chapter 6</a>).</p>
+<p>The <code>select!</code> waits for the first of four events. A cancel ends the loop, enabled only when the stop state really is “cancel”. A pause, signaled by the <code>stopping</code> token, wakes the loop so it stops queuing parts; enabled only while the state reads “continue”, it fires once and then lets in-flight parts finish. A pause deadline three seconds later (<code>PAUSE_GRACE</code>) ends the wait for slow parts; without a deadline, <code>sleep_until_opt</code> returns <code>std::future::pending()</code>, which never completes. The normal event is the next finished part. When the loop breaks, <code>drop(in_flight)</code> cancels unfinished part requests and releases their permits, while completed parts are already in the resume state.</p>
+<p>The FFmpeg runner in <code>crates/r2dock-media/src/ffmpeg/run.rs</code> uses <code>biased;</code> so its cancel branch is checked before reading the next progress line, and a continuous stream of output can never delay a cancel; <code>rx.recv()</code> is cancellation safe, so nothing is lost.</p>
+</section>
+<section id="cancellationtoken-one-signal-many-listeners" class="level3">
+<h2>CancellationToken: One Signal, Many Listeners</h2>
+<p>A cancel must reach the job loop, a part future, a body stream, and a backoff sleep. <code>CancellationToken</code> from <code>tokio-util</code> provides this. Its <a href="https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html" target="_blank" rel="noopener noreferrer">documentation</a> says <code>cancel()</code> “will wake up all tasks which are waiting for cancellation”, <code>cancelled()</code> completes when cancellation is requested (immediately if it already was) and “is cancel safe”, and clones share state. R2Dock wraps two tokens and an atomic state in <code>RunControl</code>, created fresh for every run.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/ctx.rs#L26-L56" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/ctx.rs, lines 26 to 56</a></p>
+</div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb4-1"><span class="co">/// Pause and cancel requests for one run of a job.</span></span>
+<span id="cb4-2"><span class="at">#[</span>derive<span class="at">(</span><span class="bu">Debug</span><span class="op">,</span> <span class="bu">Default</span><span class="at">)]</span></span>
+<span id="cb4-3"><span class="kw">pub</span> <span class="kw">struct</span> RunControl <span class="op">{</span></span>
+<span id="cb4-4">    <span class="kw">pub</span> cancel<span class="op">:</span> CancellationToken<span class="op">,</span></span>
+<span id="cb4-5">    <span class="co">/// Fires on any pause or cancel request, so a job waiting for parts in</span></span>
+<span id="cb4-6">    <span class="co">/// flight notices a pause without polling.</span></span>
+<span id="cb4-7">    <span class="kw">pub</span> stopping<span class="op">:</span> CancellationToken<span class="op">,</span></span>
+<span id="cb4-8">    stop<span class="op">:</span> AtomicU8<span class="op">,</span></span>
+<span id="cb4-9"><span class="op">}</span></span>
+<span id="cb4-10"></span>
+<span id="cb4-11"><span class="kw">impl</span> RunControl <span class="op">{</span></span>
+<span id="cb4-12">    <span class="co">// ...</span></span>
+<span id="cb4-13">    <span class="co">/// Multipart uploads finish in-flight parts; downloads stop at once.</span></span>
+<span id="cb4-14">    <span class="kw">pub</span> <span class="kw">fn</span> request_pause(<span class="op">&amp;</span><span class="kw">self</span><span class="op">,</span> interrupt_streams<span class="op">:</span> <span class="dt">bool</span>) <span class="op">{</span></span>
+<span id="cb4-15">        <span class="kw">let</span> _ <span class="op">=</span> <span class="kw">self</span></span>
+<span id="cb4-16">            <span class="op">.</span>stop</span>
+<span id="cb4-17">            <span class="op">.</span>compare_exchange(<span class="dv">0</span><span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="pp">Ordering::</span>SeqCst<span class="op">,</span> <span class="pp">Ordering::</span>SeqCst)<span class="op">;</span></span>
+<span id="cb4-18">        <span class="kw">self</span><span class="op">.</span>stopping<span class="op">.</span>cancel()<span class="op">;</span></span>
+<span id="cb4-19">        <span class="cf">if</span> interrupt_streams <span class="op">{</span></span>
+<span id="cb4-20">            <span class="kw">self</span><span class="op">.</span>cancel<span class="op">.</span>cancel()<span class="op">;</span></span>
+<span id="cb4-21">        <span class="op">}</span></span>
+<span id="cb4-22">    <span class="op">}</span></span>
+<span id="cb4-23"></span>
+<span id="cb4-24">    <span class="kw">pub</span> <span class="kw">fn</span> request_cancel(<span class="op">&amp;</span><span class="kw">self</span>) <span class="op">{</span></span>
+<span id="cb4-25">        <span class="kw">self</span><span class="op">.</span>stop<span class="op">.</span>store(<span class="dv">2</span><span class="op">,</span> <span class="pp">Ordering::</span>SeqCst)<span class="op">;</span></span>
+<span id="cb4-26">        <span class="kw">self</span><span class="op">.</span>stopping<span class="op">.</span>cancel()<span class="op">;</span></span>
+<span id="cb4-27">        <span class="kw">self</span><span class="op">.</span>cancel<span class="op">.</span>cancel()<span class="op">;</span></span>
+<span id="cb4-28">    <span class="op">}</span></span></code></pre></div>
+<p>A cancel fires both tokens. A multipart pause fires only <code>stopping</code>, so in-flight parts finish and are kept, while a download pause also fires <code>cancel</code> because the partial file is kept for resume anyway. Code that must know why it woke reads <code>stop</code>. A resumed job gets a new <code>RunControl</code>; reused cancelled tokens would stop it immediately. Elsewhere, tokens are passed by reference into the FFmpeg runner, installer, and bulk operations, and commands without a cancel button pass <code>&amp;CancellationToken::new()</code>.</p>
+</section>
+<section id="channels-passing-values-between-tasks-and-threads" class="level3">
+<h2>Channels: Passing Values Between Tasks and Threads</h2>
+<p>A channel moves values from senders to a receiver, and R2Dock uses four kinds. A Tokio <code>oneshot</code> carries one value: <code>pick_files</code> in <code>src-tauri/src/dialogs.rs</code> turns the native dialog’s callback into an awaitable result, so no thread blocks while the user browses. A bounded Tokio <code>mpsc</code> (multi-producer, single-consumer) channel of capacity 256 carries FFmpeg’s output lines, so if the runner falls behind, the reader tasks and then FFmpeg wait instead of memory growing. Standard <code>mpsc</code> channels feed the activity thread, and Tauri’s <code>Channel&lt;T&gt;</code> (<a href="/books/r2dock/read/ch006#ch-02">Chapter 2</a>) carries events to the webview through a sink that never awaits, because <code>emit</code> holds the delivery lock.</p>
+</section>
+<section id="async-locks-versus-blocking-locks" class="level3">
+<h2>Async Locks Versus Blocking Locks</h2>
+<p>The async question about <a href="/books/r2dock/read/ch009#ch-04">Chapter 4</a>’s locks is when one may be held across an <code>.await</code>. The <a href="https://docs.rs/tokio/latest/tokio/sync/struct.Mutex.html" target="_blank" rel="noopener noreferrer">Tokio Mutex documentation</a> says the ordinary blocking mutex is “often preferred” in async code, that the async mutex’s advantage is “the ability to keep it locked across an <code>.await</code> point”, and that holding a blocking guard across an <code>.await</code> “virtually never leads to correct concurrent code”. R2Dock follows this: engine state uses short <code>parking_lot</code> sections, and the three <code>tokio::sync::Mutex</code> instances serialize operations that await, such as the per-bucket Cloudflare lookup in <code>public_links.rs</code>, where a burst of requests shares one lookup.</p>
+</section>
+<section id="timeouts" class="level3">
+<h2>Timeouts</h2>
+<p>A peer can stop responding without failing; <code>tokio::time::timeout</code> returns an error if a future does not finish in time, dropping it. <code>crates/r2dock-r2/src/client.rs</code> configures a 10 second connect timeout, a 30 second per-attempt timeout for metadata and listing calls, and stalled stream protection that fails a transfer stream moving no bytes for 60 seconds. <code>abort_in_background</code> in <code>upload.rs</code> lets a cancelled multipart upload show “Cancelled” at once by spawning the abort with owned strings and a 60 second timeout; if it fails, R2 removes the incomplete upload after its default retention, as the comment notes. The FFmpeg watchdog (120 seconds by default) kills a silent process, and video probing and encoder detection use 60 and 20 second limits.</p>
+<p>Figure 5.1 brings the pieces together: which work runs as Tokio tasks, which on the blocking pool, and which outside Tokio.</p>
+<figure id="fig-05-tasks-blocking">
+<img src="/books/r2dock/media/file6.webp" alt="A Tokio tasks box holds async commands, journal writers, and the scheduler, which spawns compress_job and run_job. A blocking pool box below holds file hashing, journal flush, and keychain calls, reached from run_job, the journal writers, and the commands. Outside, compress_job talks to an FFmpeg process through pipes, and the commands send rows over a standard channel to the activity thread." width="1384" height="1153" loading="lazy" decoding="async">
+<figcaption>Figure 5.1. Where work runs in R2Dock: async commands, the scheduler, journal writers, job tasks with their part futures, and compression tasks run as Tokio tasks; keychain calls, file hashing, and journal flushes run on the blocking pool; the activity log has its own thread; FFmpeg is a child process.</figcaption>
+</figure>
+</section>
+<section id="working-on-this-code-4" class="level3">
+<h2>Working on This Code</h2>
+<p>Decide first whether work belongs in a task, on the blocking pool, or on a dedicated thread. Keychain calls, file reads and hashes, and folder walks must use <code>spawn_blocking</code>, with a stop callback for long closures, as <code>check_copy</code> does. Spawn with owned values or <code>Arc</code> clones and a bounded task count, check each <code>select!</code> branch for cancellation safety, never hold a <code>parking_lot</code> guard across an <code>.await</code>, bound every network call and child process with a timeout, and wake loops with <code>Notify</code> or a channel, never a polling timer.</p>
+<p>Run <code>cargo test -p r2dock-transfer</code> (engine, recovery, pause and cancel against the local S3 server) and <code>cargo test -p r2dock-media</code> (needs FFmpeg). The stress suites are <code>cargo test -p r2dock-transfer --release --test stress -- --include-ignored</code> and <code>cargo test -p r2dock --release --test activity_stress -- --include-ignored</code>. A common pitfall is calling a blocking helper such as a keychain read from an async command “just this once”; it passes a quick test and stalls the runtime under load.</p>
+</section>
+<section id="further-reading-4" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><a href="https://tokio.rs/tokio/tutorial/spawning" target="_blank" rel="noopener noreferrer">Tokio tutorial: Spawning</a></li>
+<li><a href="https://docs.rs/tokio/latest/tokio/task/fn.spawn_blocking.html" target="_blank" rel="noopener noreferrer">tokio::task::spawn_blocking</a></li>
+<li><a href="https://docs.rs/tokio/latest/tokio/macro.select.html" target="_blank" rel="noopener noreferrer">tokio::select!</a></li>
+<li><a href="https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html" target="_blank" rel="noopener noreferrer">tokio_util::sync::CancellationToken</a></li>
+<li><code>crates/r2dock-transfer/src/engine/mod.rs</code> and <code>crates/r2dock-media/src/ffmpeg/run.rs</code></li>
+</ul>
+</section>
+</section>

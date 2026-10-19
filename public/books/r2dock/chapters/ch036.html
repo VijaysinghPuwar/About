@@ -1,0 +1,174 @@
+<section id="ch-26" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">26</span> React and Tauri IPC</h1>
+<p><a href="/books/r2dock/read/ch006#ch-02">Chapter 2</a> (Complete Software Architecture) introduced the split: a React interface in a system webview, a Rust core that owns everything else, and Tauri’s Inter-Process Communication (IPC) layer carrying JSON between them. This chapter goes underneath that picture: typed wrappers, errors as data, generated types, lossless event channels, and an upload that never shows the page a local path. Which commands the webview may call at all is the subject of <a href="/books/r2dock/read/ch031#ch-22">Chapter 22</a> (Tauri Security Architecture).</p>
+<section id="commands-and-the-single-wrapper-module" class="level3">
+<h2>Commands and the Single Wrapper Module</h2>
+<p>A Tauri command is a Rust function marked <code>#[tauri::command]</code> and called from JavaScript by name with <code>invoke</code>. The <a href="https://v2.tauri.app/develop/calling-rust/" target="_blank" rel="noopener noreferrer">Tauri guide to calling Rust</a> sets the contract: arguments travel as a JSON object “with camelCase keys” (so <code>connection_id</code> is sent as <code>connectionId</code>), parameters implement <code>Deserialize</code>, results implement <code>Serialize</code>, and a command returning <code>Err</code> rejects the promise with the serialized error.</p>
+<p>R2Dock registers 56 commands, listed in <code>tauri::generate_handler!</code> in <code>src-tauri/src/lib.rs</code>, in the <code>COMMANDS</code> allowlist in <code>src-tauri/build.rs</code>, and as <code>allow-&lt;name&gt;</code> permissions in <code>src-tauri/capabilities/main.json</code>. Architecture decision record (ADR) 0003 accepts this duplication: “Command names and arguments are still listed by hand in <code>commands.ts</code>, <code>build.rs</code>, and the capability file.” A new command must appear in all four places, or it fails to compile, is refused at runtime, or is unreachable.</p>
+<p>Components never call <code>invoke</code> themselves. The header of <code>src/ipc/commands.ts</code> states the rule: “The frontend calls Rust only through this module.” Each command has a one-line wrapper that fixes its name, argument names, and result type, for example <code>bucketList = (connectionId) =&gt; invoke&lt;BucketEntry[]&gt;("bucket_list", { connectionId })</code>. The type parameter on <code>invoke</code> is a promise to the compiler, not a runtime check; the safety comes from the result type being generated from the Rust struct the command returns.</p>
+<p><code>StrictMode</code>, which <code>src/main.tsx</code> wraps around <code>&lt;App /&gt;</code>, shapes how the wrappers that subscribe are used. The <a href="https://react.dev/reference/react/StrictMode" target="_blank" rel="noopener noreferrer">React StrictMode documentation</a> says that in development React runs an extra setup and cleanup cycle for every Effect. Any Effect that opens a subscription to Rust must clean it up or guard against running twice; R2Dock does both, as shown later.</p>
+</section>
+<section id="errors-as-data" class="level3">
+<h2>Errors as Data</h2>
+<p>Commands return <code>CmdResult&lt;T&gt;</code>, an alias for <code>Result&lt;T, AppError&gt;</code> in <code>src-tauri/src/commands/mod.rs</code>. <code>AppError</code> lives in <code>r2dock-core</code> and is built to cross the boundary.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-core/src/app_error.rs#L37-L53" target="_blank" rel="noopener noreferrer">crates/r2dock-core/src/app_error.rs, lines 37 to 53</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="at">#[</span>derive<span class="at">(</span><span class="bu">Debug</span><span class="op">,</span> <span class="bu">Clone</span><span class="op">,</span> <span class="bu">PartialEq</span><span class="op">,</span> <span class="bu">Eq</span><span class="op">,</span> Serialize<span class="op">,</span> TS<span class="at">)]</span></span>
+<span id="cb1-2"><span class="at">#[</span>serde<span class="at">(</span>rename_all <span class="op">=</span> <span class="st">"camelCase"</span><span class="at">)]</span></span>
+<span id="cb1-3"><span class="at">#[</span>ts<span class="at">(</span>export<span class="at">)]</span></span>
+<span id="cb1-4"><span class="kw">pub</span> <span class="kw">struct</span> AppError <span class="op">{</span></span>
+<span id="cb1-5">    <span class="kw">pub</span> code<span class="op">:</span> ErrorCode<span class="op">,</span></span>
+<span id="cb1-6">    <span class="co">/// One plain sentence suitable for the UI.</span></span>
+<span id="cb1-7">    <span class="kw">pub</span> message<span class="op">:</span> <span class="dt">String</span><span class="op">,</span></span>
+<span id="cb1-8">    <span class="co">/// Optional technical detail (error code, request id). Never a secret.</span></span>
+<span id="cb1-9">    <span class="kw">pub</span> detail<span class="op">:</span> <span class="dt">Option</span><span class="op">&lt;</span><span class="dt">String</span><span class="op">&gt;,</span></span>
+<span id="cb1-10">    <span class="kw">pub</span> retryable<span class="op">:</span> <span class="dt">bool</span><span class="op">,</span></span>
+<span id="cb1-11">    <span class="co">/// Bucket names, object keys, or file names that appear in `message` or</span></span>
+<span id="cb1-12">    <span class="co">/// `detail`. Never sent to the frontend; the activity log uses them to</span></span>
+<span id="cb1-13">    <span class="co">/// hide those names when the user has not allowed names in the log.</span></span>
+<span id="cb1-14">    <span class="at">#[</span>serde<span class="at">(</span>skip<span class="at">)]</span></span>
+<span id="cb1-15">    <span class="at">#[</span>ts<span class="at">(</span>skip<span class="at">)]</span></span>
+<span id="cb1-16">    <span class="kw">pub</span> names<span class="op">:</span> <span class="dt">Vec</span><span class="op">&lt;</span><span class="dt">String</span><span class="op">&gt;,</span></span>
+<span id="cb1-17"><span class="op">}</span></span></code></pre></div>
+<p>The paired <code>#[serde(skip)]</code> and <code>#[ts(skip)]</code> on <code>names</code> keep that field off the wire and out of the generated type, so the frontend’s view of an error is exactly what it receives. Because a JavaScript rejection can be anything, <code>commands.ts</code> adds the runtime guard <code>isAppError</code> (an object with <code>code</code> and a string <code>message</code>) and <code>errorMessage</code>, which returns the <code>AppError</code> message, an <code>Error</code>’s message, or “Something went wrong. Try again.” <code>ErrorView</code> in <code>src/features/connections/ErrorStates.tsx</code> switches on <code>code</code>, never on message text, so Rust can reword messages freely. (<code>src/lib/errors.ts</code> also defines <code>isCredentialError</code> and <code>isOfflineError</code>, which nothing imports at this commit.)</p>
+</section>
+<section id="generated-types-with-ts-rs" class="level3">
+<h2>Generated Types with ts-rs</h2>
+<p>PLAN.md section 7.1 left the choice between <code>specta</code> and <code>ts-rs</code> marked <strong>[Verify]</strong>. ADR 0003 records the answer for data transfer objects (DTOs), checked by continuous integration (CI): “Rust DTOs derive <code>ts_rs::TS</code>; <code>cargo test</code> writes TypeScript definitions to <code>src/ipc/bindings/</code>. CI fails if the generated files differ from the committed ones.” The <a href="https://docs.rs/ts-rs/latest/ts_rs/" target="_blank" rel="noopener noreferrer">ts-rs documentation</a> explains the surprising part: <code>#[ts(export)]</code> “generates a test which writes the bindings for it to disk”. The output directory comes from <code>TS_RS_EXPORT_DIR</code>, set to <code>src/ipc/bindings</code> in <code>.cargo/config.toml</code>. The workspace enables the <code>serde-compat</code> feature, so ts-rs honors attributes such as <code>rename_all</code> and <code>tag</code>, and <code>uuid-impl</code>, so <code>Uuid</code> becomes <code>string</code>. ADR 0003 also exports 64-bit sizes as <code>number</code> “(values stay below 2^53)”, via <code>#[ts(type = "number")]</code> in <code>src-tauri/src/dto.rs</code>; that is about 9 petabytes, safe for sizes but an assumption to remember for any new 64-bit field.</p>
+<p>Figure 26.1 shows the pipeline from a Rust struct to a type-checked call.</p>
+<figure id="fig-26-generated-types">
+<img src="/books/r2dock/media/file31.webp" alt="A top to bottom flow. A Rust DTO deriving Serialize and TS feeds &#x27;cargo test runs the ts-rs export tests&#x27;, which writes files into src/ipc/bindings using TS_RS_EXPORT_DIR. Those files are imported by src/ipc/commands.ts and then by React components. A side branch shows the CI step &#x27;git diff --exit-code src/ipc/bindings&#x27; failing the build when the committed files are stale." width="1019" height="1297" loading="lazy" decoding="async">
+<figcaption>Figure 26.1. A Rust struct with serde and ts-rs derives is turned into a TypeScript file by cargo test, committed under src/ipc/bindings, imported by commands.ts, and checked in CI by a git diff.</figcaption>
+</figure>
+<p>The CI step turns convenience into a guarantee: after <code>cargo test --workspace</code> regenerates every binding, the Linux job in <code>.github/workflows/ci.yml</code> runs <code>git diff --exit-code -- src/ipc/bindings</code>, so a DTO change without regenerated TypeScript fails the build. The folder holds 74 generated files at the audited commit. A tagged enum shows how faithfully shapes carry over.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/model.rs#L323-L351" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/model.rs, lines 323 to 351</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="at">#[</span>derive<span class="at">(</span><span class="bu">Debug</span><span class="op">,</span> <span class="bu">Clone</span><span class="op">,</span> <span class="bu">PartialEq</span><span class="op">,</span> Serialize<span class="op">,</span> TS<span class="at">)]</span></span>
+<span id="cb2-2"><span class="at">#[</span>serde<span class="at">(</span></span>
+<span id="cb2-3">    rename_all <span class="op">=</span> <span class="st">"camelCase"</span><span class="op">,</span></span>
+<span id="cb2-4">    rename_all_fields <span class="op">=</span> <span class="st">"camelCase"</span><span class="op">,</span></span>
+<span id="cb2-5">    tag <span class="op">=</span> <span class="st">"type"</span></span>
+<span id="cb2-6"><span class="at">)]</span></span>
+<span id="cb2-7"><span class="at">#[</span>ts<span class="at">(</span>export<span class="at">)]</span></span>
+<span id="cb2-8"><span class="kw">pub</span> <span class="kw">enum</span> TransferEvent <span class="op">{</span></span>
+<span id="cb2-9">    <span class="co">/// Full state, sent when the frontend subscribes.</span></span>
+<span id="cb2-10">    Snapshot <span class="op">{</span></span>
+<span id="cb2-11">        jobs<span class="op">:</span> <span class="dt">Vec</span><span class="op">&lt;</span>JobSnapshot<span class="op">&gt;,</span></span>
+<span id="cb2-12">    <span class="op">},</span></span>
+<span id="cb2-13">    Added <span class="op">{</span></span>
+<span id="cb2-14">        jobs<span class="op">:</span> <span class="dt">Vec</span><span class="op">&lt;</span>JobSnapshot<span class="op">&gt;,</span></span>
+<span id="cb2-15">    <span class="op">},</span></span>
+<span id="cb2-16">    Updated <span class="op">{</span></span>
+<span id="cb2-17">        job<span class="op">:</span> <span class="dt">Box</span><span class="op">&lt;</span>JobSnapshot<span class="op">&gt;,</span></span>
+<span id="cb2-18">    <span class="op">},</span></span>
+<span id="cb2-19">    Progress <span class="op">{</span></span>
+<span id="cb2-20">        updates<span class="op">:</span> <span class="dt">Vec</span><span class="op">&lt;</span>ProgressUpdate<span class="op">&gt;,</span></span>
+<span id="cb2-21">    <span class="op">},</span></span>
+<span id="cb2-22">    Removed <span class="op">{</span></span>
+<span id="cb2-23">        ids<span class="op">:</span> <span class="dt">Vec</span><span class="op">&lt;</span>JobId<span class="op">&gt;,</span></span>
+<span id="cb2-24">    <span class="op">},</span></span>
+<span id="cb2-25">    <span class="co">/// A connection's credentials were rejected; its jobs stopped.</span></span>
+<span id="cb2-26">    AuthFailed <span class="op">{</span></span>
+<span id="cb2-27">        connection_id<span class="op">:</span> Uuid<span class="op">,</span></span>
+<span id="cb2-28">    <span class="op">},</span></span>
+<span id="cb2-29"><span class="op">}</span></span></code></pre></div>
+<p>The generated <code>src/ipc/bindings/TransferEvent.ts</code> is one long line; re-wrapped, it reads:</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src/ipc/bindings/TransferEvent.ts#L5" target="_blank" rel="noopener noreferrer">src/ipc/bindings/TransferEvent.ts, line 5</a></p>
+</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb3-1"><span class="im">export type</span> TransferEvent <span class="op">=</span></span>
+<span id="cb3-2">  { <span class="st">"type"</span><span class="op">:</span> <span class="st">"snapshot"</span><span class="op">,</span> jobs<span class="op">:</span> <span class="bu">Array</span><span class="op">&lt;</span>JobSnapshot<span class="op">&gt;,</span> }</span>
+<span id="cb3-3">  <span class="op">|</span> { <span class="st">"type"</span><span class="op">:</span> <span class="st">"added"</span><span class="op">,</span> jobs<span class="op">:</span> <span class="bu">Array</span><span class="op">&lt;</span>JobSnapshot<span class="op">&gt;,</span> }</span>
+<span id="cb3-4">  <span class="op">|</span> { <span class="st">"type"</span><span class="op">:</span> <span class="st">"updated"</span><span class="op">,</span> job<span class="op">:</span> JobSnapshot<span class="op">,</span> }</span>
+<span id="cb3-5">  <span class="op">|</span> { <span class="st">"type"</span><span class="op">:</span> <span class="st">"progress"</span><span class="op">,</span> updates<span class="op">:</span> <span class="bu">Array</span><span class="op">&lt;</span>ProgressUpdate<span class="op">&gt;,</span> }</span>
+<span id="cb3-6">  <span class="op">|</span> { <span class="st">"type"</span><span class="op">:</span> <span class="st">"removed"</span><span class="op">,</span> ids<span class="op">:</span> <span class="bu">Array</span><span class="op">&lt;</span><span class="dt">string</span><span class="op">&gt;,</span> }</span>
+<span id="cb3-7">  <span class="op">|</span> { <span class="st">"type"</span><span class="op">:</span> <span class="st">"authFailed"</span><span class="op">,</span> connectionId<span class="op">:</span> <span class="dt">string</span><span class="op">,</span> }<span class="op">;</span></span></code></pre></div>
+<p><code>tag = "type"</code> became a discriminated union, <code>Box</code> vanished because boxing is invisible in JSON, and <code>connection_id</code> became <code>connectionId</code> through <code>rename_all_fields</code>. A <code>switch (event.type)</code> in the reducer of <a href="/books/r2dock/read/ch038#ch-28">Chapter 28</a> (UI Performance and Large Queues) narrows each branch, so a renamed Rust variant becomes a TypeScript compile error instead of a silent <code>undefined</code>.</p>
+<p>The gap ts-rs leaves is the command list itself: it generates value shapes, not command names or argument names, so a misspelled <code>prefix</code> in <code>invoke("object_list", ...)</code> still compiles. The ADR accepts this and keeps all such calls in one reviewed file. Tools such as <code>tauri-specta</code> can generate typed command functions, but the code does not use them, and the project records no reason beyond the ADR’s decision.</p>
+</section>
+<section id="a-request-through-both-layers" class="level3">
+<h2>A Request Through Both Layers</h2>
+<p><code>useExplorerData</code> in <code>src/features/browser/useExplorerData.ts</code> runs a TanStack Query infinite query keyed by <code>qk.objects(connectionId, bucket, prefix)</code> whose page function calls <code>objectList(connectionId, bucket, prefix, pageParam)</code>, starting with <code>null</code>. Tauri deserializes the arguments into <code>object_list</code> in <code>src-tauri/src/commands/browse.rs</code>. Deserialization is the first validation: <code>connection_id</code> is typed <code>Uuid</code>, so a malformed id is rejected before the body runs, and <code>null</code> becomes <code>Option::None</code>. The command then validates bucket and prefix with <code>bucket_arg</code> and <code>prefix_arg</code>, opens an activity log record, and calls <code>with_client</code>, which resolves the connection to an <code>R2Client</code> whose credentials never leave Rust and records online status from the result. <code>R2Client::list_page</code> sends <code>ListObjectsV2</code> with delimiter <code>/</code> and 1,000 keys per page (<a href="/books/r2dock/read/ch014#ch-08">Chapter 8</a>, The S3-Compatible Protocol).</p>
+<p>The returned <code>ListPage</code> has <code>prefix</code>, <code>folders</code>, <code>objects</code>, and <code>nextToken</code>. <code>getNextPageParam</code> returns <code>last.nextToken ?? undefined</code>, and the <a href="https://tanstack.com/query/v5/docs/framework/react/guides/infinite-queries" target="_blank" rel="noopener noreferrer">TanStack Query infinite query guide</a> documents that <code>undefined</code> means no further page. Rust keeps no per-view state: the frontend owns accumulated pages, sorting, filtering, and merging in-progress uploads (<a href="/books/r2dock/read/ch037#ch-27">Chapter 27</a>, Frontend State Management).</p>
+</section>
+<section id="channels-streaming-transfer-events" class="level3">
+<h2>Channels: Streaming Transfer Events</h2>
+<p>A transfer queue may run for hours and produce thousands of changes; a promise resolves once, and polling wastes work. The <a href="https://v2.tauri.app/develop/calling-frontend/" target="_blank" rel="noopener noreferrer">guide to calling the frontend from Rust</a> says “The event system is not designed for low latency or high throughput situations,” while “Channels are designed to be fast and deliver ordered data.” A channel is created in JavaScript and passed as a command argument; the <a href="https://v2.tauri.app/reference/javascript/api/namespacecore/" target="_blank" rel="noopener noreferrer"><code>@tauri-apps/api/core</code> reference</a> warns that messages arriving before <code>onmessage</code> is set are not replayed. R2Dock’s wrapper therefore sets the handler first.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src/ipc/commands.ts#L130-L134" target="_blank" rel="noopener noreferrer">src/ipc/commands.ts, lines 130 to 134</a></p>
+</div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb4-1"><span class="im">export</span> <span class="kw">const</span> transferSubscribe <span class="op">=</span> (onEvent<span class="op">:</span> (e<span class="op">:</span> TransferEvent) <span class="kw">=&gt;</span> <span class="dt">void</span>) <span class="kw">=&gt;</span> {</span>
+<span id="cb4-2">  <span class="kw">const</span> channel <span class="op">=</span> <span class="kw">new</span> <span class="fu">Channel</span><span class="op">&lt;</span>TransferEvent<span class="op">&gt;</span>()<span class="op">;</span></span>
+<span id="cb4-3">  channel<span class="op">.</span><span class="at">onmessage</span> <span class="op">=</span> onEvent<span class="op">;</span></span>
+<span id="cb4-4">  <span class="cf">return</span> <span class="fu">invoke</span><span class="op">&lt;</span><span class="dt">void</span><span class="op">&gt;</span>(<span class="st">"transfer_subscribe"</span><span class="op">,</span> { onEvent<span class="op">:</span> channel })<span class="op">;</span></span>
+<span id="cb4-5">}<span class="op">;</span></span></code></pre></div>
+<p>On the Rust side, <code>transfer_subscribe</code> in <code>src-tauri/src/commands/transfers.rs</code> receives a <code>Channel&lt;TransferEvent&gt;</code>, installs a sink closure in the engine, and returns at once; the channel lives on inside the sink. Before forwarding each event, the sink records interesting <code>Updated</code> states in the activity log (<code>record_job</code>), lets the connection service learn online status from finished transfers (<code>note_transfer</code>), and counts completions for a background notification, which it spawns onto the runtime with the comment “Never block the event path on window queries.” It ends with <code>let _ = on_event.send(event)</code>, ignoring failure because a vanished webview has nobody left to tell.</p>
+<p>The engine side solves the classic race between taking a snapshot and subscribing.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/engine/mod.rs#L262-L270" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/engine/mod.rs, lines 262 to 270</a></p>
+</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb5-1">    <span class="co">/// Set (or replace) the event sink and send a full snapshot.</span></span>
+<span id="cb5-2">    <span class="kw">pub</span> <span class="kw">fn</span> subscribe(<span class="op">&amp;</span><span class="kw">self</span><span class="op">,</span> sink<span class="op">:</span> EventSink) <span class="op">{</span></span>
+<span id="cb5-3">        <span class="co">// Hold the delivery lock so no event can slip between the snapshot</span></span>
+<span id="cb5-4">        <span class="co">// and the new sink, or arrive before the snapshot.</span></span>
+<span id="cb5-5">        <span class="kw">let</span> _order <span class="op">=</span> <span class="kw">self</span><span class="op">.</span>inner<span class="op">.</span>delivery<span class="op">.</span>lock()<span class="op">;</span></span>
+<span id="cb5-6">        <span class="kw">let</span> jobs <span class="op">=</span> <span class="kw">self</span><span class="op">.</span>snapshot()<span class="op">;</span></span>
+<span id="cb5-7">        sink(<span class="pp">TransferEvent::</span>Snapshot <span class="op">{</span> jobs <span class="op">}</span>)<span class="op">;</span></span>
+<span id="cb5-8">        <span class="op">*</span><span class="kw">self</span><span class="op">.</span>inner<span class="op">.</span>sink<span class="op">.</span>write() <span class="op">=</span> <span class="cn">Some</span>(sink)<span class="op">;</span></span>
+<span id="cb5-9">    <span class="op">}</span></span></code></pre></div>
+<p>Every emission goes through <code>Inner::emit</code>, which takes the same <code>delivery</code> lock, so no event can fall into the gap or overtake the snapshot. A reloaded page subscribes again, its sink replaces the old one, and the first message is a fresh <code>Snapshot</code> that the reducer treats as “replace everything”.</p>
+<p>Events come at two rates. State changes (<code>Added</code>, <code>Updated</code>, <code>Removed</code>) are emitted immediately. Byte progress is batched by <code>progress_ticker</code>, which every <code>progress_interval</code> (250 milliseconds by default in <code>EngineConfig::new</code>) gathers all active jobs’ counters into one <code>Progress</code> event, skipping unchanged ones. PLAN.md section 12.4 describes “at most every 250 ms per active job”; the code goes further with one combined event per tick for all jobs. <a href="/books/r2dock/read/ch011#ch-06">Chapter 6</a> (The Transfer Scheduler) owns the engine side.</p>
+<p>On the page, <code>startTransferSubscription</code> in <code>src/features/transfers/subscription.ts</code> subscribes once for the app’s lifetime from an Effect in <code>src/app/App.tsx</code>. A module-level <code>started</code> flag absorbs <code>StrictMode</code>’s second run; if the invoke fails the flag resets and a toast says “Transfer updates are not available.” There is no unsubscribe. The same idiom, a promise for the final result and a channel for progress, appears in <code>deleteExecute</code> and <code>moveExecute</code> (a <code>Channel&lt;OpProgress&gt;</code> with <code>done</code> and <code>total</code>) and <code>compressionInstall</code> (<code>Channel&lt;InstallProgress&gt;</code>). Copy it for any new long-running command.</p>
+</section>
+<section id="an-upload-from-click-to-progress-bar" class="level3">
+<h2>An Upload from Click to Progress Bar</h2>
+<p>The upload path combines every mechanism and turns a security rule into an API shape. Figure 26.2 shows the sequence.</p>
+<figure id="fig-26-ipc-roundtrip">
+<img src="/books/r2dock/media/file32.webp" alt="Four participants: UI, Commands, Engine, and R2. The UI calls transfer_subscribe, the commands layer subscribes a sink in the engine, and the engine sends a Snapshot to the UI. The UI then calls pick_upload_files and gets a selection id, calls upload_prepare and gets a plan id and counts, and calls upload_start, which enqueues jobs and returns a job count. The engine puts parts to R2 and sends Added, Updated, and Progress events to the UI." width="1400" height="1630" loading="lazy" decoding="async">
+<figcaption>Figure 26.2. The UI subscribes with a channel, then calls pick_upload_files, upload_prepare, and upload_start, receiving opaque ids and counts, while the engine uploads to R2 and pushes events back.</figcaption>
+</figure>
+<p><code>pickAndUpload</code> in <code>src/features/browser/upload.ts</code> calls <code>pick_upload_files</code>. Rust opens the native dialog, registers the chosen paths in <code>state.selections</code>, and returns a <code>Selection</code>: an opaque <code>id</code>, a <code>count</code>, and up to three display names. The paths stay in Rust. PLAN.md section 7.1 gives the reason: this “prevents a compromised webview from uploading <code>~/.ssh</code> by passing a path string.” No upload command accepts a path at all.</p>
+<p><code>uploadSelection</code> then calls <code>upload_prepare</code> with the selection id and target. Rust looks up the paths, walks folders inside <code>spawn_blocking</code>, computes keys, optionally estimates compression savings, counts existing destination keys, and stores a <code>PreparedUpload</code> under a new plan id. It returns an <code>UploadPlan</code> summary; as the comment on <code>useUploadStore</code> says, “Plans hold no secrets and no local paths.” If <code>needs_review</code> holds (folders, more than 20 files, conflicts, skipped items, a scan that hit its size limit, or a compression estimate), a dialog collects the conflict policy. <code>upload_start</code> then takes the plan with <code>state.uploads.take(&amp;plan_id)</code>, making it single use (“This upload expired. Choose the files again.”), turns files into <code>JobSpec::Upload</code> values, calls <code>engine.enqueue</code>, and returns only a <code>u32</code> job count. Everything after that arrives over the channel opened at startup.</p>
+<p>Drag and drop enters the same flow differently. The webview never receives dropped paths: <code>src-tauri/src/dragdrop.rs</code> handles window drag events in Rust, registers dropped paths with the same <code>register_selection</code>, and emits a Tauri event <code>r2dock://drag</code> carrying a <code>DragEvent</code> (<code>enter</code>, <code>over</code>, <code>leave</code>, or <code>drop</code> with a <code>Selection</code>). An event is fine here because drag notifications are few and small. The <code>useDragDrop</code> hook listens with <code>listen</code> and, on <code>drop</code>, calls <code>uploadSelection</code>. Its cleanup handles an asynchronous subscription under <code>StrictMode</code>.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src/features/browser/useDragDrop.ts#L63-L76" target="_blank" rel="noopener noreferrer">src/features/browser/useDragDrop.ts, lines 63 to 76</a></p>
+</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb6-1">    })</span>
+<span id="cb6-2">      <span class="op">.</span><span class="fu">then</span>((fn) <span class="kw">=&gt;</span> {</span>
+<span id="cb6-3">        <span class="cf">if</span> (disposed) <span class="fu">fn</span>()<span class="op">;</span></span>
+<span id="cb6-4">        <span class="cf">else</span> unlisten <span class="op">=</span> fn<span class="op">;</span></span>
+<span id="cb6-5">      })</span>
+<span id="cb6-6">      <span class="op">.</span><span class="fu">catch</span>(() <span class="kw">=&gt;</span> {</span>
+<span id="cb6-7">        <span class="co">// Not running inside the desktop shell (for example in tests).</span></span>
+<span id="cb6-8">      })<span class="op">;</span></span>
+<span id="cb6-9">    <span class="cf">return</span> () <span class="kw">=&gt;</span> {</span>
+<span id="cb6-10">      disposed <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb6-11">      unlisten<span class="op">?.</span>()<span class="op">;</span></span>
+<span id="cb6-12">    }<span class="op">;</span></span>
+<span id="cb6-13">  }<span class="op">,</span> [client])<span class="op">;</span></span>
+<span id="cb6-14">}</span></code></pre></div>
+<p><code>listen</code> returns a promise for the unlisten function. If the Effect is cleaned up before it resolves, as <code>StrictMode</code>’s extra cycle does, the <code>disposed</code> flag makes the late function run at once instead of leaking a second listener.</p>
+</section>
+<section id="secrets-and-the-cost-of-the-boundary" class="level3">
+<h2>Secrets and the Cost of the Boundary</h2>
+<p>The only time a secret crosses IPC is the Connect form submit. <code>ConnectionInput</code> in <code>src-tauri/src/dto.rs</code> is the only DTO with a secret field and derives <code>Deserialize</code> but not <code>Serialize</code>, so Rust cannot send it back; in edit mode the form sends <code>secret: null</code> to keep the stored one. <code>ConnectionSummary</code> returns only hints such as <code>accessKeyHint</code>, <code>secretStorage</code>, and <code>hasApiToken</code>. In React the secret lives in <code>ConnectForm</code>’s local <code>useState</code>, never in Zustand or the query cache, and is cleared after a successful save but kept after a failure so the user can retry; <code>ConnectForm.test.tsx</code> pins this down, including that error text never contains the secret. <code>ConnectionInput</code> still derives <code>Debug</code> with the secret as a plain <code>String</code>; nothing formats it today, but a redacting type would make a future leak impossible (<a href="/books/r2dock/read/ch034#ch-25">Chapter 25</a>, Threat Modeling and Remaining Risks).</p>
+<p>Every call costs a JSON encode and decode, cheap at R2Dock’s sizes. File contents never cross IPC; transfers stream inside Rust and previews use the custom scheme of <a href="/books/r2dock/read/ch033#ch-24">Chapter 24</a> (The Custom Media Preview Protocol). The failure modes are bounded. Arguments that do not deserialize reject with a non-<code>AppError</code> value, which <code>errorMessage</code> still handles. What the webview receives if a command panics is not shown by the code; the project rule is that command paths must not panic. A failed channel send leaves the engine running until the next snapshot. A command missing from the capability is refused before its handler runs, and a stale binding fails CI.</p>
+</section>
+<section id="working-on-this-code-25" class="level3">
+<h2>Working on This Code</h2>
+<p>To add a command, write a thin handler under <code>src-tauri/src/commands/</code> (validate with <code>bucket_arg</code>, <code>prefix_arg</code>, or <code>key_arg</code>, call a service, return <code>CmdResult&lt;T&gt;</code>), register it in <code>generate_handler!</code>, add it to <code>COMMANDS</code> in <code>src-tauri/build.rs</code> and its <code>allow-</code> permission to <code>src-tauri/capabilities/main.json</code> with a reason in the pull request, and add a typed wrapper to <code>src/ipc/commands.ts</code>. New shapes go in <code>src-tauri/src/dto.rs</code> (or the owning crate) with <code>Serialize</code>, <code>TS</code>, <code>rename_all = "camelCase"</code>, and <code>#[ts(export)]</code>; run <code>cargo test -p r2dock</code> and commit the regenerated bindings, never hand-edited. Long-running work returns its result through the promise and streams progress through a <code>Channel&lt;T&gt;</code> whose <code>onmessage</code> is set before <code>invoke</code>.</p>
+<p>The invariants: no command returns a secret or accepts a local path; branch on <code>AppError.code</code>, not message text; 64-bit fields exported as <code>number</code> stay below 2^53. Frontend checks are <code>npm test</code>, <code>npm run typecheck</code>, and <code>npm run lint</code>. Mock IPC by mocking the whole commands module with <code>vi.mock</code>, as <code>subscription.test.ts</code> does.</p>
+</section>
+<section id="further-reading-25" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>src/ipc/commands.ts</code>, every command the interface can call.</li>
+<li><code>docs/adr/0003-ipc-types.md</code>, the decision to generate types with ts-rs.</li>
+<li><a href="https://v2.tauri.app/develop/calling-rust/" target="_blank" rel="noopener noreferrer">Tauri: Calling Rust from the Frontend</a>.</li>
+<li><a href="https://v2.tauri.app/develop/calling-frontend/" target="_blank" rel="noopener noreferrer">Tauri: Calling the Frontend from Rust</a>, events compared with channels.</li>
+<li><a href="https://docs.rs/ts-rs/latest/ts_rs/" target="_blank" rel="noopener noreferrer">ts-rs crate documentation</a>.</li>
+</ul>
+</section>
+</section>

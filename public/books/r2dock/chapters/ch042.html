@@ -1,0 +1,158 @@
+<section id="ch-31" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">31</span> CI/CD and Desktop Releases</h1>
+<p>A desktop application ships as installers that users run with their own privileges, so each must come from a checked commit, the file set must be unambiguous, and users must be able to verify downloads. This chapter follows R2Dock’s three GitHub Actions workflows: <code>ci.yml</code>, which checks every push and pull request; <code>release.yml</code>, which builds and publishes installers from a version tag; and <code>tools.yml</code>, which builds the pinned FFmpeg packages. It also states which parts of a trustworthy release are not done yet, most importantly code signing.</p>
+<p>Toolchain setup for contributors (Rust 1.94 or newer, Node.js 22, and the Tauri prerequisites) is covered in <a href="/books/r2dock/read/ch046#ch-34">Chapter 34</a> (Your First Contribution); the continuous integration (CI) workflow below is the most precise record of what each platform needs. One constraint belongs here because it broke a release: the Rust <code>tauri</code> crate and the JavaScript <code>@tauri-apps/api</code> package must share a minor version. The CHANGELOG entry for 0.1.1 records that release builds failed until the crate moved to 2.12 “matching the JavaScript API package”, and at the audited commit both lock files hold 2.12.4.</p>
+<section id="the-continuous-integration-workflow" class="level3">
+<h2>The Continuous Integration Workflow</h2>
+<p>The CI workflow, <code>ci.yml</code>, runs on every push to <code>main</code> and every pull request. Figure 31.1 shows its two jobs.</p>
+<figure id="fig-31-ci-checks">
+<img src="/books/r2dock/media/file37.webp" alt="A push to main or a pull request starts two jobs. The test job runs in order: OS setup and toolchains, including system libraries, FFmpeg, the NASM assembler, Rust stable, and Node 22; frontend lint, typecheck, Vitest, and Vite build; Rust format check and Clippy; cargo test, which writes the TypeScript bindings; the live tools install test; and on Linux only, a git diff of the bindings. The audit job runs npm audit and cargo audit on Linux." width="1059" height="1617" loading="lazy" decoding="async">
+<figcaption>Figure 31.1. The CI workflow: a push or pull request starts a three-platform test job (setup and toolchains, frontend checks, Rust format and lint, tests, pinned tools install, and a Linux-only bindings diff) and a separate Linux dependency audit job.</figcaption>
+</figure>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/.github/workflows/ci.yml#L8-L25" target="_blank" rel="noopener noreferrer">.github/workflows/ci.yml, lines 8 to 25</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb1-1"><span class="fu">permissions</span><span class="kw">:</span></span>
+<span id="cb1-2"><span class="at">  </span><span class="fu">contents</span><span class="kw">:</span><span class="at"> read</span></span>
+<span id="cb1-3"></span>
+<span id="cb1-4"><span class="fu">concurrency</span><span class="kw">:</span></span>
+<span id="cb1-5"><span class="at">  </span><span class="fu">group</span><span class="kw">:</span><span class="at"> ci-${{ github.ref }}</span></span>
+<span id="cb1-6"><span class="at">  </span><span class="fu">cancel-in-progress</span><span class="kw">:</span><span class="at"> </span><span class="ch">true</span></span>
+<span id="cb1-7"></span>
+<span id="cb1-8"><span class="fu">env</span><span class="kw">:</span></span>
+<span id="cb1-9"><span class="at">  </span><span class="fu">CARGO_TERM_COLOR</span><span class="kw">:</span><span class="at"> always</span></span>
+<span id="cb1-10"></span>
+<span id="cb1-11"><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb1-12"><span class="at">  </span><span class="fu">test</span><span class="kw">:</span></span>
+<span id="cb1-13"><span class="at">    </span><span class="fu">name</span><span class="kw">:</span><span class="at"> Test (${{ matrix.os }})</span></span>
+<span id="cb1-14"><span class="at">    </span><span class="fu">strategy</span><span class="kw">:</span></span>
+<span id="cb1-15"><span class="at">      </span><span class="fu">fail-fast</span><span class="kw">:</span><span class="at"> </span><span class="ch">false</span></span>
+<span id="cb1-16"><span class="at">      </span><span class="fu">matrix</span><span class="kw">:</span></span>
+<span id="cb1-17"><span class="at">        </span><span class="fu">os</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">ubuntu</span><span class="fl">-22.04</span><span class="kw">,</span><span class="at"> macos-latest</span><span class="kw">,</span><span class="at"> windows-latest</span><span class="kw">]</span></span>
+<span id="cb1-18"><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ${{ matrix.os }}</span></span></code></pre></div>
+<p><code>permissions: contents: read</code> limits the automatic <code>GITHUB_TOKEN</code> to reading, as GitHub’s <a href="https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication" target="_blank" rel="noopener noreferrer">token documentation</a> recommends (“grant the <code>GITHUB_TOKEN</code> the least required access”); CI runs code from pull requests, so a read-only token limits what a malicious change could do. The <code>concurrency</code> group with <code>cancel-in-progress: true</code> cancels a branch’s older run when a new push arrives. GitHub’s <a href="https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/running-variations-of-jobs-in-a-workflow" target="_blank" rel="noopener noreferrer">matrix documentation</a> explains that fail-fast cancels the other jobs when one fails; <code>fail-fast: false</code> keeps them running, so one run shows whether a failure is platform-specific.</p>
+<section id="the-test-job" class="level4">
+<h3>The test job</h3>
+<p>The job installs system packages and FFmpeg (on Windows exporting the real <code>ffmpeg.exe</code> rather than a Chocolatey shim, as <a href="/books/r2dock/read/ch040#ch-29">Chapter 29</a>, Automated Testing Strategy, explains), the Netwide Assembler (NASM) on Windows, stable Rust with <code>rustfmt</code> and <code>clippy</code>, a Rust build cache through <code>Swatinem/rust-cache</code>, and Node.js 22. The workflow does not say which dependency needs NASM, and this book has not traced it. Because it uses <code>dtolnay/rust-toolchain@stable</code>, CI checks the newest compiler, and no job builds with exactly Rust 1.94, so the <code>rust-version</code> floor is declared but not tested.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/.github/workflows/ci.yml#L65-L90" target="_blank" rel="noopener noreferrer">.github/workflows/ci.yml, lines 65 to 90</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb2-1"><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">run</span><span class="kw">:</span><span class="at"> npm ci</span></span>
+<span id="cb2-2"></span>
+<span id="cb2-3"><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> Frontend lint, types, tests, build</span></span>
+<span id="cb2-4"><span class="fu">        run</span><span class="kw">: </span><span class="ch">|</span></span>
+<span id="cb2-5">          npm run lint</span>
+<span id="cb2-6">          npm run typecheck</span>
+<span id="cb2-7">          npm test</span>
+<span id="cb2-8">          npm run build</span>
+<span id="cb2-9"></span>
+<span id="cb2-10"><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> Rust format</span></span>
+<span id="cb2-11"><span class="at">        </span><span class="fu">run</span><span class="kw">:</span><span class="at"> cargo fmt --all -- --check</span></span>
+<span id="cb2-12"></span>
+<span id="cb2-13"><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> Rust lint</span></span>
+<span id="cb2-14"><span class="at">        </span><span class="fu">run</span><span class="kw">:</span><span class="at"> cargo clippy --workspace --all-targets -- -D warnings</span></span>
+<span id="cb2-15"></span>
+<span id="cb2-16"><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> Rust tests</span></span>
+<span id="cb2-17"><span class="at">        </span><span class="fu">run</span><span class="kw">:</span><span class="at"> cargo test --workspace</span></span>
+<span id="cb2-18"></span>
+<span id="cb2-19"><span class="co">      # Downloads this OS's pinned FFmpeg package from the tools release,</span></span>
+<span id="cb2-20"><span class="co">      # verifies it, and compresses a file with it.</span></span>
+<span id="cb2-21"><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> Compression tools install on this OS</span></span>
+<span id="cb2-22"><span class="at">        </span><span class="fu">run</span><span class="kw">:</span><span class="at"> cargo test -p r2dock-media --test live_tools -- --ignored</span></span>
+<span id="cb2-23"></span>
+<span id="cb2-24"><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> Generated IPC types are up to date</span></span>
+<span id="cb2-25"><span class="at">        </span><span class="fu">if</span><span class="kw">:</span><span class="at"> runner.os == 'Linux'</span></span>
+<span id="cb2-26"><span class="at">        </span><span class="fu">run</span><span class="kw">:</span><span class="at"> git diff --exit-code -- src/ipc/bindings</span></span></code></pre></div>
+<p>The Rust lint step interacts with the workspace lint table in <code>Cargo.toml</code>, which sets <code>unsafe_code = "forbid"</code> and Clippy’s <code>unwrap_used</code>, <code>expect_used</code>, <code>panic</code>, <code>dbg_macro</code>, and <code>todo</code> to <code>warn</code>. Warnings alone do not fail a build, but <code>-D warnings</code> turns them into errors, so a stray <code>unwrap()</code> in application code fails CI on every platform. Test files opt out with a crate-level <code>#![allow(...)]</code>, so an <code>allow</code> in non-test code stands out in review. The tools step runs the ignored <code>live_tools</code> test, so a missing or altered FFmpeg release asset breaks CI rather than a user’s download.</p>
+</section>
+<section id="checking-the-generated-typescript-bindings" class="level4">
+<h3>Checking the generated TypeScript bindings</h3>
+<p>Architecture decision record (ADR) 0003 records the typed Inter-Process Communication (IPC) contract: “Rust DTOs derive <code>ts_rs::TS</code>; <code>cargo test</code> writes TypeScript definitions to <code>src/ipc/bindings/</code>. CI fails if the generated files differ from the committed ones.” Each exported type carries <code>#[ts(export)]</code> (74 occurrences at the audited commit), and <code>.cargo/config.toml</code> sets <code>TS_RS_EXPORT_DIR</code> to <code>src/ipc/bindings</code>. After the test step regenerates every binding, <code>git diff --exit-code</code> fails if a contributor changed a Rust data transfer object without committing the new TypeScript, protecting the rule from <a href="/books/r2dock/read/ch036#ch-26">Chapter 26</a> (React and Tauri IPC) that frontend IPC types come only from generated definitions. The workflow does not say why the check runs only on Linux. ADR 0003 also notes the gap: command names and arguments are still listed by hand in <code>src/ipc/commands.ts</code>, <code>src-tauri/build.rs</code>, and the capability file.</p>
+</section>
+</section>
+<section id="dependency-audits" class="level3">
+<h2>Dependency Audits</h2>
+<p>The <code>audit</code> job runs on Linux: <code>npm audit --omit=dev</code>, then <code>cargo install cargo-audit --locked</code> and <code>cargo audit</code>. The npm check covers only packages that ship in the app. <code>cargo audit</code> checks <code>Cargo.lock</code> against the RustSec database, “a repository of security advisories filed against Rust crates published via crates.io” according to its <a href="https://rustsec.org/" target="_blank" rel="noopener noreferrer">project site</a>, and <code>--locked</code> pins the auditor’s own dependencies.</p>
+<p>Three limitations follow from the code. The audit has no scheduled trigger, so an advisory against an unchanged lock file is noticed only at the next push. Nothing in the release workflow depends on it. And PLAN.md section 19 and the contribution rules mention <code>cargo deny</code>, but no <code>deny.toml</code> is tracked and no step runs it; its <a href="https://embarkstudios.github.io/cargo-deny/checks/index.html" target="_blank" rel="noopener noreferrer">license check</a> would suit an MIT-licensed project that distributes tools under the GNU Lesser General Public License (LGPL). PLAN.md also mentions Dependabot or Renovate; neither is configured.</p>
+</section>
+<section id="the-release-workflow" class="level3">
+<h2>The Release Workflow</h2>
+<p><code>release.yml</code> turns a version tag into a GitHub release with five installers and a checksum file. It starts on a pushed <code>v*</code> tag, or through <code>workflow_dispatch</code> with an existing tag, which allows rebuilding after a failed build. Figure 31.2 shows its three jobs.</p>
+<figure id="fig-31-release-pipeline">
+<img src="/books/r2dock/media/file38.webp" alt="A tag push or manual dispatch starts the verify job, which checks the tag format, that the tag equals the checked-out commit, that versions match, and that the CHANGELOG has an entry. It passes the commit hash to four build jobs: macOS Apple silicon DMG, macOS Intel DMG, Windows NSIS installer, and Linux AppImage and deb. Their artifacts flow to the publish job, which checks the exact file set, writes SHA256SUMS.txt, and creates the release." width="1400" height="1744" loading="lazy" decoding="async">
+<figcaption>Figure 31.2. The release pipeline: a version tag triggers a verify job, which passes one commit hash to four parallel build jobs (two macOS, Windows, Linux); their artifacts are checked as an exact five-file set, checksummed, and published as an unsigned GitHub release.</figcaption>
+</figure>
+<section id="verifying-the-tag" class="level4">
+<h3>Verifying the tag</h3>
+<p>The <code>verify</code> job runs a script under <code>set -euo pipefail</code>. It rejects any tag that is not <code>v</code> plus three dot-separated numbers, requires <code>git rev-parse "refs/tags/$TAG^{commit}"</code> to equal the checked-out <code>HEAD</code>, requires the versions in <code>Cargo.toml</code>, <code>package.json</code>, and <code>src-tauri/tauri.conf.json</code> to equal the tag, and requires a <code>## [X.Y.Z]</code> heading in <code>CHANGELOG.md</code>. It then outputs the commit hash as <code>sha</code>. A mismatched manifest would produce installers reporting the wrong version, and passing the hash rather than the tag means every build checks out the same commit even if the tag moves mid-run.</p>
+<p>What the workflow does not do is run tests. Nothing in <code>release.yml</code> runs <code>cargo test</code> or <code>npm test</code> or requires a green CI run, so a tested release depends on the maintainer tagging a commit whose CI passed. A <code>needs</code> dependency on a test job or a check of the commit’s CI status would make that mechanical.</p>
+</section>
+<section id="building-four-targets" class="level4">
+<h3>Building four targets</h3>
+<p>The build job is a four-entry matrix with <code>fail-fast: false</code>.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/.github/workflows/release.yml#L54-L76" target="_blank" rel="noopener noreferrer">.github/workflows/release.yml, lines 54 to 76</a></p>
+</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb3-1"><span class="at">      </span><span class="fu">matrix</span><span class="kw">:</span></span>
+<span id="cb3-2"><span class="at">        </span><span class="fu">include</span><span class="kw">:</span></span>
+<span id="cb3-3"><span class="at">          </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> macOS Apple Silicon</span></span>
+<span id="cb3-4"><span class="at">            </span><span class="fu">os</span><span class="kw">:</span><span class="at"> macos-latest</span></span>
+<span id="cb3-5"><span class="at">            </span><span class="fu">target</span><span class="kw">:</span><span class="at"> aarch64-apple-darwin</span></span>
+<span id="cb3-6"><span class="at">            </span><span class="fu">args</span><span class="kw">:</span><span class="at"> --target aarch64-apple-darwin</span></span>
+<span id="cb3-7"><span class="at">            </span><span class="fu">bundles</span><span class="kw">:</span><span class="at"> dmg</span></span>
+<span id="cb3-8"><span class="at">          </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> macOS Intel</span></span>
+<span id="cb3-9"><span class="at">            </span><span class="fu">os</span><span class="kw">:</span><span class="at"> macos-latest</span></span>
+<span id="cb3-10"><span class="at">            </span><span class="fu">target</span><span class="kw">:</span><span class="at"> x86_64-apple-darwin</span></span>
+<span id="cb3-11"><span class="at">            </span><span class="fu">args</span><span class="kw">:</span><span class="at"> --target x86_64-apple-darwin</span></span>
+<span id="cb3-12"><span class="at">            </span><span class="fu">bundles</span><span class="kw">:</span><span class="at"> dmg</span></span>
+<span id="cb3-13"><span class="at">          </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> Windows x64</span></span>
+<span id="cb3-14"><span class="at">            </span><span class="fu">os</span><span class="kw">:</span><span class="at"> windows-latest</span></span>
+<span id="cb3-15"><span class="at">            </span><span class="fu">target</span><span class="kw">:</span><span class="at"> x86_64-pc-windows-msvc</span></span>
+<span id="cb3-16"><span class="at">            </span><span class="fu">args</span><span class="kw">:</span><span class="at"> </span><span class="st">""</span></span>
+<span id="cb3-17"><span class="at">            </span><span class="fu">bundles</span><span class="kw">:</span><span class="at"> nsis</span></span>
+<span id="cb3-18"><span class="at">          </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> Linux x64</span></span>
+<span id="cb3-19"><span class="at">            </span><span class="fu">os</span><span class="kw">:</span><span class="at"> ubuntu-22.04</span></span>
+<span id="cb3-20"><span class="at">            </span><span class="fu">target</span><span class="kw">:</span><span class="at"> x86_64-unknown-linux-gnu</span></span>
+<span id="cb3-21"><span class="at">            </span><span class="fu">args</span><span class="kw">:</span><span class="at"> </span><span class="st">""</span></span>
+<span id="cb3-22"><span class="at">            </span><span class="fu">bundles</span><span class="kw">:</span><span class="at"> appimage,deb</span></span>
+<span id="cb3-23"><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ${{ matrix.os }}</span></span></code></pre></div>
+<p>Both macOS builds use one runner image with an explicit <code>--target</code>, so one is a cross-compilation, and two disk images ship instead of a universal binary. The command is <code>npm run tauri build -- ${{ matrix.args }} --bundles ${{ matrix.bundles }}</code>; <code>--bundles</code> narrows the formats because <code>tauri.conf.json</code> sets <code>"targets": "all"</code>, and a comment explains “One clearly named file per platform (no MSI, RPM, or updater archives).” Building Linux on Ubuntu 22.04 likely keeps the AppImage compatible with newer glibc versions, but the workflow does not state that reason. In <code>tauri.conf.json</code>, macOS requires version 11.0 and the <code>installMode</code> of the Nullsoft Scriptable Install System (NSIS) installer is <code>currentUser</code>, so Windows installation needs no administrator rights. A bash step renames each bundle to a fixed name such as <code>R2Dock-0.5.0-Windows-Setup.exe</code> and uploads it as an artifact.</p>
+</section>
+<section id="publishing-with-a-fixed-file-set-and-checksums" class="level4">
+<h3>Publishing with a fixed file set and checksums</h3>
+<p>Only the <code>publish</code> job has <code>contents: write</code>. It downloads all artifacts (GitHub’s <a href="https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/storing-and-sharing-data-from-a-workflow" target="_blank" rel="noopener noreferrer">artifact documentation</a> says each upload’s SHA-256 digest is recalculated on download), sorts the file names with <code>LC_ALL=C sort</code>, and compares them with an expected list of exactly five versioned names. A missing or extra file fails the release, which stops a partially failed matrix from publishing an incomplete set. The job then writes <code>SHA256SUMS.txt</code>, builds notes from a fixed “Which file do I download?” table, the line “Unsigned preview build.”, and the CHANGELOG section, and runs <code>gh release create ... --verify-tag</code>, which per the <a href="https://cli.github.com/manual/gh_release_create" target="_blank" rel="noopener noreferrer">GitHub CLI manual</a> aborts if the tag does not exist remotely.</p>
+<p>The checksum file confirms that a download matches what the workflow published. It does not prove who published it, because the checksums sit on the same release page as the files; authenticity needs a signature.</p>
+<p>PLAN.md section 19 planned to use <a href="https://github.com/tauri-apps/tauri-action" target="_blank" rel="noopener noreferrer"><code>tauri-apps/tauri-action</code></a>, which can also generate updater manifests. The implemented workflow instead calls the Tauri CLI and does naming, checks, and publishing in visible shell, at the cost of maintaining that logic itself. Here PLAN.md and the code differ, and the code is the source of truth.</p>
+</section>
+</section>
+<section id="signing-notarization-and-distribution-limits" class="level3">
+<h2>Signing, Notarization, and Distribution Limits</h2>
+<p>Code signing attaches a signature from an identity the operating system trusts. R2Dock’s installers are not signed: the release notes say “Unsigned preview build”, PLAN.md section 17.1 says “Code signing, notarization, and the updater are not done”, and nothing in <code>release.yml</code> or <code>tauri.conf.json</code> configures a certificate. The README tells Windows users to choose <em>More info &gt; Run anyway</em> and macOS users to right-click and choose <em>Open</em>.</p>
+<p>The <a href="https://v2.tauri.app/distribute/sign/macos/" target="_blank" rel="noopener noreferrer">Tauri macOS signing guide</a> says distribution outside the App Store uses a Developer ID Application certificate and “Notarization is required when using a Developer ID Application certificate”, with the certificate supplied to CI through secrets. This book did not inspect the published disk images for an ad-hoc signature. The <a href="https://v2.tauri.app/distribute/sign/windows/" target="_blank" rel="noopener noreferrer">Windows guide</a> explains that signing reduces SmartScreen warnings, though reputation builds over time; PLAN.md section 15 marks Windows certificate options <strong>[Verify cost/options]</strong>. The <a href="https://v2.tauri.app/distribute/sign/linux/" target="_blank" rel="noopener noreferrer">Linux guide</a> says signing “is not required”, and that GPG-signed AppImages are not validated automatically (“AppImage does not validate the signature”).</p>
+<p>For users today, the operating system cannot say who made the app, and checksums help only if users check them and trust the release page. There is no auto-updater (the Tauri plugins in <code>src-tauri/Cargo.toml</code> do not include it), so a fixed vulnerability reaches users only when they download a new version; SECURITY.md says “Only the latest release receives fixes while the project is in 0.x.” PLAN.md Phase 7 lists signed macOS and Windows builds, a signed updater, and release smoke tests as future deliverables.</p>
+</section>
+<section id="the-compression-tools-pipeline" class="level3">
+<h2>The Compression Tools Pipeline</h2>
+<p>R2Dock downloads FFmpeg on first use; <a href="/books/r2dock/read/ch025#ch-17">Chapter 17</a> (How FFmpeg Integrates with Rust) covers installation and verification in the app. The packages come from <code>tools.yml</code>, triggered by hand with a build number and published as <code>tools-ffmpeg-9.0.2-&lt;build&gt;</code>. Its header states “A release tag is never reused; a new build gets a new tag, and the app pins the new SHA-256 sums in crates/r2dock-media/src/tools/manifest.rs”, and the publish job refuses to continue if the tag exists. Because the app pins download and binary digests per platform and points <code>RELEASE_URL</code> at one tools release (build 2 at the audited commit), a rebuilt package can never silently replace a trusted one.</p>
+<p>For Windows and Linux, the <code>mirror</code> job downloads a dated LGPL build from the BtbN FFmpeg-Builds project, verifies its SHA-256, fails if <code>ffmpeg -version</code> shows <code>--enable-gpl</code>, and runs smoke encodes. For macOS, <code>tools/ffmpeg/build-macos.sh</code> builds FFmpeg 9.0.2 with LAME, Opus, and SVT-AV1 from sources verified against pinned SHA-256 values, with <code>--disable-autodetect</code> and <code>--disable-network</code>, and fails if <code>otool -L</code> shows any library outside <code>/usr/lib/</code> or <code>/System/Library/</code>, if GNU General Public License (GPL) code is enabled, or if the AV1 encoder is missing. The publish job writes the digests a maintainer copies into <code>manifest.rs</code> and marks the release as a prerelease. The CI <code>live_tools</code> step closes the loop by installing exactly what <code>manifest.rs</code> pins.</p>
+</section>
+<section id="versioning-and-the-changelog" class="level3">
+<h2>Versioning and the Changelog</h2>
+<p>R2Dock uses Semantic Versioning and a CHANGELOG that “follows Keep a Changelog”. The version lives in the workspace <code>Cargo.toml</code>, <code>package.json</code>, and <code>src-tauri/tauri.conf.json</code>, all 0.5.0 at the audited commit; the release workflow refuses a tag that does not match all three or lacks a CHANGELOG section, which becomes the release notes.</p>
+</section>
+<section id="working-on-this-code-30" class="level3">
+<h2>Working on This Code</h2>
+<p>Workflows live in <code>.github/workflows/ci.yml</code>, <code>release.yml</code>, and <code>tools.yml</code>; packaging in the <code>bundle</code> section of <code>src-tauri/tauri.conf.json</code>; tool pins in <code>crates/r2dock-media/src/tools/manifest.rs</code> and <code>tools/ffmpeg/build-macos.sh</code>. Before pushing, run the CONTRIBUTING.md checklist (<a href="/books/r2dock/read/ch046#ch-34">Chapter 34</a> lists it), which mirrors the test job. If you change a Rust type that crosses IPC, commit the regenerated <code>src/ipc/bindings/</code> files. After dependency changes, run <code>cargo audit</code> and <code>npm audit --omit=dev</code>.</p>
+<p>To release, bump all three manifests, add a <code>## [X.Y.Z]</code> CHANGELOG section, confirm CI is green on all three platforms for that commit (the release workflow does not test), and push a <code>vX.Y.Z</code> tag. Never reuse a tools tag. Keep tokens read-only outside publish jobs, keep <code>fail-fast: false</code>, never add GPL or nonfree FFmpeg components, never put credentials in workflows or logs, and keep <code>tauri</code> and <code>@tauri-apps/api</code> on the same minor version. Adding a bundle format without updating the publish job’s expected file list fails the release by design.</p>
+</section>
+<section id="further-reading-30" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>.github/workflows/release.yml</code> and <code>.github/workflows/ci.yml</code></li>
+<li><code>.github/workflows/tools.yml</code> and <code>tools/ffmpeg/build-macos.sh</code></li>
+<li><a href="https://v2.tauri.app/distribute/" target="_blank" rel="noopener noreferrer">Tauri: Distribute</a></li>
+<li><a href="https://v2.tauri.app/distribute/sign/macos/" target="_blank" rel="noopener noreferrer">Tauri: macOS Code Signing</a></li>
+<li><a href="https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/running-variations-of-jobs-in-a-workflow" target="_blank" rel="noopener noreferrer">GitHub Docs: Running variations of jobs in a workflow</a></li>
+</ul>
+</section>
+</section>

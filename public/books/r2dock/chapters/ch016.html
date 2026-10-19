@@ -1,0 +1,135 @@
+<section id="ch-10" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">10</span> Downloads and HTTP Range Requests</h1>
+<p>A download looks easy: one <code>GetObject</code> request, written to a file. But the connection can drop after 30 GB of a 40 GB file, the object can be replaced while a paused download waits overnight, the app can be killed just before the file is moved into place, and a file with the same name can appear in the destination at any moment. A careful download never leaves a corrupted file where the user expects a good one and never overwrites a file without permission. This chapter follows <code>crates/r2dock-transfer/src/download.rs</code>: the hidden partial file, resuming with Range and If-Match, validating and verifying the data, and the ordered finalization. <a href="/books/r2dock/read/ch022#ch-15">Chapter 15</a> (Crash Consistency and Recovery) builds the full failure matrix on it.</p>
+<section id="network-success-is-not-completion" class="level3">
+<h2>Network Success Is Not Completion</h2>
+<p>Receiving the last byte is not finishing. The bytes must reach the disk, match the promised count and, where possible, the object’s checksum; the file must move to its final name without replacing someone else’s file; and the app must record enough to explain a crash at any point. Only then does the job report <code>Completed</code>, after passing through <code>Preparing</code>, <code>Running</code>, and <code>Verifying</code> (<a href="/books/r2dock/read/ch020#ch-13">Chapter 13</a>, Transfer State Machines).</p>
+</section>
+<section id="the-partial-file" class="level3">
+<h2>The Partial File</h2>
+<p>Bytes never go directly into the destination. <code>temp_path_for</code> names a temporary file in the same folder: for <code>report.pdf</code> and a job identifier beginning <code>0123abcd</code>, it is <code>.report.pdf.0123abcd.r2dock-part</code>, as the test <code>temp_name_is_hidden_unique_and_beside_target</code> checks. The dot hides it, the job tag makes it unique per job, and the name is truncated if needed to fit the path guard’s per-component limit. PLAN.md section 8.5 describes the name as <code>.&lt;name&gt;.r2dock-part</code>; the job tag was added after the plan was written.</p>
+<p>The partial file lives beside its target because a rename is atomic only within one file system; a move from <code>/tmp</code> to an external drive would be a copy that a crash could truncate.</p>
+<p><code>open_temp</code> opens the partial file with write and create. With <code>keep</code> of zero it truncates; with a positive <code>keep</code> it cuts the file to exactly that length and seeks to the end, so new data continues after the trusted prefix. On Unix it adds <code>O_NOFOLLOW</code>, so a temporary path replaced by a symbolic link cannot redirect the download into another file, and <code>run</code> already refuses a temporary path that exists but is not a regular file.</p>
+</section>
+<section id="starting-or-resuming" class="level3">
+<h2>Starting or Resuming</h2>
+<p>For a new download, <code>resolve_target</code> asks the path guard (<code>resolve_file_under_root</code>) to map the destination root and the key-derived relative path into a path that cannot escape the root, then checks without following links whether something exists there. Replace uses the path; Skip ends as <code>Skipped</code>; Ask ends as <code>NeedsDecision</code>; Keep both tries <code>name (1).ext</code> and onward, up to 1,000 names. <code>conflict_policies_for_downloads</code> covers these, and <code>traversal_keys_never_escape_destination</code> checks that a key trying to climb out of the destination fails without writing outside it. Before any request, <code>fs4::available_space</code> turns a too-small volume into a <code>DiskFull</code> error. The check is advisory.</p>
+<p>A job that ran before has a saved <code>DownloadState</code> (<code>crates/r2dock-transfer/src/ctx.rs</code>): the entity tag (ETag) from the first response, the temporary path, the final path, and an optional finalization record. The saved temporary path is trusted only if it equals what <code>temp_path_for</code> computes for this job and the final path still passes the path guard; otherwise, for example if a folder was replaced by a symbolic link while the app was closed, the partial file is removed (after confirming its folder is still the validated one) and the job starts over.</p>
+<p>The resume offset is the partial file’s length minus <code>RESUME_BACKOFF</code>, 1 MiB. Its doc comment explains: “After a crash or power loss the file can be longer than the data that reached the disk (the tail reads as zeros), so the last stretch is fetched again.” The margin is a heuristic: the code does not show how 1 MiB was chosen, and an operating system can cache more than that, so zeros further back are possible. The MD5 check below would catch that for single part objects; for multipart objects it is a residual risk. The offset is also discarded if no ETag was saved or it exceeds the expected size.</p>
+</section>
+<section id="http-range-and-if-match" class="level3">
+<h2>HTTP Range and If-Match</h2>
+<p><a href="https://www.rfc-editor.org/rfc/rfc9110.html" target="_blank" rel="noopener noreferrer">RFC 9110</a> defines both mechanisms. <code>Range: bytes=1048576-</code> asks for “the remainder of the representation” from that byte (section 14.1.2); success is <code>206 Partial Content</code> with a header such as <code>Content-Range: bytes 42-1233/1234</code>. <code>If-Match</code> asks the server to proceed only if the representation still has the given ETag, which the server “MUST” compare strongly (section 13.1.1), answering <code>412 (Precondition Failed)</code> otherwise. Without <code>If-Match</code>, resuming after the object was replaced would yield a file that is half old and half new. The <a href="https://developers.cloudflare.com/r2/api/s3/api/" target="_blank" rel="noopener noreferrer">R2 S3 API compatibility page</a> lists <code>Range</code> and <code>If-Match</code> for <code>GetObject</code>, and PLAN.md section 8.5 marks conditional GET as confirmed.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/download.rs#L229-L261" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/download.rs, lines 229 to 261</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">// ...</span></span>
+<span id="cb1-2"><span class="kw">let</span> <span class="kw">mut</span> response <span class="op">=</span> <span class="cn">None</span><span class="op">;</span></span>
+<span id="cb1-3"><span class="cf">for</span> _ <span class="kw">in</span> <span class="dv">0</span><span class="op">..</span><span class="dv">2</span> <span class="op">{</span></span>
+<span id="cb1-4">    <span class="kw">let</span> <span class="kw">mut</span> req <span class="op">=</span> ctx</span>
+<span id="cb1-5">        <span class="op">.</span>client</span>
+<span id="cb1-6">        <span class="op">.</span>sdk()</span>
+<span id="cb1-7">        <span class="op">.</span>get_object()</span>
+<span id="cb1-8">        <span class="op">.</span>bucket(<span class="op">&amp;</span>spec<span class="op">.</span>bucket)</span>
+<span id="cb1-9">        <span class="op">.</span>key(<span class="op">&amp;</span>spec<span class="op">.</span>key)<span class="op">;</span></span>
+<span id="cb1-10">    <span class="cf">if</span> offset <span class="op">&gt;</span> <span class="dv">0</span> <span class="op">{</span></span>
+<span id="cb1-11">        req <span class="op">=</span> req<span class="op">.</span>range(<span class="pp">format!</span>(<span class="st">"bytes={offset}-"</span>))<span class="op">;</span></span>
+<span id="cb1-12">        <span class="cf">if</span> <span class="kw">let</span> <span class="cn">Some</span>(e) <span class="op">=</span> <span class="op">&amp;</span>etag <span class="op">{</span></span>
+<span id="cb1-13">            req <span class="op">=</span> req<span class="op">.</span>if_match(e)<span class="op">;</span></span>
+<span id="cb1-14">        <span class="op">}</span></span>
+<span id="cb1-15">    <span class="op">}</span></span>
+<span id="cb1-16">    <span class="kw">let</span> sent <span class="op">=</span> <span class="pp">tokio::select!</span> <span class="op">{</span></span>
+<span id="cb1-17">        () <span class="op">=</span> ctx<span class="op">.</span>control<span class="op">.</span>cancel<span class="op">.</span>cancelled() <span class="op">=&gt;</span> <span class="cf">return</span> stopped(ctx<span class="op">,</span> <span class="op">&amp;</span>temp)<span class="op">,</span></span>
+<span id="cb1-18">        r <span class="op">=</span> req<span class="op">.</span>send() <span class="op">=&gt;</span> r<span class="op">.</span>map_err(<span class="pp">R2Error::</span>from_sdk)<span class="op">,</span></span>
+<span id="cb1-19">    <span class="op">};</span></span>
+<span id="cb1-20">    <span class="cf">match</span> sent <span class="op">{</span></span>
+<span id="cb1-21">        <span class="cn">Ok</span>(out) <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb1-22">            response <span class="op">=</span> <span class="cn">Some</span>(out)<span class="op">;</span></span>
+<span id="cb1-23">            <span class="cf">break</span><span class="op">;</span></span>
+<span id="cb1-24">        <span class="op">}</span></span>
+<span id="cb1-25">        <span class="cn">Err</span>(<span class="pp">R2Error::</span>PreconditionFailed <span class="op">{</span> <span class="op">..</span> <span class="op">}</span>)</span>
+<span id="cb1-26">        <span class="op">|</span> <span class="cn">Err</span>(<span class="pp">R2Error::</span>Service <span class="op">{</span> status<span class="op">:</span> <span class="dv">416</span><span class="op">,</span> <span class="op">..</span> <span class="op">}</span>)</span>
+<span id="cb1-27">            <span class="cf">if</span> offset <span class="op">&gt;</span> <span class="dv">0</span> <span class="op">=&gt;</span></span>
+<span id="cb1-28">        <span class="op">{</span></span>
+<span id="cb1-29">            offset <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb1-30">            etag <span class="op">=</span> <span class="cn">None</span><span class="op">;</span></span>
+<span id="cb1-31">        <span class="op">}</span></span>
+<span id="cb1-32">        <span class="cn">Err</span>(e) <span class="op">=&gt;</span> <span class="cf">return</span> <span class="cn">Err</span>(e<span class="op">.</span>into())<span class="op">,</span></span>
+<span id="cb1-33">    <span class="op">}</span></span>
+<span id="cb1-34"><span class="op">}</span></span></code></pre></div>
+<p>A 412 means the object changed; a 416 (Range Not Satisfiable) means the offset no longer fits, most likely because the object shrank. Either way the loop forgets the offset and ETag and tries once from byte zero. The 416 is matched as <code>Service { status: 416, .. }</code> because <a href="/books/r2dock/read/ch014#ch-08">Chapter 8</a> (The S3-Compatible Protocol) maps that status to the catch-all variant. The loop runs at most twice; any other error goes to the engine’s retry policy (<a href="/books/r2dock/read/ch023#ch-16">Chapter 16</a>, Retries, Cancellation, and Idempotency). The ETag in <code>If-Match</code> is the one from the first response, not from a separate <code>HeadObject</code>, so the version is pinned by the response whose bytes are already on disk.</p>
+<section id="validating-the-response" class="level4">
+<h3>Validating the response</h3>
+<p>RFC 9110 section 14.2 says “A server MAY ignore the Range header field.” A server or proxy that does so replies <code>200 OK</code> with the whole object, and appending it would duplicate the start of the file. So if a resumed response lacks a <code>Content-Range</code> starting exactly at <code>bytes {offset}-</code>, the code sets the offset to zero and <code>open_temp</code> truncates before writing. The check reads only the first byte position; the expected total is the offset plus <code>Content-Length</code>, which agrees with the full range for an open-ended request. Only after a valid response does the job reset or reopen the partial file and then save a <code>DownloadState</code> with the new ETag, so the saved state always describes the file actually on disk.</p>
+</section>
+</section>
+<section id="streaming-and-verifying" class="level3">
+<h2>Streaming and Verifying</h2>
+<p>The body is consumed chunk by chunk, each read raced against cancellation and written with <code>write_all</code>; the committed count updates after every write, so throttled progress (<a href="/books/r2dock/read/ch011#ch-06">Chapter 6</a>, The Transfer Scheduler) reflects bytes written, not merely received. The body is never collected, so memory is bounded by a chunk. A body error, such as a reset or the 60 second stall guard of the AWS software development kit (SDK) (<a href="/books/r2dock/read/ch014#ch-08">Chapter 8</a>), flushes the file and returns a retryable “Connection lost during download,” keeping the partial file for resume. A pause keeps the partial file and returns <code>Outcome::Paused</code>; a cancel deletes it and clears the saved state. Downloads stop at once on pause, since every written byte is kept.</p>
+<p>When the stream ends, the job calls <code>flush</code> and <code>sync_all</code>, so a “completed” file cannot still be in memory when power fails, and enters <code>Verifying</code>. If the bytes written differ from the expected total, it returns a retryable “Download ended early,” keeping the partial file. If the ETag passes <code>is_single_part_md5</code>, the only case where an ETag is the object’s MD5 (<a href="/books/r2dock/read/ch014#ch-08">Chapter 8</a>), and no customer-provided encryption (SSE-C) is reported, <code>md5_file</code> hashes the whole file on a blocking thread with a 1 MiB buffer. A mismatch deletes the partial file and clears the saved state before returning a retryable “Downloaded data did not match the file in R2,” so the retry starts from zero rather than resuming bad data.</p>
+<p>Objects uploaded with multipart, including everything R2Dock uploads above its 100 MiB default threshold (<a href="/books/r2dock/read/ch015#ch-09">Chapter 9</a>, Multipart Uploads in Depth), have <code>&lt;hash&gt;-&lt;parts&gt;</code> ETags and are verified by size only. HTTPS protects the wire, so the residual risk is local, such as the crash tail above. Comparing per-part MD5s through <code>GetObject</code>’s <code>PartNumber</code> parameter, which R2 supports, is a possible future improvement the code does not implement.</p>
+</section>
+<section id="finalizing-the-file" class="level3">
+<h2>Finalizing the File</h2>
+<p>Figure 10.1 shows the path from request to a completed job.</p>
+<figure id="fig-10-download-finalize">
+<img src="/books/r2dock/media/file12.webp" alt="A top to bottom flow. GetObject, with Range and If-Match when resuming, restarts from byte zero on a 412 or 416. The Content-Range is checked and data streams into the partial file, which is flushed and synced. A failed size or MD5 check gives a retryable error. Otherwise a finalization record is persisted at once, the path is revalidated, and the file is placed without overwriting, ending Completed, or Skipped or NeedsDecision when the name is taken." width="1054" height="1721" loading="lazy" decoding="async">
+<figcaption>Figure 10.1. Download finalization: request with Range and If-Match when resuming, stream into the partial file, sync, check size and MD5, persist a finalization record, then place the file without overwriting.</figcaption>
+</figure>
+<p>Before moving the file, the job records it as a <code>WrittenFile</code> (<code>source.rs</code>): size, nanosecond modification time, and on Unix the device and inode. It saves this as the <code>finalized</code> field of <code>DownloadState</code> and, unlike normal batched journal updates (<a href="/books/r2dock/read/ch021#ch-14">Chapter 14</a>, Journals and Persistent Queues), writes it immediately through <code>persist_now</code> on a blocking thread. The code comment explains why: “after a crash right after the move, this record is what tells the moved file apart from someone else’s file at the destination.” A same-folder rename keeps these values; an unrelated file almost certainly does not.</p>
+<p>At the top of <code>run</code>, a saved download with no partial file on disk has two possible histories: the app placed the file and stopped before clearing state, or the partial file was lost. <code>find_finalized</code> looks for a file matching the record at the target, then at the Keep both names beside it, stopping at the first missing name. A match completes the job without downloading again. No record, or no match, means starting over and applying the conflict policy again, “so an existing file is never replaced without permission.” Tests in <code>crates/r2dock-transfer/tests/recovery.rs</code>, such as <code>finalized_download_completes_after_restart</code> and <code>missing_partial_without_proof_keeps_a_user_file</code>, confirm that a matching record completes the job and that a same-size file alone is never proof.</p>
+<p>Just before the move, the job revalidates the destination with the path guard, since folders may have changed, then calls <code>place</code>.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/download.rs#L501-L545" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/download.rs, lines 501 to 545</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="kw">fn</span> place(</span>
+<span id="cb2-2">    temp<span class="op">:</span> <span class="op">&amp;</span><span class="dt">Path</span><span class="op">,</span></span>
+<span id="cb2-3">    target<span class="op">:</span> <span class="op">&amp;</span><span class="dt">Path</span><span class="op">,</span></span>
+<span id="cb2-4">    policy<span class="op">:</span> ConflictPolicy</span>
+<span id="cb2-5">) <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span>Placed<span class="op">,</span> JobError<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb2-6">    <span class="cf">if</span> policy <span class="op">==</span> <span class="pp">ConflictPolicy::</span>Replace <span class="op">{</span></span>
+<span id="cb2-7">        <span class="co">// ... refuse a symlink or directory at the target</span></span>
+<span id="cb2-8">        <span class="pp">std::fs::</span>rename(temp<span class="op">,</span> target)</span>
+<span id="cb2-9">            <span class="op">.</span>map_err(<span class="op">|</span>e<span class="op">|</span> <span class="pp">JobError::</span>io(<span class="op">&amp;</span>e<span class="op">,</span> <span class="st">"save the download"</span>))<span class="op">?;</span></span>
+<span id="cb2-10">        <span class="cf">return</span> <span class="cn">Ok</span>(<span class="pp">Placed::</span>Done(target<span class="op">.</span>to_path_buf()))<span class="op">;</span></span>
+<span id="cb2-11">    <span class="op">}</span></span>
+<span id="cb2-12">    <span class="co">// ... candidate starts as the target</span></span>
+<span id="cb2-13">    <span class="cf">for</span> n <span class="kw">in</span> <span class="dv">0</span><span class="op">..=</span>KEEP_BOTH_LIMIT <span class="op">{</span></span>
+<span id="cb2-14">        <span class="co">// ... from n = 1, candidate is "name (n).ext"</span></span>
+<span id="cb2-15">        <span class="kw">let</span> tmp <span class="op">=</span> <span class="pp">tempfile::TempPath::</span>try_from_path(temp)</span>
+<span id="cb2-16">            <span class="op">.</span>map_err(<span class="op">|</span>e<span class="op">|</span> <span class="pp">JobError::</span>io(<span class="op">&amp;</span>e<span class="op">,</span> <span class="st">"save the download"</span>))<span class="op">?;</span></span>
+<span id="cb2-17">        <span class="cf">match</span> tmp<span class="op">.</span>persist_noclobber(<span class="op">&amp;</span>candidate) <span class="op">{</span></span>
+<span id="cb2-18">            <span class="cn">Ok</span>(()) <span class="op">=&gt;</span> <span class="cf">return</span> <span class="cn">Ok</span>(<span class="pp">Placed::</span>Done(candidate))<span class="op">,</span></span>
+<span id="cb2-19">            <span class="cn">Err</span>(err) <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb2-20">                <span class="co">// Keep the temp file: we still need it.</span></span>
+<span id="cb2-21">                <span class="kw">let</span> _ <span class="op">=</span> err<span class="op">.</span>path<span class="op">.</span>keep()<span class="op">;</span></span>
+<span id="cb2-22">                <span class="co">// ... other I/O errors are returned</span></span>
+<span id="cb2-23">                <span class="cf">match</span> policy <span class="op">{</span></span>
+<span id="cb2-24">                    <span class="pp">ConflictPolicy::</span>Skip <span class="op">=&gt;</span> <span class="cf">return</span> <span class="cn">Ok</span>(<span class="pp">Placed::</span>Skipped)<span class="op">,</span></span>
+<span id="cb2-25">                    <span class="pp">ConflictPolicy::</span>Ask <span class="op">=&gt;</span> <span class="cf">return</span> <span class="cn">Ok</span>(<span class="pp">Placed::</span>Ask)<span class="op">,</span></span>
+<span id="cb2-26">                    _ <span class="op">=&gt;</span> <span class="op">{}</span></span>
+<span id="cb2-27">                <span class="op">}</span></span>
+<span id="cb2-28">            <span class="op">}</span></span>
+<span id="cb2-29">        <span class="op">}</span></span>
+<span id="cb2-30">    <span class="op">}</span></span>
+<span id="cb2-31">    <span class="co">// ... "Too many files with this name already exist."</span></span></code></pre></div>
+<p>With Replace, a plain <code>rename</code> replaces the target in one step, after refusing a target that is a symbolic link or directory. Every other policy uses <code>persist_noclobber</code> from <code>tempfile</code>, which per its <a href="https://docs.rs/tempfile/latest/tempfile/struct.TempPath.html" target="_blank" rel="noopener noreferrer">documentation</a> persists “if and only if no file exists there.” A file that appeared since <code>resolve_target</code>, perhaps hours earlier, makes the persist fail with <code>AlreadyExists</code> instead of being overwritten. Skip then ends as <code>Skipped</code> and deletes the partial file; Ask ends as <code>NeedsDecision</code> and keeps it, so resolving later refetches only the last mebibyte; Keep both tries the next name. The test <code>place_never_overwrites_without_replace</code> checks all three branches.</p>
+<p>The <code>tempfile</code> documentation warns that <code>persist_noclobber</code> “is not atomic” and “can leave the original link to the temporary file behind.” Where it links a second name and then removes the first, a crash between the steps leaves both. On restart the job would resume and place the file again, which under Keep both could create a second copy. This is inferred from the code and library documentation; no test exercises it.</p>
+<p>After placement the job clears its state and reports <code>Completed</code>. The folder is not synced after the rename, and on some file systems a rename may not survive power loss until it is. If it is lost, the partial file reappears and the resume path handles it: extra work, not a corrupted file.</p>
+<p>Ranged reads also serve text previews (<code>read_head_bytes</code> in <code>crates/r2dock-r2/src/ops.rs</code>, which wraps the body in <code>take</code> so an ignored range cannot make it read more) and media previews (<a href="/books/r2dock/read/ch033#ch-24">Chapter 24</a>, The Custom Media Preview Protocol).</p>
+</section>
+<section id="working-on-this-code-9" class="level3">
+<h2>Working on This Code</h2>
+<p>Nearly everything is in <code>crates/r2dock-transfer/src/download.rs</code>, with saved state in <code>ctx.rs</code>, <code>WrittenFile</code> in <code>source.rs</code>, and path validation in <code>crates/r2dock-core/src/path_guard.rs</code>. Run <code>cargo test -p r2dock-transfer --test engine</code> for round trips, conflicts, traversal, and resume, <code>cargo test -p r2dock-transfer --test recovery</code> for finalization and restart, and <code>cargo test -p r2dock-transfer</code> for unit tests; all use the in-process S3 server.</p>
+<p>Keep the finalization order: write, flush, <code>sync_all</code>, size check, MD5 where the ETag allows, persist the record, revalidate, place. Reordering opens crash windows. Never write to the final path directly, never overwrite without Replace, and never follow symbolic links. Keep the partial file beside its target. Always pair a resumed range with <code>If-Match</code> and the first response’s ETag, treat a response without a matching <code>Content-Range</code> as a full body, keep bodies streaming, and never treat a multipart ETag as an MD5.</p>
+</section>
+<section id="further-reading-9" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>crates/r2dock-transfer/src/download.rs</code> and <code>crates/r2dock-transfer/tests/recovery.rs</code> at the audited commit.</li>
+<li>IETF, <a href="https://www.rfc-editor.org/rfc/rfc9110.html" target="_blank" rel="noopener noreferrer">RFC 9110: HTTP Semantics</a>, sections 13.1.1, 14.2, and 14.4.</li>
+<li>Cloudflare, <a href="https://developers.cloudflare.com/r2/api/s3/api/" target="_blank" rel="noopener noreferrer">R2 S3 API compatibility</a>, GetObject features.</li>
+<li>docs.rs, <a href="https://docs.rs/tempfile/latest/tempfile/struct.TempPath.html" target="_blank" rel="noopener noreferrer">tempfile <code>TempPath</code></a>, on <code>persist_noclobber</code>.</li>
+</ul>
+</section>
+</section>

@@ -1,0 +1,127 @@
+<section id="ch-21" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">21</span> Credential Storage and Authentication</h1>
+<p>R2Dock asks for keys that can read, overwrite, and delete everything in a user’s buckets. This chapter follows those keys from the Connect form to the signed request: where a secret may live, who may see it, and how it is destroyed. Request signing with the Amazon Simple Storage Service (S3) protocol is in <a href="/books/r2dock/read/ch014#ch-08">Chapter 8</a> (The S3-Compatible Protocol), and the optional Cloudflare API token in <a href="/books/r2dock/read/ch018#ch-12">Chapter 12</a> (Public URLs and Cloudflare REST API Integration).</p>
+<section id="which-credentials-exist" class="level3">
+<h2>Which Credentials Exist</h2>
+<p>A connection is described by four values, two of them secret. The <strong>account ID</strong> is not secret but is masked in logs; it becomes part of the endpoint host (<code>&lt;account&gt;.r2.cloudflarestorage.com</code>, with <code>eu</code> or <code>fedramp</code> for those jurisdictions), so <code>validate_account_id</code> accepts only ASCII letters and digits, at most 64 bytes. The test <code>account_id_cannot_inject_host</code> checks that <code>evil.com/x</code> is refused, since a dot or slash could steer requests to another host. The <strong>access key ID</strong> is the public half of the key pair, stored in plain JSON and shown only as a shortened hint. The <strong>secret access key</strong> signs requests with the key’s full permissions; it is the asset this chapter protects. The optional <strong>Cloudflare API token</strong> is a second secret, used only to discover public domains.</p>
+<p>The data model makes the split visible: a saved connection holds only a description of where its secret is kept.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-core/src/connections.rs#L46-L68" target="_blank" rel="noopener noreferrer">crates/r2dock-core/src/connections.rs, lines 46 to 68</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">/// Where a connection's secret lives.</span></span>
+<span id="cb1-2"><span class="at">#[</span>derive<span class="at">(</span><span class="bu">Debug</span><span class="op">,</span> <span class="bu">Clone</span><span class="op">,</span> <span class="bu">PartialEq</span><span class="op">,</span> <span class="bu">Eq</span><span class="op">,</span> Serialize<span class="op">,</span> Deserialize<span class="at">)]</span></span>
+<span id="cb1-3"><span class="at">#[</span>serde<span class="at">(</span>rename_all <span class="op">=</span> <span class="st">"camelCase"</span><span class="op">,</span> tag <span class="op">=</span> <span class="st">"kind"</span><span class="at">)]</span></span>
+<span id="cb1-4"><span class="kw">pub</span> <span class="kw">enum</span> SecretLocation <span class="op">{</span></span>
+<span id="cb1-5">    <span class="co">/// OS credential store entry, keyed by a random id.</span></span>
+<span id="cb1-6">    Keychain <span class="op">{</span> reference<span class="op">:</span> <span class="dt">String</span> <span class="op">},</span></span>
+<span id="cb1-7">    <span class="co">/// Held in memory for this session only (credential store unavailable).</span></span>
+<span id="cb1-8">    Session<span class="op">,</span></span>
+<span id="cb1-9"><span class="op">}</span></span>
+<span id="cb1-10"></span>
+<span id="cb1-11"><span class="at">#[</span>derive<span class="at">(</span><span class="bu">Debug</span><span class="op">,</span> <span class="bu">Clone</span><span class="op">,</span> <span class="bu">PartialEq</span><span class="op">,</span> <span class="bu">Eq</span><span class="op">,</span> Serialize<span class="op">,</span> Deserialize<span class="at">)]</span></span>
+<span id="cb1-12"><span class="at">#[</span>serde<span class="at">(</span>rename_all <span class="op">=</span> <span class="st">"camelCase"</span><span class="at">)]</span></span>
+<span id="cb1-13"><span class="kw">pub</span> <span class="kw">struct</span> ConnectionConfig <span class="op">{</span></span>
+<span id="cb1-14">    <span class="kw">pub</span> id<span class="op">:</span> Uuid<span class="op">,</span></span>
+<span id="cb1-15">    <span class="kw">pub</span> name<span class="op">:</span> <span class="dt">String</span><span class="op">,</span></span>
+<span id="cb1-16">    <span class="kw">pub</span> account_id<span class="op">:</span> <span class="dt">String</span><span class="op">,</span></span>
+<span id="cb1-17">    <span class="kw">pub</span> access_key_id<span class="op">:</span> <span class="dt">String</span><span class="op">,</span></span>
+<span id="cb1-18">    <span class="kw">pub</span> jurisdiction<span class="op">:</span> Jurisdiction<span class="op">,</span></span>
+<span id="cb1-19">    <span class="kw">pub</span> secret<span class="op">:</span> SecretLocation<span class="op">,</span></span>
+<span id="cb1-20">    <span class="co">/// Optional Cloudflare API token, used only to read a bucket's public</span></span>
+<span id="cb1-21">    <span class="co">/// domains. Stored like the secret; absent in older config files.</span></span>
+<span id="cb1-22">    <span class="at">#[</span>serde<span class="at">(</span><span class="kw">default</span><span class="op">,</span> skip_serializing_if <span class="op">=</span> <span class="st">"Option::is_none"</span><span class="at">)]</span></span>
+<span id="cb1-23">    <span class="kw">pub</span> api_token<span class="op">:</span> <span class="dt">Option</span><span class="op">&lt;</span>SecretLocation<span class="op">&gt;,</span></span>
+<span id="cb1-24">    <span class="co">// ...</span></span></code></pre></div>
+<p><code>Keychain</code> carries a random reference to an operating system credential store entry; <code>Session</code> carries nothing, because a session secret lives only in process memory. The configuration is serialized to <code>connections.json</code>, and the derived serializer can only write the reference or the word <code>session</code>. There is no field into which a secret could be serialized: the leak is unrepresentable rather than prevented by a rule every writer must remember.</p>
+</section>
+<section id="operating-system-credential-stores" class="level3">
+<h2>Operating System Credential Stores</h2>
+<p>Desktop systems ship a per-user secret store: the Keychain on macOS, Credential Manager on Windows, and the freedesktop Secret Service over D-Bus on Linux. Unlike a configuration file, they encrypt secrets at rest and stay out of casual reads and backups.</p>
+<p>R2Dock uses the <code>keyring</code> crate (pinned at 3.6.3). Its <a href="https://docs.rs/keyring/3.6.3/keyring/" target="_blank" rel="noopener noreferrer">documentation</a> says entries are named by a service and a user name and that “there are no default features in this crate”; without a platform feature it uses a mock store that keeps nothing. <code>crates/r2dock-secrets/Cargo.toml</code> therefore selects <code>apple-native</code>, <code>windows-native</code>, or <code>sync-secret-service</code> with <code>crypto-rust</code> per target, as Architecture Decision Record (ADR) 0002 records (Linux needs <code>libdbus-1</code>). Because the documentation warns some stores are unsafe for concurrent or rapid access, every call is a short blocking operation in <code>spawn_blocking</code> (<a href="/books/r2dock/read/ch010#ch-05">Chapter 5</a>).</p>
+<p>The program sees only the <code>SecretStore</code> trait (<code>set</code>, <code>get</code>, and a <code>delete</code> that ignores missing entries). <code>KeyringStore</code> uses the service name <code>app.r2dock.credentials</code>; <code>MemoryStore</code> keeps secrets in a mutex-protected map and lets the connection tests run without a keychain. Each entry is named by a fresh UUID from <code>new_reference</code>, so the keychain reveals no account or bucket and a replacement never overwrites the old entry. <code>map_keyring_error</code> folds errors into <code>SecretError</code> (<code>NotFound</code>, <code>Unavailable</code>, or <code>Other</code>; the <code>Denied</code> variant exists but this function never produces it) with fixed messages, so platform text naming a service or account goes no further; these map to the <code>CredentialMissing</code> and <code>CredentialStoreUnavailable</code> codes of <code>AppError</code>.</p>
+</section>
+<section id="probe-then-fall-back" class="level3">
+<h2>Probe, Then Fall Back</h2>
+<p>A store can exist and still fail, for example with no Secret Service daemon or a locked keyring. At startup <code>KeyringStore::probe</code> writes, reads back, compares, and deletes an entry named <code>probe-</code> plus a UUID; only if that succeeds is the store used, otherwise every secret goes to session memory. The backend label (“macOS Keychain”, “Memory for this session only”) appears in Settings and in the activity log’s <code>app_start</code> row.</p>
+<p>When there is no safe place for a secret, many tools quietly write it to a file. R2Dock refuses: the crate comment says “There is no plaintext fallback”, PLAN.md section 9.2 agrees, and no code path writes a secret to disk. After a restart the user pastes the secret again; <code>session_only_when_keychain_unavailable</code> shows the summary reporting <code>SecretStorage::Missing</code> and client construction failing with <code>ErrorCode::CredentialMissing</code>. The form warns that the secret “will be kept in memory until R2Dock closes”.</p>
+</section>
+<section id="secret-values-in-memory" class="level3">
+<h2>Secret Values in Memory</h2>
+<p>In memory a secret is a <code>secrecy::SecretString</code> (0.10.3). The <a href="https://docs.rs/secrecy/0.10.3/secrecy/" target="_blank" rel="noopener noreferrer">secrecy documentation</a> says the crate wipes secrets on drop through <code>zeroize</code>, makes access explicit through <code>ExposeSecret</code>, and prevents leaks through debug logging; R2Dock’s test <code>secret_debug_is_redacted</code> checks the last point. It also says the crate does not lock pages with <code>mlock</code>, so a secret can still reach swap or a core dump.</p>
+<p>The <code>expose_secret()</code> calls are the audit trail: the store adapter, the connection service, the Cloudflare API client’s bearer header, and the S3 client constructor. The comment in <code>crates/r2dock-r2/src/lib.rs</code> says this crate “is the only place (besides the secret store) that ever sees a secret”, which holds for request construction.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-r2/src/client.rs#L52-L58" target="_blank" rel="noopener noreferrer">crates/r2dock-r2/src/client.rs, lines 52 to 58</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1">        <span class="kw">let</span> credentials <span class="op">=</span> <span class="pp">Credentials::</span>new(</span>
+<span id="cb2-2">            params<span class="op">.</span>access_key_id<span class="op">.</span>clone()<span class="op">,</span></span>
+<span id="cb2-3">            params<span class="op">.</span>secret<span class="op">.</span>expose_secret()<span class="op">.</span>to_string()<span class="op">,</span></span>
+<span id="cb2-4">            <span class="cn">None</span><span class="op">,</span></span>
+<span id="cb2-5">            <span class="cn">None</span><span class="op">,</span></span>
+<span id="cb2-6">            <span class="st">"r2dock"</span><span class="op">,</span></span>
+<span id="cb2-7">        )<span class="op">;</span></span></code></pre></div>
+<p>The protection has gaps worth stating exactly. First, <code>.to_string()</code> makes an ordinary <code>String</code> moved into the SDK’s credential type; whether it is wiped depends on the AWS types, which the R2Dock code does not show. Second, the secret arrives over Inter-Process Communication (IPC) in <code>ConnectionInput</code> (<code>src-tauri/src/dto.rs</code>), whose <code>secret</code> and <code>api_token</code> are plain <code>Option&lt;String&gt;</code> dropped without zeroization after being copied into a <code>SecretString</code>. Third, <code>ConnectionInput</code> derives <code>Debug</code>, so <code>format!("{input:?}")</code> would print the secret. No code does that, and commands log only booleans such as <code>new_secret</code>, but PLAN.md section 9.2 says secret-holding types do not implement <code>Debug</code> “without redaction”. This type does not meet that rule; a custom <code>Debug</code> like the one <code>ClientParams</code> has in <code>client.rs</code> would close the gap.</p>
+</section>
+<section id="saving-using-and-rotating-a-secret" class="level3">
+<h2>Saving, Using, and Rotating a Secret</h2>
+<p>The Connect form sends a <code>ConnectionInput</code> to <code>connection_test</code> or <code>connection_save</code> in <code>src-tauri/src/commands/connections.rs</code>, thin commands that call <code>ConnectionService::test</code> or <code>save</code> in <code>src-tauri/src/connections.rs</code>. Figure 21.1 shows the path of a secret.</p>
+<figure id="fig-21-credential-flow">
+<img src="/books/r2dock/media/file26.webp" alt="A top to bottom flow across two zones. In the untrusted webview, the Connect form sends the secret once over IPC to connection_save in the trusted Rust core, which validates it, wraps it as a SecretString, and tests it against R2. If the credential store worked at startup, the secret goes there under a random UUID; otherwise it stays in session memory. connections.json receives only the reference. The client later reads the secret to sign requests. The webview receives only a summary with a hint." width="1109" height="1762" loading="lazy" decoding="async">
+<figcaption>Figure 21.1. The path of the secret access key from the Connect form through validation and a live test into the credential store or session memory, with only a reference written to disk.</figcaption>
+</figure>
+<p><code>prepare</code> validates every field. <code>validate_secret</code> requires non-empty visible ASCII of at most 256 bytes and cannot echo the value into an error. When editing with the secret field closed, the stored secret is used, so “Replace secret” never displays the old one. <code>run_test</code> then calls R2, so rejected credentials are never saved; <code>save_edit_replace_remove_lifecycle</code> shows a wrong replacement refused without the value in the message, while the old secret keeps working.</p>
+<p>After the test, <code>save</code> writes the secret under a new UUID with <code>store_new_reference</code>, or holds it as a pending session secret. <code>commit_then</code>, the service’s transactional core, applies the change to a copy of the configuration, writes the copy atomically, and only then swaps it in and runs a <code>publish</code> closure under the write lock that stores session secrets and invalidates cached clients. As PLAN.md section 9.3 says, no reader can pair new settings with an old secret. If the write fails, nothing is published and new keychain entries are removed by <code>discard_reference</code> (<code>failed_saves_leave_the_committed_state</code>).</p>
+<p><code>ConnectionService::client</code> returns a cached <code>R2Client</code> or reads the secret on a blocking thread and builds one, caching it only if a per-connection generation counter is unchanged; <code>invalidate</code> bumps it on edit, removal, or authentication failure, so a client built from an old secret is never cached after a replacement. A missing secret yields a location-specific message (<code>secret_removed_outside_app_is_reported</code>).</p>
+<p>PLAN.md section 9.3 describes rotation as write, test, switch, delete the old entry. The code tests first, so a rejected secret never touches the store, then writes, switches, and deletes. The configuration never points at nothing, and a crash between steps never loses the working secret.</p>
+<p>Deleting the old entry can fail, for example on a locked keyring, so the old reference is added to a <code>secret_cleanup</code> list in the same atomic save that stops using it. <code>ConnectionsFile::add_cleanup</code> refuses a reference still in use (<code>cleanup_never_records_a_reference_in_use</code>). <code>cleanup_secrets</code> runs at startup and after every change; if even the configuration save fails, the reference goes to <code>connections-cleanup.json</code> (<code>orphaned_secret_survives_a_restart_until_deleted</code>). Both files hold only UUIDs. Deleting R2Dock’s copy does not revoke the key at Cloudflare; an exposed key must be revoked in the dashboard.</p>
+</section>
+<section id="the-secret-in-the-webview" class="level3">
+<h2>The Secret in the Webview</h2>
+<p>The secret crosses IPC once, from the form to the save command. Per PLAN.md section 9.2 it never enters TanStack Query or Zustand, and the command logs nothing about inputs.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src/features/connections/ConnectForm.tsx#L136-L156" target="_blank" rel="noopener noreferrer">src/features/connections/ConnectForm.tsx, lines 136 to 156</a></p>
+</div>
+<pre class="tsx"><code>  const runSave = async () =&gt; {
+    setSubmitted(true);
+    if (!valid || busy) return;
+    setBusy("save");
+    let saved: ConnectionSummary | null = null;
+    try {
+      // Saving always runs a connection test in Rust first.
+      if (!passed) setTest({ kind: "testing" });
+      saved = await connectionSave(buildInput());
+    } catch (e) {
+      fail(e);
+    } finally {
+      // Clear the secret and the API token once they have been saved.
+      if (saved) {
+        setSecret("");
+        setApiToken("");
+      }
+      setBusy(null);
+    }
+    if (saved) await onSaved(saved);
+  };</code></pre>
+<p>PLAN.md says the field “is cleared from React state immediately after the call”; the code clears it only after a successful save, so a user can fix another field and retry. The secret thus lives in JavaScript memory for the dialog’s lifetime, and JavaScript strings cannot be wiped. <code>SecretField</code> in <code>src/components/Fields.tsx</code> is a password input with <code>autoComplete="new-password"</code>, spelling correction off, and copy and cut blocked while masked.</p>
+<p>Once saved, the secret never comes back. <code>ConnectionSummary</code> carries <code>access_key_hint</code> (such as <code>a1b2…9f0e</code>), <code>secret_storage</code>, and the boolean <code>has_api_token</code>, and the lifecycle test asserts that neither the configuration file nor the serialized summaries contain the secret. The summary does carry the full account ID, which the edit form needs.</p>
+</section>
+<section id="redaction-in-logs-and-errors" class="level3">
+<h2>Redaction in Logs and Errors</h2>
+<p>Text about requests can still carry secrets, such as an echoed header or a presigned URL. <code>RedactingWriter</code> in <code>src-tauri/src/logging.rs</code> passes each log event through <code>redact_text</code>, and the filter keeps the AWS SDK and <code>hyper</code> at warning level. <code>redact_text</code> in <code>crates/r2dock-core/src/redact.rs</code> blanks everything after <code>authorization</code> on a line, the values after markers such as <code>x-amz-signature</code>, <code>signature=</code>, <code>secret</code>, and <code>token=</code>, and the account part of <code>r2.cloudflarestorage.com</code> hosts. Property tests (<code>redaction_is_total_over_utf8</code>, <code>known_account_is_always_masked</code>) and <code>fake_secret_never_reaches_log_output</code> cover it.</p>
+<p>Pattern redaction is a safety net: a secret printed without a recognizable marker would pass. The primary defenses remain <code>SecretString</code>, fixed <code>SecretError</code> messages, and <code>AppError</code>, whose doc comment says messages never contain secrets, signatures, raw server responses, or full local paths. One discrepancy: PLAN.md section 9.7 says logs rotate at “5 files, 5 MB each”, but <code>logging::init</code> rotates daily and keeps five files with no size limit. The code is the authority.</p>
+</section>
+<section id="working-on-this-code-20" class="level3">
+<h2>Working on This Code</h2>
+<p><code>crates/r2dock-secrets/src/lib.rs</code> owns the store abstraction, <code>crates/r2dock-core/src/connections.rs</code> the non-secret configuration and validators, <code>src-tauri/src/connections.rs</code> the lifecycle (test, save, replace, remove, cleanup), and <code>ConnectForm.tsx</code> the only interface that touches a secret. Run <code>cargo test -p r2dock-secrets</code>, <code>cargo test -p r2dock-core</code> for validators and redaction, and <code>cargo test -p r2dock</code> for the lifecycle tests, which use the local S3 server from <code>r2dock-testkit</code> and an in-memory store. The real keychain test is ignored; run it per platform with <code>cargo test -p r2dock-secrets -- --ignored</code>.</p>
+<p>No command may return a secret and no serialized type may hold one; if you add a field to <code>ConnectionSummary</code>, confirm the lifecycle test still proves the secret absent. Keep secrets in <code>SecretString</code>, justify every <code>expose_secret</code>, run store calls in <code>spawn_blocking</code>, never add a plaintext fallback, and record old references for cleanup in the same save that stops using them. Pitfalls: logging a <code>ConnectionInput</code> with <code>{:?}</code>, and formatting a store error’s text into a message.</p>
+</section>
+<section id="further-reading-20" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>crates/r2dock-secrets/src/lib.rs</code> and <code>docs/adr/0002-credential-store.md</code>.</li>
+<li><code>src-tauri/src/connections.rs</code>, especially <code>save</code>, <code>commit_then</code>, and <code>cleanup_secrets</code>.</li>
+<li><a href="https://docs.rs/keyring/3.6.3/keyring/" target="_blank" rel="noopener noreferrer">docs.rs/keyring 3.6.3</a>.</li>
+<li><a href="https://docs.rs/secrecy/0.10.3/secrecy/" target="_blank" rel="noopener noreferrer">docs.rs/secrecy 0.10.3</a>.</li>
+<li>PLAN.md sections 9.2, 9.3, and 9.7.</li>
+</ul>
+</section>
+</section>

@@ -1,0 +1,217 @@
+<section id="ch-29" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">29</span> Automated Testing Strategy</h1>
+<p>A desktop client for object storage fails in ways that are expensive to discover by hand. A crash in the middle of a multipart upload, a key that contains <code>../</code>, a second client that replaces an object while a move is half done, an FFmpeg process that stops printing and never exits: none of these show up on the happy path. R2Dock answers with a layered test suite in which each layer is chosen for the kind of failure it can reproduce cheaply and deterministically. This chapter walks through the layers, the fault injection tools the project built for itself, and the results of running the default suites for this book.</p>
+<section id="the-layers" class="level3">
+<h2>The Layers</h2>
+<p>Fast unit tests prove one function; integration tests prove collaboration at higher cost; tests against real external systems prove the most but need credentials, network, and possibly private data. R2Dock follows that economic shape, with boundaries drawn around its own risks. Figure 29.1 maps each layer to real suites.</p>
+<figure id="fig-29-test-layers">
+<img src="/books/r2dock/media/file35.webp" alt="A vertical stack of boxes. At the bottom, Rust unit and property tests such as path_guard, parts, redact, and journal, with a dotted link to a box for the frontend Vitest tests, run in the same CI job. Above the base, request-boundary mocks for moves and the Cloudflare API, then local S3 integration tests, then real FFmpeg suites, then the pinned tools install test that CI runs. At the top, a grey box for ignored heavy, timing, manual, and live runs." width="988" height="1654" loading="lazy" decoding="async">
+<figcaption>Figure 29.1. The R2Dock test layers, from Rust unit and property tests at the base, through request-boundary mocks, local S3 integration, and real FFmpeg suites, up to the pinned tools install test and ignored runs; frontend tests run beside the Rust suites in the same continuous integration (CI) job.</figcaption>
+</figure>
+<p>PLAN.md section 18 also lists an end to end layer with WebdriverIO and <code>tauri-driver</code>, axe-core accessibility scans, and a fault-injecting proxy such as Toxiproxy; none exists at the audited commit. The section ends with “No test results are claimed in this plan. None have been run.”, which is now out of date.</p>
+</section>
+<section id="rust-unit-and-property-tests" class="level3">
+<h2>Rust Unit and Property Tests</h2>
+<p>Pure logic lives in crates that do not depend on Tauri precisely so it can be unit tested. The densest suites guard boundaries described elsewhere: the path guard in <code>crates/r2dock-core/src/path_guard.rs</code> (<a href="/books/r2dock/read/ch032#ch-23">Chapter 23</a>, Filesystem Security), part planning in <code>parts.rs</code> (<a href="/books/r2dock/read/ch015#ch-09">Chapter 9</a>, Multipart Uploads in Depth), log redaction in <code>redact.rs</code>, the journal in <code>crates/r2dock-transfer/src/journal.rs</code> (<a href="/books/r2dock/read/ch021#ch-14">Chapter 14</a>, Journals and Persistent Queues), compression planning and FFmpeg argument building in <code>crates/r2dock-media</code>, and the CSV activity log in <code>src-tauri/src/activity/</code>.</p>
+<p>Property based tests check a rule against inputs the developer did not think of. The <a href="https://docs.rs/proptest/latest/proptest/" target="_blank" rel="noopener noreferrer">proptest documentation</a> describes “Hypothesis-like property-based testing and shrinking”: random inputs come from a strategy, and a failure is shrunk toward a minimal case. Four files in <code>r2dock-core</code> use it: <code>keys.rs</code>, <code>parts.rs</code>, <code>path_guard.rs</code>, and <code>redact.rs</code>. The most important property is that no key maps to a local path that escapes the download folder.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-core/src/path_guard.rs#L464-L476" target="_blank" rel="noopener noreferrer">crates/r2dock-core/src/path_guard.rs, lines 464 to 476</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1">        <span class="at">#[</span>test<span class="at">]</span></span>
+<span id="cb1-2">        <span class="kw">fn</span> never_escapes_root(key <span class="kw">in</span> <span class="st">"(?s).{0,60}"</span>) <span class="op">{</span></span>
+<span id="cb1-3">            <span class="co">// ...</span></span>
+<span id="cb1-4">            <span class="op">{</span></span>
+<span id="cb1-5">                <span class="cf">if</span> <span class="kw">let</span> <span class="cn">Ok</span>(p) <span class="op">=</span></span>
+<span id="cb1-6">                    key_to_relative_path(<span class="op">&amp;</span>key<span class="op">,</span> <span class="pp">Platform::</span>current())</span>
+<span id="cb1-7">                <span class="op">{</span></span>
+<span id="cb1-8">                    <span class="pp">prop_assert!</span>(p<span class="op">.</span>is_relative())<span class="op">;</span></span>
+<span id="cb1-9">                    <span class="cf">for</span> c <span class="kw">in</span> p<span class="op">.</span>components() <span class="op">{</span></span>
+<span id="cb1-10">                        <span class="pp">prop_assert!</span>(</span>
+<span id="cb1-11">                            <span class="pp">matches!</span>(c<span class="op">,</span> <span class="pp">Component::</span>Normal(_))<span class="op">,</span></span>
+<span id="cb1-12">                            <span class="st">"bad component in {:?}"</span><span class="op">,</span></span>
+<span id="cb1-13">                            p</span>
+<span id="cb1-14">                        )<span class="op">;</span></span>
+<span id="cb1-15">                    <span class="op">}</span></span>
+<span id="cb1-16">                <span class="op">}</span></span>
+<span id="cb1-17">            <span class="op">}</span></span>
+<span id="cb1-18">        <span class="op">}</span></span>
+<span id="cb1-19">    <span class="op">}</span></span></code></pre></div>
+<p>The strategy generates any string of up to 60 characters, including newlines, slashes, dots, and arbitrary Unicode. The function may refuse a key, but whenever it accepts one the result must be a relative path of normal components only: no root, no prefix, no <code>..</code>, no <code>.</code>. Sibling properties cover the lossy mapping and Unicode normalization collisions; <code>plans_are_contiguous_and_within_limits</code> in <code>parts.rs</code> checks part plans for sizes up to 64 GiB, and <code>known_account_is_always_masked</code> checks that an account identifier never survives redaction. Path rules depend on the host platform (a Windows reserved name such as <code>CON</code> is only exercised on Windows), which is one reason the suite runs on all three operating systems.</p>
+</section>
+<section id="mocks-that-act-at-request-boundaries" class="level3">
+<h2>Mocks That Act at Request Boundaries</h2>
+<p>A move in R2 is a copy, a verification, and a delete (<a href="/books/r2dock/read/ch017#ch-11">Chapter 11</a>, Object Management and Consistency). The dangerous moments are between those requests, and a real server cannot be paused there. <code>crates/r2dock-r2/tests/support/mock_s3.rs</code> is a deliberately tiny S3 server whose module comment says “a hook runs after each request is applied and before the response is sent, so tests can change objects at exact request boundaries.”</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-r2/tests/support/mock_s3.rs#L55-L66" target="_blank" rel="noopener noreferrer">crates/r2dock-r2/tests/support/mock_s3.rs, lines 55 to 66</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="at">#[</span>derive<span class="at">(</span><span class="bu">Debug</span><span class="op">,</span> <span class="bu">Default</span><span class="at">)]</span></span>
+<span id="cb2-2"><span class="kw">pub</span> <span class="kw">struct</span> Model <span class="op">{</span></span>
+<span id="cb2-3">    <span class="kw">pub</span> objects<span class="op">:</span> BTreeMap<span class="op">&lt;</span><span class="dt">String</span><span class="op">,</span> Obj<span class="op">&gt;,</span></span>
+<span id="cb2-4">    <span class="kw">pub</span> requests<span class="op">:</span> <span class="dt">Vec</span><span class="op">&lt;</span>Req<span class="op">&gt;,</span></span>
+<span id="cb2-5">    <span class="co">/// Answer every DeleteObject with a server error.</span></span>
+<span id="cb2-6">    <span class="kw">pub</span> fail_deletes<span class="op">:</span> <span class="dt">bool</span><span class="op">,</span></span>
+<span id="cb2-7">    <span class="co">/// Apply every CopyObject but answer with a server error, as when the</span></span>
+<span id="cb2-8">    <span class="co">/// response is lost after the copy happened.</span></span>
+<span id="cb2-9">    <span class="kw">pub</span> lose_copy_responses<span class="op">:</span> <span class="dt">bool</span><span class="op">,</span></span>
+<span id="cb2-10">    next_version<span class="op">:</span> <span class="dt">u64</span><span class="op">,</span></span>
+<span id="cb2-11">    uploads<span class="op">:</span> BTreeMap<span class="op">&lt;</span><span class="dt">String</span><span class="op">,</span> (<span class="dt">String</span><span class="op">,</span> <span class="dt">Vec</span><span class="op">&lt;</span>(<span class="dt">String</span><span class="op">,</span> <span class="dt">String</span>)<span class="op">&gt;</span>)<span class="op">&gt;,</span></span>
+<span id="cb2-12"><span class="op">}</span></span></code></pre></div>
+<p>Every write gets a fresh ETag (<code>"v1"</code>, <code>"v2"</code>, and so on) and every request is recorded. <code>lose_copy_responses</code> models the worst network failure: the copy happened, but the client was told it did not. The mock honors R2’s conditional headers on CopyObject and, like R2, ignores the source condition on UploadPartCopy; a mock more forgiving than the real service would let bugs through.</p>
+<p>The suite <code>crates/r2dock-r2/tests/move_races.rs</code> has 14 tests under one contract: “every case must keep the changed data.”</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-r2/tests/move_races.rs#L80-L96" target="_blank" rel="noopener noreferrer">crates/r2dock-r2/tests/move_races.rs, lines 80 to 96</a></p>
+</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb3-1"><span class="co">/// T21 case 1: the source changes right after the copy. The new version</span></span>
+<span id="cb3-2"><span class="co">/// must not be deleted.</span></span>
+<span id="cb3-3"><span class="at">#[</span><span class="pp">tokio::</span>test<span class="at">]</span></span>
+<span id="cb3-4"><span class="kw">async</span> <span class="kw">fn</span> source_changed_after_copy_is_kept() <span class="op">{</span></span>
+<span id="cb3-5">    <span class="kw">let</span> hook<span class="op">:</span> Hook <span class="op">=</span> <span class="pp">Arc::</span>new(<span class="op">|</span>r<span class="op">:</span> <span class="op">&amp;</span>Req<span class="op">,</span> m<span class="op">:</span> <span class="op">&amp;</span><span class="kw">mut</span> Model<span class="op">|</span> <span class="op">{</span></span>
+<span id="cb3-6">        <span class="cf">if</span> r<span class="op">.</span>is(<span class="st">"PUT"</span><span class="op">,</span> <span class="st">"dst"</span>) <span class="op">&amp;&amp;</span> r<span class="op">.</span>status <span class="op">==</span> <span class="dv">200</span> <span class="op">{</span></span>
+<span id="cb3-7">            m<span class="op">.</span>put(<span class="st">"src"</span><span class="op">,</span> <span class="st">b"NEW!"</span>)<span class="op">;</span></span>
+<span id="cb3-8">        <span class="op">}</span></span>
+<span id="cb3-9">    <span class="op">}</span>)<span class="op">;</span></span>
+<span id="cb3-10">    <span class="kw">let</span> (s3<span class="op">,</span> report) <span class="op">=</span> run_move(with_source()<span class="op">,</span> <span class="dv">4</span><span class="op">,</span> <span class="cn">false</span><span class="op">,</span> hook)<span class="op">.</span><span class="kw">await</span><span class="op">;</span></span>
+<span id="cb3-11">    <span class="kw">let</span> m <span class="op">=</span> s3<span class="op">.</span>model<span class="op">.</span>lock()<span class="op">.</span>unwrap()<span class="op">;</span></span>
+<span id="cb3-12">    <span class="pp">assert_eq!</span>(m<span class="op">.</span>body(<span class="st">"src"</span>)<span class="op">,</span> <span class="cn">Some</span>(<span class="op">&amp;</span><span class="st">b"NEW!"</span>[<span class="op">..</span>])<span class="op">,</span> <span class="st">"{:?}"</span><span class="op">,</span> m<span class="op">.</span>sequence())<span class="op">;</span></span>
+<span id="cb3-13">    <span class="pp">assert_eq!</span>(report<span class="op">.</span>moved<span class="op">,</span> <span class="dv">0</span>)<span class="op">;</span></span>
+<span id="cb3-14">    <span class="pp">assert_eq!</span>(report<span class="op">.</span>copied_not_deleted<span class="op">.</span>len()<span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="st">"{report:?}"</span>)<span class="op">;</span></span>
+<span id="cb3-15">    <span class="pp">assert!</span>(<span class="op">!</span>m<span class="op">.</span>requests<span class="op">.</span>iter()<span class="op">.</span>any(<span class="op">|</span>r<span class="op">|</span> r<span class="op">.</span>is(<span class="st">"DELETE"</span><span class="op">,</span> <span class="st">"src"</span>)))<span class="op">;</span></span>
+<span id="cb3-16"><span class="op">}</span></span></code></pre></div>
+<p>Figure 29.2 shows the resulting sequence. Once the copy into <code>dst</code> succeeds, the hook writes new content to <code>src</code>, giving it a new ETag. The private function <code>move_one</code> in <code>crates/r2dock-r2/src/bulk.rs</code> checks the destination and then the source after the copy, sees the source ETag changed, and reports the item as copied but not deleted. The test asserts that the new data survives, the report is correct, and no DELETE for the source was sent.</p>
+<figure id="fig-29-move-race">
+<img src="/books/r2dock/media/file36.webp" alt="A sequence diagram with three participants: move_one, MockS3, and Hook. The move sends HEAD for the destination (404) and the source (ETag v1), then a copy to the destination conditional on v1. After the copy is applied, the hook puts new content to the source, giving ETag v3. The mock answers 200. The move checks the destination, which matches the copy, and the source, now v3, and reports the item as copied, not deleted." width="1400" height="1893" loading="lazy" decoding="async">
+<figcaption>Figure 29.2. Request sequence in the source-changed-after-copy race: the move checks both objects, copies with an ETag condition, the hook changes the source, and the post-copy check keeps the source.</figcaption>
+</figure>
+<p>Other cases cover a destination created after the existence check, a same-length replacement of the destination, a failed delete, a lost copy response, and multipart copies of objects faked as larger than 5 GiB. For the Cloudflare REST API, <code>MockCloudflare</code> in <code>crates/r2dock-testkit/src/cloudflare.rs</code> returns canned bodies or <code>Reply::Hang</code>, which never answers, so <code>crates/r2dock-r2/src/cfapi/tests.rs</code> can prove timeouts and token-free errors (<a href="/books/r2dock/read/ch018#ch-12">Chapter 12</a>).</p>
+</section>
+<section id="the-local-s3-server-and-network-shaping" class="level3">
+<h2>The Local S3 Server and Network Shaping</h2>
+<p>Architecture decision record (ADR) 0005 records that tests must never touch production buckets and that <code>crates/r2dock-testkit</code> “starts an in-process S3-compatible server (<code>s3s</code> with <code>s3s-fs</code>) on a random local port backed by a temporary folder.” <code>LocalS3::start</code> creates a temporary directory with one folder per bucket, serves it with fixed test credentials on <code>127.0.0.1</code> port 0, and aborts the server when the value is dropped. <code>object_path</code> exposes an object’s data file so a test can corrupt stored bytes. The client, bulk operations, engine, and connection service are therefore tested with real Signature Version 4 signing, HTTP, multipart uploads, and ranged reads. It is only a development dependency. ADR 0005 states the cost: “R2-specific behaviour (conditional writes, error codes, checksum defaults, scoped token responses) is not proven by these tests.” Those items stay marked <strong>[Verify]</strong> in PLAN.md.</p>
+<p>Loopback hides bugs that only appear when uploads are slow or aborts take seconds, so the test kit’s <code>Network</code> layer adds “a shared upload bandwidth limit and a delay before multipart aborts are answered.” Its <code>before</code> hook recognizes an AbortMultipartUpload (a DELETE with an <code>uploadId</code> query), counts it, and optionally sleeps, so a test can assert through <code>Network::aborts</code> that a cancel reached the server without making the user wait. When a limit is set, request bodies are wrapped in <code>Throttled</code>, an <code>http_body::Body</code> that reserves time for each frame on one shared clock behind a mutex, so concurrent requests share a single uplink of a chosen speed. The compression-at-scale benchmark notes that an earlier version of this limiter waited per request instead of reading at the limited rate (<a href="/books/r2dock/read/ch041#ch-30">Chapter 30</a>, Performance Benchmarking).</p>
+</section>
+<section id="what-the-integration-suites-prove" class="level3">
+<h2>What the Integration Suites Prove</h2>
+<p>The transfer suites in <code>crates/r2dock-transfer/tests/</code> build an <code>R2Client</code> against the local server, use an <code>EngineConfig</code> with small thresholds, and wait with helpers such as <code>wait_state</code>, which fails with the job’s last state after a timeout. <code>engine.rs</code> (14 tests) covers byte round trips, every conflict policy, cancel and pause of multipart uploads, the concurrency limit, and restarts on the same data directory. <code>traversal_keys_never_escape_destination</code> stores an object under <code>../evil.txt</code>, asks the engine to download it into a subfolder, insists on <code>JobState::Failed</code>, and checks that nothing appeared in the parent; it proves the engine actually routes destinations through the path guard. <code>wrong_credentials_fail_without_retry_storm</code> asserts <code>ErrorCode::SignatureMismatch</code> with fewer attempts than <code>retry::MAX_ATTEMPTS</code>, and exactly one attempt only off Windows, because there the server can reset the connection while rejecting the body and the first failure surfaces as retryable.</p>
+<p><code>recovery.rs</code> (7 tests) supports <a href="/books/r2dock/read/ch022#ch-15">Chapter 15</a> (Crash Consistency and Recovery). Instead of killing a process, it writes a journal by hand with <code>Journal</code> and <code>JournalEntry</code> and starts an engine on it, reproducing exact post-crash states: a partial without a finalization record, a record that proves completion (with the user’s file backdated, because Windows timestamps can tie), a record for a different file, and 5,000 paused downloads.</p>
+<p><code>compress.rs</code> (11 tests) runs compression before upload with real FFmpeg. In <code>compress_scale.rs</code>, <code>copies_waiting_for_upload_stay_bounded</code> limits the link to 600,000 bytes per second, watches the work folder, and asserts at most 4 copies on disk (“3 upload slots + 1 encoder”), the bound <a href="/books/r2dock/read/ch012#ch-07">Chapter 7</a> (Backpressure and Resource Management) explains. <code>a_long_encode_does_not_hold_back_other_uploads</code> substitutes a script named <code>ffmpeg</code> that runs <code>exec sleep 600</code>, queues 300 files behind it and 50 that skip compression, requires the 50 to finish within 30 seconds, and then uses <code>pgrep -P</code> to wait until no FFmpeg child remains. Similarly, <code>watchdog_stops_a_silent_process</code> in <code>crates/r2dock-media/tests/ffmpeg.rs</code> runs <code>/bin/sleep 10</code> as a stuck FFmpeg and expects <code>RunError::Stalled</code>, and <code>preserve.rs</code> proves that compression never drops audio, video, subtitle streams, or channels (Chapters 18 and 19).</p>
+<section id="tests-that-skip-silently" class="level4">
+<h3>Tests that skip silently</h3>
+<p>FFmpeg tests return early when no binary is found. Most fall back to <code>ffmpeg</code> on the <code>PATH</code>; the scale suite is stricter.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/tests/compress_scale.rs#L54-L65" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/tests/compress_scale.rs, lines 54 to 65</a></p>
+</div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb4-1"><span class="kw">fn</span> ffmpeg_bin() <span class="op">-&gt;</span> <span class="dt">Option</span><span class="op">&lt;</span><span class="dt">PathBuf</span><span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb4-2">    <span class="kw">let</span> bin <span class="op">=</span> <span class="pp">std::env::</span>var_os(<span class="st">"R2DOCK_TEST_FFMPEG"</span>)<span class="op">.</span>map(<span class="dt">PathBuf</span><span class="pp">::</span>from)<span class="op">?;</span></span>
+<span id="cb4-3">    <span class="kw">let</span> ok <span class="op">=</span> <span class="pp">Command::</span>new(<span class="op">&amp;</span>bin)</span>
+<span id="cb4-4">        <span class="op">.</span>arg(<span class="st">"-version"</span>)</span>
+<span id="cb4-5">        <span class="op">.</span>output()</span>
+<span id="cb4-6">        <span class="op">.</span>is_ok_and(<span class="op">|</span>o<span class="op">|</span> o<span class="op">.</span>status<span class="op">.</span>success())<span class="op">;</span></span>
+<span id="cb4-7">    <span class="cf">if</span> <span class="op">!</span>ok <span class="op">{</span></span>
+<span id="cb4-8">        <span class="pp">eprintln!</span>(<span class="st">"R2DOCK_TEST_FFMPEG does not run; skipping"</span>)<span class="op">;</span></span>
+<span id="cb4-9">        <span class="cf">return</span> <span class="cn">None</span><span class="op">;</span></span>
+<span id="cb4-10">    <span class="op">}</span></span>
+<span id="cb4-11">    <span class="cn">Some</span>(bin)</span>
+<span id="cb4-12"><span class="op">}</span></span></code></pre></div>
+<p>Without the variable the test returns silently, and Rust’s harness, which has no “skipped” outcome, reports it as passed. A green <code>compress_scale</code> line therefore does not prove the behavior was exercised. CI sets <code>R2DOCK_TEST_FFMPEG</code> only on Windows, so the two portable default tests that need it (<code>copies_waiting_for_upload_stay_bounded</code> and <code>cancel_all_mid_compress_and_mid_upload</code>) exercise FFmpeg only there; the fourth, <code>pause_on_a_slow_link_is_prompt_and_resume_completes</code>, uses no FFmpeg. <code>a_long_encode_does_not_hold_back_other_uploads</code> is <code>#[cfg(unix)]</code>, so the code shows no CI job where it runs with FFmpeg. That is a gap worth closing; the recorded scale results were produced by hand with the variable set.</p>
+</section>
+</section>
+<section id="ignored-heavy-and-live-tests" class="level3">
+<h2>Ignored, Heavy, and Live Tests</h2>
+<p>The <a href="https://doc.rust-lang.org/book/ch11-02-running-tests.html" target="_blank" rel="noopener noreferrer">Rust book</a> describes <code>#[ignore]</code> for expensive tests, <code>-- --ignored</code> to run only them, and <code>-- --include-ignored</code> to run all. R2Dock’s 15 ignored tests carry reasons that serve as documentation. Heavy and timing runs include <code>many_files_with_pause_and_resume_heavy</code>, <code>bulk_controls_timing</code>, and <code>realistic_long_audiobooks</code>. <code>installs_the_pinned_package_and_compresses</code> in <code>crates/r2dock-media/tests/live_tools.rs</code> downloads the pinned FFmpeg package; CI runs it explicitly on every operating system. Manual checks need inputs that cannot be committed: the read-only <code>crates/r2dock-r2/tests/live_r2.rs</code> needs real R2 credentials, the real media tests need local files, and one <code>r2dock-secrets</code> test touches the real OS credential store. The principle is that <code>cargo test --workspace</code> must be safe anywhere: offline, credential-free, no private files, no writes outside temporary directories.</p>
+</section>
+<section id="frontend-tests" class="level3">
+<h2>Frontend Tests</h2>
+<p>Vitest is configured in <code>vite.config.ts</code> with <code>environment: "jsdom"</code> and a setup file, <code>src/test/setup.ts</code>. The <a href="https://vitest.dev/config/environment" target="_blank" rel="noopener noreferrer">Vitest documentation</a> describes <code>jsdom</code> as a browser-like environment. Because jsdom has no layout engine, the setup gives elements a fixed size “so virtualized lists render rows” and stubs browser methods. <code>renderWithProviders</code> in <code>src/test/utils.tsx</code> wraps components in a TanStack Query client with retries disabled.</p>
+<p>The frontend never talks to Rust in tests, so the Inter-Process Communication (IPC) layer is mocked: nine files replace <code>src/ipc/commands.ts</code> (<a href="/books/r2dock/read/ch036#ch-26">Chapter 26</a>, React and Tauri IPC) with <code>vi.mock</code>, swapping commands for spies. The connection form test checks that a secret crosses IPC only on submit and is cleared from React state afterwards.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src/features/connections/ConnectForm.test.tsx#L102-L107" target="_blank" rel="noopener noreferrer">src/features/connections/ConnectForm.test.tsx, lines 102 to 107</a></p>
+</div>
+<pre class="tsx"><code>    await user.click(
+      screen.getByRole("button", { name: "Save connection" })
+    );
+    await waitFor(() =&gt; expect(onSaved).toHaveBeenCalledWith(summary));
+    // Save never calls the test command (Rust tests before saving).
+    expect(commands.connectionTest).toHaveBeenCalledTimes(1);
+    expect(
+      (commands.connectionSave.mock.calls[0]?.[0] as ConnectionInput).secret
+    ).toBe(SECRET);
+    expect(secretInput().value).toBe("");</code></pre>
+<p>Neighboring tests check that error text never contains the secret and that edit mode sends <code>secret: null</code> when it is not replaced. <code>src/styles/contrast.test.ts</code> asserts that every text and background token pair in both themes meets the Web Content Accessibility Guidelines (WCAG) AA ratio of 4.5 to 1; it is a narrow check, not a substitute for the planned axe-core scans.</p>
+</section>
+<section id="cross-platform-validation" class="level3">
+<h2>Cross-Platform Validation</h2>
+<p>Path rules, file identity, process control, TCP behavior, and credential stores differ by operating system, so the <code>test</code> job in <code>.github/workflows/ci.yml</code> runs the default suite on <code>ubuntu-22.04</code>, <code>macos-latest</code>, and <code>windows-latest</code> with <code>fail-fast: false</code> (<a href="/books/r2dock/read/ch042#ch-31">Chapter 31</a>, CI/CD and Desktop Releases). Each runner installs FFmpeg. On Windows the workflow exports the real <code>ffmpeg.exe</code> as <code>R2DOCK_TEST_FFMPEG</code> because, as its comment says, cancel and Job Object tests must “act on FFmpeg itself”, not on a Chocolatey shim that launches it as a child. The <code>live_tools</code> step downloads and verifies each platform’s pinned FFmpeg package in every run, so a changed or missing release asset fails CI.</p>
+<p>No cloud account is needed to run any default test. Toolchain setup, the full local checklist, and running the app against the <code>local-s3</code> test server are covered in <a href="/books/r2dock/read/ch046#ch-34">Chapter 34</a> (Your First Contribution).</p>
+</section>
+<section id="results-of-running-the-default-suites-for-this-book" class="level3">
+<h2>Results of Running the Default Suites for This Book</h2>
+<p>The default suites were run for this book at the audited commit on an Apple silicon Mac laptop with Rust 1.94.0 and FFmpeg 9.0.1 from a package manager on the <code>PATH</code>, with no credentials or network services and <code>R2DOCK_TEST_FFMPEG</code> unset for the first run.</p>
+<p><code>cargo test --workspace</code> exited with status 0: 463 tests passed, 0 failed, and 15 were ignored, across 32 test binaries. Wall-clock time was 113.7 seconds, 32.1 of them compilation. The table breaks the passing tests down by crate.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Crate</th>
+<th>Passed</th>
+<th>Ignored</th>
+<th>Largest suites</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>r2dock-core</code></td>
+<td>91</td>
+<td>0</td>
+<td>path guard, keys, redaction</td>
+</tr>
+<tr>
+<td><code>r2dock-secrets</code></td>
+<td>3</td>
+<td>1</td>
+<td>credential store wrapper</td>
+</tr>
+<tr>
+<td><code>r2dock-r2</code></td>
+<td>53</td>
+<td>1</td>
+<td>unit 31, <code>move_races</code> 14, <code>local_s3</code> 8</td>
+</tr>
+<tr>
+<td><code>r2dock-transfer</code></td>
+<td>82</td>
+<td>5</td>
+<td>unit 44, <code>engine</code> 14, <code>compress</code> 11</td>
+</tr>
+<tr>
+<td><code>r2dock-media</code></td>
+<td>125</td>
+<td>5</td>
+<td>unit 89, <code>ffmpeg</code> 16, <code>preserve</code> 14</td>
+</tr>
+<tr>
+<td><code>r2dock</code> (src-tauri)</td>
+<td>109</td>
+<td>3</td>
+<td>unit 107, <code>activity_stress</code> 2</td>
+</tr>
+</tbody>
+</table></div>
+<p>Because three of the four default <code>compress_scale.rs</code> tests returned early in that run, the suite was run again for this book with <code>R2DOCK_TEST_FFMPEG</code> set: <code>cargo test -p r2dock-transfer --test compress_scale -- --nocapture --test-threads=1</code>. All four passed in 35.5 seconds of test time; <a href="/books/r2dock/read/ch041#ch-30">Chapter 30</a> discusses their timings.</p>
+<p><code>npm test</code> (which runs <code>vitest run</code>) passed all 158 tests in 22 files in 2.67 seconds as reported by Vitest. Together that is 621 passing tests, consistent with the README’s “about 600 automated tests”. Linting, type checking, formatting, Clippy, and the ignored tests were not run for this book.</p>
+</section>
+<section id="working-on-this-code-28" class="level3">
+<h2>Working on This Code</h2>
+<p>Start with the test file nearest your change; add a table case for every bug and a <code>proptest!</code> property when a rule holds “for all inputs”. Move and copy changes belong in <code>crates/r2dock-r2/tests/move_races.rs</code>; add a flag to <code>Model</code> for a new failure rather than weakening the mock’s R2 rules. Engine and restart changes go in <code>engine.rs</code> or <code>recovery.rs</code>, writing journals by hand for crash states. Slow links use <code>LocalS3::network</code> with <code>set_upload_bps</code> and <code>set_abort_delay</code>.</p>
+<p>Run one suite with <code>cargo test -p r2dock-transfer --test recovery</code> or <code>cargo test -p r2dock-r2 --test move_races</code>, and the frontend with <code>npm test</code>. For media and scale tests, set <code>R2DOCK_TEST_FFMPEG</code> to an absolute path and pass <code>--nocapture</code> to see skips.</p>
+<p>Keep the default run offline and credential-free, use fictional names such as <code>media-library</code>, never commit media files or their names, and keep every test passing on all three platforms. A test that returns early must say so with <code>eprintln!</code>, and every <code>#[ignore]</code> needs a reason that says how to run it.</p>
+</section>
+<section id="further-reading-28" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>docs/adr/0005-testing-against-local-s3.md</code> and <code>crates/r2dock-testkit/src/lib.rs</code></li>
+<li><code>crates/r2dock-r2/tests/support/mock_s3.rs</code> and <code>move_races.rs</code></li>
+<li><code>crates/r2dock-transfer/tests/recovery.rs</code></li>
+<li><a href="https://doc.rust-lang.org/book/ch11-02-running-tests.html" target="_blank" rel="noopener noreferrer">The Rust Programming Language: Controlling How Tests Are Run</a></li>
+<li><a href="https://docs.rs/proptest/latest/proptest/" target="_blank" rel="noopener noreferrer">proptest crate documentation</a></li>
+</ul>
+</section>
+</section>

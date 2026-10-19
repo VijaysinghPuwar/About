@@ -1,5 +1,2384 @@
 [
   {
+    "slug": "r2dock",
+    "title": "Inside R2Dock",
+    "subtitle": "Rust, Cloud Storage, Concurrency, Security, and Reliable Desktop Engineering",
+    "author": "Vijaysingh Puwar",
+    "date": "2026-10-18",
+    "description": "A technical guide to the architecture, algorithms, and engineering decisions behind R2Dock, a Tauri 2, Rust, and React desktop client for Cloudflare R2 object storage. Edition for R2Dock 0.5.0, audited revision 2bdc8a65cb02b81c2bee8e3422b36e9ae0741128.",
+    "subjects": [
+      "Rust",
+      "Tauri",
+      "Cloudflare R2",
+      "Amazon S3",
+      "Concurrency",
+      "Software security",
+      "Desktop applications"
+    ],
+    "cover": {
+      "src": "/books/r2dock/cover.webp",
+      "width": 640,
+      "height": 960
+    },
+    "words": 91569,
+    "minutes": 416,
+    "chapters": [
+      {
+        "id": "ch002",
+        "title": "About This Edition",
+        "number": null,
+        "part": null,
+        "words": 212,
+        "minutes": 1,
+        "sections": []
+      },
+      {
+        "id": "ch003",
+        "title": "How to Read This Book",
+        "number": null,
+        "part": null,
+        "words": 743,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "how-the-book-is-organized",
+            "title": "How the book is organized",
+            "number": null
+          },
+          {
+            "id": "how-claims-are-labeled",
+            "title": "How claims are labeled",
+            "number": null
+          },
+          {
+            "id": "conventions",
+            "title": "Conventions",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch005",
+        "title": "The Engineering Problem R2Dock Solves",
+        "number": "1",
+        "part": "Part I: Understanding the System",
+        "words": 983,
+        "minutes": 4,
+        "sections": [
+          {
+            "id": "object-storage-looks-like-a-drive-but-is-not-one",
+            "title": "Object Storage Looks Like a Drive but Is Not One",
+            "number": null
+          },
+          {
+            "id": "requirements-in-priority-order",
+            "title": "Requirements in Priority Order",
+            "number": null
+          },
+          {
+            "id": "constraints-that-shape-the-design",
+            "title": "Constraints That Shape the Design",
+            "number": null
+          },
+          {
+            "id": "why-a-desktop-application",
+            "title": "Why a Desktop Application",
+            "number": null
+          },
+          {
+            "id": "what-version-0.5.0-delivers",
+            "title": "What Version 0.5.0 Delivers",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch006",
+        "title": "Complete Software Architecture",
+        "number": "2",
+        "part": "Part I: Understanding the System",
+        "words": 2070,
+        "minutes": 9,
+        "sections": [
+          {
+            "id": "two-processes-and-a-trust-boundary",
+            "title": "Two Processes and a Trust Boundary",
+            "number": null
+          },
+          {
+            "id": "the-layers-inside-the-application",
+            "title": "The Layers Inside the Application",
+            "number": null
+          },
+          {
+            "id": "the-command-layer-and-application-state",
+            "title": "The Command Layer and Application State",
+            "number": null
+          },
+          {
+            "id": "the-rust-crates-and-their-dependencies",
+            "title": "The Rust Crates and Their Dependencies",
+            "number": null
+          },
+          {
+            "id": "ipc-path-one-commands",
+            "title": "IPC Path One: Commands",
+            "number": null
+          },
+          {
+            "id": "ipc-path-two-channels-and-events",
+            "title": "IPC Path Two: Channels and Events",
+            "number": null
+          },
+          {
+            "id": "ipc-path-three-the-media-protocol",
+            "title": "IPC Path Three: The Media Protocol",
+            "number": null
+          },
+          {
+            "id": "operating-system-services-and-lifecycle",
+            "title": "Operating System Services and Lifecycle",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-1",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-1",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch007",
+        "title": "A Guided Tour Through the Repository",
+        "number": "3",
+        "part": "Part I: Understanding the System",
+        "words": 2000,
+        "minutes": 9,
+        "sections": [
+          {
+            "id": "the-top-level",
+            "title": "The Top Level",
+            "number": null
+          },
+          {
+            "id": "documentation-tools-and-workflows",
+            "title": "Documentation, Tools, and Workflows",
+            "number": null
+          },
+          {
+            "id": "the-rust-crates-module-by-module",
+            "title": "The Rust Crates, Module by Module",
+            "number": null
+          },
+          {
+            "id": "the-tauri-application-src-tauri",
+            "title": "The Tauri Application: src-tauri",
+            "number": null
+          },
+          {
+            "id": "the-frontend-src",
+            "title": "The Frontend: src",
+            "number": null
+          },
+          {
+            "id": "how-the-pieces-depend-on-each-other",
+            "title": "How the Pieces Depend on Each Other",
+            "number": null
+          },
+          {
+            "id": "a-recommended-reading-order",
+            "title": "A Recommended Reading Order",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-2",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-2",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch009",
+        "title": "Rust Concepts Used in R2Dock",
+        "number": "4",
+        "part": "Part II: Rust and Systems Engineering",
+        "words": 2966,
+        "minutes": 13,
+        "sections": [
+          {
+            "id": "ownership-every-value-has-one-owner",
+            "title": "Ownership: Every Value Has One Owner",
+            "number": null
+          },
+          {
+            "id": "borrowing-using-data-without-taking-it",
+            "title": "Borrowing: Using Data Without Taking It",
+            "number": null
+          },
+          {
+            "id": "enums-and-pattern-matching",
+            "title": "Enums and Pattern Matching",
+            "number": null
+          },
+          {
+            "id": "traits-shared-behavior-and-seams-for-testing",
+            "title": "Traits: Shared Behavior and Seams for Testing",
+            "number": null
+          },
+          {
+            "id": "generics-one-implementation-for-many-types",
+            "title": "Generics: One Implementation for Many Types",
+            "number": null
+          },
+          {
+            "id": "result-option-and-the-question-mark-operator",
+            "title": "Result, Option, and the Question Mark Operator",
+            "number": null
+          },
+          {
+            "id": "error-types-with-thiserror-and-the-apperror-boundary",
+            "title": "Error Types with thiserror and the AppError Boundary",
+            "number": null
+          },
+          {
+            "id": "sharing-data-between-threads-with-arc",
+            "title": "Sharing Data Between Threads with Arc",
+            "number": null
+          },
+          {
+            "id": "locks-mutex-and-rwlock-from-parking_lot-std-and-tokio",
+            "title": "Locks: Mutex and RwLock from parking_lot, std, and Tokio",
+            "number": null
+          },
+          {
+            "id": "atomics-lock-free-counters-and-flags",
+            "title": "Atomics: Lock-Free Counters and Flags",
+            "number": null
+          },
+          {
+            "id": "drop-guards-cleanup-that-cannot-be-forgotten",
+            "title": "Drop Guards: Cleanup That Cannot Be Forgotten",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-3",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-3",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch010",
+        "title": "Tokio and Asynchronous Execution",
+        "number": "5",
+        "part": "Part II: Rust and Systems Engineering",
+        "words": 2772,
+        "minutes": 13,
+        "sections": [
+          {
+            "id": "the-problem-many-slow-things-at-once",
+            "title": "The Problem: Many Slow Things at Once",
+            "number": null
+          },
+          {
+            "id": "futures-computations-that-run-when-polled",
+            "title": "Futures: Computations That Run When Polled",
+            "number": null
+          },
+          {
+            "id": "the-runtime-and-its-threads",
+            "title": "The Runtime and Its Threads",
+            "number": null
+          },
+          {
+            "id": "tasks-spawn-and-the-static-and-send-bounds",
+            "title": "Tasks: spawn and the ’static and Send Bounds",
+            "number": null
+          },
+          {
+            "id": "spawn_blocking-where-blocking-work-goes",
+            "title": "spawn_blocking: Where Blocking Work Goes",
+            "number": null
+          },
+          {
+            "id": "a-dedicated-thread-for-the-activity-log",
+            "title": "A Dedicated Thread for the Activity Log",
+            "number": null
+          },
+          {
+            "id": "notify-waking-a-sleeping-task",
+            "title": "Notify: Waking a Sleeping Task",
+            "number": null
+          },
+          {
+            "id": "select-waiting-for-the-first-of-several-events",
+            "title": "select!: Waiting for the First of Several Events",
+            "number": null
+          },
+          {
+            "id": "cancellationtoken-one-signal-many-listeners",
+            "title": "CancellationToken: One Signal, Many Listeners",
+            "number": null
+          },
+          {
+            "id": "channels-passing-values-between-tasks-and-threads",
+            "title": "Channels: Passing Values Between Tasks and Threads",
+            "number": null
+          },
+          {
+            "id": "async-locks-versus-blocking-locks",
+            "title": "Async Locks Versus Blocking Locks",
+            "number": null
+          },
+          {
+            "id": "timeouts",
+            "title": "Timeouts",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-4",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-4",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch011",
+        "title": "The Transfer Scheduler",
+        "number": "6",
+        "part": "Part II: Rust and Systems Engineering",
+        "words": 3251,
+        "minutes": 15,
+        "sections": [
+          {
+            "id": "why-a-transfer-engine-needs-a-scheduler",
+            "title": "Why a Transfer Engine Needs a Scheduler",
+            "number": null
+          },
+          {
+            "id": "the-data-the-scheduler-works-on",
+            "title": "The Data the Scheduler Works On",
+            "number": null
+          },
+          {
+            "id": "the-scheduler-loop",
+            "title": "The Scheduler Loop",
+            "number": null
+          },
+          {
+            "id": "one-scheduling-pass",
+            "title": "One Scheduling Pass",
+            "number": null
+          },
+          {
+            "id": "launching-a-job",
+            "title": "Launching a Job",
+            "number": null
+          },
+          {
+            "id": "semaphores-from-the-problem-to-r2docks-use",
+            "title": "Semaphores, From the Problem to R2Dock’s Use",
+            "number": null
+          },
+          {
+            "id": "progress-without-flooding-the-window",
+            "title": "Progress Without Flooding the Window",
+            "number": null
+          },
+          {
+            "id": "what-the-tests-and-benchmarks-show",
+            "title": "What the Tests and Benchmarks Show",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-5",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-5",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch012",
+        "title": "Backpressure and Resource Management",
+        "number": "7",
+        "part": "Part II: Rust and Systems Engineering",
+        "words": 2354,
+        "minutes": 11,
+        "sections": [
+          {
+            "id": "fast-producers-and-slow-consumers",
+            "title": "Fast Producers and Slow Consumers",
+            "number": null
+          },
+          {
+            "id": "memory-streaming-instead-of-buffering",
+            "title": "Memory: Streaming Instead of Buffering",
+            "number": null
+          },
+          {
+            "id": "the-job-queue-as-a-buffer",
+            "title": "The Job Queue as a Buffer",
+            "number": null
+          },
+          {
+            "id": "compression-as-a-separate-stage",
+            "title": "Compression as a Separate Stage",
+            "number": null
+          },
+          {
+            "id": "head-of-line-blocking",
+            "title": "Head of Line Blocking",
+            "number": null
+          },
+          {
+            "id": "releasing-resources-on-every-exit-path",
+            "title": "Releasing Resources on Every Exit Path",
+            "number": null
+          },
+          {
+            "id": "what-the-realistic-runs-show",
+            "title": "What the Realistic Runs Show",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-6",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-6",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch014",
+        "title": "The S3-Compatible Protocol",
+        "number": "8",
+        "part": "Part III: Cloudflare R2 and Networking",
+        "words": 3035,
+        "minutes": 14,
+        "sections": [
+          {
+            "id": "why-r2dock-uses-the-aws-sdk",
+            "title": "Why R2Dock Uses the AWS SDK",
+            "number": null
+          },
+          {
+            "id": "endpoints-and-jurisdictions",
+            "title": "Endpoints and Jurisdictions",
+            "number": null
+          },
+          {
+            "id": "credentials-and-signing",
+            "title": "Credentials and Signing",
+            "number": null
+          },
+          {
+            "id": "the-life-of-one-request",
+            "title": "The Life of One Request",
+            "number": null
+          },
+          {
+            "id": "division-of-labor",
+            "title": "Division of Labor",
+            "number": null
+          },
+          {
+            "id": "keys-and-prefixes",
+            "title": "Keys and Prefixes",
+            "number": null
+          },
+          {
+            "id": "listing-and-pagination",
+            "title": "Listing and Pagination",
+            "number": null
+          },
+          {
+            "id": "metadata",
+            "title": "Metadata",
+            "number": null
+          },
+          {
+            "id": "conditional-requests",
+            "title": "Conditional Requests",
+            "number": null
+          },
+          {
+            "id": "error-classification",
+            "title": "Error Classification",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-7",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-7",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch015",
+        "title": "Multipart Uploads in Depth",
+        "number": "9",
+        "part": "Part III: Cloudflare R2 and Networking",
+        "words": 2977,
+        "minutes": 14,
+        "sections": [
+          {
+            "id": "the-protocol-and-r2s-limits",
+            "title": "The Protocol and R2’s Limits",
+            "number": null
+          },
+          {
+            "id": "single-upload-or-multipart",
+            "title": "Single Upload or Multipart",
+            "number": null
+          },
+          {
+            "id": "planning-the-parts",
+            "title": "Planning the Parts",
+            "number": null
+          },
+          {
+            "id": "walking-through-a-multipart-upload",
+            "title": "Walking Through a Multipart Upload",
+            "number": null
+          },
+          {
+            "id": "reading-hashing-and-sending-a-part",
+            "title": "Reading, Hashing, and Sending a Part",
+            "number": null
+          },
+          {
+            "id": "parallel-parts-and-bounded-concurrency",
+            "title": "Parallel Parts and Bounded Concurrency",
+            "number": null
+          },
+          {
+            "id": "etags-completion-and-the-final-check",
+            "title": "ETags, Completion, and the Final Check",
+            "number": null
+          },
+          {
+            "id": "resuming-an-interrupted-upload",
+            "title": "Resuming an Interrupted Upload",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-8",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-8",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch016",
+        "title": "Downloads and HTTP Range Requests",
+        "number": "10",
+        "part": "Part III: Cloudflare R2 and Networking",
+        "words": 2384,
+        "minutes": 11,
+        "sections": [
+          {
+            "id": "network-success-is-not-completion",
+            "title": "Network Success Is Not Completion",
+            "number": null
+          },
+          {
+            "id": "the-partial-file",
+            "title": "The Partial File",
+            "number": null
+          },
+          {
+            "id": "starting-or-resuming",
+            "title": "Starting or Resuming",
+            "number": null
+          },
+          {
+            "id": "http-range-and-if-match",
+            "title": "HTTP Range and If-Match",
+            "number": null
+          },
+          {
+            "id": "streaming-and-verifying",
+            "title": "Streaming and Verifying",
+            "number": null
+          },
+          {
+            "id": "finalizing-the-file",
+            "title": "Finalizing the File",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-9",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-9",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch017",
+        "title": "Object Management and Consistency",
+        "number": "11",
+        "part": "Part III: Cloudflare R2 and Networking",
+        "words": 2819,
+        "minutes": 13,
+        "sections": [
+          {
+            "id": "why-a-move-is-hard-on-r2",
+            "title": "Why a Move Is Hard on R2",
+            "number": null
+          },
+          {
+            "id": "simulated-folders",
+            "title": "Simulated Folders",
+            "number": null
+          },
+          {
+            "id": "server-side-copy",
+            "title": "Server-Side Copy",
+            "number": null
+          },
+          {
+            "id": "move-as-copy-verify-delete",
+            "title": "Move as Copy, Verify, Delete",
+            "number": null
+          },
+          {
+            "id": "proving-the-ordering-with-a-mock-server",
+            "title": "Proving the Ordering With a Mock Server",
+            "number": null
+          },
+          {
+            "id": "rename-is-a-move-in-place",
+            "title": "Rename Is a Move in Place",
+            "number": null
+          },
+          {
+            "id": "bulk-delete-and-confirmation-tokens",
+            "title": "Bulk Delete and Confirmation Tokens",
+            "number": null
+          },
+          {
+            "id": "concurrency-cancellation-and-gaps",
+            "title": "Concurrency, Cancellation, and Gaps",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-10",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-10",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch018",
+        "title": "Public URLs and Cloudflare REST API Integration",
+        "number": "12",
+        "part": "Part III: Cloudflare R2 and Networking",
+        "words": 2070,
+        "minutes": 9,
+        "sections": [
+          {
+            "id": "two-doors-into-the-same-bucket",
+            "title": "Two Doors Into the Same Bucket",
+            "number": null
+          },
+          {
+            "id": "two-credentials-with-different-jobs",
+            "title": "Two Credentials With Different Jobs",
+            "number": null
+          },
+          {
+            "id": "resolving-a-link",
+            "title": "Resolving a Link",
+            "number": null
+          },
+          {
+            "id": "building-the-url-from-a-key",
+            "title": "Building the URL From a Key",
+            "number": null
+          },
+          {
+            "id": "talking-to-the-cloudflare-api",
+            "title": "Talking to the Cloudflare API",
+            "number": null
+          },
+          {
+            "id": "domain-names-are-untrusted-input",
+            "title": "Domain Names Are Untrusted Input",
+            "number": null
+          },
+          {
+            "id": "caching-and-request-coalescing",
+            "title": "Caching and Request Coalescing",
+            "number": null
+          },
+          {
+            "id": "security-properties-and-limits",
+            "title": "Security Properties and Limits",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-11",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-11",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch020",
+        "title": "Transfer State Machines",
+        "number": "13",
+        "part": "Part IV: Reliability and Persistence",
+        "words": 2250,
+        "minutes": 10,
+        "sections": [
+          {
+            "id": "why-model-transfers-as-a-state-machine",
+            "title": "Why Model Transfers as a State Machine",
+            "number": null
+          },
+          {
+            "id": "the-thirteen-states",
+            "title": "The Thirteen States",
+            "number": null
+          },
+          {
+            "id": "how-transitions-are-performed",
+            "title": "How Transitions Are Performed",
+            "number": null
+          },
+          {
+            "id": "the-main-path",
+            "title": "The Main Path",
+            "number": null
+          },
+          {
+            "id": "the-control-path",
+            "title": "The Control Path",
+            "number": null
+          },
+          {
+            "id": "where-the-documentation-differs",
+            "title": "Where the Documentation Differs",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-12",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-12",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch021",
+        "title": "Journals and Persistent Queues",
+        "number": "14",
+        "part": "Part IV: Reliability and Persistence",
+        "words": 3064,
+        "minutes": 14,
+        "sections": [
+          {
+            "id": "work-that-outlives-the-process",
+            "title": "Work That Outlives the Process",
+            "number": null
+          },
+          {
+            "id": "three-files-under-the-transfers-folder",
+            "title": "Three Files Under the Transfers Folder",
+            "number": null
+          },
+          {
+            "id": "the-record-format",
+            "title": "The Record Format",
+            "number": null
+          },
+          {
+            "id": "batching-writes-off-the-async-runtime",
+            "title": "Batching Writes Off the Async Runtime",
+            "number": null
+          },
+          {
+            "id": "appending-to-the-log",
+            "title": "Appending to the Log",
+            "number": null
+          },
+          {
+            "id": "snapshots-atomic-replace-and-fsync",
+            "title": "Snapshots, Atomic Replace, and fsync",
+            "number": null
+          },
+          {
+            "id": "generation-numbers",
+            "title": "Generation Numbers",
+            "number": null
+          },
+          {
+            "id": "replay-at-startup",
+            "title": "Replay at Startup",
+            "number": null
+          },
+          {
+            "id": "compaction-when-and-how",
+            "title": "Compaction: When and How",
+            "number": null
+          },
+          {
+            "id": "damage-and-disk-failures",
+            "title": "Damage and Disk Failures",
+            "number": null
+          },
+          {
+            "id": "ordering-between-memory-disk-and-the-network",
+            "title": "Ordering Between Memory, Disk, and the Network",
+            "number": null
+          },
+          {
+            "id": "how-this-compares-with-a-write-ahead-log",
+            "title": "How This Compares With a Write-Ahead Log",
+            "number": null
+          },
+          {
+            "id": "what-the-log-saves-in-practice",
+            "title": "What the Log Saves in Practice",
+            "number": null
+          },
+          {
+            "id": "a-crash-recovery-walkthrough",
+            "title": "A Crash Recovery Walkthrough",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-13",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-13",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch022",
+        "title": "Crash Consistency and Recovery",
+        "number": "15",
+        "part": "Part IV: Reliability and Persistence",
+        "words": 2556,
+        "minutes": 12,
+        "sections": [
+          {
+            "id": "two-kinds-of-crash",
+            "title": "Two Kinds of Crash",
+            "number": null
+          },
+          {
+            "id": "where-r2dock-forces-data-to-disk",
+            "title": "Where R2Dock Forces Data to Disk",
+            "number": null
+          },
+          {
+            "id": "the-startup-sequence",
+            "title": "The Startup Sequence",
+            "number": null
+          },
+          {
+            "id": "partial-downloads",
+            "title": "Partial Downloads",
+            "number": null
+          },
+          {
+            "id": "finishing-a-download-exactly-once",
+            "title": "Finishing a Download Exactly Once",
+            "number": null
+          },
+          {
+            "id": "uploads-that-completed-but-were-not-recorded",
+            "title": "Uploads That Completed but Were Not Recorded",
+            "number": null
+          },
+          {
+            "id": "multipart-uploads-interrupted-midway",
+            "title": "Multipart Uploads Interrupted Midway",
+            "number": null
+          },
+          {
+            "id": "orphans-and-interrupted-compression",
+            "title": "Orphans and Interrupted Compression",
+            "number": null
+          },
+          {
+            "id": "crash-during-compaction",
+            "title": "Crash During Compaction",
+            "number": null
+          },
+          {
+            "id": "the-failure-matrix",
+            "title": "The Failure Matrix",
+            "number": null
+          },
+          {
+            "id": "gaps-and-possible-improvements",
+            "title": "Gaps and Possible Improvements",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-14",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-14",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch023",
+        "title": "Retries, Cancellation, and Idempotency",
+        "number": "16",
+        "part": "Part IV: Reliability and Persistence",
+        "words": 2191,
+        "minutes": 10,
+        "sections": [
+          {
+            "id": "two-layers-of-retry",
+            "title": "Two Layers of Retry",
+            "number": null
+          },
+          {
+            "id": "deciding-what-is-retryable",
+            "title": "Deciding What Is Retryable",
+            "number": null
+          },
+          {
+            "id": "what-the-engine-does-with-a-failure",
+            "title": "What the Engine Does With a Failure",
+            "number": null
+          },
+          {
+            "id": "timeouts-1",
+            "title": "Timeouts",
+            "number": null
+          },
+          {
+            "id": "cancellation-from-a-click-to-a-closed-connection",
+            "title": "Cancellation: From a Click to a Closed Connection",
+            "number": null
+          },
+          {
+            "id": "aborting-multipart-uploads",
+            "title": "Aborting Multipart Uploads",
+            "number": null
+          },
+          {
+            "id": "did-the-request-apply",
+            "title": "Did the Request Apply?",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-15",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-15",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch025",
+        "title": "How FFmpeg Integrates with Rust",
+        "number": "17",
+        "part": "Part V: Multimedia Processing",
+        "words": 2983,
+        "minutes": 14,
+        "sections": [
+          {
+            "id": "why-ffmpeg-runs-as-a-separate-program",
+            "title": "Why FFmpeg Runs as a Separate Program",
+            "number": null
+          },
+          {
+            "id": "finding-the-tools",
+            "title": "Finding the Tools",
+            "number": null
+          },
+          {
+            "id": "building-a-command-line-without-a-shell",
+            "title": "Building a Command Line Without a Shell",
+            "number": null
+          },
+          {
+            "id": "spawning-the-process",
+            "title": "Spawning the Process",
+            "number": null
+          },
+          {
+            "id": "reading-two-pipes-at-once",
+            "title": "Reading Two Pipes at Once",
+            "number": null
+          },
+          {
+            "id": "parsing-progress",
+            "title": "Parsing Progress",
+            "number": null
+          },
+          {
+            "id": "timeouts-cancellation-and-exit-status",
+            "title": "Timeouts, Cancellation, and Exit Status",
+            "number": null
+          },
+          {
+            "id": "safe-messages-and-cleanup",
+            "title": "Safe Messages and Cleanup",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-16",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-16",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch026",
+        "title": "Audio Compression Internals",
+        "number": "18",
+        "part": "Part V: Multimedia Processing",
+        "words": 2704,
+        "minutes": 12,
+        "sections": [
+          {
+            "id": "audio-concepts-you-need",
+            "title": "Audio Concepts You Need",
+            "number": null
+          },
+          {
+            "id": "probing-in-process-with-symphonia",
+            "title": "Probing in Process with Symphonia",
+            "number": null
+          },
+          {
+            "id": "speech-or-music",
+            "title": "Speech or Music",
+            "number": null
+          },
+          {
+            "id": "the-bitrate-ladder",
+            "title": "The Bitrate Ladder",
+            "number": null
+          },
+          {
+            "id": "channels-never-lose-sound-silently",
+            "title": "Channels: Never Lose Sound Silently",
+            "number": null
+          },
+          {
+            "id": "sample-rates",
+            "title": "Sample Rates",
+            "number": null
+          },
+          {
+            "id": "when-compression-is-skipped",
+            "title": "When Compression Is Skipped",
+            "number": null
+          },
+          {
+            "id": "the-sample-test",
+            "title": "The Sample Test",
+            "number": null
+          },
+          {
+            "id": "building-the-encode-command",
+            "title": "Building the Encode Command",
+            "number": null
+          },
+          {
+            "id": "verifying-the-output",
+            "title": "Verifying the Output",
+            "number": null
+          },
+          {
+            "id": "compare-quality",
+            "title": "Compare Quality",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-17",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-17",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch027",
+        "title": "Video Compression Internals",
+        "number": "19",
+        "part": "Part V: Multimedia Processing",
+        "words": 2755,
+        "minutes": 13,
+        "sections": [
+          {
+            "id": "video-concepts-for-newcomers",
+            "title": "Video Concepts for Newcomers",
+            "number": null
+          },
+          {
+            "id": "routing-a-file-to-the-video-path",
+            "title": "Routing a File to the Video Path",
+            "number": null
+          },
+          {
+            "id": "which-encoders-exist-on-this-computer",
+            "title": "Which Encoders Exist on This Computer",
+            "number": null
+          },
+          {
+            "id": "choosing-the-encoder-for-a-file",
+            "title": "Choosing the Encoder for a File",
+            "number": null
+          },
+          {
+            "id": "skips-hdr-tracks-size-and-bitrate",
+            "title": "Skips: HDR, Tracks, Size, and Bitrate",
+            "number": null
+          },
+          {
+            "id": "resolution-and-the-bitrate-model",
+            "title": "Resolution and the Bitrate Model",
+            "number": null
+          },
+          {
+            "id": "encoder-settings-and-filters",
+            "title": "Encoder Settings and Filters",
+            "number": null
+          },
+          {
+            "id": "streams-and-rotation",
+            "title": "Streams and Rotation",
+            "number": null
+          },
+          {
+            "id": "sample-encode-retry-verify",
+            "title": "Sample, Encode, Retry, Verify",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-18",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-18",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch028",
+        "title": "Compression Scheduling and Data Integrity",
+        "number": "20",
+        "part": "Part V: Multimedia Processing",
+        "words": 2104,
+        "minutes": 10,
+        "sections": [
+          {
+            "id": "two-stages-one-job",
+            "title": "Two Stages, One Job",
+            "number": null
+          },
+          {
+            "id": "where-temporary-files-live",
+            "title": "Where Temporary Files Live",
+            "number": null
+          },
+          {
+            "id": "proving-the-original-did-not-change",
+            "title": "Proving the Original Did Not Change",
+            "number": null
+          },
+          {
+            "id": "recording-and-rechecking-the-copy",
+            "title": "Recording and Rechecking the Copy",
+            "number": null
+          },
+          {
+            "id": "falling-back-to-the-original",
+            "title": "Falling Back to the Original",
+            "number": null
+          },
+          {
+            "id": "pause-cancel-and-crashes",
+            "title": "Pause, Cancel, and Crashes",
+            "number": null
+          },
+          {
+            "id": "failure-matrix",
+            "title": "Failure Matrix",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-19",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-19",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch030",
+        "title": "Credential Storage and Authentication",
+        "number": "21",
+        "part": "Part VI: Security Engineering",
+        "words": 2177,
+        "minutes": 10,
+        "sections": [
+          {
+            "id": "which-credentials-exist",
+            "title": "Which Credentials Exist",
+            "number": null
+          },
+          {
+            "id": "operating-system-credential-stores",
+            "title": "Operating System Credential Stores",
+            "number": null
+          },
+          {
+            "id": "probe-then-fall-back",
+            "title": "Probe, Then Fall Back",
+            "number": null
+          },
+          {
+            "id": "secret-values-in-memory",
+            "title": "Secret Values in Memory",
+            "number": null
+          },
+          {
+            "id": "saving-using-and-rotating-a-secret",
+            "title": "Saving, Using, and Rotating a Secret",
+            "number": null
+          },
+          {
+            "id": "the-secret-in-the-webview",
+            "title": "The Secret in the Webview",
+            "number": null
+          },
+          {
+            "id": "redaction-in-logs-and-errors",
+            "title": "Redaction in Logs and Errors",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-20",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-20",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch031",
+        "title": "Tauri Security Architecture",
+        "number": "22",
+        "part": "Part VI: Security Engineering",
+        "words": 2165,
+        "minutes": 10,
+        "sections": [
+          {
+            "id": "two-trust-groups-and-one-bridge",
+            "title": "Two Trust Groups and One Bridge",
+            "number": null
+          },
+          {
+            "id": "the-command-allowlist",
+            "title": "The Command Allowlist",
+            "number": null
+          },
+          {
+            "id": "the-capability-file",
+            "title": "The Capability File",
+            "number": null
+          },
+          {
+            "id": "the-webview-configuration-and-csp",
+            "title": "The Webview Configuration and CSP",
+            "number": null
+          },
+          {
+            "id": "validating-every-argument",
+            "title": "Validating Every Argument",
+            "number": null
+          },
+          {
+            "id": "local-paths-never-come-from-the-page",
+            "title": "Local Paths Never Come From the Page",
+            "number": null
+          },
+          {
+            "id": "what-remains-in-reach-of-a-compromised-page",
+            "title": "What Remains in Reach of a Compromised Page",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-21",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-21",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch032",
+        "title": "Filesystem Security",
+        "number": "23",
+        "part": "Part VI: Security Engineering",
+        "words": 2363,
+        "minutes": 11,
+        "sections": [
+          {
+            "id": "object-keys-are-untrusted-input",
+            "title": "Object Keys Are Untrusted Input",
+            "number": null
+          },
+          {
+            "id": "stage-one-turning-a-key-into-a-relative-path",
+            "title": "Stage One: Turning a Key Into a Relative Path",
+            "number": null
+          },
+          {
+            "id": "lossy-mapping-and-the-traversal-exception",
+            "title": "Lossy Mapping and the Traversal Exception",
+            "number": null
+          },
+          {
+            "id": "stage-two-walking-the-real-file-system",
+            "title": "Stage Two: Walking the Real File System",
+            "number": null
+          },
+          {
+            "id": "stage-three-writing-and-placing",
+            "title": "Stage Three: Writing and Placing",
+            "number": null
+          },
+          {
+            "id": "collisions-between-two-remote-names",
+            "title": "Collisions Between Two Remote Names",
+            "number": null
+          },
+          {
+            "id": "the-upload-side-reading-the-right-file",
+            "title": "The Upload Side: Reading the Right File",
+            "number": null
+          },
+          {
+            "id": "what-the-guard-does-not-do",
+            "title": "What the Guard Does Not Do",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-22",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-22",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch033",
+        "title": "The Custom Media Preview Protocol",
+        "number": "24",
+        "part": "Part VI: Security Engineering",
+        "words": 2215,
+        "minutes": 10,
+        "sections": [
+          {
+            "id": "why-not-a-presigned-url-or-a-local-server",
+            "title": "Why Not a Presigned URL or a Local Server",
+            "number": null
+          },
+          {
+            "id": "opaque-tokens-as-capabilities",
+            "title": "Opaque Tokens as Capabilities",
+            "number": null
+          },
+          {
+            "id": "the-request-path-in-rust",
+            "title": "The Request Path in Rust",
+            "number": null
+          },
+          {
+            "id": "http-range-support",
+            "title": "HTTP Range Support",
+            "number": null
+          },
+          {
+            "id": "bounding-memory-even-against-a-misbehaving-server",
+            "title": "Bounding Memory, Even Against a Misbehaving Server",
+            "number": null
+          },
+          {
+            "id": "content-types-and-response-headers",
+            "title": "Content Types and Response Headers",
+            "number": null
+          },
+          {
+            "id": "local-targets-compression-samples",
+            "title": "Local Targets: Compression Samples",
+            "number": null
+          },
+          {
+            "id": "tracing-one-request",
+            "title": "Tracing One Request",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-23",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-23",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch034",
+        "title": "Threat Modeling and Remaining Risks",
+        "number": "25",
+        "part": "Part VI: Security Engineering",
+        "words": 2206,
+        "minutes": 10,
+        "sections": [
+          {
+            "id": "scope-assets-and-attackers",
+            "title": "Scope, Assets, and Attackers",
+            "number": null
+          },
+          {
+            "id": "entry-points-and-their-defenses",
+            "title": "Entry Points and Their Defenses",
+            "number": null
+          },
+          {
+            "id": "code-compared-with-plan.md-section-9.8",
+            "title": "Code Compared With PLAN.md Section 9.8",
+            "number": null
+          },
+          {
+            "id": "remaining-risks-ranked",
+            "title": "Remaining Risks, Ranked",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-24",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-24",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch036",
+        "title": "React and Tauri IPC",
+        "number": "26",
+        "part": "Part VII: Frontend Engineering",
+        "words": 2740,
+        "minutes": 12,
+        "sections": [
+          {
+            "id": "commands-and-the-single-wrapper-module",
+            "title": "Commands and the Single Wrapper Module",
+            "number": null
+          },
+          {
+            "id": "errors-as-data",
+            "title": "Errors as Data",
+            "number": null
+          },
+          {
+            "id": "generated-types-with-ts-rs",
+            "title": "Generated Types with ts-rs",
+            "number": null
+          },
+          {
+            "id": "a-request-through-both-layers",
+            "title": "A Request Through Both Layers",
+            "number": null
+          },
+          {
+            "id": "channels-streaming-transfer-events",
+            "title": "Channels: Streaming Transfer Events",
+            "number": null
+          },
+          {
+            "id": "an-upload-from-click-to-progress-bar",
+            "title": "An Upload from Click to Progress Bar",
+            "number": null
+          },
+          {
+            "id": "secrets-and-the-cost-of-the-boundary",
+            "title": "Secrets and the Cost of the Boundary",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-25",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-25",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch037",
+        "title": "Frontend State Management",
+        "number": "27",
+        "part": "Part VII: Frontend Engineering",
+        "words": 2442,
+        "minutes": 11,
+        "sections": [
+          {
+            "id": "four-kinds-of-state",
+            "title": "Four Kinds of State",
+            "number": null
+          },
+          {
+            "id": "tanstack-query-as-the-cache-of-rust-answers",
+            "title": "TanStack Query as the Cache of Rust Answers",
+            "number": null
+          },
+          {
+            "id": "optimistic-preferences",
+            "title": "Optimistic Preferences",
+            "number": null
+          },
+          {
+            "id": "invalidation-after-changes",
+            "title": "Invalidation After Changes",
+            "number": null
+          },
+          {
+            "id": "zustand-for-state-without-a-server",
+            "title": "Zustand for State Without a Server",
+            "number": null
+          },
+          {
+            "id": "the-transfer-read-model-and-pending-intent",
+            "title": "The Transfer Read Model and Pending Intent",
+            "number": null
+          },
+          {
+            "id": "ghost-rows-joining-two-sources",
+            "title": "Ghost Rows: Joining Two Sources",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-26",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-26",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch038",
+        "title": "UI Performance and Large Queues",
+        "number": "28",
+        "part": "Part VII: Frontend Engineering",
+        "words": 2357,
+        "minutes": 11,
+        "sections": [
+          {
+            "id": "targets-without-measurements",
+            "title": "Targets Without Measurements",
+            "number": null
+          },
+          {
+            "id": "two-throttles-and-a-debounce",
+            "title": "Two Throttles and a Debounce",
+            "number": null
+          },
+          {
+            "id": "a-reducer-that-copies-once-per-batch",
+            "title": "A Reducer That Copies Once per Batch",
+            "number": null
+          },
+          {
+            "id": "side-effects-without-per-event-cost",
+            "title": "Side Effects Without Per-Event Cost",
+            "number": null
+          },
+          {
+            "id": "selecting-without-waste",
+            "title": "Selecting Without Waste",
+            "number": null
+          },
+          {
+            "id": "virtualization-with-tanstack-virtual",
+            "title": "Virtualization With TanStack Virtual",
+            "number": null
+          },
+          {
+            "id": "accessibility-and-testing",
+            "title": "Accessibility and Testing",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-27",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-27",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch040",
+        "title": "Automated Testing Strategy",
+        "number": "29",
+        "part": "Part VIII: Testing and Production Engineering",
+        "words": 2929,
+        "minutes": 13,
+        "sections": [
+          {
+            "id": "the-layers",
+            "title": "The Layers",
+            "number": null
+          },
+          {
+            "id": "rust-unit-and-property-tests",
+            "title": "Rust Unit and Property Tests",
+            "number": null
+          },
+          {
+            "id": "mocks-that-act-at-request-boundaries",
+            "title": "Mocks That Act at Request Boundaries",
+            "number": null
+          },
+          {
+            "id": "the-local-s3-server-and-network-shaping",
+            "title": "The Local S3 Server and Network Shaping",
+            "number": null
+          },
+          {
+            "id": "what-the-integration-suites-prove",
+            "title": "What the Integration Suites Prove",
+            "number": null
+          },
+          {
+            "id": "ignored-heavy-and-live-tests",
+            "title": "Ignored, Heavy, and Live Tests",
+            "number": null
+          },
+          {
+            "id": "frontend-tests",
+            "title": "Frontend Tests",
+            "number": null
+          },
+          {
+            "id": "cross-platform-validation",
+            "title": "Cross-Platform Validation",
+            "number": null
+          },
+          {
+            "id": "results-of-running-the-default-suites-for-this-book",
+            "title": "Results of Running the Default Suites for This Book",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-28",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-28",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch041",
+        "title": "Performance Benchmarking",
+        "number": "30",
+        "part": "Part VIII: Testing and Production Engineering",
+        "words": 2279,
+        "minutes": 10,
+        "sections": [
+          {
+            "id": "where-benchmarks-live",
+            "title": "Where Benchmarks Live",
+            "number": null
+          },
+          {
+            "id": "instruments-in-the-test-code",
+            "title": "Instruments in the Test Code",
+            "number": null
+          },
+          {
+            "id": "how-to-read-each-kind-of-metric",
+            "title": "How to Read Each Kind of Metric",
+            "number": null
+          },
+          {
+            "id": "benchmark-transfer-and-activity-log-stress",
+            "title": "Benchmark: Transfer and Activity Log Stress",
+            "number": null
+          },
+          {
+            "id": "benchmark-video-encoders",
+            "title": "Benchmark: Video Encoders",
+            "number": null
+          },
+          {
+            "id": "benchmark-compression-and-uploads-at-scale",
+            "title": "Benchmark: Compression and Uploads at Scale",
+            "number": null
+          },
+          {
+            "id": "re-running-a-benchmark-for-this-book",
+            "title": "Re-running a Benchmark for This Book",
+            "number": null
+          },
+          {
+            "id": "what-has-not-been-measured",
+            "title": "What Has Not Been Measured",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-29",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-29",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch042",
+        "title": "CI/CD and Desktop Releases",
+        "number": "31",
+        "part": "Part VIII: Testing and Production Engineering",
+        "words": 2526,
+        "minutes": 11,
+        "sections": [
+          {
+            "id": "the-continuous-integration-workflow",
+            "title": "The Continuous Integration Workflow",
+            "number": null
+          },
+          {
+            "id": "dependency-audits",
+            "title": "Dependency Audits",
+            "number": null
+          },
+          {
+            "id": "the-release-workflow",
+            "title": "The Release Workflow",
+            "number": null
+          },
+          {
+            "id": "signing-notarization-and-distribution-limits",
+            "title": "Signing, Notarization, and Distribution Limits",
+            "number": null
+          },
+          {
+            "id": "the-compression-tools-pipeline",
+            "title": "The Compression Tools Pipeline",
+            "number": null
+          },
+          {
+            "id": "versioning-and-the-changelog",
+            "title": "Versioning and the Changelog",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-30",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-30",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch043",
+        "title": "Engineering Trade-offs and Future Improvements",
+        "number": "32",
+        "part": "Part VIII: Testing and Production Engineering",
+        "words": 2613,
+        "minutes": 12,
+        "sections": [
+          {
+            "id": "intentional-compromises-in-the-current-code",
+            "title": "Intentional Compromises in the Current Code",
+            "number": null
+          },
+          {
+            "id": "where-the-documents-and-the-code-disagree",
+            "title": "Where the Documents and the Code Disagree",
+            "number": null
+          },
+          {
+            "id": "improvements-the-evidence-supports",
+            "title": "Improvements the Evidence Supports",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-31",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-31",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch044",
+        "title": "Complete End-to-End Execution Walkthrough",
+        "number": "33",
+        "part": "Part VIII: Testing and Production Engineering",
+        "words": 4090,
+        "minutes": 19,
+        "sections": [
+          {
+            "id": "the-scenario",
+            "title": "The Scenario",
+            "number": null
+          },
+          {
+            "id": "step-1-picking-the-file-in-rust",
+            "title": "Step 1: Picking the File in Rust",
+            "number": null
+          },
+          {
+            "id": "step-2-planning-the-upload",
+            "title": "Step 2: Planning the Upload",
+            "number": null
+          },
+          {
+            "id": "step-3-starting-the-plan",
+            "title": "Step 3: Starting the Plan",
+            "number": null
+          },
+          {
+            "id": "step-4-enqueue-and-the-queue-journal",
+            "title": "Step 4: Enqueue and the Queue Journal",
+            "number": null
+          },
+          {
+            "id": "step-5-the-scheduler-picks-the-job",
+            "title": "Step 5: The Scheduler Picks the Job",
+            "number": null
+          },
+          {
+            "id": "step-6-run_job-builds-the-context",
+            "title": "Step 6: run_job Builds the Context",
+            "number": null
+          },
+          {
+            "id": "step-7-deciding-between-resume-single-and-multipart",
+            "title": "Step 7: Deciding Between Resume, Single, and Multipart",
+            "number": null
+          },
+          {
+            "id": "step-8-creating-the-upload-and-saving-resume-state",
+            "title": "Step 8: Creating the Upload and Saving Resume State",
+            "number": null
+          },
+          {
+            "id": "step-9-sending-parts-under-two-limits",
+            "title": "Step 9: Sending Parts Under Two Limits",
+            "number": null
+          },
+          {
+            "id": "step-10-progress-over-the-channel",
+            "title": "Step 10: Progress Over the Channel",
+            "number": null
+          },
+          {
+            "id": "step-11-verifying-and-completing",
+            "title": "Step 11: Verifying and Completing",
+            "number": null
+          },
+          {
+            "id": "step-12-finishing-in-the-engine",
+            "title": "Step 12: Finishing in the Engine",
+            "number": null
+          },
+          {
+            "id": "step-13-refreshing-the-listing",
+            "title": "Step 13: Refreshing the Listing",
+            "number": null
+          },
+          {
+            "id": "the-compression-detour",
+            "title": "The Compression Detour",
+            "number": null
+          },
+          {
+            "id": "second-scenario-killed-mid-upload",
+            "title": "Second Scenario: Killed Mid-Upload",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-32",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-32",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch046",
+        "title": "Your First Contribution",
+        "number": "34",
+        "part": "Part IX: Joining the Project",
+        "words": 1966,
+        "minutes": 9,
+        "sections": [
+          {
+            "id": "toolchain-prerequisites",
+            "title": "Toolchain Prerequisites",
+            "number": null
+          },
+          {
+            "id": "cloning-and-the-first-build",
+            "title": "Cloning and the First Build",
+            "number": null
+          },
+          {
+            "id": "running-the-app-against-a-local-s3-server",
+            "title": "Running the App Against a Local S3 Server",
+            "number": null
+          },
+          {
+            "id": "the-project-rules",
+            "title": "The Project Rules",
+            "number": null
+          },
+          {
+            "id": "checks-before-a-pull-request",
+            "title": "Checks Before a Pull Request",
+            "number": null
+          },
+          {
+            "id": "adding-a-new-command",
+            "title": "Adding a New Command",
+            "number": null
+          },
+          {
+            "id": "reporting-a-security-issue",
+            "title": "Reporting a Security Issue",
+            "number": null
+          },
+          {
+            "id": "finding-a-first-task",
+            "title": "Finding a First Task",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-33",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-33",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch047",
+        "title": "Source-Code Study Roadmap",
+        "number": "35",
+        "part": "Part IX: Joining the Project",
+        "words": 1432,
+        "minutes": 7,
+        "sections": [
+          {
+            "id": "stage-1-the-shape-of-the-system",
+            "title": "Stage 1: The Shape of the System",
+            "number": null
+          },
+          {
+            "id": "stage-2-rules-without-input-or-output",
+            "title": "Stage 2: Rules Without Input or Output",
+            "number": null
+          },
+          {
+            "id": "stage-3-secrets-and-the-r2-client",
+            "title": "Stage 3: Secrets and the R2 Client",
+            "number": null
+          },
+          {
+            "id": "stage-4-the-transfer-engine",
+            "title": "Stage 4: The Transfer Engine",
+            "number": null
+          },
+          {
+            "id": "stage-5-media-processing",
+            "title": "Stage 5: Media Processing",
+            "number": null
+          },
+          {
+            "id": "stage-6-the-application-shell",
+            "title": "Stage 6: The Application Shell",
+            "number": null
+          },
+          {
+            "id": "stage-7-the-frontend",
+            "title": "Stage 7: The Frontend",
+            "number": null
+          },
+          {
+            "id": "stage-8-tests-benchmarks-and-releases",
+            "title": "Stage 8: Tests, Benchmarks, and Releases",
+            "number": null
+          },
+          {
+            "id": "the-path-at-a-glance",
+            "title": "The Path at a Glance",
+            "number": null
+          },
+          {
+            "id": "working-on-this-code-34",
+            "title": "Working on This Code",
+            "number": null
+          },
+          {
+            "id": "further-reading-34",
+            "title": "Further Reading",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch049",
+        "title": "Glossary",
+        "number": null,
+        "part": "Appendices",
+        "words": 2896,
+        "minutes": 13,
+        "sections": [
+          {
+            "id": "a",
+            "title": "A",
+            "number": null
+          },
+          {
+            "id": "b",
+            "title": "B",
+            "number": null
+          },
+          {
+            "id": "c",
+            "title": "C",
+            "number": null
+          },
+          {
+            "id": "d",
+            "title": "D",
+            "number": null
+          },
+          {
+            "id": "e",
+            "title": "E",
+            "number": null
+          },
+          {
+            "id": "f",
+            "title": "F",
+            "number": null
+          },
+          {
+            "id": "g",
+            "title": "G",
+            "number": null
+          },
+          {
+            "id": "h",
+            "title": "H",
+            "number": null
+          },
+          {
+            "id": "i",
+            "title": "I",
+            "number": null
+          },
+          {
+            "id": "j",
+            "title": "J",
+            "number": null
+          },
+          {
+            "id": "k",
+            "title": "K",
+            "number": null
+          },
+          {
+            "id": "l",
+            "title": "L",
+            "number": null
+          },
+          {
+            "id": "m",
+            "title": "M",
+            "number": null
+          },
+          {
+            "id": "n",
+            "title": "N",
+            "number": null
+          },
+          {
+            "id": "o",
+            "title": "O",
+            "number": null
+          },
+          {
+            "id": "p",
+            "title": "P",
+            "number": null
+          },
+          {
+            "id": "q",
+            "title": "Q",
+            "number": null
+          },
+          {
+            "id": "r",
+            "title": "R",
+            "number": null
+          },
+          {
+            "id": "s",
+            "title": "S",
+            "number": null
+          },
+          {
+            "id": "t",
+            "title": "T",
+            "number": null
+          },
+          {
+            "id": "u",
+            "title": "U",
+            "number": null
+          },
+          {
+            "id": "v",
+            "title": "V",
+            "number": null
+          },
+          {
+            "id": "w",
+            "title": "W",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch050",
+        "title": "References",
+        "number": null,
+        "part": "Appendices",
+        "words": 706,
+        "minutes": 3,
+        "sections": [
+          {
+            "id": "rust-and-tokio",
+            "title": "Rust and Tokio",
+            "number": null
+          },
+          {
+            "id": "tauri",
+            "title": "Tauri",
+            "number": null
+          },
+          {
+            "id": "cloudflare-r2",
+            "title": "Cloudflare R2",
+            "number": null
+          },
+          {
+            "id": "amazon-s3-and-aws-sdk",
+            "title": "Amazon S3 and AWS SDK",
+            "number": null
+          },
+          {
+            "id": "http-standards",
+            "title": "HTTP Standards",
+            "number": null
+          },
+          {
+            "id": "ffmpeg",
+            "title": "FFmpeg",
+            "number": null
+          },
+          {
+            "id": "frontend",
+            "title": "Frontend",
+            "number": null
+          },
+          {
+            "id": "security-and-file-systems",
+            "title": "Security and File Systems",
+            "number": null
+          },
+          {
+            "id": "other",
+            "title": "Other",
+            "number": null
+          },
+          {
+            "id": "repository-documents",
+            "title": "Repository Documents",
+            "number": null
+          }
+        ]
+      },
+      {
+        "id": "ch051",
+        "title": "License Notice",
+        "number": null,
+        "part": "Appendices",
+        "words": 224,
+        "minutes": 1,
+        "sections": []
+      }
+    ]
+  },
+  {
     "slug": "inside-the-projects",
     "title": "Inside the Projects",
     "subtitle": "A Deep Technical Guide to the Projects of Vijaysingh Puwar",

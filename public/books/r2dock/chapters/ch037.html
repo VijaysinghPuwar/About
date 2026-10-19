@@ -1,0 +1,199 @@
+<section id="ch-27" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">27</span> Frontend State Management</h1>
+<p>Most of R2Dock’s truth is not in the user interface: listings live in R2, credentials in the credential store, and transfer state in the Rust engine. The React code is a view onto these sources, so its state management is mostly about keeping copies honest. <a href="/books/r2dock/read/ch036#ch-26">Chapter 26</a> (React and Tauri IPC) covered how data crosses the boundary; <a href="/books/r2dock/read/ch038#ch-28">Chapter 28</a> (UI Performance and Large Queues) covers how the transfer stream is applied quickly.</p>
+<section id="four-kinds-of-state" class="level3">
+<h2>Four Kinds of State</h2>
+<p>Server state has its truth outside the webview and is fetched on demand: listings, object details, buckets, connections, settings, transfer history, compression tool status. The frontend holds a cache that can be stale. UI state exists only because someone is looking at the screen: the open folder, the selection, open dialogs, the search text; losing it on restart is acceptable. The transfer queue is a streamed read model: PLAN.md section 6.6 says “Transfer state is owned by Rust. The frontend holds a read model updated from a progress channel.” It changes too often to fetch, so the frontend keeps a projection rebuilt from a snapshot and patched by events. Finally, component-local state should not outlive one component; the main example is the secret in the Connect form’s <code>useState</code>.</p>
+<p>PLAN.md section 6.6 assigns “TanStack Query for IPC-backed server state (listings, details) with caching and invalidation after uploads and deletes,” “Zustand (tiny) for UI state,” and “No Redux, no global event bus.” Architecture decision record (ADR) 0004 confirms it. Figure 27.1 shows the resulting ownership map.</p>
+<figure id="fig-27-state-ownership">
+<img src="/books/r2dock/media/file33.webp" alt="Two columns. The Rust core column holds R2 via R2Client, settings and connections files, the transfer engine, and the OS credential store. The webview column holds the TanStack Query cache, useTransferStore as a read model, Zustand UI stores, and the Connect form secret. R2 and the files feed the query cache through invoke; the engine feeds the transfer store through a channel; the transfer store invalidates the query cache; UI stores send commands to the engine; the secret goes to the credential store once, on save." width="1104" height="1052" loading="lazy" decoding="async">
+<figcaption>Figure 27.1. Rust owns R2 data, settings and connection files, the transfer engine, and the credential store; the webview holds a query cache, a transfer read model, UI stores, and a local form secret.</figcaption>
+</figure>
+<p>The frontend never edits a cached listing to pretend an upload happened; it waits for Rust or overlays a clearly marked temporary row.</p>
+</section>
+<section id="tanstack-query-as-the-cache-of-rust-answers" class="level3">
+<h2>TanStack Query as the Cache of Rust Answers</h2>
+<p>TanStack Query is a cache keyed by arrays whose entries know how to fetch themselves and whether they are stale. R2Dock creates one <code>QueryClient</code> in <code>src/app/App.tsx</code> with this factory.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src/app/queries.ts#L18-L29" target="_blank" rel="noopener noreferrer">src/app/queries.ts, lines 18 to 29</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb1-1"><span class="im">export</span> <span class="kw">function</span> <span class="fu">createQueryClient</span>()<span class="op">:</span> QueryClient {</span>
+<span id="cb1-2">  <span class="cf">return</span> <span class="kw">new</span> <span class="fu">QueryClient</span>({</span>
+<span id="cb1-3">    defaultOptions<span class="op">:</span> {</span>
+<span id="cb1-4">      queries<span class="op">:</span> {</span>
+<span id="cb1-5">        retry<span class="op">:</span> <span class="kw">false</span><span class="op">,</span></span>
+<span id="cb1-6">        refetchOnWindowFocus<span class="op">:</span> <span class="kw">false</span><span class="op">,</span></span>
+<span id="cb1-7">        staleTime<span class="op">:</span> <span class="dv">30_000</span><span class="op">,</span></span>
+<span id="cb1-8">      }<span class="op">,</span></span>
+<span id="cb1-9">      mutations<span class="op">:</span> { retry<span class="op">:</span> <span class="kw">false</span> }<span class="op">,</span></span>
+<span id="cb1-10">    }<span class="op">,</span></span>
+<span id="cb1-11">  })<span class="op">;</span></span>
+<span id="cb1-12">}</span></code></pre></div>
+<p>Each setting overrides a default that the <a href="https://tanstack.com/query/v5/docs/framework/react/guides/important-defaults" target="_blank" rel="noopener noreferrer">important defaults page</a> documents: data is stale immediately, stale queries refetch when “The window is refocused,” and failures are “silently retried 3 times, with exponential backoff delay”. Retries are off because the Rust client already classifies errors and backs off (<a href="/books/r2dock/read/ch023#ch-16">Chapter 16</a>, Retries, Cancellation, and Idempotency); a second loop in JavaScript would multiply attempts against a server that may be rate limiting and delay messages such as “The keys for this connection no longer work.” Focus refetching is off because every listing refetch is a <code>ListObjectsV2</code> call, which PLAN.md section 8.3 says R2 bills as a Class A operation (a claim the plan marks <strong>[Verify]</strong>), and because a list that reloads on focus can reorder under the cursor. The cost is that changes by other tools need a manual refresh.</p>
+<p>Some queries override the 30 second default: <code>appInfo</code> and <code>settings</code> use <code>Infinity</code>, <code>connections</code> 60 seconds, <code>buckets</code> 5 minutes, and <code>media</code> tokens 4 minutes. Settings never go stale because every settings command returns the new <code>SettingsView</code> for <code>setQueryData</code>. Folder sizes (<code>prefixSize</code>) use <code>enabled: false</code>: the query is only a cache slot, filled when the user presses Calculate, because sizing a folder lists every object under it. <code>useConnections</code> is the one place the frontend polls: <code>refetchInterval</code> returns 5 seconds while any connection is <code>unknown</code> or <code>offline</code>, and <code>false</code> otherwise. <code>connection_list</code> reads in-memory state in Rust with no network request, so the poll only asks what Rust learned from other traffic. PLAN.md section 14 lists “no polling” as a strategy; this is a small, commented exception.</p>
+<section id="query-keys-as-a-hierarchy" class="level4">
+<h3>Query Keys as a Hierarchy</h3>
+<p>The <a href="https://tanstack.com/query/v5/docs/framework/react/guides/query-keys" target="_blank" rel="noopener noreferrer">query keys guide</a> says a key “should include every variable the query function uses that can change.” R2Dock defines every key in one object, <code>qk</code>, in <code>src/app/queries.ts</code>. Keys follow <code>[kind, connectionId, bucket, prefix or key]</code>, so a shorter key is a prefix of every longer key in its family, and the <a href="https://tanstack.com/query/v5/docs/framework/react/guides/query-invalidation" target="_blank" rel="noopener noreferrer">invalidation guide</a> matches “multiple queries by their prefix.” <code>qk.objectsBucket</code> invalidates every listing in a bucket; <code>qk.objectsAll</code> every listing of a connection, which <code>ConnectDialog</code> uses after keys are edited. Putting <code>connectionId</code> before the bucket is a correctness decision: two accounts can each have a bucket named <code>media-library</code>, and without the connection in the key one account’s listing could appear under the other.</p>
+</section>
+</section>
+<section id="optimistic-preferences" class="level3">
+<h2>Optimistic Preferences</h2>
+<p>The one <code>useMutation</code> is for preferences, where a toggle must apply instantly while the save happens in the background and may fail.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src/app/queries.ts#L138-L166" target="_blank" rel="noopener noreferrer">src/app/queries.ts, lines 138 to 166</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb2-1"><span class="co">/** Change one or more preferences. Applies immediately, then saves. */</span></span>
+<span id="cb2-2"><span class="im">export</span> <span class="kw">function</span> <span class="fu">useUpdatePreferences</span>() {</span>
+<span id="cb2-3">  <span class="kw">const</span> client <span class="op">=</span> <span class="fu">useQueryClient</span>()<span class="op">;</span></span>
+<span id="cb2-4">  <span class="kw">const</span> mutation <span class="op">=</span> <span class="fu">useMutation</span>({</span>
+<span id="cb2-5">    mutationFn<span class="op">:</span> (prefs<span class="op">:</span> Preferences) <span class="kw">=&gt;</span> <span class="fu">settingsSet</span>(prefs)<span class="op">,</span></span>
+<span id="cb2-6">    onMutate<span class="op">:</span> <span class="kw">async</span> (prefs) <span class="kw">=&gt;</span> {</span>
+<span id="cb2-7">      <span class="kw">const</span> change <span class="op">=</span> <span class="op">++</span>preferenceChanges<span class="op">;</span></span>
+<span id="cb2-8">      <span class="cf">await</span> client<span class="op">.</span><span class="fu">cancelQueries</span>({ queryKey<span class="op">:</span> qk<span class="op">.</span><span class="at">settings</span> })<span class="op">;</span></span>
+<span id="cb2-9">      <span class="kw">const</span> previous <span class="op">=</span> client<span class="op">.</span><span class="fu">getQueryData</span><span class="op">&lt;</span>SettingsView<span class="op">&gt;</span>(qk<span class="op">.</span><span class="at">settings</span>)<span class="op">;</span></span>
+<span id="cb2-10">      <span class="cf">if</span> (previous) client<span class="op">.</span><span class="fu">setQueryData</span><span class="op">&lt;</span>SettingsView<span class="op">&gt;</span>(qk<span class="op">.</span><span class="at">settings</span><span class="op">,</span></span>
+<span id="cb2-11">        { <span class="op">...</span>previous<span class="op">,</span> preferences<span class="op">:</span> prefs })<span class="op">;</span></span>
+<span id="cb2-12">      <span class="cf">return</span> { previous<span class="op">,</span> change }<span class="op">;</span></span>
+<span id="cb2-13">    }<span class="op">,</span></span>
+<span id="cb2-14">    onError<span class="op">:</span> (err<span class="op">,</span> _prefs<span class="op">,</span> ctx) <span class="kw">=&gt;</span> {</span>
+<span id="cb2-15">      toast<span class="op">.</span><span class="fu">danger</span>(<span class="fu">errorMessage</span>(err))<span class="op">;</span></span>
+<span id="cb2-16">      <span class="co">// A newer change is on its way and carries the full preferences.</span></span>
+<span id="cb2-17">      <span class="cf">if</span> (ctx<span class="op">?.</span><span class="at">change</span> <span class="op">!==</span> preferenceChanges) <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb2-18">      <span class="cf">if</span> (ctx<span class="op">.</span><span class="at">previous</span>) client<span class="op">.</span><span class="fu">setQueryData</span>(qk<span class="op">.</span><span class="at">settings</span><span class="op">,</span> ctx<span class="op">.</span><span class="at">previous</span>)<span class="op">;</span></span>
+<span id="cb2-19">      <span class="kw">void</span> client<span class="op">.</span><span class="fu">invalidateQueries</span>({ queryKey<span class="op">:</span> qk<span class="op">.</span><span class="at">settings</span> })<span class="op">;</span></span>
+<span id="cb2-20">    }<span class="op">,</span></span>
+<span id="cb2-21">    onSuccess<span class="op">:</span> (view<span class="op">,</span> _prefs<span class="op">,</span> ctx) <span class="kw">=&gt;</span> {</span>
+<span id="cb2-22">      <span class="co">// A late reply to an older change must not undo a newer one.</span></span>
+<span id="cb2-23">      <span class="cf">if</span> (ctx<span class="op">.</span><span class="at">change</span> <span class="op">===</span> preferenceChanges)</span>
+<span id="cb2-24">        client<span class="op">.</span><span class="fu">setQueryData</span>(qk<span class="op">.</span><span class="at">settings</span><span class="op">,</span> view)<span class="op">;</span></span>
+<span id="cb2-25">    }<span class="op">,</span></span>
+<span id="cb2-26">  })<span class="op">;</span></span>
+<span id="cb2-27">  <span class="co">// ...</span></span>
+<span id="cb2-28">}</span></code></pre></div>
+<p>The shape follows the <a href="https://tanstack.com/query/v5/docs/framework/react/guides/optimistic-updates" target="_blank" rel="noopener noreferrer">optimistic updates guide</a>: cancel in-flight fetches, snapshot, write, roll back on error. R2Dock adds the counter <code>preferenceChanges</code>. If a user moves concurrency from 3 to 4 and quickly to 6, two <code>settings_set</code> calls are in flight; writing the late reply to the first would flip the slider back to 4 while disk ends at 6. Older replies are therefore ignored, and older failures do not roll back, because each call sends the complete <code>Preferences</code>. The tests “ignores a late reply to an older change” and “a failed older change does not roll back a newer one” in <code>src/app/queries.test.tsx</code> reproduce both orderings.</p>
+<p>Here the code and PLAN.md disagree. Section 6.6 lists “theme” as Zustand UI state, and section 10 says theme and density live in “Zustand, persisted via settings commands.” The code keeps all preferences in the <code>settings</code> query; the comment on <code>useUiStore</code> says “Preferences live in the settings query.” One copy cannot disagree with itself after a failed save. The plan has not been updated.</p>
+</section>
+<section id="invalidation-after-changes" class="level3">
+<h2>Invalidation After Changes</h2>
+<p>Uploads are the hardest case: they complete one by one, sometimes thousands in a burst, and each changes a listing, search results, details, previews, and the size of every ancestor folder. <code>invalidateObjectChanges</code> handles a batch.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src/app/objectChanges.ts#L55-L66" target="_blank" rel="noopener noreferrer">src/app/objectChanges.ts, lines 55 to 66</a></p>
+</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb3-1"><span class="im">export</span> <span class="kw">function</span> <span class="fu">invalidateObjectChanges</span>(client<span class="op">:</span> QueryClient<span class="op">,</span></span>
+<span id="cb3-2">  changes<span class="op">:</span> Iterable<span class="op">&lt;</span>ObjectChange<span class="op">&gt;</span>)<span class="op">:</span> <span class="dt">void</span> {</span>
+<span id="cb3-3">  <span class="cf">for</span> (<span class="kw">const</span> g <span class="kw">of</span> <span class="fu">group</span>(changes)<span class="op">.</span><span class="fu">values</span>()) {</span>
+<span id="cb3-4">    <span class="kw">void</span> client<span class="op">.</span><span class="fu">invalidateQueries</span>({</span>
+<span id="cb3-5">      queryKey<span class="op">:</span> qk<span class="op">.</span><span class="fu">objectsBucket</span>(g<span class="op">.</span><span class="at">connectionId</span><span class="op">,</span> g<span class="op">.</span><span class="at">bucket</span>) })<span class="op">;</span></span>
+<span id="cb3-6">    <span class="kw">void</span> client<span class="op">.</span><span class="fu">invalidateQueries</span>({</span>
+<span id="cb3-7">      queryKey<span class="op">:</span> [<span class="st">"search"</span><span class="op">,</span> g<span class="op">.</span><span class="at">connectionId</span><span class="op">,</span> g<span class="op">.</span><span class="at">bucket</span>] })<span class="op">;</span></span>
+<span id="cb3-8">    <span class="kw">void</span> client<span class="op">.</span><span class="fu">invalidateQueries</span>({</span>
+<span id="cb3-9">      predicate<span class="op">:</span> (q) <span class="kw">=&gt;</span> OBJECT_KINDS<span class="op">.</span><span class="fu">has</span>(<span class="bu">String</span>(q<span class="op">.</span><span class="at">queryKey</span>[<span class="dv">0</span>]))</span>
+<span id="cb3-10">        <span class="op">&amp;&amp;</span> <span class="fu">inBucket</span>(q<span class="op">,</span> g) <span class="op">&amp;&amp;</span> g<span class="op">.</span><span class="at">keys</span><span class="op">.</span><span class="fu">has</span>(<span class="bu">String</span>(q<span class="op">.</span><span class="at">queryKey</span>[<span class="dv">3</span>]))<span class="op">,</span></span>
+<span id="cb3-11">    })<span class="op">;</span></span>
+<span id="cb3-12">    <span class="kw">void</span> client<span class="op">.</span><span class="fu">resetQueries</span>({</span>
+<span id="cb3-13">      predicate<span class="op">:</span> (q) <span class="kw">=&gt;</span> q<span class="op">.</span><span class="at">queryKey</span>[<span class="dv">0</span>] <span class="op">===</span> <span class="st">"prefixSize"</span> <span class="op">&amp;&amp;</span> <span class="fu">inBucket</span>(q<span class="op">,</span> g)</span>
+<span id="cb3-14">        <span class="op">&amp;&amp;</span> g<span class="op">.</span><span class="at">prefixes</span><span class="op">.</span><span class="fu">has</span>(<span class="bu">String</span>(q<span class="op">.</span><span class="at">queryKey</span>[<span class="dv">3</span>]))<span class="op">,</span></span>
+<span id="cb3-15">    })<span class="op">;</span></span>
+<span id="cb3-16">  }</span>
+<span id="cb3-17">}</span></code></pre></div>
+<p>Changes are grouped by bucket with their keys and ancestor prefixes, so the number of cache operations per bucket is fixed. Listings and search are invalidated by prefix; per-object views (<code>head</code>, <code>text</code>, <code>media</code>) by a predicate that touches only changed keys. Folder sizes are reset, not invalidated. The <a href="https://tanstack.com/query/v5/docs/reference/QueryClient" target="_blank" rel="noopener noreferrer">QueryClient reference</a> says <code>invalidateQueries</code> “Marks queries matching the given filters as invalidated” (refetching only active ones), while <code>resetQueries</code> returns them “back to their initial state”. For a disabled size query a reset empties it, so the Details panel shows Calculate again instead of a wrong number. The transfer subscription calls this once per burst with an 800 millisecond debounce (<a href="/books/r2dock/read/ch038#ch-28">Chapter 28</a>); the test “refreshes every view of an uploaded object once the burst settles” in <code>subscription.test.ts</code> checks that unrelated keys, accounts, and sibling folder sizes are left alone.</p>
+<p>Deletes and moves invalidate more coarsely. <code>DeleteFlow.tsx</code> invalidates the bucket’s listings, search, and sizes after <code>deleteExecute</code> resolves. <code>runMove</code> in <code>src/features/manage/moveRunner.ts</code> also invalidates every <code>head</code> entry, inside <code>finally</code>, because an R2 move is copy then delete and can leave objects in both places (<a href="/books/r2dock/read/ch017#ch-11">Chapter 11</a>, Object Management and Consistency). <code>DeleteFlow</code> invalidates only on success; the code does not show whether a rejected delete can have removed some objects first, so check <code>delete_execute_inner</code> before assuming nothing changed.</p>
+<p>The explicit refresh, <code>refreshCurrentView</code> in <code>src/app/refresh.ts</code>, resets the open folder’s listing and search rather than invalidating them. The <a href="https://tanstack.com/query/v5/docs/framework/react/guides/infinite-queries" target="_blank" rel="noopener noreferrer">infinite queries guide</a> explains that a stale infinite query refetches every loaded page in sequence; after scrolling ten pages, invalidation would cost ten requests, a reset costs one. <code>useGlobalShortcuts.ts</code> intercepts F5 and Ctrl or Command with R so the page itself never reloads and wipes every store. Switching connections clears selection and resets navigation; the old account’s cache entries stay under their own key until garbage collected.</p>
+</section>
+<section id="zustand-for-state-without-a-server" class="level3">
+<h2>Zustand for State Without a Server</h2>
+<p>The <a href="https://github.com/pmndrs/zustand" target="_blank" rel="noopener noreferrer">Zustand README</a> sums up its model: “Your store is a hook!” and “Select your state and the component will re-render on changes.” Code outside React reads “non-reactive fresh state” with <code>getState()</code>. R2Dock has about ten small stores beside the features that use them; the main ones are below.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Store</th>
+<th>File</th>
+<th>Holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>useNavStore</code></td>
+<td><code>src/app/navStore.ts</code></td>
+<td>View, bucket, prefix, history stacks</td>
+</tr>
+<tr>
+<td><code>useUiStore</code></td>
+<td><code>src/app/uiStore.ts</code></td>
+<td>Sidebar, panels, dock, dialogs</td>
+</tr>
+<tr>
+<td><code>useBrowserStore</code></td>
+<td><code>browser/browserStore.ts</code></td>
+<td>Selection, focus, search, sort</td>
+</tr>
+<tr>
+<td><code>useTransferStore</code></td>
+<td><code>transfers/transferStore.ts</code></td>
+<td>Transfer read model</td>
+</tr>
+<tr>
+<td><code>usePendingStore</code></td>
+<td><code>transfers/pendingStore.ts</code></td>
+<td>Cancel or pause clicks awaiting the engine</td>
+</tr>
+</tbody>
+</table></div>
+<p>Smaller ones are <code>useToastStore</code>, <code>useUploadStore</code>, <code>usePreviewStore</code>, <code>useOpsStore</code>, and <code>useDragStore</code>. Navigation is a store rather than a router because non-React code (a toast’s “Show” action, the drop handler) also changes location. <code>navigate</code> caps the back stack at 100 (<code>HISTORY_LIMIT</code>), clears the forward stack, and ignores navigation to the current location. PLAN.md section 11 describes history as “(connection, bucket, prefix)”, but <code>Location</code> holds view, bucket, and prefix; the code compensates by calling <code>reset</code> on every connection switch, so history never leads into another account’s bucket. Components subscribe with narrow selectors; event handlers read with <code>getState()</code>, so the keyboard handler’s Effect is installed once and still sees current values.</p>
+</section>
+<section id="the-transfer-read-model-and-pending-intent" class="level3">
+<h2>The Transfer Read Model and Pending Intent</h2>
+<p>The transfer queue arrives as a push stream, which fits a store with a pure reducer better than a fetch-oriented cache. <code>TransferState</code> in <code>src/features/transfers/transferStore.ts</code> holds jobs by id, an <code>order</code> array, a <code>seen</code> flag, and the last <code>authFailed</code> connection; <a href="/books/r2dock/read/ch038#ch-28">Chapter 28</a> dissects the reducer. The ownership rules are what matter here: a <code>snapshot</code> replaces everything, <code>added</code> and <code>updated</code> replace whole job snapshots, <code>progress</code> touches only byte counts and rates, and the frontend never invents a job state.</p>
+<p>The one deliberate exception lives in a separate store. Stopping a transfer can take seconds. <code>usePendingStore</code> records the click so the row shows “Cancelling…” at once, and <code>settlePending</code> clears it only when the engine reports a state outside the moving set; a job going from <code>running</code> to <code>verifying</code> keeps its pending cancel. The marker states intent, never a claim about the engine.</p>
+</section>
+<section id="ghost-rows-joining-two-sources" class="level3">
+<h2>Ghost Rows: Joining Two Sources</h2>
+<p>When a user uploads into the open folder, the files should appear at once with progress, though R2 will not list them until they finish. <code>useExplorerData</code> joins the query cache and the transfer store.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src/features/browser/useExplorerData.ts#L54-L70" target="_blank" rel="noopener noreferrer">src/features/browser/useExplorerData.ts, lines 54 to 70</a></p>
+</div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode ts"><code class="sourceCode typescript"><span id="cb4-1">  <span class="kw">const</span> jobs <span class="op">=</span> <span class="fu">useTransferStore</span>((s) <span class="kw">=&gt;</span> s<span class="op">.</span><span class="at">jobs</span>)<span class="op">;</span></span>
+<span id="cb4-2">  <span class="kw">const</span> order <span class="op">=</span> <span class="fu">useTransferStore</span>((s) <span class="kw">=&gt;</span> s<span class="op">.</span><span class="at">order</span>)<span class="op">;</span></span>
+<span id="cb4-3">  <span class="kw">const</span> listedAt <span class="op">=</span> listing<span class="op">.</span><span class="at">dataUpdatedAt</span><span class="op">;</span></span>
+<span id="cb4-4">  <span class="kw">const</span> ghosts<span class="op">:</span> GhostRow[] <span class="op">=</span> <span class="fu">useMemo</span>(() <span class="kw">=&gt;</span> {</span>
+<span id="cb4-5">    <span class="cf">if</span> (bucketSearch <span class="op">||</span> term) <span class="cf">return</span> []<span class="op">;</span></span>
+<span id="cb4-6">    <span class="kw">const</span> listedKeys <span class="op">=</span> <span class="kw">new</span> <span class="bu">Set</span>(listed<span class="op">.</span><span class="fu">map</span>((r) <span class="kw">=&gt;</span> r<span class="op">.</span><span class="at">id</span>))<span class="op">;</span></span>
+<span id="cb4-7">    <span class="kw">const</span> out<span class="op">:</span> GhostRow[] <span class="op">=</span> []<span class="op">;</span></span>
+<span id="cb4-8">    <span class="cf">for</span> (<span class="kw">const</span> id <span class="kw">of</span> order) {</span>
+<span id="cb4-9">      <span class="kw">const</span> j <span class="op">=</span> jobs[id]<span class="op">;</span></span>
+<span id="cb4-10">      <span class="cf">if</span> (<span class="op">!</span>j <span class="op">||</span> j<span class="op">.</span><span class="at">direction</span> <span class="op">!==</span> <span class="st">"upload"</span> <span class="op">||</span> j<span class="op">.</span><span class="at">connectionId</span> <span class="op">!==</span> connectionId</span>
+<span id="cb4-11">        <span class="op">||</span> j<span class="op">.</span><span class="at">bucket</span> <span class="op">!==</span> bucket) <span class="cf">continue</span><span class="op">;</span></span>
+<span id="cb4-12">      <span class="cf">if</span> (<span class="fu">parentPrefix</span>(j<span class="op">.</span><span class="at">key</span>) <span class="op">!==</span> prefix <span class="op">||</span> listedKeys<span class="op">.</span><span class="fu">has</span>(j<span class="op">.</span><span class="at">key</span>)) <span class="cf">continue</span><span class="op">;</span></span>
+<span id="cb4-13">      <span class="kw">const</span> done <span class="op">=</span> j<span class="op">.</span><span class="at">state</span> <span class="op">===</span> <span class="st">"completed"</span> <span class="op">&amp;&amp;</span> j<span class="op">.</span><span class="at">finishedAt</span> <span class="op">!==</span> <span class="kw">null</span></span>
+<span id="cb4-14">        <span class="op">&amp;&amp;</span> <span class="bu">Date</span><span class="op">.</span><span class="fu">parse</span>(j<span class="op">.</span><span class="at">finishedAt</span>) <span class="op">&gt;=</span> listedAt<span class="op">;</span></span>
+<span id="cb4-15">      <span class="cf">if</span> (<span class="fu">isTerminal</span>(j<span class="op">.</span><span class="at">state</span>) <span class="op">&amp;&amp;</span> <span class="op">!</span>done) <span class="cf">continue</span><span class="op">;</span></span>
+<span id="cb4-16">      <span class="co">// ... push { kind: "ghost", ... }</span></span>
+<span id="cb4-17">    }</span>
+<span id="cb4-18">    <span class="cf">return</span> out<span class="op">;</span></span>
+<span id="cb4-19">  }<span class="op">,</span> [jobs<span class="op">,</span> order<span class="op">,</span> listed<span class="op">,</span> listedAt<span class="op">,</span> connectionId<span class="op">,</span> bucket<span class="op">,</span> prefix<span class="op">,</span></span>
+<span id="cb4-20">    bucketSearch<span class="op">,</span> term])<span class="op">;</span></span></code></pre></div>
+<p>The subtle line is <code>done</code>. Between completion and the debounced refetch, the object exists in R2 but not in the cached list; dropping the ghost at completion would make the file vanish and reappear. So a completed upload keeps its ghost, marked “Uploaded”, if it finished after the listing loaded (<code>dataUpdatedAt</code>), and <code>listedKeys.has(j.key)</code> removes it once the refetched list contains the key. The tests “keeps a finished upload visible until the listing refresh shows it” and “does not show uploads that finished before the listing loaded” cover both paths. One hidden assumption: <code>finishedAt</code> comes from the Rust clock and <code>dataUpdatedAt</code> from the webview’s, which is sound only because both run on the same machine.</p>
+<p>Ordering races appear elsewhere too: <code>showInBucket</code> serializes requests through a promise chain and checks <code>request !== latest</code> after every <code>await</code>, so a slow account switch from an older click cannot navigate last. It uses <code>fetchQuery</code>, which the current TanStack reference marks deprecated; this book did not verify whether that applies to the locked 5.104.3 release.</p>
+<p>On failure these choices behave predictably: an unreachable R2 fails queries at once with code <code>network</code>; a webview reload loses every store, but listings refetch and the transfer store rebuilds from a new <code>snapshot</code>.</p>
+</section>
+<section id="working-on-this-code-26" class="level3">
+<h2>Working on This Code</h2>
+<p>Add new keys to <code>qk</code> in the <code>[kind, connectionId, bucket, rest]</code> shape so prefix invalidations cover them, and choose <code>staleTime</code> deliberately: anything costing R2 operations should not refetch on its own. For operations that change many objects, reuse <code>invalidateObjectChanges</code>. Prefer <code>resetQueries</code> when stale data would mislead or refetching every page would waste requests.</p>
+<p>Never put secrets in a store or the query cache. Never write a job state the engine did not send; intent goes in <code>usePendingStore</code>. Preferences live in the <code>settings</code> query. Tests include <code>src/app/queries.test.tsx</code>, <code>src/features/transfers/subscription.test.ts</code>, <code>transferStore.test.ts</code>, <code>useExplorerData.test.tsx</code>, <code>refresh.test.ts</code>, and <code>showInBucket.test.ts</code>; run them with <code>npm test</code> or one file with <code>npx vitest run src/app/queries.test.tsx</code>. In tests, use <code>testQueryClient()</code> from <code>src/test/utils.tsx</code> (with <code>gcTime: Infinity</code>), not the app’s factory.</p>
+</section>
+<section id="further-reading-26" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>src/app/queries.ts</code>, query keys, defaults, and the preferences mutation.</li>
+<li><code>src/app/objectChanges.ts</code>, batched invalidation after uploads.</li>
+<li><a href="https://tanstack.com/query/v5/docs/framework/react/guides/query-invalidation" target="_blank" rel="noopener noreferrer">TanStack Query: Query Invalidation</a>.</li>
+<li><a href="https://tanstack.com/query/v5/docs/framework/react/guides/optimistic-updates" target="_blank" rel="noopener noreferrer">TanStack Query: Optimistic Updates</a>.</li>
+<li><a href="https://github.com/pmndrs/zustand" target="_blank" rel="noopener noreferrer">Zustand README</a>.</li>
+</ul>
+</section>
+</section>

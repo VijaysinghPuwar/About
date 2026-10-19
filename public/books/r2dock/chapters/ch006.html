@@ -1,0 +1,137 @@
+<section id="ch-02" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">2</span> Complete Software Architecture</h1>
+<p>This chapter maps R2Dock’s processes, layers, crates, Inter-Process Communication (IPC) paths, and operating system services. Later chapters zoom into each part.</p>
+<section id="two-processes-and-a-trust-boundary" class="level3">
+<h2>Two Processes and a Trust Boundary</h2>
+<p>The <a href="https://v2.tauri.app/concept/process-model/" target="_blank" rel="noopener noreferrer">Tauri process model documentation</a> calls the Rust side the core process, “the only component with full access to the operating system”; the interface runs in a separate webview process (WebView2 on Windows, WKWebView on macOS, WebKitGTK on Linux). It recommends keeping secrets and business logic in the core.</p>
+<p><code>docs/adr/0001-architecture.md</code> puts all R2 traffic, credentials, file access, and transfers in Rust; React only renders and calls allowlisted typed commands. <code>PLAN.md</code> section 7 adds that commands stay thin, services live in crates without a Tauri dependency so they can be tested without a window, and only the secret store adapter and R2 client builder ever see a secret.</p>
+<p>The webview renders untrusted strings from a remote bucket. If an attacker ran script there, the damage is limited to a fixed list of 56 commands, none of which returns a secret or accepts an arbitrary local path (<a href="/books/r2dock/read/ch031#ch-22">Chapter 22</a>, Tauri Security Architecture).</p>
+</section>
+<section id="the-layers-inside-the-application" class="level3">
+<h2>The Layers Inside the Application</h2>
+<p>Figure 2.1 shows the layers: a React screen calls a typed wrapper, Tauri checks the message against the capability allowlist, a command handler validates it and calls a service, and the service uses the workspace crates, which reach the operating system and network. Events flow back through a channel.</p>
+<figure id="fig-02-layers">
+<img src="/books/r2dock/media/file0.webp" alt="A webview box with React screens calling commands.ts sends invoke JSON down into the core process box: Tauri IPC gate, command handlers, app services in AppState, then workspace crates, which point to operating system services and to the network and FFmpeg. A dashed Channel events arrow returns from the services to the webview." width="1102" height="1676" loading="lazy" decoding="async">
+<figcaption>Figure 2.1. The layers of R2Dock, from React screens in the webview, through the Tauri IPC gate and command handlers, to services, workspace crates, and operating system and network resources.</figcaption>
+</figure>
+<p>In <code>src/</code>, screens live in <code>src/features/</code>, and all calls into Rust go through <code>src/ipc/commands.ts</code>, whose header says “The frontend calls Rust only through this module” (<a href="/books/r2dock/read/ch036#ch-26">Chapter 26</a>, React and Tauri IPC).</p>
+<p>The gate is configured by three files. <code>src-tauri/tauri.conf.json</code> sets the Content Security Policy (CSP) and disables <code>withGlobalTauri</code>. <code>src-tauri/build.rs</code> passes a <code>COMMANDS</code> array of 56 names to <code>tauri_build::AppManifest::new().commands</code>, and <code>src-tauri/capabilities/main.json</code> grants the main window each generated permission by name, such as <code>allow-object-list</code>. The <a href="https://v2.tauri.app/security/capabilities/" target="_blank" rel="noopener noreferrer">Tauri capabilities documentation</a> explains why: by default every registered command is callable from every window. A registered command missing from the capability file cannot be called. <code>docs/adr/0003-ipc-types.md</code> notes the cost: command names are listed by hand in <code>commands.ts</code>, <code>build.rs</code>, and the capability file.</p>
+</section>
+<section id="the-command-layer-and-application-state" class="level3">
+<h2>The Command Layer and Application State</h2>
+<p>Handlers live in seven topic modules under <code>src-tauri/src/commands/</code> and are registered with <code>tauri::generate_handler!</code> in <code>src-tauri/src/lib.rs</code>. The helper most browsing commands use shows the “validate, call a service, map errors” contract.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src-tauri/src/commands/mod.rs#L20-L30" target="_blank" rel="noopener noreferrer">src-tauri/src/commands/mod.rs, lines 20 to 30</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">/// Run an R2 call for a connection, tracking its online status.</span></span>
+<span id="cb1-2"><span class="kw">pub</span> <span class="kw">async</span> <span class="kw">fn</span> with_client<span class="op">&lt;</span>T<span class="op">,</span> F<span class="op">,</span> Fut<span class="op">&gt;</span>(</span>
+<span id="cb1-3">    state<span class="op">:</span> <span class="op">&amp;</span>AppState<span class="op">,</span></span>
+<span id="cb1-4">    connection<span class="op">:</span> Uuid<span class="op">,</span></span>
+<span id="cb1-5">    f<span class="op">:</span> F</span>
+<span id="cb1-6">) <span class="op">-&gt;</span> CmdResult<span class="op">&lt;</span>T<span class="op">&gt;</span></span>
+<span id="cb1-7"><span class="kw">where</span></span>
+<span id="cb1-8">    F<span class="op">:</span> <span class="bu">FnOnce</span>(R2Client) <span class="op">-&gt;</span> Fut<span class="op">,</span></span>
+<span id="cb1-9">    Fut<span class="op">:</span> <span class="pp">std::future::</span><span class="bu">Future</span><span class="op">&lt;</span>Output <span class="op">=</span> <span class="dt">Result</span><span class="op">&lt;</span>T<span class="op">,</span> R2Error<span class="op">&gt;&gt;,</span></span>
+<span id="cb1-10"><span class="op">{</span></span>
+<span id="cb1-11">    <span class="kw">let</span> client <span class="op">=</span> state<span class="op">.</span>connections<span class="op">.</span>client(connection)<span class="op">.</span><span class="kw">await</span><span class="op">?;</span></span>
+<span id="cb1-12">    <span class="kw">let</span> result <span class="op">=</span> f(client)<span class="op">.</span><span class="kw">await</span><span class="op">;</span></span>
+<span id="cb1-13">    state<span class="op">.</span>connections<span class="op">.</span>note_result(connection<span class="op">,</span> <span class="op">&amp;</span>result)<span class="op">;</span></span>
+<span id="cb1-14">    result<span class="op">.</span>map_err(<span class="pp">AppError::</span>from)</span>
+<span id="cb1-15"><span class="op">}</span></span></code></pre></div>
+<p><code>CmdResult&lt;T&gt;</code> is <code>Result&lt;T, AppError&gt;</code>; the generics and <code>?</code> are explained in <a href="/books/r2dock/read/ch009#ch-04">Chapter 4</a> (Rust Concepts Used in R2Dock). Architecturally, the command never builds a client or sees the secret. The connection service reads the secret from the credential store on a blocking thread, builds an AWS software development kit (SDK) client, caches it, and records whether the connection is reachable.</p>
+<p>The services live in one struct, <code>AppState</code>, which <code>setup</code> in <code>src-tauri/src/lib.rs</code> builds once and registers with <code>app.manage</code>, so any command can take it as <code>State&lt;'_, AppState&gt;</code>.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src-tauri/src/state.rs#L112-L126" target="_blank" rel="noopener noreferrer">src-tauri/src/state.rs, lines 112 to 126</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="kw">pub</span> <span class="kw">struct</span> AppState <span class="op">{</span></span>
+<span id="cb2-2">    <span class="kw">pub</span> paths<span class="op">:</span> Paths<span class="op">,</span></span>
+<span id="cb2-3">    <span class="kw">pub</span> settings<span class="op">:</span> RwLock<span class="op">&lt;</span>SettingsFile<span class="op">&gt;,</span></span>
+<span id="cb2-4">    <span class="kw">pub</span> connections<span class="op">:</span> Arc<span class="op">&lt;</span>ConnectionService<span class="op">&gt;,</span></span>
+<span id="cb2-5">    <span class="kw">pub</span> engine<span class="op">:</span> Engine<span class="op">,</span></span>
+<span id="cb2-6">    <span class="kw">pub</span> selections<span class="op">:</span> Registry<span class="op">&lt;</span><span class="dt">Vec</span><span class="op">&lt;</span><span class="dt">PathBuf</span><span class="op">&gt;&gt;,</span></span>
+<span id="cb2-7">    <span class="kw">pub</span> uploads<span class="op">:</span> Registry<span class="op">&lt;</span>PreparedUpload<span class="op">&gt;,</span></span>
+<span id="cb2-8">    <span class="kw">pub</span> deletes<span class="op">:</span> Registry<span class="op">&lt;</span>PendingDelete<span class="op">&gt;,</span></span>
+<span id="cb2-9">    <span class="kw">pub</span> moves<span class="op">:</span> Registry<span class="op">&lt;</span>PendingMove<span class="op">&gt;,</span></span>
+<span id="cb2-10">    <span class="kw">pub</span> media<span class="op">:</span> MediaRegistry<span class="op">,</span></span>
+<span id="cb2-11">    <span class="kw">pub</span> credential_store_label<span class="op">:</span> <span class="dt">String</span><span class="op">,</span></span>
+<span id="cb2-12">    <span class="kw">pub</span> activity<span class="op">:</span> Arc<span class="op">&lt;</span><span class="kw">crate</span><span class="pp">::activity::</span>ActivityLog<span class="op">&gt;,</span></span>
+<span id="cb2-13">    <span class="kw">pub</span> compression<span class="op">:</span> <span class="kw">crate</span><span class="pp">::compression::</span>CompressionService<span class="op">,</span></span>
+<span id="cb2-14">    <span class="kw">pub</span> public_links<span class="op">:</span> <span class="kw">crate</span><span class="pp">::public_links::</span>PublicLinks<span class="op">,</span></span>
+<span id="cb2-15"><span class="op">}</span></span></code></pre></div>
+<p><code>settings</code> sits behind a read-write lock, <code>connections</code> is the <code>ConnectionService</code> in <code>src-tauri/src/connections.rs</code>, <code>engine</code> comes from <code>r2dock-transfer</code>, and <code>media</code> issues preview tokens. The four <code>Registry</code> fields map opaque random identifiers to values that expire after 15 minutes, implementing a core security rule: local paths never come from the frontend. <code>pick_upload_files</code> opens a native dialog from Rust (<code>src-tauri/src/dialogs.rs</code>), stores the paths in <code>state.selections</code>, and returns a <code>Selection</code> with only an identifier, a count, and up to three display names. Drag and drop works the same way (<code>src-tauri/src/dragdrop.rs</code>), so a compromised webview can refer only to files the user chose. Deletes use the idea in reverse: <code>delete_preview</code> stores a <code>PendingDelete</code> under a token, and <code>delete_execute</code> accepts only that token, refusing expired or unknown ones (<a href="/books/r2dock/read/ch017#ch-11">Chapter 11</a>, Object Management and Consistency).</p>
+</section>
+<section id="the-rust-crates-and-their-dependencies" class="level3">
+<h2>The Rust Crates and Their Dependencies</h2>
+<p>The root <code>Cargo.toml</code> declares seven workspace members: six crates under <code>crates/</code> and the application crate in <code>src-tauri/</code>. Figure 2.2 shows the internal dependencies as the manifests declare them; a dashed arrow marks a test-only dependency.</p>
+<figure id="fig-02-crates">
+<img src="/books/r2dock/media/file1.webp" alt="The app crate r2dock points to all five library crates. r2dock-transfer points to r2dock-r2, r2dock-media, and r2dock-core, and r2dock-r2 and r2dock-media each point to r2dock-core. r2dock-secrets has no internal dependencies. A grey r2dock-testkit box has dashed dev arrows from the app, transfer, and r2 crates." width="1334" height="1208" loading="lazy" decoding="async">
+<figcaption>Figure 2.2. The R2Dock crate dependency graph: the app crate depends on all five library crates, the transfer crate depends on r2, media, and core, and r2 and media depend on core; the testkit crate is a test-only dependency.</figcaption>
+</figure>
+<p><code>r2dock-core</code> holds pure logic (keys, path safety, part planning, settings) and the shared <code>AppError</code>; it depends on no workspace crate and not on Tokio. <code>r2dock-secrets</code> adapts the <code>keyring</code> crate per platform; its module comment warns that every call may block and must be wrapped in <code>spawn_blocking</code>. <code>r2dock-r2</code> wraps the AWS SDK for S3 plus a read-only Cloudflare REST client, <code>r2dock-media</code> runs probing and FFmpeg, and <code>r2dock-transfer</code> is the engine: queue, scheduler, uploads, downloads, journal, and history.</p>
+<p>The application crate, <code>r2dock</code> (library <code>r2dock_lib</code>), depends on all five plus Tauri and its plugins (dialog, notification, clipboard manager, opener, single instance). <code>r2dock-testkit</code> provides an in-process S3-compatible server and a mock Cloudflare API, only under <code>[dev-dependencies]</code> (<code>docs/adr/0005-testing-against-local-s3.md</code>). The graph is a strict layering with no cycles and Tauri only at the top, which is why most logic is tested with <code>cargo test -p r2dock-transfer</code> or <code>cargo test -p r2dock-core</code> without a window.</p>
+</section>
+<section id="ipc-path-one-commands" class="level3">
+<h2>IPC Path One: Commands</h2>
+<p>The <a href="https://v2.tauri.app/concept/inter-process-communication/" target="_blank" rel="noopener noreferrer">Tauri IPC concept page</a> describes commands as using “a JSON-RPC like protocol under the hood”. The <a href="https://v2.tauri.app/develop/calling-rust/" target="_blank" rel="noopener noreferrer">Calling Rust guide</a> adds that arguments arrive with camelCase keys, that return values and errors must implement <code>serde::Serialize</code>, and that async commands run as separate tasks. Figure 2.3 follows one folder listing.</p>
+<figure id="fig-02-ipc-command">
+<img src="/books/r2dock/media/file2.webp" alt="The webview invokes object_list with JSON. The command validates its input, gets a cached client from the connection service, sends ListObjectsV2 to R2, receives one page, and returns a ListPage or an AppError." width="1400" height="1157" loading="lazy" decoding="async">
+<figcaption>Figure 2.3. Sequence of a folder listing: the webview invokes object_list, which validates input, gets a cached client from the connection service, calls ListObjectsV2 on R2, and returns a ListPage or an AppError.</figcaption>
+</figure>
+<p><code>object_list</code> in <code>src-tauri/src/commands/browse.rs</code> validates bucket and prefix with <code>r2dock-core</code> helpers, calls <code>with_client</code>, and records the activity. <code>R2Client::list_page</code> in <code>crates/r2dock-r2/src/list.rs</code> sends <code>ListObjectsV2</code> with a <code>/</code> delimiter and rejects a truncated page without a continuation token or with a repeated token, which would otherwise loop forever.</p>
+<p>Types on both sides come from one source: Rust types derive <code>ts_rs::TS</code>, and <code>cargo test</code> writes TypeScript definitions into <code>src/ipc/bindings/</code> (set by <code>TS_RS_EXPORT_DIR</code> in <code>.cargo/config.toml</code>). The Linux continuous integration (CI) job fails if they differ from the committed files. The error type shows what crosses the boundary.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-core/src/app_error.rs#L37-L53" target="_blank" rel="noopener noreferrer">crates/r2dock-core/src/app_error.rs, lines 37 to 53</a></p>
+</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb3-1"><span class="at">#[</span>derive<span class="at">(</span><span class="bu">Debug</span><span class="op">,</span> <span class="bu">Clone</span><span class="op">,</span> <span class="bu">PartialEq</span><span class="op">,</span> <span class="bu">Eq</span><span class="op">,</span> Serialize<span class="op">,</span> TS<span class="at">)]</span></span>
+<span id="cb3-2"><span class="at">#[</span>serde<span class="at">(</span>rename_all <span class="op">=</span> <span class="st">"camelCase"</span><span class="at">)]</span></span>
+<span id="cb3-3"><span class="at">#[</span>ts<span class="at">(</span>export<span class="at">)]</span></span>
+<span id="cb3-4"><span class="kw">pub</span> <span class="kw">struct</span> AppError <span class="op">{</span></span>
+<span id="cb3-5">    <span class="kw">pub</span> code<span class="op">:</span> ErrorCode<span class="op">,</span></span>
+<span id="cb3-6">    <span class="co">/// One plain sentence suitable for the UI.</span></span>
+<span id="cb3-7">    <span class="kw">pub</span> message<span class="op">:</span> <span class="dt">String</span><span class="op">,</span></span>
+<span id="cb3-8">    <span class="co">/// Optional technical detail (error code, request id). Never a secret.</span></span>
+<span id="cb3-9">    <span class="kw">pub</span> detail<span class="op">:</span> <span class="dt">Option</span><span class="op">&lt;</span><span class="dt">String</span><span class="op">&gt;,</span></span>
+<span id="cb3-10">    <span class="kw">pub</span> retryable<span class="op">:</span> <span class="dt">bool</span><span class="op">,</span></span>
+<span id="cb3-11">    <span class="co">/// Bucket names, object keys, or file names that appear in `message` or</span></span>
+<span id="cb3-12">    <span class="co">/// `detail`. Never sent to the frontend; the activity log uses them to</span></span>
+<span id="cb3-13">    <span class="co">/// hide those names when the user has not allowed names in the log.</span></span>
+<span id="cb3-14">    <span class="at">#[</span>serde<span class="at">(</span>skip<span class="at">)]</span></span>
+<span id="cb3-15">    <span class="at">#[</span>ts<span class="at">(</span>skip<span class="at">)]</span></span>
+<span id="cb3-16">    <span class="kw">pub</span> names<span class="op">:</span> <span class="dt">Vec</span><span class="op">&lt;</span><span class="dt">String</span><span class="op">&gt;,</span></span>
+<span id="cb3-17"><span class="op">}</span></span></code></pre></div>
+<p>The frontend gets a stable <code>code</code>, a displayable sentence, an optional detail such as an R2 request identifier, and a <code>retryable</code> flag. <code>names</code> is skipped by serde and ts-rs, and the test <code>marked_names_never_cross_ipc</code> asserts it is absent from the serialized form.</p>
+</section>
+<section id="ipc-path-two-channels-and-events" class="level3">
+<h2>IPC Path Two: Channels and Events</h2>
+<p>For the stream of transfer updates, the Calling Rust guide recommends channels for ordered, high-throughput streaming, since event listeners can see events out of order. The <code>transferSubscribe</code> wrapper in <code>src/ipc/commands.ts</code> creates a <code>Channel&lt;TransferEvent&gt;</code>, sets its <code>onmessage</code> handler, and passes it to <code>transfer_subscribe</code> as the <code>onEvent</code> argument. Figure 2.4 shows the rest.</p>
+<figure id="fig-02-ipc-channel">
+<img src="/books/r2dock/media/file3.webp" alt="The webview invokes the subscribe command with a Channel, and the command subscribes to the engine. The engine sends a snapshot. When a job task reports a state change, the engine sends an Updated event, and progress batches follow every 250 milliseconds. The webview applies events every 50 milliseconds." width="1400" height="1167" loading="lazy" decoding="async">
+<figcaption>Figure 2.4. Sequence of the transfer event channel: the webview invokes the subscribe command with a Channel, the engine sends a snapshot, then forwards job state changes and progress every 250 milliseconds, which the webview applies every 50 milliseconds.</figcaption>
+</figure>
+<p><code>transfer_subscribe</code> passes the channel to <code>Engine::subscribe</code>, which sends a full <code>Snapshot</code> first under a delivery lock, so no event can arrive before it or slip between snapshot and subscription. Then come <code>Added</code>, <code>Updated</code>, <code>Removed</code>, <code>Progress</code>, and <code>AuthFailed</code> events. A ticker batches progress for all jobs at most every 250 milliseconds (the default <code>progress_interval</code> in <code>EngineConfig</code>), and <code>src/features/transfers/subscription.ts</code> batches again for 50 milliseconds. Bulk deletes, moves, and the FFmpeg download also take a channel; the drag and drop bridge uses a plain event, <code>r2dock://drag</code>.</p>
+</section>
+<section id="ipc-path-three-the-media-protocol" class="level3">
+<h2>IPC Path Three: The Media Protocol</h2>
+<p>A presigned R2 URL in the webview would be a credential-equivalent link. Instead, <code>run</code> registers a URI scheme, <code>r2dock-media</code>: <code>media_token</code> maps an opaque token to a bucket and key, and the handler in <code>src-tauri/src/media.rs</code> fetches with range support, size caps, and two static semaphores. The CSP allows this scheme for images and media and nothing remote (<a href="/books/r2dock/read/ch033#ch-24">Chapter 24</a>, The Custom Media Preview Protocol).</p>
+</section>
+<section id="operating-system-services-and-lifecycle" class="level3">
+<h2>Operating System Services and Lifecycle</h2>
+<p>At startup <code>setup</code> writes, reads, and deletes a probe credential; on failure the app uses session-only memory storage, never a plaintext file (<code>docs/adr/0002-credential-store.md</code>). Dialogs, notifications, clipboard, and link opening go through plugins called from Rust, and <code>open_external</code> refuses anything but <code>https://</code> URLs. Downloads always pass through the path guard (<a href="/books/r2dock/read/ch032#ch-23">Chapter 23</a>, Filesystem Security). FFmpeg runs in its own process group or Windows Job Object (<a href="/books/r2dock/read/ch025#ch-17">Chapter 17</a>). In the background, the engine runs a scheduler task and a progress ticker, its two journals each run a writer task, and the activity log runs an operating system thread named <code>r2dock-activity</code> (<a href="/books/r2dock/read/ch010#ch-05">Chapter 5</a>, Tokio and Asynchronous Execution).</p>
+<p><code>run</code> installs the plugins, protocol, and command list, exiting with status 1 instead of panicking if that fails. <code>setup</code> loads settings and connections, probes the credential store, starts the engine and activity log, starts a background sweep of compressed copies left by a crash (<a href="/books/r2dock/read/ch022#ch-15">Chapter 15</a>), and registers <code>AppState</code>. On <code>RunEvent::Exit</code>, <code>engine.flush()</code> writes resumable state and the queue to disk, and the activity log shuts down within two seconds (<a href="/books/r2dock/read/ch021#ch-14">Chapter 14</a>, Journals and Persistent Queues).</p>
+</section>
+<section id="working-on-this-code-1" class="level3">
+<h2>Working on This Code</h2>
+<p>To add a command, write the handler under <code>src-tauri/src/commands/</code>, register it in <code>tauri::generate_handler!</code> in <code>src-tauri/src/lib.rs</code>, add its name to <code>COMMANDS</code> in <code>src-tauri/build.rs</code>, add <code>allow-&lt;name&gt;</code> to <code>src-tauri/capabilities/main.json</code>, and add a wrapper in <code>src/ipc/commands.ts</code>. Forgetting one list shows up as a runtime permission error, not a compile error. A new data shape derives <code>TS</code> with <code>#[ts(export)]</code>; run <code>cargo test --workspace</code> and commit the generated binding, because CI compares it.</p>
+<p>Keep handlers thin and put logic in a workspace crate. No command may return a secret or accept a local path string, destructive bulk operations need a backend token from a preview call, and remote content is never rendered as HTML. Run <code>cargo test -p r2dock</code> (connection and registry tests), <code>cargo test -p r2dock-core</code>, and <code>npm test</code>.</p>
+</section>
+<section id="further-reading-1" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>docs/adr/0001-architecture.md</code> and <code>docs/adr/0003-ipc-types.md</code></li>
+<li><code>src-tauri/src/lib.rs</code> and <code>src-tauri/src/state.rs</code></li>
+<li><a href="https://v2.tauri.app/concept/process-model/" target="_blank" rel="noopener noreferrer">Tauri process model</a></li>
+<li><a href="https://v2.tauri.app/develop/calling-rust/" target="_blank" rel="noopener noreferrer">Calling Rust from the frontend</a></li>
+<li><a href="https://v2.tauri.app/security/capabilities/" target="_blank" rel="noopener noreferrer">Tauri capabilities</a></li>
+</ul>
+</section>
+</section>

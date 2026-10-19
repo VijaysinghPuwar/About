@@ -1,0 +1,192 @@
+<section id="ch-20" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">20</span> Compression Scheduling and Data Integrity</h1>
+<p>The previous chapters treated compression as a function: give it a file, get back a smaller copy or a reason to upload the original. In the running app, that function sits between a user’s file and an upload that may happen hours or a restart later. Meanwhile the user can edit the original, the copy can be altered, the app can be killed mid-encode, and the disk can fill. This chapter shows how R2Dock uploads only a verified encode of the file the user chose and leaves nothing behind. The code is mostly in <code>crates/r2dock-transfer/src/engine/compress.rs</code>, with <code>source.rs</code> and <code>engine/mod.rs</code> in the same crate. Job states belong to <a href="/books/r2dock/read/ch020#ch-13">Chapter 13</a> (Transfer State Machines) and the journal to <a href="/books/r2dock/read/ch021#ch-14">Chapter 14</a> (Journals and Persistent Queues).</p>
+<section id="two-stages-one-job" class="level3">
+<h2>Two Stages, One Job</h2>
+<p>A compressed upload is one job with two stages: <code>Queued</code> (needs compression), <code>Compressing</code>, <code>Queued</code> again, then the normal upload from <a href="/books/r2dock/read/ch015#ch-09">Chapter 9</a> (Multipart Uploads in Depth). The job’s <code>UploadSpec</code> in <code>model.rs</code> holds the request (<code>compression</code>: settings and failure policy) and the outcome (<code>compressed</code>: a <code>CompressionResult</code> that is <code>Compressed</code>, <code>Unchanged</code>, or <code>Failed</code>). <code>needs_compression</code> is true exactly when a request exists without an outcome, and since the specification is journaled, the decision survives a restart.</p>
+<p>A job waiting for or running an encode holds no upload slot. <code>schedule_compression</code> starts encodes up to <code>encode_limit</code> (1 by default, up to 4) and only while finished copies awaiting upload stay within a bound; <a href="/books/r2dock/read/ch012#ch-07">Chapter 7</a> (Backpressure and Resource Management) owns that bound. A picked job becomes <code>Compressing</code>, gets a fresh <code>RunControl</code> (the pause and cancel handle from <a href="/books/r2dock/read/ch023#ch-16">Chapter 16</a>), and runs <code>compress_job</code> as its own task. Figure 20.1 shows the path and its integrity checks.</p>
+<figure id="fig-20-compress-upload">
+<img src="/books/r2dock/media/file25.webp" alt="A top to bottom flow. A queued job is opened and fingerprinted, then encoded and verified. If the original changed, the encode repeats up to two more times; if it keeps changing, or the encode errors, the failure policy decides. Otherwise the copy&#x27;s SHA-256 is saved in the journal. Before each upload attempt the original and copy are checked; a mismatch drops the copy and requeues the job. A successful upload completes the job and deletes the copy." width="1078" height="1836" loading="lazy" decoding="async">
+<figcaption>Figure 20.1. The compressed upload path: the original is fingerprinted, the copy is encoded and verified, the original is checked unchanged, the copy is hashed and journaled, and both are checked again before every upload attempt.</figcaption>
+</figure>
+</section>
+<section id="where-temporary-files-live" class="level3">
+<h2>Where Temporary Files Live</h2>
+<p>The work folder is <code>paths.cache.join("compress")</code> in the app’s cache directory (set in <code>src-tauri/src/lib.rs</code>). Copies are named <code>&lt;job id&gt;.&lt;ext&gt;</code>, and sample files <code>&lt;job id&gt;.sample.&lt;ext&gt;</code> are deleted right after measuring, so jobs never collide and the user’s folders are never written.</p>
+<p>Before a full encode, <code>pipeline.rs</code> requires free space of <code>SPACE_FACTOR</code> (1.2) times the estimate. A full disk is not a failure: the original is uploaded as <code>Unchanged::NoDiskSpace</code>. Because the check uses <code>is_ok_and</code>, unknown free space lets the encode proceed, and since it is a snapshot, another program filling the disk is only detected later as an FFmpeg error. The scale benchmark did not drive it to a full disk.</p>
+</section>
+<section id="proving-the-original-did-not-change" class="level3">
+<h2>Proving the Original Did Not Change</h2>
+<p>A file still being recorded, synced, or edited could change mid-encode, giving a copy of a version that no longer exists. R2Dock opens the original through <code>SourceFile::open</code> in <code>source.rs</code>, as an upload does: no symbolic links, regular files only, identity (device and inode on Unix) compared with the scan, and a <code>Fingerprint</code> of length and modification time in nanoseconds (see <a href="/books/r2dock/read/ch032#ch-23">Chapter 23</a>, Filesystem Security). After an encode, the same <code>SourceFile</code> checks for changes before the copy is recorded.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/engine/compress.rs#L476-L516" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/engine/compress.rs, lines 476 to 516</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1">    <span class="kw">let</span> <span class="cn">Ok</span>(<span class="pp">Prepared::</span>Compressed(c)) <span class="op">=</span> <span class="op">&amp;</span>result <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb1-2">        <span class="cf">break</span> (result<span class="op">,</span> fingerprint<span class="op">,</span> <span class="cn">None</span>)<span class="op">;</span></span>
+<span id="cb1-3">    <span class="op">};</span></span>
+<span id="cb1-4">    <span class="co">// The original must not have changed while it was compressed, and</span></span>
+<span id="cb1-5">    <span class="co">// the verified copy is recorded exactly (size, identity, SHA-256)</span></span>
+<span id="cb1-6">    <span class="co">// so a later change to it is noticed before upload.</span></span>
+<span id="cb1-7">    <span class="kw">let</span> output <span class="op">=</span> c<span class="op">.</span>output<span class="op">.</span>clone()<span class="op">;</span></span>
+<span id="cb1-8">    <span class="kw">let</span> checked <span class="op">=</span> <span class="pp">tokio::task::</span>spawn_blocking(<span class="kw">move</span> <span class="op">||</span> <span class="op">{</span></span>
+<span id="cb1-9">        source</span>
+<span id="cb1-10">            <span class="op">.</span>ensure_unchanged()</span>
+<span id="cb1-11">            <span class="op">.</span>ok()</span>
+<span id="cb1-12">            <span class="op">.</span>map(<span class="op">|</span>()<span class="op">|</span> digest_written(<span class="op">&amp;</span>output))</span>
+<span id="cb1-13">    <span class="op">}</span>)</span>
+<span id="cb1-14">    <span class="op">.</span><span class="kw">await</span></span>
+<span id="cb1-15">    <span class="op">.</span>ok()</span>
+<span id="cb1-16">    <span class="op">.</span>flatten()<span class="op">;</span></span>
+<span id="cb1-17">    <span class="cf">match</span> checked <span class="op">{</span></span>
+<span id="cb1-18">        <span class="cn">Some</span>(<span class="cn">Ok</span>((file<span class="op">,</span> sha256))) <span class="cf">if</span> file<span class="op">.</span>len <span class="op">==</span> c<span class="op">.</span>size <span class="op">=&gt;</span> <span class="op">{</span></span>
+<span id="cb1-19">            <span class="cf">break</span> (result<span class="op">,</span> fingerprint<span class="op">,</span> <span class="cn">Some</span>(CopyDigest <span class="op">{</span> file<span class="op">,</span> sha256 <span class="op">}</span>))<span class="op">;</span></span>
+<span id="cb1-20">        <span class="op">}</span></span>
+<span id="cb1-21">        <span class="co">// ...</span></span>
+<span id="cb1-22">    <span class="kw">let</span> _ <span class="op">=</span> <span class="pp">std::fs::</span>remove_file(<span class="op">&amp;</span>c<span class="op">.</span>output)<span class="op">;</span></span>
+<span id="cb1-23">    attempts <span class="op">+=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb1-24">    <span class="cf">if</span> attempts <span class="op">&gt;</span> CHANGED_RETRIES <span class="op">{</span></span>
+<span id="cb1-25">        <span class="cf">break</span> (</span>
+<span id="cb1-26">            <span class="cn">Err</span>(<span class="pp">EncodeError::</span>Failed(<span class="st">"the file is still changing"</span><span class="op">.</span>into()))<span class="op">,</span></span>
+<span id="cb1-27">            fingerprint<span class="op">,</span></span>
+<span id="cb1-28">            <span class="cn">None</span><span class="op">,</span></span>
+<span id="cb1-29">        )<span class="op">;</span></span>
+<span id="cb1-30">    <span class="op">}</span></span></code></pre></div>
+<p><code>ensure_unchanged</code> compares fresh and saved fingerprints. A change deletes the copy and reruns the pipeline; <code>CHANGED_RETRIES</code> is 2, so after three encodes the job fails with “the file is still changing”, which the 0.4.1 CHANGELOG says replaced “being re-encoded forever.” The test <code>a_file_that_keeps_changing_fails_after_retries</code> appends a byte every 20 milliseconds. In the elided middle, a failed hash or mismatched size deletes the copy as a compression failure.</p>
+<p><strong>The original is not hashed.</strong> An edit that keeps the length and restores the modification time would go undetected; hashing every large original twice more is the cost the code declines. The copy, which R2Dock must later prove untouched, is hashed.</p>
+</section>
+<section id="recording-and-rechecking-the-copy" class="level3">
+<h2>Recording and Rechecking the Copy</h2>
+<p><code>digest_written_until</code> in <code>source.rs</code> computes the copy’s SHA-256 (Secure Hash Algorithm with a 256 bit digest) with a fixed 1 MiB buffer, opening without following links, asking a <code>stop</code> callback between blocks so pause or cancel can interrupt it, and rejecting the hash if the metadata changed during the read. Callers run it in <code>spawn_blocking</code>.</p>
+<p>The resulting <code>CopyDigest</code> (length, modification time, identity, and hex digest) is stored in <code>CompressedCopy</code> with everything needed to undo compression: the copy’s path (<code>temp</code>), the original’s path, key, size, fingerprint, scan identity, and preset. <code>compress</code> then points the specification’s <code>local</code>, <code>key</code> (a <code>.wav</code> key may become <code>.mp3</code>), <code>size</code>, and <code>identity</code> at the copy, saves the job, and requeues it at the front.</p>
+<p>The copy may wait on disk across a restart. Before every upload attempt, first or retry, <code>gate_copy</code> in <code>engine/mod.rs</code> calls <code>check_copy</code> on a blocking thread.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/engine/compress.rs#L301-L325" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/engine/compress.rs, lines 301 to 325</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn</span> check_copy(c<span class="op">:</span> <span class="op">&amp;</span>CompressedCopy<span class="op">,</span> stop<span class="op">:</span> <span class="op">&amp;</span><span class="kw">dyn</span> <span class="bu">Fn</span>() <span class="op">-&gt;</span> <span class="dt">bool</span>)</span>
+<span id="cb2-2">    <span class="op">-&gt;</span> CopyCheck <span class="op">{</span></span>
+<span id="cb2-3">    <span class="co">// Size and time tell whether the original changed. Its scan identity</span></span>
+<span id="cb2-4">    <span class="co">// is checked when the original itself is uploaded (`restore_original`).</span></span>
+<span id="cb2-5">    <span class="kw">let</span> original_ok <span class="op">=</span> <span class="pp">SourceFile::</span>open(<span class="op">&amp;</span>c<span class="op">.</span>original_local<span class="op">,</span> <span class="cn">None</span>)</span>
+<span id="cb2-6">        <span class="op">.</span>is_ok_and(<span class="op">|</span>s<span class="op">|</span> s<span class="op">.</span>fingerprint <span class="op">==</span> c<span class="op">.</span>original)<span class="op">;</span></span>
+<span id="cb2-7">    <span class="cf">if</span> <span class="op">!</span>original_ok <span class="op">{</span></span>
+<span id="cb2-8">        <span class="cf">return</span> <span class="pp">CopyCheck::</span>Unusable<span class="op">;</span></span>
+<span id="cb2-9">    <span class="op">}</span></span>
+<span id="cb2-10">    <span class="kw">let</span> <span class="cn">Some</span>(want) <span class="op">=</span> <span class="op">&amp;</span>c<span class="op">.</span>output <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb2-11">        <span class="cf">return</span> <span class="pp">CopyCheck::</span>Unusable<span class="op">;</span></span>
+<span id="cb2-12">    <span class="op">};</span></span>
+<span id="cb2-13">    <span class="kw">let</span> same_shape <span class="op">=</span> <span class="op">|</span>f<span class="op">:</span> <span class="op">&amp;</span>WrittenFile<span class="op">|</span> f<span class="op">.</span>len <span class="op">==</span> want<span class="op">.</span>file<span class="op">.</span>len</span>
+<span id="cb2-14">        <span class="op">&amp;&amp;</span> f<span class="op">.</span>mtime_ns <span class="op">==</span> want<span class="op">.</span>file<span class="op">.</span>mtime_ns<span class="op">;</span></span>
+<span id="cb2-15">    <span class="kw">let</span> quick <span class="op">=</span> <span class="pp">std::fs::</span>symlink_metadata(<span class="op">&amp;</span>c<span class="op">.</span>temp)</span>
+<span id="cb2-16">        <span class="op">.</span>is_ok_and(<span class="op">|</span>m<span class="op">|</span> m<span class="op">.</span>is_file() <span class="op">&amp;&amp;</span> same_shape(<span class="op">&amp;</span><span class="pp">WrittenFile::</span>of(<span class="op">&amp;</span>m)))<span class="op">;</span></span>
+<span id="cb2-17">    <span class="cf">if</span> <span class="op">!</span>quick <span class="op">{</span></span>
+<span id="cb2-18">        <span class="cf">return</span> <span class="pp">CopyCheck::</span>Unusable<span class="op">;</span></span>
+<span id="cb2-19">    <span class="op">}</span></span>
+<span id="cb2-20">    <span class="cf">match</span> digest_written_until(<span class="op">&amp;</span>c<span class="op">.</span>temp<span class="op">,</span> stop) <span class="op">{</span></span>
+<span id="cb2-21">        <span class="cn">Ok</span>(<span class="cn">Some</span>((file<span class="op">,</span> sha256)))</span>
+<span id="cb2-22">            <span class="cf">if</span> same_shape(<span class="op">&amp;</span>file) <span class="op">&amp;&amp;</span> sha256 <span class="op">==</span> want<span class="op">.</span>sha256 <span class="op">=&gt;</span></span>
+<span id="cb2-23">        <span class="op">{</span></span>
+<span id="cb2-24">            <span class="pp">CopyCheck::</span>Usable(file<span class="op">.</span>identity)</span>
+<span id="cb2-25">        <span class="op">}</span></span>
+<span id="cb2-26">        <span class="cn">Ok</span>(<span class="cn">None</span>) <span class="op">=&gt;</span> <span class="pp">CopyCheck::</span>Stopped<span class="op">,</span></span>
+<span id="cb2-27">        _ <span class="op">=&gt;</span> <span class="pp">CopyCheck::</span>Unusable<span class="op">,</span></span>
+<span id="cb2-28">    <span class="op">}</span></span>
+<span id="cb2-29"><span class="op">}</span></span></code></pre></div>
+<p>The original must still match its fingerprint, the copy must have a digest (older versions saved none), and the copy must match its recorded length and time (a cheap check) and then its SHA-256. Per the doc comment, the copy’s device and inode are not compared because some file systems report new values after a restart.</p>
+<p>In <code>gate_copy</code>, a usable copy proceeds with its proven identity written into the specification, and <code>Stopped</code> becomes a pause or cancel. An unusable copy never fails the job: <code>drop_compressed(id, true)</code> deletes it and restores the original, and the job returns to <code>Queued</code> to compress afresh. Tests in <code>crates/r2dock-transfer/tests/compress.rs</code> cover altered copies, digest-less copies, and <code>a_copy_changed_during_a_retry_wait_is_not_uploaded</code>, a real bug before 0.5.0 per the scale benchmark. That benchmark measured one SHA-256 of a 353 MiB copy at 0.64 seconds on an Apple silicon Mac, with at most 3.1 milliseconds of delay on a 10 millisecond runtime timer (synthetic data, warm cache likely; recorded in <code>docs/benchmarks/2026-10-18-compression-at-scale.md</code>, not re-run for this book).</p>
+<p>Uploads attach <code>compression_metadata</code> from <code>upload.rs</code> as <code>x-amz-meta-</code> headers (<a href="/books/r2dock/read/ch014#ch-08">Chapter 8</a>): <code>r2dock-original-size</code>, <code>r2dock-compression</code> (the preset), and a percent encoded <code>r2dock-original-name</code>, since header values must be ASCII.</p>
+</section>
+<section id="falling-back-to-the-original" class="level3">
+<h2>Falling Back to the Original</h2>
+<p><strong>Unchanged</strong> (already compressed, too small, no disk space, tools missing, tracks at risk) always continues with the original. <strong>Failed</strong> (an FFmpeg error, failed verification, the watchdog, an unhashable copy, an original that kept changing) follows the “If compression fails” setting: by default <code>CompressionFailure::UploadOriginal</code> uploads the original under its own key, while <code>SkipFile</code> ends the job <code>Failed</code> with a “Compression failed:” message. The test <code>failure_policies</code> covers both, and the activity log records <code>compress_failed</code> and the other <code>compress_*</code> events.</p>
+<p><code>restore_original</code> swaps the original’s path, key, size, and scan identity back; without the identity, the original would be checked against the copy’s identity or none (a 0.5.0 fix per the scale benchmark).</p>
+</section>
+<section id="pause-cancel-and-crashes" class="level3">
+<h2>Pause, Cancel, and Crashes</h2>
+<p>Encodes are not resumable mid-file. Pausing a <code>Compressing</code> job cancels the token passed to FFmpeg; the runner from <a href="/books/r2dock/read/ch025#ch-17">Chapter 17</a> kills the process, the partial output is deleted, and with no outcome recorded, resuming starts over. Cancel ends in <code>Cancelled</code>. The test <code>cancel_and_pause_while_compressing</code> checks both, and the scale benchmark confirmed with <code>pgrep -P</code> that no FFmpeg child or work file remained after cancelling 100 jobs mid-encode.</p>
+<p>A task can also end unexpectedly, for example by a panic in a callback. <code>compress_job</code> therefore holds a <code>Finalize</code> guard whose <code>Drop</code> runs on every exit (<a href="/books/r2dock/read/ch009#ch-04">Chapter 4</a> explains <code>Drop</code>). Without it, a panic would leave the job showing <code>Compressing</code> forever with its encoder slot counted busy, so no other encode could start. The guard releases the job’s control only if no newer run replaced it (an <code>Arc::ptr_eq</code> comparison), fails a job still in <code>Compressing</code> with “a background task stopped”, and always wakes the scheduler.</p>
+<p><code>finish</code> deletes the journal entry and the copy before announcing <code>Completed</code>, <code>Cancelled</code>, or <code>Skipped</code>, so nobody who sees “completed” finds the copy still there. A failed job keeps its copy for a retry until removed.</p>
+<p>At startup, a restored copy that is missing or lacks a digest is forgotten (<code>restore_original</code>). A present copy is not read then (restoring 20 held copies took 0.39 milliseconds in the benchmark); <code>gate_copy</code> checks it before upload. Jobs return as <code>Interrupted</code> (<a href="/books/r2dock/read/ch022#ch-15">Chapter 15</a>). The tests <code>restart_reuses_the_copy_and_edits_compress_again</code> and <code>an_unchanged_result_survives_a_restart</code> cover this.</p>
+<p>A crash mid-encode leaves no outcome, so the job compresses again, but partial output stays on disk. <code>sweep_work_dir</code> deletes every regular file in the work folder that no restored job refers to, once at startup on a blocking thread, with the comment “Copies left by a crash, before any encode can start.” That ordering relies on timing: encodes wait for the separately spawned <code>CompressionService::refresh</code> to check tools and test encoders, which normally takes far longer, but nothing guarantees the sweep finishes first. Until <code>refresh</code> completes, <code>schedule_compression</code> would mark a new compression job <code>ToolsMissing</code> and upload the original; whether the interface can enqueue in that window was not verified.</p>
+</section>
+<section id="failure-matrix" class="level3">
+<h2>Failure Matrix</h2>
+<p>The table collects each failure case above with the test or code path that covers it.</p>
+<div class="table-scroll"><table>
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr>
+<th>Event</th>
+<th>What R2Dock does</th>
+<th>Test or evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Original edited during encode</td>
+<td>Copy deleted, encode repeated twice</td>
+<td><code>a_file_that_keeps_changing_fails_after_retries</code></td>
+</tr>
+<tr>
+<td>Original edited after encode</td>
+<td>Copy dropped, compressed again</td>
+<td><code>restart_reuses_the_copy_and_edits_compress_again</code></td>
+</tr>
+<tr>
+<td>Copy altered before upload</td>
+<td>SHA-256 mismatch, compressed again</td>
+<td><code>a_changed_copy_is_compressed_again</code></td>
+</tr>
+<tr>
+<td>Copy altered during retry wait</td>
+<td>Checked before each attempt</td>
+<td><code>a_copy_changed_during_a_retry_wait_is_not_uploaded</code></td>
+</tr>
+<tr>
+<td>Not enough disk space</td>
+<td>Original uploaded (<code>NoDiskSpace</code>)</td>
+<td><code>pipeline.rs</code> code path</td>
+</tr>
+<tr>
+<td>FFmpeg error or watchdog</td>
+<td>Failure policy decides</td>
+<td><code>failure_policies</code></td>
+</tr>
+<tr>
+<td>Copy lost a track</td>
+<td>Original uploaded (<code>TracksNotKept</code>)</td>
+<td><code>a_copy_that_lost_something_uploads_the_original</code></td>
+</tr>
+<tr>
+<td>Pause or cancel mid encode</td>
+<td>FFmpeg killed, output deleted</td>
+<td><code>cancel_and_pause_while_compressing</code></td>
+</tr>
+<tr>
+<td>Crash mid encode</td>
+<td>Orphan swept, encode reruns</td>
+<td><code>sweep_work_dir</code> code path</td>
+</tr>
+</tbody>
+</table></div>
+<p>The track test is in <code>crates/r2dock-media/tests/preserve.rs</code>, and <code>a_file_that_keeps_changing_fails_after_retries</code> is a unit test inside <code>engine/compress.rs</code>; the others are in <code>crates/r2dock-transfer/tests/compress.rs</code>.</p>
+</section>
+<section id="working-on-this-code-19" class="level3">
+<h2>Working on This Code</h2>
+<p><code>engine/compress.rs</code> holds scheduling, the per job task (<code>compress_job</code>, <code>compress</code>), <code>check_copy</code>, and cleanup (<code>drop_compressed</code>, <code>sweep_work_dir</code>, <code>restore_original</code>); <code>gate_copy</code> is in <code>engine/mod.rs</code>, the data model in <code>model.rs</code>, hashing in <code>source.rs</code>. New fields in journaled types need <code>#[serde(default)]</code> so older journals load.</p>
+<p><code>cargo test -p r2dock-transfer --test compress</code> runs the engine tests against the in-process local S3 server; they need <code>R2DOCK_TEST_FFMPEG</code> and skip with a message otherwise. <code>cargo test -p r2dock-transfer --test compress_scale</code> holds the scale scenarios, some ignored and run by name.</p>
+<p>Never upload a copy that has not passed <code>check_copy</code> right before that attempt, never let a copy check fail a job, never hold an upload slot while compressing, hash only on blocking threads with fixed buffers and a stop callback, and clean up before announcing a final state. A common pitfall is an early return in <code>compress</code> that records no outcome, leaving <code>needs_compression</code> true forever.</p>
+</section>
+<section id="further-reading-19" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><code>crates/r2dock-transfer/src/engine/compress.rs</code> and <code>crates/r2dock-transfer/tests/compress.rs</code>.</li>
+<li><code>docs/benchmarks/2026-10-18-compression-at-scale.md</code>, for the restart measurements and what was not covered.</li>
+<li><code>docs/plans/media-compression.md</code>, section “Every case covered”.</li>
+<li><a href="https://docs.rs/tokio/latest/tokio/task/fn.spawn_blocking.html" target="_blank" rel="noopener noreferrer">tokio::task::spawn_blocking</a>, for running hashing off the async runtime.</li>
+</ul>
+</section>
+</section>

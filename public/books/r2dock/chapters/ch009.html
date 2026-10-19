@@ -1,0 +1,219 @@
+<section id="ch-04" class="level2 chapter">
+<h1 class="chapter"><span class="header-section-number">4</span> Rust Concepts Used in R2Dock</h1>
+<p>This chapter teaches the Rust features R2Dock depends on, using the project’s own code, and owns their definitions for the rest of the book. Asynchronous Rust belongs to <a href="/books/r2dock/read/ch010#ch-05">Chapter 5</a> (Tokio and Asynchronous Execution). Each section states the problem, the concept, and where R2Dock relies on it.</p>
+<section id="ownership-every-value-has-one-owner" class="level3">
+<h2>Ownership: Every Value Has One Owner</h2>
+<p>Most languages free memory with a garbage collector or manual calls; Rust decides at compile time. The <a href="https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html" target="_blank" rel="noopener noreferrer">ownership chapter of The Rust Programming Language</a> states three rules: each value has an owner, there is only one owner at a time, and the value is dropped when its owner goes out of scope. Assigning a heap-owning value such as a <code>String</code>, or passing it by value, moves it, and the old name can no longer be used.</p>
+<p>Moves also express “this can happen only once”. The activity log’s builder <code>Act</code> (<code>src-tauri/src/activity/mod.rs</code>) has an <code>end</code> method that takes <code>self</code> by value, so after <code>act.end(&amp;result)</code> the compiler rejects any further use of <code>act</code>, and a duplicate comma-separated values (CSV) row from ending an action twice cannot be written. A garbage-collected language would need a runtime flag.</p>
+<p>Values are also moved into closures that run on other threads, as in <code>blocking(move || hashing.md5_range(0, size))</code> in <code>upload.rs</code>, because the closure may outlive the current stack frame.</p>
+</section>
+<section id="borrowing-using-data-without-taking-it" class="level3">
+<h2>Borrowing: Using Data Without Taking It</h2>
+<p>A reference <code>&amp;T</code> lets code read a value it does not own, and <code>&amp;mut T</code> lets it modify one. The compiler enforces two rules: at any moment there are either any number of shared references or exactly one mutable reference, and no reference outlives its value. Helpers in <code>r2dock-core</code> use this to return views of their input instead of new strings.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-core/src/keys.rs#L86-L93" target="_blank" rel="noopener noreferrer">crates/r2dock-core/src/keys.rs, lines 86 to 93</a></p>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb1-1"><span class="co">/// The last segment of a key, without a trailing slash.</span></span>
+<span id="cb1-2"><span class="kw">pub</span> <span class="kw">fn</span> base_name(key<span class="op">:</span> <span class="op">&amp;</span><span class="dt">str</span>) <span class="op">-&gt;</span> <span class="op">&amp;</span><span class="dt">str</span> <span class="op">{</span></span>
+<span id="cb1-3">    <span class="kw">let</span> trimmed <span class="op">=</span> key<span class="op">.</span>strip_suffix(<span class="ch">'/'</span>)<span class="op">.</span>unwrap_or(key)<span class="op">;</span></span>
+<span id="cb1-4">    <span class="cf">match</span> trimmed<span class="op">.</span>rfind(<span class="ch">'/'</span>) <span class="op">{</span></span>
+<span id="cb1-5">        <span class="cn">Some</span>(i) <span class="op">=&gt;</span> <span class="op">&amp;</span>trimmed[i <span class="op">+</span> <span class="dv">1</span><span class="op">..</span>]<span class="op">,</span></span>
+<span id="cb1-6">        <span class="cn">None</span> <span class="op">=&gt;</span> trimmed<span class="op">,</span></span>
+<span id="cb1-7">    <span class="op">}</span></span>
+<span id="cb1-8"><span class="op">}</span></span></code></pre></div>
+<p>With one input reference and one output reference, lifetime elision tells the compiler the result borrows from <code>key</code>. <code>base_name("Podcasts/Season 2/Episode 01.mp3")</code> returns <code>Episode 01.mp3</code> without copying, and keeping that result after freeing the key would not compile.</p>
+<p><code>upload::run(ctx: &amp;JobCtx, spec: &amp;mut UploadSpec)</code> reads the context but may change the specification, for example when “Keep both” renames the destination key. Because an upload can take an hour, <code>run_job</code> clones the specification out of the locked job map, runs on its own copy, and writes it back under a second short lock instead of holding a guard across the upload (<a href="/books/r2dock/read/ch010#ch-05">Chapter 5</a> explains why).</p>
+</section>
+<section id="enums-and-pattern-matching" class="level3">
+<h2>Enums and Pattern Matching</h2>
+<p>A Rust enum is a type whose value is exactly one of several variants, each able to carry data. With <code>match</code>, which the compiler checks for exhaustiveness, enums replace flag combinations, magic strings, and null checks. The transfer job state is an enum with thirteen variants, classified by two methods.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/model.rs#L43-L55" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/model.rs, lines 43 to 55</a></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb2-1"><span class="kw">impl</span> JobState <span class="op">{</span></span>
+<span id="cb2-2">    <span class="kw">pub</span> <span class="kw">fn</span> is_terminal(<span class="kw">self</span>) <span class="op">-&gt;</span> <span class="dt">bool</span> <span class="op">{</span></span>
+<span id="cb2-3">        <span class="pp">matches!</span>(<span class="kw">self</span><span class="op">,</span> <span class="dt">Self</span><span class="pp">::</span>Completed <span class="op">|</span> <span class="dt">Self</span><span class="pp">::</span>Cancelled <span class="op">|</span> <span class="dt">Self</span><span class="pp">::</span>Skipped)</span>
+<span id="cb2-4">    <span class="op">}</span></span>
+<span id="cb2-5"></span>
+<span id="cb2-6">    <span class="co">/// States that hold a scheduler slot.</span></span>
+<span id="cb2-7">    <span class="kw">pub</span> <span class="kw">fn</span> is_active(<span class="kw">self</span>) <span class="op">-&gt;</span> <span class="dt">bool</span> <span class="op">{</span></span>
+<span id="cb2-8">        <span class="pp">matches!</span>(</span>
+<span id="cb2-9">            <span class="kw">self</span><span class="op">,</span></span>
+<span id="cb2-10">            <span class="dt">Self</span><span class="pp">::</span>Preparing <span class="op">|</span> <span class="dt">Self</span><span class="pp">::</span>Running</span>
+<span id="cb2-11">                <span class="op">|</span> <span class="dt">Self</span><span class="pp">::</span>Retrying <span class="op">|</span> <span class="dt">Self</span><span class="pp">::</span>Verifying</span>
+<span id="cb2-12">        )</span>
+<span id="cb2-13">    <span class="op">}</span></span>
+<span id="cb2-14"><span class="op">}</span></span></code></pre></div>
+<p><code>matches!</code> expands to a <code>match</code> that returns <code>true</code> for the listed patterns, and because <code>JobState</code> derives <code>Copy</code>, taking <code>self</code> by value costs nothing. <a href="/books/r2dock/read/ch020#ch-13">Chapter 13</a> (Transfer State Machines) owns the meaning of each state; the point here is that adding a variant forces the author to revisit every exhaustive <code>match</code>, which is what a growing state machine needs.</p>
+<p>Variants carry data too: <code>ResumeState</code> is <code>None</code>, <code>Multipart(MultipartState)</code>, or <code>Download(DownloadState)</code>, serialized with a <code>kind</code> tag so the journal is self-describing. Enums also serve as private vocabulary: <code>Inner::control</code> decides what a user action means inside a block that holds the jobs lock and evaluates to a local <code>Then</code> enum, then performs side effects after the guard is dropped, so “never emit while holding the jobs lock” is structural.</p>
+<p>Two newer forms appear constantly. <code>let ... else</code> binds a pattern or leaves: <code>let Some(e) = jobs.map.get_mut(&amp;id) else { return; };</code>. Let chains, available in the 2024 edition the workspace uses, combine <code>if let</code> with boolean conditions; the end of <code>run_job</code> uses one to clear a job’s control only if <code>Arc::ptr_eq</code> shows that no newer run replaced it.</p>
+</section>
+<section id="traits-shared-behavior-and-seams-for-testing" class="level3">
+<h2>Traits: Shared Behavior and Seams for Testing</h2>
+<p>A trait declares behavior several types can implement, like an interface. R2Dock uses traits mostly as seams: a lower crate calls into something it does not depend on, and tests substitute fakes.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-secrets/src/lib.rs#L62-L68" target="_blank" rel="noopener noreferrer">crates/r2dock-secrets/src/lib.rs, lines 62 to 68</a></p>
+</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb3-1"><span class="kw">pub</span> <span class="kw">trait</span> SecretStore<span class="op">:</span> <span class="bu">Send</span> <span class="op">+</span> <span class="bu">Sync</span> <span class="op">{</span></span>
+<span id="cb3-2">    <span class="kw">fn</span> backend(<span class="op">&amp;</span><span class="kw">self</span>) <span class="op">-&gt;</span> Backend<span class="op">;</span></span>
+<span id="cb3-3">    <span class="kw">fn</span> set(<span class="op">&amp;</span><span class="kw">self</span><span class="op">,</span> reference<span class="op">:</span> <span class="op">&amp;</span><span class="dt">str</span><span class="op">,</span> secret<span class="op">:</span> <span class="op">&amp;</span>SecretString)</span>
+<span id="cb3-4">        <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span>()<span class="op">,</span> SecretError<span class="op">&gt;;</span></span>
+<span id="cb3-5">    <span class="kw">fn</span> get(<span class="op">&amp;</span><span class="kw">self</span><span class="op">,</span> reference<span class="op">:</span> <span class="op">&amp;</span><span class="dt">str</span>) <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span>SecretString<span class="op">,</span> SecretError<span class="op">&gt;;</span></span>
+<span id="cb3-6">    <span class="co">/// Deleting a missing entry is not an error.</span></span>
+<span id="cb3-7">    <span class="kw">fn</span> delete(<span class="op">&amp;</span><span class="kw">self</span><span class="op">,</span> reference<span class="op">:</span> <span class="op">&amp;</span><span class="dt">str</span>) <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span>()<span class="op">,</span> SecretError<span class="op">&gt;;</span></span>
+<span id="cb3-8"><span class="op">}</span></span></code></pre></div>
+<p><code>KeyringStore</code> and <code>MemoryStore</code> (a locked <code>HashMap</code> for session-only mode) implement it, and the supertraits <code>Send + Sync</code> make the compiler check that every implementation can be shared between threads. <code>ConnectionService</code> holds <code>Option&lt;Arc&lt;dyn SecretStore&gt;&gt;</code>: a trait object whose concrete type is chosen at runtime by the startup keychain probe, called through a table of function pointers. The connection tests pass a <code>MemoryStore</code> and never touch a real keychain.</p>
+<p>The engine needs R2 clients, but only the application crate can read secrets and the transfer crate must not depend on it. So the engine defines <code>ClientProvider</code>, whose one method returns a <code>BoxFuture</code> (a <code>Pin&lt;Box&lt;dyn Future&lt;Output = T&gt; + Send + 'a&gt;&gt;</code>, one concrete type as <code>dyn</code> requires), and <code>EngineClients</code> in <code>src-tauri/src/state.rs</code> implements it. Compression tests substitute a <code>NoClient</code> provider that always fails, and <code>JobHooks</code> in <code>ctx.rs</code> lets a running transfer report back without knowing engine internals.</p>
+</section>
+<section id="generics-one-implementation-for-many-types" class="level3">
+<h2>Generics: One Implementation for Many Types</h2>
+<p>Generics let one definition serve many types with static checking and no runtime cost, because the compiler specializes a copy per type. <code>Registry&lt;T&gt;</code> in <code>src-tauri/src/state.rs</code> backs all four opaque identifier maps: <code>insert</code> takes ownership, drops expired entries, evicts the oldest at 256, and returns a random identifier, and <code>take</code> removes the value so a token works once. A separate <code>impl&lt;T: Clone&gt; Registry&lt;T&gt;</code> block adds a non-consuming <code>get</code>; <code>T: Clone</code> is a trait bound placed exactly where it is needed.</p>
+<p>Closure parameters are the other common form: the <code>blocking&lt;T, F&gt;</code> helper in <code>upload.rs</code> and <code>download.rs</code> accepts any <code>F: FnOnce() -&gt; Result&lt;T, JobError&gt; + Send + 'static</code>, the bounds <code>spawn_blocking</code> requires (<a href="/books/r2dock/read/ch010#ch-05">Chapter 5</a>).</p>
+</section>
+<section id="result-option-and-the-question-mark-operator" class="level3">
+<h2>Result, Option, and the Question Mark Operator</h2>
+<p>Rust has no exceptions and no null. A fallible function returns <code>Result&lt;T, E&gt;</code> (<code>Ok(value)</code> or <code>Err(error)</code>), and a possibly absent value is an <code>Option&lt;T&gt;</code> (<code>Some(value)</code> or <code>None</code>). The compiler warns when a <code>Result</code> is ignored, so failures cannot be dropped silently without an explicit <code>let _ =</code>.</p>
+<p>The <code>?</code> operator returns early with the error, converting it with <code>From::from</code> if needed, or returns <code>None</code> early on an <code>Option</code>. <code>spawn_blocking(...).await</code> yields a nested result (outer <code>Err</code> only if the task panicked), so <code>ConnectionService::client</code> ends with <code>.await.map_err(|_| blocking_err())??</code>: the first <code>?</code> handles a panic, the second a credential store error.</p>
+<p>Clippy warns on <code>unwrap()</code> and <code>expect()</code>, and continuous integration (CI) makes that an error, so even an infallible conversion states a fallback, such as <code>u32::try_from(parts.len()).unwrap_or(u32::MAX)</code>.</p>
+</section>
+<section id="error-types-with-thiserror-and-the-apperror-boundary" class="level3">
+<h2>Error Types with thiserror and the AppError Boundary</h2>
+<p>Each layer defines its own error enum because each knows different things. According to the <a href="https://docs.rs/thiserror/latest/thiserror/" target="_blank" rel="noopener noreferrer">thiserror documentation</a>, deriving <code>Error</code> generates <code>Display</code> from <code>#[error("...")]</code> attributes, a <code>source()</code> method, and optional <code>From</code> implementations, and the crate “deliberately does not appear in your public API”. R2Dock writes its <code>From</code> implementations by hand, which keeps each conversion visible and lets it discard information on purpose.</p>
+<p><code>R2Error</code> in <code>crates/r2dock-r2/src/error.rs</code> has variants such as <code>InvalidAccessKey</code>, <code>AccessDenied</code>, <code>NoSuchKey</code>, rate limiting, timeout, an open <code>Service</code> variant, and cancellation, filled by <code>from_sdk</code>. Its <code>detail</code> strings keep only the code, status, and request identifier; the test <code>maps_codes</code> checks that a fake message reading “raw server text with secrets?” does not leak. <code>is_retryable</code> and <code>is_auth_failure</code> classify it, and <code>impl From&lt;R2Error&gt; for AppError</code> calls <code>to_app_error</code>, so commands can apply <code>?</code>.</p>
+<p>The engine needs more than an <code>AppError</code>: it must decide whether to retry, stop all jobs of a connection, or mark a job cancelled. <code>crates/r2dock-transfer/src/retry.rs</code> therefore defines <code>JobError</code>, an <code>AppError</code> plus <code>retryable</code>, <code>auth</code>, and <code>cancelled</code> flags.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/retry.rs#L86-L104" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/retry.rs, lines 86 to 104</a></p>
+</div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb4-1"><span class="kw">impl</span> <span class="bu">From</span><span class="op">&lt;</span>R2Error<span class="op">&gt;</span> <span class="cf">for</span> JobError <span class="op">{</span></span>
+<span id="cb4-2">    <span class="kw">fn</span> from(err<span class="op">:</span> R2Error) <span class="op">-&gt;</span> <span class="dt">Self</span> <span class="op">{</span></span>
+<span id="cb4-3">        <span class="cf">if</span> err <span class="op">==</span> <span class="pp">R2Error::</span>Cancelled <span class="op">{</span></span>
+<span id="cb4-4">            <span class="cf">return</span> <span class="dt">Self</span><span class="pp">::</span>cancelled()<span class="op">;</span></span>
+<span id="cb4-5">        <span class="op">}</span></span>
+<span id="cb4-6">        <span class="co">// A bad digest means the bytes changed between hashing and sending.</span></span>
+<span id="cb4-7">        <span class="cf">if</span> <span class="kw">let</span> <span class="pp">R2Error::</span>Service <span class="op">{</span> code<span class="op">,</span> <span class="op">..</span> <span class="op">}</span> <span class="op">=</span> <span class="op">&amp;</span>err</span>
+<span id="cb4-8">            <span class="op">&amp;&amp;</span> (code <span class="op">==</span> <span class="st">"BadDigest"</span> <span class="op">||</span> code <span class="op">==</span> <span class="st">"InvalidDigest"</span>)</span>
+<span id="cb4-9">        <span class="op">{</span></span>
+<span id="cb4-10">            <span class="cf">return</span> <span class="dt">Self</span><span class="pp">::</span>file_changed()<span class="op">;</span></span>
+<span id="cb4-11">        <span class="op">}</span></span>
+<span id="cb4-12">        <span class="dt">Self</span> <span class="op">{</span></span>
+<span id="cb4-13">            app<span class="op">:</span> err<span class="op">.</span>to_app_error()<span class="op">,</span></span>
+<span id="cb4-14">            retryable<span class="op">:</span> err<span class="op">.</span>is_retryable()<span class="op">,</span></span>
+<span id="cb4-15">            auth<span class="op">:</span> err<span class="op">.</span>is_auth_failure()<span class="op">,</span></span>
+<span id="cb4-16">            cancelled<span class="op">:</span> <span class="cn">false</span><span class="op">,</span></span>
+<span id="cb4-17">        <span class="op">}</span></span>
+<span id="cb4-18">    <span class="op">}</span></span>
+<span id="cb4-19"><span class="op">}</span></span></code></pre></div>
+<p>A server digest mismatch becomes “the file changed while uploading”, because the code computed the MD5 digest just before sending; only the transfer layer knows that, and the test <code>classification</code> checks it. Figure 4.1 summarizes the conversions.</p>
+<figure id="fig-04-error-flow">
+<img src="/books/r2dock/media/file5.webp" alt="Grey source errors std::io::Error, keyring::Error, and the AWS SdkError sit at the top. keyring errors map to SecretError and SDK errors to R2Error. SecretError, R2Error, and io errors convert to AppError; R2Error and io errors also convert to JobError, which carries an AppError. AppError is serialized to JSON with names skipped and read as the TypeScript AppError type." width="1188" height="1516" loading="lazy" decoding="async">
+<figcaption>Figure 4.1. How errors flow between layers: I/O, keyring, and SDK errors are converted into SecretError, R2Error, and JobError, all of which end as an AppError that is serialized to JSON and read as a typed TypeScript object.</figcaption>
+</figure>
+<p>Every boundary loses information deliberately, because paths, raw server responses, and keychain messages can contain personal or secret data. <code>SecretError</code> carries no operating system text, <code>StorageError</code> and <code>PathGuardError</code> keep only an <code>io::ErrorKind</code>, and <code>io_error</code> produces pathless sentences, checked by the test <code>io_errors_never_include_paths</code>.</p>
+</section>
+<section id="sharing-data-between-threads-with-arc" class="level3">
+<h2>Sharing Data Between Threads with Arc</h2>
+<p>Many tasks must share one queue, journal, and client cache. The <a href="https://doc.rust-lang.org/std/sync/struct.Arc.html" target="_blank" rel="noopener noreferrer">standard library documentation</a> describes <code>Arc&lt;T&gt;</code> as “a thread-safe reference-counting pointer”: cloning it increments a counter and points at the same allocation, and the value is dropped with the last <code>Arc</code>. An <code>Arc</code> gives only shared access; changing the data needs interior mutability such as a lock or an atomic.</p>
+<p><code>Engine</code> is a single <code>inner: Arc&lt;Inner&gt;</code> field with <code>#[derive(Clone)]</code>, so every cheap clone (in <code>AppState</code>, in the event closure, in cleanup tasks) controls the same engine. <code>Inner</code> holds further <code>Arc</code> fields such as <code>part_slots: Arc&lt;Semaphore&gt;</code> that are handed separately to jobs.</p>
+<p><code>Arc::ptr_eq</code> compares identity rather than value. Each job run gets a fresh <code>Arc&lt;RunControl&gt;</code>, and when it ends it clears the job’s control only if the stored one is still its own, so it cannot erase a newer run’s control. Two fresh controls look identical by value.</p>
+</section>
+<section id="locks-mutex-and-rwlock-from-parking_lot-std-and-tokio" class="level3">
+<h2>Locks: Mutex and RwLock from parking_lot, std, and Tokio</h2>
+<p>A mutex (mutual exclusion lock) lets one thread at a time access the data inside, and a read-write lock (<code>RwLock</code>) allows many readers or one writer. In Rust both wrap the data they protect and return a guard; as the <a href="https://doc.rust-lang.org/std/sync/struct.Mutex.html" target="_blank" rel="noopener noreferrer">standard library Mutex documentation</a> says, “When the guard goes out of scope, the mutex will be unlocked.” R2Dock uses three lock families deliberately.</p>
+<p><code>parking_lot</code>’s <code>Mutex</code> and <code>RwLock</code> hold almost all production shared state. Its <a href="https://docs.rs/parking_lot/latest/parking_lot/type.Mutex.html" target="_blank" rel="noopener noreferrer">Mutex documentation</a> lists “No poisoning, the lock is released normally on panic”. The standard mutex instead becomes poisoned after a panic, and later <code>lock()</code> calls return an error that would need <code>unwrap()</code>, which the lints forbid. The trade-off is that a panic mid-update can leave data inconsistent without a signal, so R2Dock keeps critical sections short and free of fallible work, and adds a repair guard in the compression path (see Drop Guards later in this chapter).</p>
+<p><code>tokio::sync::Mutex</code> appears only where a lock must be held across an <code>.await</code> (<a href="/books/r2dock/read/ch010#ch-05">Chapter 5</a>): the settings writer, the connection file writer (<code>persist_lock</code>), and per-bucket coalescing in <code>public_links.rs</code>. The settings update uses both kinds.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/src-tauri/src/state.rs#L172-L192" target="_blank" rel="noopener noreferrer">src-tauri/src/state.rs, lines 172 to 192</a></p>
+</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb5-1"><span class="kw">async</span> <span class="kw">fn</span> commit_json<span class="op">&lt;</span>T<span class="op">&gt;</span>(</span>
+<span id="cb5-2">    cell<span class="op">:</span> <span class="op">&amp;</span>RwLock<span class="op">&lt;</span>T<span class="op">&gt;,</span></span>
+<span id="cb5-3">    lock<span class="op">:</span> <span class="op">&amp;</span><span class="pp">tokio::sync::</span>Mutex<span class="op">&lt;</span>()<span class="op">&gt;,</span></span>
+<span id="cb5-4">    path<span class="op">:</span> <span class="dt">PathBuf</span><span class="op">,</span></span>
+<span id="cb5-5">    change<span class="op">:</span> <span class="kw">impl</span> <span class="bu">FnOnce</span>(<span class="op">&amp;</span><span class="kw">mut</span> T)<span class="op">,</span></span>
+<span id="cb5-6">) <span class="op">-&gt;</span> <span class="dt">Result</span><span class="op">&lt;</span>T<span class="op">,</span> AppError<span class="op">&gt;</span></span>
+<span id="cb5-7"><span class="kw">where</span></span>
+<span id="cb5-8">    T<span class="op">:</span> <span class="bu">Clone</span> <span class="op">+</span> <span class="pp">serde::</span>Serialize <span class="op">+</span> <span class="bu">Send</span> <span class="op">+</span> <span class="ot">'static</span><span class="op">,</span></span>
+<span id="cb5-9"><span class="op">{</span></span>
+<span id="cb5-10">    <span class="kw">let</span> _writing <span class="op">=</span> lock<span class="op">.</span>lock()<span class="op">.</span><span class="kw">await</span><span class="op">;</span></span>
+<span id="cb5-11">    <span class="kw">let</span> old <span class="op">=</span> cell<span class="op">.</span>read()<span class="op">.</span>clone()<span class="op">;</span></span>
+<span id="cb5-12">    <span class="kw">let</span> <span class="kw">mut</span> candidate <span class="op">=</span> old<span class="op">.</span>clone()<span class="op">;</span></span>
+<span id="cb5-13">    change(<span class="op">&amp;</span><span class="kw">mut</span> candidate)<span class="op">;</span></span>
+<span id="cb5-14">    <span class="kw">let</span> snapshot <span class="op">=</span> candidate<span class="op">.</span>clone()<span class="op">;</span></span>
+<span id="cb5-15">    <span class="pp">tokio::task::</span>spawn_blocking(<span class="kw">move</span> <span class="op">||</span> write_json_atomic(<span class="op">&amp;</span>path<span class="op">,</span> <span class="op">&amp;</span>snapshot))</span>
+<span id="cb5-16">        <span class="op">.</span><span class="kw">await</span></span>
+<span id="cb5-17">        <span class="op">.</span>map_err(<span class="op">|</span>_<span class="op">|</span> <span class="pp">AppError::</span>internal(</span>
+<span id="cb5-18">            <span class="st">"A background task stopped unexpectedly."</span></span>
+<span id="cb5-19">        ))<span class="op">?</span></span>
+<span id="cb5-20">        <span class="op">.</span>map_err(<span class="op">|</span>_<span class="op">|</span> <span class="pp">AppError::</span>new(</span>
+<span id="cb5-21">            <span class="pp">r2dock_core::ErrorCode::</span>Io<span class="op">,</span></span>
+<span id="cb5-22">            <span class="st">"Could not save settings."</span></span>
+<span id="cb5-23">        ))<span class="op">?;</span></span>
+<span id="cb5-24">    <span class="op">*</span>cell<span class="op">.</span>write() <span class="op">=</span> candidate<span class="op">;</span></span>
+<span id="cb5-25">    <span class="cn">Ok</span>(old)</span>
+<span id="cb5-26"><span class="op">}</span></span></code></pre></div>
+<p>The async mutex <code>_writing</code> spans the whole function, including the disk write, so two changes cannot interleave. The parking_lot <code>RwLock</code> is touched for one statement at a time, and <code>*cell.write() = candidate</code> publishes only after the save succeeded, so readers never wait for disk I/O. The test <code>settings_change_is_published_only_after_it_is_saved</code> checks that a failed save changes nothing.</p>
+<p>Guard scope deserves care. In <code>PublicLinks::domains</code>, <code>self.inflight.lock().entry(key.clone()).or_default().clone()</code> clones an <code>Arc</code> out of the map and releases the temporary guard at the semicolon, before awaiting the per-bucket Tokio mutex; binding the guard to a variable would keep the map locked while the task is suspended. The engine’s <code>emit</code> likewise clones the sink out of its read lock, then calls it inside a <code>delivery</code> mutex that keeps events in order, which is why its comment says the sink must never block.</p>
+</section>
+<section id="atomics-lock-free-counters-and-flags" class="level3">
+<h2>Atomics: Lock-Free Counters and Flags</h2>
+<p>An atomic integer can be updated by many threads without a lock, using indivisible processor instructions. Each operation takes a memory ordering. The <a href="https://doc.rust-lang.org/std/sync/atomic/enum.Ordering.html" target="_blank" rel="noopener noreferrer">Ordering documentation</a> defines <code>Relaxed</code> as “No ordering constraints, only atomic operations” and <code>SeqCst</code> as adding that “all threads see all sequentially consistent operations in the same order”. <code>Relaxed</code> suffices when only the number matters; stronger orderings are needed when one thread’s write must make other data visible.</p>
+<p>The busiest atomic is the progress <code>Counter</code> in <code>crates/r2dock-transfer/src/progress.rs</code>, updated for every 64 KiB upload chunk and every chunk a download writes, always with <code>Ordering::Relaxed</code> because it is only displayed. <code>sub_in_flight</code> shows the compare-and-swap loop, the basic tool for an atomic update that is not a built-in operation: load the value, compute <code>cur.saturating_sub(bytes)</code>, store it with <code>compare_exchange_weak</code> only if nobody changed the value meanwhile, and otherwise retry with the actual value. Saturating subtraction prevents wrap-around when a request body is rebuilt after an SDK retry, and a lock here would add contention on the hottest path in the program.</p>
+<p><code>RunControl</code> in <code>ctx.rs</code> encodes continue, pause, or cancel in an <code>AtomicU8</code> with <code>SeqCst</code>: <code>request_pause</code> uses <code>compare_exchange(0, 1, ...)</code> so it can only replace “continue”, while <code>request_cancel</code> stores 2 unconditionally, so cancel always wins.</p>
+</section>
+<section id="drop-guards-cleanup-that-cannot-be-forgotten" class="level3">
+<h2>Drop Guards: Cleanup That Cannot Be Forgotten</h2>
+<p>The <code>Drop</code> trait runs code when a value goes out of scope, whether by normal flow, <code>return</code>, <code>?</code>, or a panic’s unwinding. A guard exists only for that cleanup; lock guards and semaphore permits are guards, and R2Dock writes one to protect the compression task.</p>
+<div class="source">
+<p>Source: <a href="https://github.com/VijaysinghPuwar/R2Dock/blob/2bdc8a65cb02b81c2bee8e3422b36e9ae0741128/crates/r2dock-transfer/src/engine/compress.rs#L343-L378" target="_blank" rel="noopener noreferrer">crates/r2dock-transfer/src/engine/compress.rs, lines 343 to 378</a></p>
+</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode rust"><code class="sourceCode rust"><span id="cb6-1"><span class="co">/// Runs on every exit of [`compress_job`], including a panic: releases the</span></span>
+<span id="cb6-2"><span class="co">/// run's control (only if no newer run replaced it) and wakes the</span></span>
+<span id="cb6-3"><span class="co">/// scheduler, so the next job can take the encode slot. A job still shown</span></span>
+<span id="cb6-4"><span class="co">/// as compressing at that point ended abnormally and is marked failed.</span></span>
+<span id="cb6-5"><span class="kw">struct</span> Finalize <span class="op">{</span></span>
+<span id="cb6-6">    inner<span class="op">:</span> Arc<span class="op">&lt;</span>Inner<span class="op">&gt;,</span></span>
+<span id="cb6-7">    id<span class="op">:</span> JobId<span class="op">,</span></span>
+<span id="cb6-8">    control<span class="op">:</span> Arc<span class="op">&lt;</span>RunControl<span class="op">&gt;,</span></span>
+<span id="cb6-9"><span class="op">}</span></span>
+<span id="cb6-10"></span>
+<span id="cb6-11"><span class="kw">impl</span> <span class="bu">Drop</span> <span class="cf">for</span> Finalize <span class="op">{</span></span>
+<span id="cb6-12">    <span class="kw">fn</span> drop(<span class="op">&amp;</span><span class="kw">mut</span> <span class="kw">self</span>) <span class="op">{</span></span>
+<span id="cb6-13">        <span class="kw">let</span> stuck <span class="op">=</span> <span class="op">{</span></span>
+<span id="cb6-14">            <span class="kw">let</span> <span class="kw">mut</span> jobs <span class="op">=</span> <span class="kw">self</span><span class="op">.</span>inner<span class="op">.</span>jobs<span class="op">.</span>lock()<span class="op">;</span></span>
+<span id="cb6-15">            <span class="cf">match</span> jobs<span class="op">.</span>map<span class="op">.</span>get_mut(<span class="op">&amp;</span><span class="kw">self</span><span class="op">.</span>id) <span class="op">{</span></span>
+<span id="cb6-16">                <span class="cn">Some</span>(e)</span>
+<span id="cb6-17">                    <span class="cf">if</span> e<span class="op">.</span>control</span>
+<span id="cb6-18">                        <span class="op">.</span>as_ref()</span>
+<span id="cb6-19">                        <span class="op">.</span>is_some_and(<span class="op">|</span>c<span class="op">|</span> <span class="pp">Arc::</span>ptr_eq(c<span class="op">,</span> <span class="op">&amp;</span><span class="kw">self</span><span class="op">.</span>control)) <span class="op">=&gt;</span></span>
+<span id="cb6-20">                <span class="op">{</span></span>
+<span id="cb6-21">                    e<span class="op">.</span>control <span class="op">=</span> <span class="cn">None</span><span class="op">;</span></span>
+<span id="cb6-22">                    e<span class="op">.</span>snap<span class="op">.</span>state <span class="op">==</span> <span class="pp">JobState::</span>Compressing</span>
+<span id="cb6-23">                <span class="op">}</span></span>
+<span id="cb6-24">                _ <span class="op">=&gt;</span> <span class="cn">false</span><span class="op">,</span></span>
+<span id="cb6-25">            <span class="op">}</span></span>
+<span id="cb6-26">        <span class="op">};</span></span>
+<span id="cb6-27">        <span class="cf">if</span> stuck <span class="op">{</span></span>
+<span id="cb6-28">            <span class="co">// ...</span></span>
+<span id="cb6-29">        <span class="op">}</span></span>
+<span id="cb6-30">        <span class="kw">self</span><span class="op">.</span>inner<span class="op">.</span>wake<span class="op">.</span>notify_one()<span class="op">;</span></span>
+<span id="cb6-31">    <span class="op">}</span></span>
+<span id="cb6-32"><span class="op">}</span></span></code></pre></div>
+<p><code>compress_job</code> creates it first with <code>let _finalize = Finalize { ... };</code> (a bare <code>_</code> would drop it immediately). Without it, an encode that ended unexpectedly would leave its job compressing forever and the scheduler asleep, blocking the encode slot; with it, every exit releases the slot, wakes the scheduler, and fails a stuck job. Because the engine’s locks come from parking_lot, the guard can lock the job table even while a panic unwinds. The FFmpeg runner similarly uses <code>KillOnDrop</code> from <code>process-wrap</code> (<a href="/books/r2dock/read/ch025#ch-17">Chapter 17</a>).</p>
+<p><code>PLAN.md</code> section 12.5 says multipart cleanup “uses an RAII guard that calls <code>AbortMultipartUpload</code> on drop”. The audited code has no such guard: the only non-test <code>Drop</code> implementations are <code>Finalize</code> and the test kit’s servers. Instead, <code>upload.rs</code> calls <code>abort_in_background</code> or <code>abort_multipart</code> explicitly on each cancel and failure path (<a href="/books/r2dock/read/ch023#ch-16">Chapter 16</a>, Retries, Cancellation, and Idempotency). That is easy to follow but relies on every new exit path remembering the call, a plan and code mismatch worth resolving.</p>
+<p>Finally, <code>unsafe_code = "forbid"</code> means no R2Dock crate contains <code>unsafe</code>; platform needs such as opening a file without following symbolic links use safe wrappers like <code>OpenOptionsExt::custom_flags</code> and the <code>same-file</code> crate.</p>
+</section>
+<section id="working-on-this-code-3" class="level3">
+<h2>Working on This Code</h2>
+<p>Give a new layer a <code>thiserror</code> enum whose messages contain no paths, secrets, or raw server text, with an explicit conversion to <code>AppError</code>. Never <code>unwrap</code>. Keep <code>parking_lot</code> critical sections to a few statements and never across an <code>.await</code> (use <code>tokio::sync::Mutex</code> there), and use atomics only for counters and flags. Write a <code>Drop</code> guard when something must be released on every exit path, and avoid wildcard <code>_</code> arms on enums you own.</p>
+<p>Run <code>cargo test -p r2dock-core</code>, <code>cargo test -p r2dock-r2</code> (<code>maps_codes</code>), <code>cargo test -p r2dock-transfer</code> (<code>classification</code>, progress counter tests), and <code>cargo test -p r2dock</code> (registry and settings tests), then <code>cargo clippy --workspace --all-targets -- -D warnings</code>, since the lints are errors in CI.</p>
+</section>
+<section id="further-reading-3" class="level3">
+<h2>Further Reading</h2>
+<ul>
+<li><a href="https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html" target="_blank" rel="noopener noreferrer">The Rust Programming Language, What Is Ownership?</a></li>
+<li><a href="https://doc.rust-lang.org/std/sync/struct.Arc.html" target="_blank" rel="noopener noreferrer">std::sync::Arc</a> and <a href="https://doc.rust-lang.org/std/sync/struct.Mutex.html" target="_blank" rel="noopener noreferrer">std::sync::Mutex</a></li>
+<li><a href="https://docs.rs/parking_lot/latest/parking_lot/type.Mutex.html" target="_blank" rel="noopener noreferrer">parking_lot::Mutex</a></li>
+<li><a href="https://docs.rs/thiserror/latest/thiserror/" target="_blank" rel="noopener noreferrer">thiserror</a></li>
+<li><code>crates/r2dock-transfer/src/retry.rs</code> and <code>engine/compress.rs</code></li>
+</ul>
+</section>
+</section>
