@@ -39,3 +39,6 @@ Icon
 
 # Supabase CLI scratch (version cache, linked-project state)
 supabase/.temp/
+
+# Python bytecode from running scripts/import-epub.py
+__pycache__/
