@@ -161,11 +161,25 @@ var send_contact_message_default = defineTool4({
       return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
     }
     const supabase = supabaseForUser(ctx);
-    const { data, error } = await supabase.from("contact_messages").insert({ user_id: ctx.getUserId(), name, email, subject, message }).select("id,created_at").maybeSingle();
-    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    const { data, error } = await supabase.functions.invoke("send-contact-email", {
+      body: { name, email, subject, message }
+    });
+    if (error) {
+      let detail = error.message;
+      const response = error.context;
+      if (response && typeof response.json === "function") {
+        try {
+          const body = await response.json();
+          if (body?.error) detail = body.error;
+        } catch {
+        }
+      }
+      return { content: [{ type: "text", text: detail }], isError: true };
+    }
+    const receipt = { id: data?.id ?? null, created_at: data?.created_at ?? null };
     return {
-      content: [{ type: "text", text: `Message sent (id ${data?.id ?? "unknown"}).` }],
-      structuredContent: { message: data }
+      content: [{ type: "text", text: `Message sent (id ${receipt.id ?? "unknown"}).` }],
+      structuredContent: { message: receipt }
     };
   }
 });
