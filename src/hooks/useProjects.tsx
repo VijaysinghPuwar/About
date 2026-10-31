@@ -22,7 +22,11 @@ export interface Project {
   updated_at: string;
 }
 
-export function useProjects() {
+/**
+ * `enabled: false` defers the request. The command palette is mounted on every
+ * route, and it only needs the database rows once it is opened.
+ */
+export function useProjects({ enabled = true }: { enabled?: boolean } = {}) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,8 +62,9 @@ export function useProjects() {
   };
 
   useEffect(() => {
+    if (!enabled) return;
     fetchProjects();
-  }, [user]);
+  }, [user, enabled]);
 
   return { projects, loading, error, refetch: fetchProjects };
 }

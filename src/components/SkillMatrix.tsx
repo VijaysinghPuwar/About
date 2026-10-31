@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { SKILL_GROUPS as GROUPS, countProjectsUsing } from '@/lib/skills';
 
 /**
  * Skills as evidence, not self-assessment.
@@ -18,94 +19,15 @@ interface SkillMatrixProps {
   activeSkill: string | null;
 }
 
-interface Skill {
-  /** Shown to the reader. */
-  label: string;
-  /** Tech strings that count as this skill. Matched case-insensitively as a
-   *  substring, which absorbs the "Next.js" / "Next.js 16" style drift in the
-   *  project data without needing the source rows cleaned up first. */
-  match?: string[];
-}
-
-const GROUPS: { key: string; label: string; skills: Skill[] }[] = [
-  {
-    key: 'secops',
-    label: 'Security Operations',
-    skills: [
-      { label: 'SIEM / Splunk', match: ['splunk', 'siem'] },
-      { label: 'Detection Engineering' },
-      { label: 'Incident Response' },
-      { label: 'Vulnerability Assessment', match: ['nmap', 'nse'] },
-      { label: 'IDS / IPS' },
-      { label: 'Endpoint Hardening', match: ['hardening', 'iptables', 'ufw'] },
-      { label: 'OWASP', match: ['owasp'] },
-    ],
-  },
-  {
-    key: 'identity',
-    label: 'Identity & Access',
-    skills: [
-      { label: 'Active Directory', match: ['active directory', 'ldap'] },
-      { label: 'IAM', match: ['iam'] },
-      { label: 'OAuth 2.0 / OIDC', match: ['oauth', 'nextauth', 'auth.js'] },
-      { label: 'JWT & Session Security', match: ['jwt', 'jose'] },
-      { label: 'MFA & GPO' },
-      { label: 'RBAC', match: ['rbac'] },
-      { label: 'Encryption at Rest', match: ['fernet', 'aes', 'cryptography'] },
-    ],
-  },
-  {
-    key: 'cloud',
-    label: 'Cloud & Infrastructure',
-    skills: [
-      { label: 'AWS', match: ['aws', 'ec2', 'vpc'] },
-      { label: 'Google Cloud Run', match: ['cloud run', 'gcp'] },
-      { label: 'Docker', match: ['docker'] },
-      { label: 'Linux', match: ['linux', 'ubuntu', 'wsl'] },
-      { label: 'Windows Administration', match: ['windows'] },
-      { label: 'ServiceNow' },
-    ],
-  },
-  {
-    key: 'network',
-    label: 'Networking',
-    skills: [
-      { label: 'TCP/IP', match: ['tcp'] },
-      { label: 'Cisco Routing & Switching', match: ['cisco', 'packet tracer', 'pvst'] },
-      { label: 'VLANs & Segmentation', match: ['vlan', 'subnet'] },
-      { label: 'Firewalls', match: ['firewall', 'iptables', 'nat'] },
-      { label: 'Wireshark', match: ['wireshark'] },
-      { label: 'Nmap', match: ['nmap'] },
-    ],
-  },
-  {
-    key: 'build',
-    label: 'Automation & Engineering',
-    skills: [
-      { label: 'Python', match: ['python'] },
-      { label: 'PowerShell', match: ['powershell'] },
-      { label: 'Bash / Shell', match: ['bash', 'shell'] },
-      { label: 'Ansible', match: ['ansible'] },
-      { label: 'FastAPI', match: ['fastapi'] },
-      { label: 'TypeScript', match: ['typescript'] },
-      { label: 'React / Next.js', match: ['react', 'next.js'] },
-      { label: 'SQL & NoSQL', match: ['postgres', 'mongodb', 'sqlalchemy', 'redis'] },
-    ],
-  },
-];
-
 export function SkillMatrix({ projects, onSelectSkill, activeSkill }: SkillMatrixProps) {
   // Evidence counts come from the real project rows, so they cannot drift away
   // from the work on display.
   const counts = useMemo(() => {
-    const tech = projects.map(p => (p.tech || []).map(t => t.toLowerCase()));
     const out = new Map<string, number>();
     for (const group of GROUPS) {
       for (const skill of group.skills) {
         if (!skill.match) continue;
-        const n = tech.filter(list =>
-          list.some(t => skill.match!.some(m => t.includes(m))),
-        ).length;
+        const n = countProjectsUsing(projects, skill.match);
         if (n > 0) out.set(skill.label, n);
       }
     }
