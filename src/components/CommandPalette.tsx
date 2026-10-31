@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Compass, Zap, Code, Folder, FileQuestion } from 'lucide-react';
-import projects from '@/data/projects.json';
+import { useProjects } from '@/hooks/useProjects';
+import { mergeProjects, type PortfolioProject } from '@/lib/merge-projects';
+import { findSkill, countProjectsUsing } from '@/lib/skills';
+import { emitFilterSkill, emitOpenProject, scrollToSection } from '@/lib/portfolio-events';
 import { loginHref } from '@/lib/auth-redirect';
 import { useAuth } from '@/hooks/useAuth';
 import { contactEmail } from '@/lib/contact-email';
@@ -18,14 +21,6 @@ interface Command {
   action: () => void;
 }
 
-const scrollTo = (id: string) => {
-  const el = document.getElementById(id);
-  if (el) {
-    const top = el.getBoundingClientRect().top + window.scrollY - 64;
-    window.scrollTo({ top, behavior: 'smooth' });
-  }
-};
-
 const CATEGORY_ICONS: Record<string, typeof Compass> = {
   Navigation: Compass,
   Actions: Zap,
@@ -33,12 +28,27 @@ const CATEGORY_ICONS: Record<string, typeof Compass> = {
   Projects: Folder,
 };
 
-function buildCommands(isAuthed: boolean, goLogin: () => void, go: (path: string) => void): Command[] {
+interface BuildContext {
+  isAuthed: boolean;
+  goLogin: () => void;
+  go: (path: string) => void;
+  /** Scrolls to a home-page section, navigating home first from any other route. */
+  goSection: (id: string) => void;
+  /** True on the home page, where the sections (and their listeners) are mounted. */
+  onHome: boolean;
+  projects: PortfolioProject[];
+}
+
+/* Skills the palette offers. Their aliases come from the shared catalogue in
+   src/lib/skills.ts, so the count and the filter match the skills section. */
+const TRACKED_SKILLS = ['Python', 'PowerShell', 'AWS', 'Docker', 'Linux', 'Nmap'];
+
+function buildCommands({ isAuthed, goLogin, go, goSection, onHome, projects }: BuildContext): Command[] {
   const nav: Command[] = [
-    { category: 'Navigation', label: 'Go to Home', keywords: 'hero top', action: () => scrollTo('home') },
-    { category: 'Navigation', label: 'Go to Projects', keywords: 'work portfolio', action: () => scrollTo('projects') },
-    { category: 'Navigation', label: 'Go to Experience', keywords: 'timeline education', action: () => scrollTo('experience') },
-    { category: 'Navigation', label: 'Go to Contact', keywords: 'email message', action: () => scrollTo('contact') },
+    { category: 'Navigation', label: 'Go to Home', keywords: 'hero top', action: () => goSection('home') },
+    { category: 'Navigation', label: 'Go to Projects', keywords: 'work portfolio', action: () => goSection('projects') },
+    { category: 'Navigation', label: 'Go to Experience', keywords: 'timeline education', action: () => goSection('experience') },
+    { category: 'Navigation', label: 'Go to Contact', keywords: 'email message', action: () => goSection('contact') },
     { category: 'Navigation', label: 'Go to Books', hint: 'Library', keywords: 'books read guides library epub', action: () => go('/books') },
     { category: 'Navigation', label: 'Go to Videos', hint: 'Channel', keywords: 'videos youtube watch course walkthrough ospf r2dock data center', action: () => go('/videos') },
   ];
@@ -105,29 +115,34 @@ function buildCommands(isAuthed: boolean, goLogin: () => void, go: (path: string
         },
   ];
 
-  const skillCounts: Record<string, number> = {};
-  const TRACKED_SKILLS = ['Python', 'PowerShell', 'AWS', 'Docker', 'Linux', 'Nmap'];
-  for (const p of projects) {
-    for (const t of p.tech) {
-      const match = TRACKED_SKILLS.find(s => t.toLowerCase().includes(s.toLowerCase()));
-      if (match) skillCounts[match] = (skillCounts[match] || 0) + 1;
-    }
-  }
-
-  const skills: Command[] = TRACKED_SKILLS.map(s => ({
-    category: 'Skills' as const,
-    label: s,
-    hint: `Used in ${skillCounts[s] || 0} projects`,
-    keywords: 'skill tech',
-    action: () => scrollTo('projects'),
-  }));
+  // The section's listeners only exist on the home page. From another route the
+  // event is held by portfolio-events and delivered once home has mounted.
+  const skills: Command[] = TRACKED_SKILLS.flatMap(label => {
+    const aliases = findSkill(label)?.match;
+    if (!aliases) return [];
+    const n = countProjectsUsing(projects, aliases);
+    return [{
+      category: 'Skills' as const,
+      label,
+      hint: n > 0 ? `Used in ${n} project${n === 1 ? '' : 's'}` : undefined,
+      keywords: 'skill tech',
+      action: () => {
+        emitFilterSkill({ label, aliases });
+        goSection('projects');
+      },
+    }];
+  });
 
   const projectCmds: Command[] = projects.map(p => ({
     category: 'Projects' as const,
     label: p.title,
     hint: p.category,
     keywords: [...p.tech, ...p.tags].join(' '),
-    action: () => scrollTo('projects'),
+    action: () => {
+      // ProjectShowcase opens the detail view and scrolls to it.
+      emitOpenProject({ query: p.id });
+      if (!onHome) go('/#projects');
+    },
   }));
 
   return [...nav, ...actions, ...skills, ...projectCmds];
@@ -143,10 +158,30 @@ export function CommandPalette() {
   const listRef = useRef<HTMLDivElement>(null);
   const prevFocusRef = useRef<HTMLElement | null>(null);
 
+  const { pathname } = useLocation();
+  const onHome = pathname === '/';
+
+  // Database-only projects are merged in the same way the home page does it.
+  // The request waits for the first open: the palette is mounted on every route.
+  const [hasOpened, setHasOpened] = useState(false);
+  useEffect(() => { if (isOpen) setHasOpened(true); }, [isOpen]);
+  const { projects: dbProjects } = useProjects({ enabled: hasOpened });
+  const projects = useMemo(() => mergeProjects(dbProjects), [dbProjects]);
+
   const isAuthed = !!user;
   const commands = useMemo(
-    () => buildCommands(isAuthed, () => navigate(loginHref()), path => navigate(path)),
-    [isAuthed, navigate],
+    () => buildCommands({
+      isAuthed,
+      goLogin: () => navigate(loginHref()),
+      go: path => navigate(path),
+      goSection: id => {
+        if (onHome) scrollToSection(id);
+        else navigate(id === 'home' ? '/' : `/#${id}`);
+      },
+      onHome,
+      projects,
+    }),
+    [isAuthed, navigate, onHome, projects],
   );
 
   const filtered = useMemo(() => {

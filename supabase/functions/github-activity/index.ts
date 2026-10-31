@@ -35,6 +35,17 @@ const DAYS = 30;
 /** Served to every caller for this long, so one token spends few requests. */
 const CACHE_SECONDS = 6 * 60 * 60;
 
+/*
+  The Cache-Control header only helps when a cache sits in front of the
+  function, and nothing guarantees one does. Without a server-side copy, every
+  call spent one GitHub request on the token, so anyone looping on the URL
+  could exhaust its hourly limit and blank the strip for everyone. A warm
+  isolate now answers from memory for the cache window; a cold one makes one
+  request. Failures are not cached, so a fixed token recovers on the next call.
+*/
+let cached: { body: string; expires: number } | null = null;
+let inflight: Promise<Response> | null = null;
+
 const QUERY = `
   query($login: String!, $from: DateTime!, $to: DateTime!) {
     user(login: $login) {
@@ -60,6 +71,30 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  if (cached && cached.expires > Date.now()) {
+    return okResponse(cached.body);
+  }
+  // Concurrent cold requests share one upstream call instead of each spending one.
+  if (inflight) return (await inflight).clone();
+  inflight = fetchActivity();
+  try {
+    return (await inflight).clone();
+  } finally {
+    inflight = null;
+  }
+});
+
+function okResponse(body: string): Response {
+  return new Response(body, {
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+      "Cache-Control": `public, max-age=${CACHE_SECONDS}, s-maxage=${CACHE_SECONDS}`,
+    },
+  });
+}
+
+async function fetchActivity(): Promise<Response> {
   const token = Deno.env.get("GITHUB_TOKEN");
   if (!token) {
     // The caller renders nothing when this happens, so a missing secret
@@ -126,27 +161,20 @@ Deno.serve(async (req) => {
     days.sort((a, b) => a.date.localeCompare(b.date));
     const window = days.slice(-DAYS);
 
-    return new Response(
-      JSON.stringify({
+    const payload = JSON.stringify({
         days: window,
         total: window.reduce((n, d) => n + d.count, 0),
         // Reported separately so the site can say plainly that some of the
         // work is in repositories a visitor cannot open.
         privateCount: collection.restrictedContributionsCount ?? 0,
         commitTotal: collection.totalCommitContributions ?? 0,
-      }),
-      {
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-          "Cache-Control": `public, max-age=${CACHE_SECONDS}, s-maxage=${CACHE_SECONDS}`,
-        },
-      },
-    );
+      });
+    cached = { body: payload, expires: Date.now() + CACHE_SECONDS * 1000 };
+    return okResponse(payload);
   } catch (err) {
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : "Unknown failure" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
-});
+}

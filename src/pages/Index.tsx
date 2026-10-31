@@ -1,13 +1,13 @@
 import { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { GitHubMark, LinkedInMark } from '@/components/BrandMarks';
-import projectsData from '@/data/projects.json';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
 import { SecurityDiagram } from '@/components/SecurityDiagram';
 import { SectionReveal, SectionRule } from '@/components/SectionReveal';
 import { ProtectedEmail } from '@/components/ProtectedEmail';
 import { onFilterSkill } from '@/lib/portfolio-events';
+import { mergeProjects } from '@/lib/merge-projects';
 
 const SkillMatrix = lazy(() => import('@/components/SkillMatrix').then(m => ({ default: m.SkillMatrix })));
 const ExperienceTimeline = lazy(() => import('@/components/ExperienceTimeline').then(m => ({ default: m.ExperienceTimeline })));
@@ -47,23 +47,31 @@ function SectionHeader({
 }
 
 /**
- * Arriving from another page at `/#contact` (the footer links on /books do
- * this). The sections are lazy, so the target may not exist yet, and once it
- * does, the sections above it are still mounting and pushing it down. Keep
- * the target under the bar for up to three seconds, stopping early once it
- * has held still, or as soon as the reader scrolls for themselves.
+ * Arriving from another page at `/#contact` (the command palette does this
+ * from any other route). The sections are lazy, so the target may not exist
+ * yet, and once it does, the sections above it are still mounting and pushing
+ * it down. Keep the target under the bar for up to three seconds after it
+ * appears, stopping early once it has held still, or as soon as the reader
+ * scrolls for themselves.
  */
 function useScrollToHashOnArrival() {
   useEffect(() => {
     const id = window.location.hash.slice(1);
     if (!id) return;
+    let waited = 0;
     let ticks = 0;
     let steady = 0;
     const stop = () => window.clearInterval(timer);
     const timer = window.setInterval(() => {
       const el = document.getElementById(id);
+      // The three seconds start once the target exists. On a slow connection
+      // the lazy section can take longer than that just to arrive, and the
+      // old shared budget gave up before it did. Ten seconds is the hard cap.
+      if (!el) {
+        if (++waited > 100) stop();
+        return;
+      }
       if (++ticks > 30) return stop();
-      if (!el) return;
       const off = el.getBoundingClientRect().top - 72;
       if (Math.abs(off) > 4) {
         steady = 0;
@@ -87,21 +95,8 @@ export default function Index() {
   useScrollToHashOnArrival();
   /* projects */
   const { projects: dbProjects } = useProjects();
-  /* projects.json is the maintained source and wins on a shared id. The
-     database still holds January seed copies of eight entries that were never
-     updated, and letting them win hid every later edit to those projects. A
-     row that exists only in the database is still shown. */
-  const allProjects = useMemo(() => {
-    const jsonIds = new Set(projectsData.map(p => p.id));
-    const normalized = (dbProjects || []).filter(p => !jsonIds.has(p.id)).map(p => ({
-      id: p.id, title: p.title, description: p.description || '', category: p.category || '',
-      tech: p.tech || [], year: p.year || '', status: p.status || 'completed',
-      featured: p.featured || false, keyResults: p.key_results || [],
-      links: { github: p.github_link, writeup: p.writeup_link, demo: p.demo_link },
-      image: p.image || '', tags: p.tags || [],
-    }));
-    return [...normalized, ...projectsData];
-  }, [dbProjects]);
+  /* projects.json wins on a shared id; see mergeProjects. */
+  const allProjects = useMemo(() => mergeProjects(dbProjects), [dbProjects]);
 
   /* Selecting a skill filters the projects section to the work that uses it. */
   const [skillFilter, setSkillFilter] = useState<{ label: string; aliases: string[] } | null>(null);
