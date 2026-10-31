@@ -51,6 +51,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const Books = lazy(() => import("./pages/Books"));
 const BookDetail = lazy(() => import("./pages/BookDetail"));
 const BookReader = lazy(() => import("./pages/BookReader"));
+const Videos = lazy(() => import("./pages/Videos"));
 
 const queryClient = new QueryClient();
 
@@ -90,6 +91,8 @@ const App = () => (
                       what lets the reader's place follow them between devices. */}
                   <Route path="/books" element={<Suspense fallback={null}><Books /></Suspense>} />
                   <Route path="/books/:slug" element={<Suspense fallback={null}><BookDetail /></Suspense>} />
+                  <Route path="/videos" element={<Suspense fallback={null}><Videos /></Suspense>} />
+                  <Route path="/videos/:slug" element={<Suspense fallback={null}><Videos /></Suspense>} />
                   <Route path="/books/:slug/read/:chapterId?" element={<ProtectedRoute><Suspense fallback={null}><BookReader /></Suspense></ProtectedRoute>} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>

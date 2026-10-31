@@ -35,6 +35,7 @@ export function Navigation() {
   const { user, profile, isAdmin, signOut } = useAuth();
   const isHomePage = location.pathname === '/';
   const onBooks = location.pathname.startsWith('/books');
+  const onVideos = location.pathname.startsWith('/videos');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -176,6 +177,18 @@ export function Navigation() {
             {onBooks && <span className="absolute bottom-[13px] left-[13px] right-[13px] h-px bg-primary" />}
           </Link>
 
+          <Link
+            to="/videos"
+            aria-current={onVideos ? 'page' : undefined}
+            className={cn(
+              'relative flex h-11 items-center px-[13px] text-[14px] transition-colors',
+              onVideos ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            Videos
+            {onVideos && <span className="absolute bottom-[13px] left-[13px] right-[13px] h-px bg-primary" />}
+          </Link>
+
           <a
             href="/resume.pdf"
             download
@@ -285,6 +298,17 @@ export function Navigation() {
             )}
           >
             Books
+          </Link>
+
+          <Link
+            to="/videos"
+            aria-current={onVideos ? 'page' : undefined}
+            className={cn(
+              'flex h-12 items-center border-t border-border text-[15px] transition-colors',
+              onVideos ? 'text-primary' : 'text-foreground'
+            )}
+          >
+            Videos
           </Link>
 
           <a

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, forwardRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Github, X, ExternalLink, ArrowRight, Columns2, Search } from 'lucide-react';
+import { Github, X, ExternalLink, ArrowRight, Columns2, Search, Play } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { onOpenProject, scrollToSection } from '@/lib/portfolio-events';
 import { cn } from '@/lib/utils';
 
@@ -90,7 +91,8 @@ interface Project {
   status: string;
   featured: boolean;
   keyResults: string[];
-  links: { github: string | null; writeup: string | null; demo: string | null };
+  /** `video` is a path on this site (/videos/<slug>), never a YouTube URL. */
+  links: { github: string | null; writeup: string | null; demo: string | null; video?: string | null };
   image: string;
   tags: string[];
 }
@@ -589,6 +591,21 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
                     </dl>
 
                     <div className="mt-6 flex flex-wrap gap-2.5">
+                      {/* A video plays on this site's own /videos page, in the
+                          same tab. Linking out to youtu.be in a new tab failed
+                          wherever the site runs inside a sandboxed frame (an
+                          editor preview, an embed): the popup inherits the
+                          sandbox, YouTube answers with a Cross-Origin-Opener-
+                          Policy, and Chrome shows ERR_BLOCKED_BY_RESPONSE. */}
+                      {selectedProject.links.video && (
+                        <Link
+                          to={selectedProject.links.video}
+                          onClick={closeModal}
+                          className="btn-outline inline-flex h-10 items-center gap-2 rounded-md px-4 text-[13.5px] font-medium"
+                        >
+                          <Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" /> Watch video
+                        </Link>
+                      )}
                       {selectedProject.links.demo && (
                         <a
                           href={selectedProject.links.demo}

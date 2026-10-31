@@ -40,6 +40,7 @@ function buildCommands(isAuthed: boolean, goLogin: () => void, go: (path: string
     { category: 'Navigation', label: 'Go to Experience', keywords: 'timeline education', action: () => scrollTo('experience') },
     { category: 'Navigation', label: 'Go to Contact', keywords: 'email message', action: () => scrollTo('contact') },
     { category: 'Navigation', label: 'Go to Books', hint: 'Library', keywords: 'books read guides library epub', action: () => go('/books') },
+    { category: 'Navigation', label: 'Go to Videos', hint: 'Channel', keywords: 'videos youtube watch course walkthrough ospf r2dock data center', action: () => go('/videos') },
   ];
 
   const actions: Command[] = [

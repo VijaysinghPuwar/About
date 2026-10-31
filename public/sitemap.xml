@@ -32,4 +32,25 @@
     <lastmod>2026-10-18</lastmod>
     <priority>0.5</priority>
   </url>
+  <url>
+    <loc>https://vijaysinghpuwar.com/videos</loc>
+    <lastmod>2026-10-31</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://vijaysinghpuwar.com/videos/ospf-course</loc>
+    <lastmod>2026-10-31</lastmod>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://vijaysinghpuwar.com/videos/inside-r2dock</loc>
+    <lastmod>2026-10-31</lastmod>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://vijaysinghpuwar.com/videos/data-center-network</loc>
+    <lastmod>2026-10-31</lastmod>
+    <priority>0.5</priority>
+  </url>
 </urlset>

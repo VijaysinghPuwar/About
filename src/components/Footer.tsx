@@ -57,6 +57,9 @@ export function Footer() {
           <Link to="/books" className="tap-44 text-muted-foreground transition-colors hover:text-primary">
             Books
           </Link>
+          <Link to="/videos" className="tap-44 text-muted-foreground transition-colors hover:text-primary">
+            Videos
+          </Link>
         </nav>
       </div>
     </footer>

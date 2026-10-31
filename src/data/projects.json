@@ -157,7 +157,8 @@
     "links": {
       "github": "https://github.com/VijaysinghPuwar/R2Dock",
       "writeup": null,
-      "demo": "https://github.com/VijaysinghPuwar/R2Dock/releases"
+      "demo": "https://github.com/VijaysinghPuwar/R2Dock/releases",
+      "video": "/videos/inside-r2dock"
     },
     "image": "",
     "tags": [
@@ -236,7 +237,8 @@
     "links": {
       "github": "https://github.com/VijaysinghPuwar/ospf-multi-area-lab",
       "writeup": null,
-      "demo": "https://youtu.be/Hul1ntaAMCo"
+      "demo": null,
+      "video": "/videos/ospf-course"
     },
     "image": "",
     "tags": [
@@ -278,7 +280,8 @@
     "links": {
       "github": "https://github.com/VijaysinghPuwar/enterprise-datacenter-network-lab",
       "writeup": null,
-      "demo": "https://youtu.be/VVfJT8srvqo"
+      "demo": null,
+      "video": "/videos/data-center-network"
     },
     "image": "",
     "tags": [
