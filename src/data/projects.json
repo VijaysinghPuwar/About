@@ -77,7 +77,7 @@
       "Dynamic 24h risk score derived from detected security events"
     ],
     "links": {
-      "github": "https://github.com/VijaysinghPuwar/VAULTSNAKE",
+      "github": null,
       "writeup": null,
       "demo": "https://vaultsnake.vercel.app"
     },
@@ -125,6 +125,211 @@
       "go",
       "postgres",
       "react"
+    ]
+  },
+  {
+    "id": "r2dock",
+    "title": "R2Dock: Desktop Client for Cloudflare R2",
+    "description": "An open-source desktop file manager for Cloudflare R2 with crash-safe multipart uploads, resumable downloads and keys held in the OS keychain. A Rust core does all I/O; the React interface never sees a secret or a local path. No backend, no telemetry.",
+    "category": "Application Development",
+    "tech": [
+      "Rust",
+      "Tauri 2",
+      "React",
+      "TypeScript",
+      "Tokio",
+      "AWS SDK for S3",
+      "FFmpeg",
+      "Vitest",
+      "GitHub Actions"
+    ],
+    "year": "2026",
+    "status": "completed",
+    "featured": true,
+    "keyResults": [
+      "Stress-tested before release with 3,000 uploads and downloads totaling 1.3 GB and 160,000 activity-log rows written from 32 threads",
+      "Roughly 550 automated tests (406 Rust, 142 Vitest), run in CI on Windows, macOS and Linux against an in-process S3-compatible server, so no test touches a real bucket",
+      "Multipart uploads run up to 4 parts in parallel with per-part checksums and an on-disk journal, so a pause, dropped connection or restart resumes where it stopped",
+      "Secrets go to macOS Keychain, Windows Credential Manager or Linux Secret Service with a session-only fallback, never a plaintext file, and are never returned to the interface",
+      "Downloads treat object names as untrusted: they cannot leave the chosen folder, never follow symlinks and never overwrite without an explicit Replace",
+      "Nine tagged releases from v0.1.0 to v0.5.1; v0.5.0 closed every finding of an independent audit of v0.4.1, and v0.5.1 patched RUSTSEC-2026-0382 and -0383"
+    ],
+    "links": {
+      "github": "https://github.com/VijaysinghPuwar/R2Dock",
+      "writeup": null,
+      "demo": "https://github.com/VijaysinghPuwar/R2Dock/releases"
+    },
+    "image": "",
+    "tags": [
+      "Least privilege",
+      "OS keychain",
+      "Path traversal defense",
+      "Resumable transfers",
+      "Content Security Policy",
+      "Desktop app"
+    ]
+  },
+  {
+    "id": "spoonstill",
+    "title": "Spoonstill: Batch Photo-and-Narration Video Renderer",
+    "description": "A batch renderer that turns a folder of stills and narration into one MP4, giving each image Ken Burns motion and cutting each scene on the length of its narration. A Rust workspace driving FFmpeg, with a CLI as the complete control surface and a thin Tauri desktop window on top.",
+    "category": "Application Development",
+    "tech": [
+      "Rust",
+      "FFmpeg",
+      "Tauri 2",
+      "Edge TTS",
+      "GitHub Actions",
+      "Bash",
+      "PowerShell"
+    ],
+    "year": "2026",
+    "status": "in-progress",
+    "featured": false,
+    "keyResults": [
+      "4K caption rendering cut from 604 ms to 62 ms per cue by rewriting dilate as a sliding-window max and blur as a running sum, with byte-identical output",
+      "Validating a 200-scene project dropped from 11.82 s to 1.31 s (9x) after replacing a flat 20 ms poll with proportional backoff and concurrent probes",
+      "About 51,700 lines of Rust across 6 crates with 826 test functions and 39 shell exit gates that render real media through real FFmpeg",
+      "179 numbered entries in a decision log; architecture, no-shell-string and cited-decision rules are enforced by tests that fail the build",
+      "Every push runs 6 CI jobs, including cargo audit, full test suites on macOS and Windows, and both installers executed end to end",
+      "Measured the free voice service failing after 335 to 390 lines regardless of request rate, so renders wait out the limit instead of failing"
+    ],
+    "links": {
+      "github": "https://github.com/VijaysinghPuwar/spoonstill",
+      "writeup": null,
+      "demo": null
+    },
+    "image": "",
+    "tags": [
+      "Video rendering",
+      "FFmpeg filter graphs",
+      "Performance measurement",
+      "Decision log",
+      "Cross-platform",
+      "CLI-first"
+    ]
+  },
+  {
+    "id": "ospf-multi-area-lab",
+    "title": "OSPF Multi-Area Lab: 8 Routers, 5 Areas, OSPFv2 and OSPFv3",
+    "description": "A Cisco Packet Tracer lab of eight OSPF routers in five areas, built and captured by script, and the basis for a 46-minute narrated course from the first Hello packet to multi-area design and troubleshooting.",
+    "category": "Network Security",
+    "tech": [
+      "Cisco Packet Tracer 9.0",
+      "Cisco IOS",
+      "OSPFv2",
+      "OSPFv3",
+      "IPv6",
+      "JavaScript (Packet Tracer automation)"
+    ],
+    "year": "2026",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "Area 2's link-state database dropped from 23 LSAs as a normal area to 18 as a stub and 3 as totally stubby",
+      "36 captured evidence steps, each applied by script with its raw show output saved",
+      "Summarizing area 1 as 10.1.0.0/16 replaced five routes with one, plus a Null0 discard route on the ABR",
+      "auto-cost reference-bandwidth 10000 separated 100 Mbps and 1 Gbps paths that tied at cost 1 by default",
+      "Seven injected faults diagnosed: hello timers, area ID, subnet mask, MTU, passive interface, duplicate router ID and network type",
+      "Documented where Packet Tracer departs from real IOS, including NSSA generating no Type 7 LSAs and an active virtual link producing bogus Type 4 LSAs and an external routing loop"
+    ],
+    "links": {
+      "github": "https://github.com/VijaysinghPuwar/ospf-multi-area-lab",
+      "writeup": null,
+      "demo": "https://youtu.be/Hul1ntaAMCo"
+    },
+    "image": "",
+    "tags": [
+      "OSPF",
+      "Multi-area routing",
+      "Stub areas",
+      "Route summarization",
+      "MD5 authentication",
+      "Troubleshooting"
+    ]
+  },
+  {
+    "id": "enterprise-datacenter-network-lab",
+    "title": "DC1: Enterprise Data Center Network Lab",
+    "description": "A redundant, segmented data center network in Cisco Packet Tracer 9 with dual cores, dual-homed racks, dual-ISP eBGP and a four-zone ASA firewall, tested by breaking it while traffic was running.",
+    "category": "Network Security",
+    "tech": [
+      "Cisco Packet Tracer 9.0",
+      "Cisco IOS",
+      "Cisco ASA 5506-X",
+      "HSRPv2",
+      "OSPF",
+      "eBGP",
+      "LACP EtherChannel",
+      "Rapid-PVST",
+      "JavaScript (Packet Tracer automation)"
+    ],
+    "year": "2026",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "Passed 12 of 12 acceptance flows, 8 required to work and 4 required to be blocked, both live and again after the saved file was reopened",
+      "Five failure drills under continuous ping: a rack uplink failure lost 0 of 200 packets, a core-to-core cable 1 of 240, and Core 1 powered off 35 of 250 while Core 2 took over every gateway",
+      "22 devices and 26 cables, with web, app and database tiers in separate VLANs and the database tier behind the firewall, unreachable from the web servers",
+      "ASA with four security zones (outside, DMZ, database, inside), static NAT for public web and DNS, and PAT for internal hosts",
+      "SSH-only management accepted only from the management VLAN, plus port security, BPDU guard and DHCP snooping on rack ports",
+      "Failover testing exposed the firewall's database cable as a single point of failure, so both firewall links moved onto the dual-homed rack switches"
+    ],
+    "links": {
+      "github": "https://github.com/VijaysinghPuwar/enterprise-datacenter-network-lab",
+      "writeup": null,
+      "demo": "https://youtu.be/VVfJT8srvqo"
+    },
+    "image": "",
+    "tags": [
+      "Data center design",
+      "High availability",
+      "Network segmentation",
+      "Firewall zones",
+      "NAT/DMZ",
+      "Failure testing"
+    ]
+  },
+  {
+    "id": "hardened-static-page",
+    "title": "Hardened Static Page: CSP and Weight Budget Enforced in CI",
+    "description": "A deliberately simple static page wrapped in a deny-by-default Content-Security-Policy, a page-weight budget and a CI pipeline that fails the build if either regresses.",
+    "category": "Application Security",
+    "tech": [
+      "HTML",
+      "CSS",
+      "Python",
+      "Bash",
+      "GitHub Actions",
+      "Lighthouse CI",
+      "gitleaks",
+      "html-validate",
+      "stylelint"
+    ],
+    "year": "2026",
+    "status": "completed",
+    "featured": false,
+    "keyResults": [
+      "Cold page load cut from about 19.6 MB to 34 KB by replacing a 19,523,366-byte PNG with a 1,020-byte SVG, with Lighthouse 100/100/100/100 in CI",
+      "CSP of default-src 'none' with no unsafe-inline or unsafe-eval, made possible by self-hosting the font and dropping all 3 third-party hosts",
+      "CI injects an inline script into a copy of the page and fails if it runs, so the policy is tested for effect rather than for spelling",
+      "Five blocking CI jobs: lint, weight budget (critical path at most 150 KB), header checks, gitleaks across full history and Lighthouse",
+      "9 security headers, including 2-year HSTS with preload, COOP/COEP/CORP and a Permissions-Policy disabling 18 unused features",
+      "Supply chain: Actions pinned to commit SHAs and the gitleaks download verified by SHA-256"
+    ],
+    "links": {
+      "github": "https://github.com/VijaysinghPuwar/hardened-static-page",
+      "writeup": null,
+      "demo": null
+    },
+    "image": "",
+    "tags": [
+      "Content Security Policy",
+      "Security headers",
+      "Performance budget",
+      "CI enforcement",
+      "Supply chain",
+      "Secret scanning"
     ]
   },
   {
@@ -263,7 +468,7 @@
       "Reduced manual configuration time by 80%"
     ],
     "links": {
-      "github": "https://github.com/vijaysinghpuwar/secure-ubuntu-fleet",
+      "github": null,
       "writeup": null,
       "demo": null
     },
@@ -424,7 +629,7 @@
       "Created predictive models for security budget forecasting"
     ],
     "links": {
-      "github": "https://github.com/vijaysinghpuwar/cs601c-final-project",
+      "github": null,
       "writeup": null,
       "demo": null
     },
@@ -488,7 +693,7 @@
       "Validated network segmentation and routing policies"
     ],
     "links": {
-      "github": "https://github.com/vijaysinghpuwar/inter-vlan-roas-lab",
+      "github": null,
       "writeup": null,
       "demo": null
     },
@@ -552,7 +757,7 @@
       "Created gamified security training tool"
     ],
     "links": {
-      "github": "https://github.com/vijaysinghpuwar/VAULTSNAKE",
+      "github": null,
       "writeup": null,
       "demo": null
     },
@@ -918,7 +1123,7 @@
       "Four runtime dependencies, no server, no database and no telemetry. Nothing leaves the browser"
     ],
     "links": {
-      "github": "https://github.com/VijaysinghPuwar/splitforge-local",
+      "github": null,
       "writeup": null,
       "demo": "https://splitforge-local-desktop.vercel.app"
     },

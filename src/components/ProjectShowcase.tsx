@@ -103,66 +103,19 @@ interface ProjectShowcaseProps {
 }
 
 
-const enrichedData: Record<string, { description: string; features: string[] }> = {
+/**
+ * Longer modal copy for the few projects whose card description cannot carry
+ * the whole story. Everything else reads from projects.json, which is the
+ * source of truth: this table used to shadow fifteen entries and kept serving
+ * descriptions the JSON had long since corrected (TOC Extractor was still
+ * "Playwright + Tkinter" here after its rewrite in C#).
+ */
+const enrichedData: Record<string, { description: string }> = {
   'vaultsnake-platform': {
     description: 'Cybersecurity Master’s final project. A full-stack security platform where users authenticate via Google OAuth, store Fernet-encrypted secrets in a personal vault, and monitor account security events, while admins get platform-wide visibility. Implements defense-in-depth: server-side JWT validation on every endpoint, encryption at rest, role-enforced backend middleware, and an automated threat engine that derives a dynamic 24h risk score.',
-    features: ['Google OAuth + server-side JWT', 'Fernet-encrypted vault at rest', 'RBAC user/admin dashboards', 'Automated threat detection & 24h risk score'],
-  },
-  'cutmox': {
-    description: 'A browser-based audio tool built on WebAssembly for fast, fully client-side processing. Built on the TanStack Start template with Vite and deployed via Cloudflare Workers (wrangler). Currently in active build: Phase 1 proved WASM viability, Phase 2 adds settings and upload. No user audio is ever uploaded to a server.',
-    features: ['Fully client-side WASM processing', 'No server upload of audio', 'TanStack Start + Vite', 'Cloudflare Workers deploy'],
   },
   'iptables-hardening': {
     description: 'CYB623 Network Security term project (Pace University, Spring 2026). A two-VM VirtualBox host-only lab (Kali attacker vs Ubuntu defender) building and quantitatively measuring three defensive layers: SSH brute-force defense with the recent module, ICMP/SYN flood mitigation with the limit module, and DNAT port forwarding for service hiding. All steps scripted, idempotent, and shellcheck-linted in CI.',
-    features: ['SSH brute-force defense (recent module)', 'ICMP/SYN flood mitigation (limit module)', 'DNAT :80 → internal :8080', 'Idempotent scripts, shellcheck CI'],
-  },
-  'win-dev-sec-bootstrap': {
-    description: 'Idempotent PowerShell bootstrap for provisioning complete Windows development and security environments. One command sets up security tools, WSL2, Docker, and all development dependencies from scratch.',
-    features: ['One-command setup', 'Idempotent execution', 'WSL2 + Docker config', 'Security tool chain'],
-  },
-  'automating-infosec': {
-    description: 'Comprehensive course repository for CYB 631: Automating Information Security with Python and Shell Scripting. Covers real-world automation scenarios for security operations teams.',
-    features: ['Python security scripts', 'Shell automation', 'Lab exercises', 'Documentation'],
-  },
-  'aws-cloud-security': {
-    description: 'Hands-on cloud security project configuring Amazon EC2 instances with layered network security including VPCs, security groups, CloudWatch monitoring, and IAM policies.',
-    features: ['EC2 hardening', 'VPC architecture', 'CloudWatch alerts', 'IAM least-privilege'],
-  },
-  'cs601c-capstone': {
-    description: 'Reproducible analytics pipeline for CS601C graduate capstone. Applied computational statistics to model cybersecurity investment costs and ROI across enterprise scenarios.',
-    features: ['Statistical modeling', 'Cost-benefit analysis', 'Reproducible pipeline', '64-page report'],
-  },
-  'secure-ubuntu-fleet': {
-    description: 'Automated toolkit for fleet-wide Ubuntu server hardening. Enforces SSH security baselines, configures UFW firewalls, and applies CIS benchmark-aligned configurations.',
-    features: ['SSH hardening', 'Firewall automation', 'CIS benchmarks', 'Fleet deployment'],
-  },
-  'http-hardening-nmap-nse': {
-    description: 'Custom Nmap NSE scripts that automate HTTP security header analysis and hardening verification. Identifies missing headers and validates compliance against OWASP guidelines.',
-    features: ['Custom NSE scripts', 'Header analysis', 'OWASP compliance', 'Automated scanning'],
-  },
-  'rapid-pvst-campus-lab': {
-    description: 'Advanced Cisco Packet Tracer lab implementing Rapid-PVST with dual-homed access, per-VLAN root load-balancing, PortFast, BPDU Guard, and Root Guard.',
-    features: ['Secure multi-switch topology', 'Per-VLAN root balancing', 'BPDU Guard'],
-  },
-  'inter-vlan-roas-lab': {
-    description: 'Packet Tracer exercise demonstrating Router-on-a-Stick configuration for inter-VLAN routing and network segmentation.',
-    features: ['Trunk links & subinterfaces', 'Inter-VLAN routing', 'Network segmentation'],
-  },
-  'vaultsnake': {
-    description: 'Secure login GUI using Tkinter with encrypted credentials storage and a classic Snake game reward for authenticated users.',
-    features: ['Encrypted credential storage', 'User authentication', 'Gamified security'],
-  },
-  'kokorotts': {
-    description: 'Desktop app for offline Kokoro TTS (ONNX) with 4 voices, speed control, play/stop, and WAV export. Windows-ready with one-click installers.',
-    features: ['Offline TTS', '4 voice options', 'WAV export', 'Windows installer'],
-  },
-  'toc-extractor': {
-    description: 'GUI tool to extract chapter pages from a Table of Contents using Playwright + Tkinter with headful browser support for authentication.',
-    features: ['Automated TOC extraction', 'GUI interface', 'Auth support'],
-  },
-  'x86-64-assembly-lab': {
-    description: 'Hands-on lab for NASM on Ubuntu 24.04 containing three beginner x86-64 programs with detailed documentation and Makefile.',
-    features: ['Three x86-64 programs', 'Detailed documentation', 'Reusable Makefile'],
   },
 };
 
@@ -172,10 +125,34 @@ const enrichedData: Record<string, { description: string; features: string[] }> 
 // at render time so the taxonomy stays clean without a data migration.
 const CATEGORY_ALIASES: Record<string, string> = {
   'Automation': 'Security Automation',
-  'Python Tools': 'Security Automation',
+  // Python Tools held desktop apps (TTS, the old VaultSnake), not security
+  // tooling, so it folds into Application Development.
+  'Python Tools': 'Application Development',
+  'Systems': 'Research',
 };
 const normalizeCategory = (category: string) => CATEGORY_ALIASES[category] ?? category;
 
+/** Group order in the index: security work first, then the rest. */
+const CATEGORY_ORDER = [
+  'Application Security',
+  'Network Security',
+  'Security Automation',
+  'Cloud Security',
+  'Threat Intelligence',
+  'Application Development',
+  'Research',
+];
+const categoryRank = (c: string) => {
+  const i = CATEGORY_ORDER.indexOf(c);
+  return i === -1 ? CATEGORY_ORDER.length : i;
+};
+
+/** The demo link means different things; say which before the reader clicks. */
+const demoLabel = (url: string) => {
+  if (/youtu\.?be/.test(url)) return 'Watch video';
+  if (/github\.com\/.+\/releases/.test(url)) return 'Download';
+  return 'Visit site';
+};
 /** True on a device driven by a mouse or trackpad rather than a finger. */
 const hasFinePointer = () =>
   typeof window !== 'undefined' &&
@@ -187,15 +164,17 @@ const hasFinePointer = () =>
  *
  * Six cards was a wall: by the third one a reader is skimming, and the two
  * strongest projects are no longer the ones being looked at. Three is what a
- * reader actually reads, and everything else stays one button away.
+ * reader actually reads, and everything else stays one button away. Four,
+ * not three: a 2×2 grid has no orphan, where the third card used to stretch
+ * across the full width and read as a different kind of thing.
  */
-const FEATURED_LIMIT = 3;
+const FEATURED_LIMIT = 4;
 
 // Declaration order is the display order of the featured grid, so the headline
 // project leads regardless of where it came from (database rows or projects.json).
 const FEATURED_ORDER = [
-  'recap-verse',
-  'vaultsnake-platform', 'breachscope', 'iptables-hardening',
+  'recap-verse', 'r2dock', 'breachscope',
+  'vaultsnake-platform', 'iptables-hardening',
   'win-dev-sec-bootstrap', 'automating-infosec', 'aws-cloud-security',
   'cs601c-capstone', 'secure-ubuntu-fleet', 'http-hardening-nmap-nse',
 ];
@@ -262,10 +241,27 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
   const indexRows = needle
     ? indexAll.filter(p =>
         p.title.toLowerCase().includes(needle) ||
+        p.description.toLowerCase().includes(needle) ||
         normalizeCategory(p.category).toLowerCase().includes(needle) ||
         (p.tech || []).some(t => t.toLowerCase().includes(needle)),
       )
     : indexAll;
+
+  /* Thirty rows in one flat list gave no way in. Grouped by category, newest
+     first inside each group, the index reads as a table of contents. */
+  const indexGroups = Object.entries(
+    indexRows.reduce<Record<string, Project[]>>((acc, p) => {
+      (acc[normalizeCategory(p.category)] ??= []).push(p);
+      return acc;
+    }, {}),
+  )
+    .sort(([a], [b]) => categoryRank(a) - categoryRank(b))
+    .map(([category, rows]) => [
+      category,
+      [...rows].sort((a, b) =>
+        Number(b.year) - Number(a.year) || featuredRank(a.id) - featuredRank(b.id),
+      ),
+    ] as const);
 
   const closeModal = useCallback(() => setSelectedProject(null), []);
   const closeIndex = useCallback(() => { setIndexOpen(false); setIndexQuery(''); }, []);
@@ -340,9 +336,9 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
             <FeaturedCard
               key={project.id}
               project={project}
-              /* Two across, then the third takes the full measure rather
-                 than sitting beside a gap. */
-              className={i === 2 ? 'wide:col-span-2' : undefined}
+              /* An odd count (a skill filter can leave three) still ends on a
+                 full-width card rather than one sitting beside a gap. */
+              className={i === featured.length - 1 && i % 2 === 0 ? 'wide:col-span-2' : undefined}
               onClick={() => setSelectedProject(project)}
             />
           ))}
@@ -453,12 +449,20 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 sm:px-7">
-                {indexRows.map(project => (
-                  <IndexRow
-                    key={project.id}
-                    project={project}
-                    onClick={() => openFromIndex(project)}
-                  />
+                {indexGroups.map(([category, rows]) => (
+                  <section key={category} aria-label={category}>
+                    <h4 className="sticky top-0 z-[1] flex items-baseline justify-between border-b border-border bg-card pb-2 pt-5">
+                      <span className="meta-label">{category}</span>
+                      <span className="font-mono text-[10.5px] text-muted-dim">{rows.length}</span>
+                    </h4>
+                    {rows.map(project => (
+                      <IndexRow
+                        key={project.id}
+                        project={project}
+                        onClick={() => openFromIndex(project)}
+                      />
+                    ))}
+                  </section>
                 ))}
                 {indexRows.length === 0 && (
                   <p className="py-10 text-center text-sm text-muted-foreground">
@@ -568,6 +572,16 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
                       </div>
                     )}
 
+                    {selectedProject.tags?.length > 0 && (
+                      <ul className="mt-6 flex flex-wrap gap-1.5" aria-label="Topics">
+                        {selectedProject.tags.map(t => (
+                          <li key={t} className="rounded-[5px] border border-border px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+                            {t}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
                     <dl className="mt-6 border-t border-border">
                       <MetaRow label="Stack" value={selectedProject.tech.join(' · ')} />
                       <MetaRow label="Year" value={selectedProject.year} />
@@ -582,7 +596,7 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
                           rel="noopener noreferrer"
                           className="btn-outline inline-flex h-10 items-center gap-2 rounded-md px-4 text-[13.5px] font-medium"
                         >
-                          Visit site <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                          {demoLabel(selectedProject.links.demo)} <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                         </a>
                       )}
                       {/* Repository links are public. links.github is only ever set for
@@ -730,23 +744,33 @@ const FeaturedCard = forwardRef<HTMLElement, { project: Project; onClick: () => 
   });
 
 /**
- * Tier two: name, stack, state. Three columns, one hairline, no card chrome.
+ * Tier two: name and what it is, then stack, then year and state. No card
+ * chrome, one hairline. The one-line description is what makes a row worth
+ * opening; a bare title like "cutmox" told the reader nothing.
  */
 const IndexRow = forwardRef<HTMLButtonElement, { project: Project; onClick: () => void }>(
   function IndexRow({ project, onClick }, ref) {
+    const inProgress = project.status === 'in-progress';
     return (
       <button
         ref={ref}
         type="button"
         onClick={onClick}
-        className="grid w-full grid-cols-1 items-center gap-1 border-b border-border py-3.5 text-left transition-colors hover:bg-card sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1.2fr)_130px] sm:gap-5"
+        className="group grid w-full grid-cols-1 items-center gap-1 border-b border-border py-3.5 text-left transition-colors hover:bg-card-elevated sm:grid-cols-[minmax(0,1fr)_140px_128px] sm:gap-5"
       >
-        <span className="text-[15px] font-medium text-foreground">{project.title}</span>
-        <span className="truncate font-mono text-[11.5px] text-muted-dim">
+        <span className="min-w-0">
+          <span className="block text-[15px] font-medium text-foreground transition-colors group-hover:text-primary">
+            {project.title}
+          </span>
+          <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
+            {project.description}
+          </span>
+        </span>
+        <span className="truncate font-mono text-[11px] text-muted-dim">
           {project.tech.slice(0, 3).join(' · ')}
         </span>
-        <span className="font-mono text-[11px] text-muted-foreground sm:text-right">
-          {statusLabel(project.status)}
+        <span className={`whitespace-nowrap font-mono text-[11px] sm:text-right ${inProgress ? 'text-primary' : 'text-muted-foreground'}`}>
+          {project.year} · {statusLabel(project.status)}
         </span>
       </button>
     );
