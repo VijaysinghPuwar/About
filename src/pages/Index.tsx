@@ -50,9 +50,14 @@ function SectionHeader({
  * Arriving from another page at `/#contact` (the command palette does this
  * from any other route). The sections are lazy, so the target may not exist
  * yet, and once it does, the sections above it are still mounting and pushing
- * it down. Keep the target under the bar for up to three seconds after it
- * appears, stopping early once it has held still, or as soon as the reader
- * scrolls for themselves.
+ * it down: the GitHub strip in the hero, for one, grows when its data lands a
+ * few seconds later. Hold the target under the bar for six seconds after it
+ * appears, and let go as soon as the reader scrolls, taps, clicks or types.
+ *
+ * It used to let go after half a second of stillness. On a cold first visit
+ * the page went still, the hook stopped, and then the late content pushed the
+ * target 250px down. A tick where nothing moved costs nothing, so there is no
+ * reason to stop early.
  */
 function useScrollToHashOnArrival() {
   useEffect(() => {
@@ -60,33 +65,29 @@ function useScrollToHashOnArrival() {
     if (!id) return;
     let waited = 0;
     let ticks = 0;
-    let steady = 0;
     const stop = () => window.clearInterval(timer);
     const timer = window.setInterval(() => {
       const el = document.getElementById(id);
-      // The three seconds start once the target exists. On a slow connection
-      // the lazy section can take longer than that just to arrive, and the
-      // old shared budget gave up before it did. Ten seconds is the hard cap.
+      // The window starts once the target exists; on a slow connection the
+      // lazy section can take seconds just to arrive. Ten seconds is the cap
+      // on waiting for it.
       if (!el) {
         if (++waited > 100) stop();
         return;
       }
-      if (++ticks > 30) return stop();
+      if (++ticks > 60) return stop();
       const off = el.getBoundingClientRect().top - 72;
       if (Math.abs(off) > 4) {
-        steady = 0;
         window.scrollTo({ top: window.scrollY + off, behavior: 'instant' as ScrollBehavior });
-      } else if (++steady >= 5) {
-        stop();
       }
     }, 100);
-    const userScroll = () => stop();
-    window.addEventListener('wheel', userScroll, { passive: true, once: true });
-    window.addEventListener('touchstart', userScroll, { passive: true, once: true });
+    // Any sign the reader has taken over ends the hold, so it never fights them.
+    const events = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const;
+    const userTookOver = () => stop();
+    for (const e of events) window.addEventListener(e, userTookOver, { passive: true, once: true });
     return () => {
       stop();
-      window.removeEventListener('wheel', userScroll);
-      window.removeEventListener('touchstart', userScroll);
+      for (const e of events) window.removeEventListener(e, userTookOver);
     };
   }, []);
 }
