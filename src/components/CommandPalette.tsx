@@ -50,7 +50,7 @@ function buildCommands({ isAuthed, goLogin, go, goSection, onHome, projects }: B
     { category: 'Navigation', label: 'Go to Experience', keywords: 'timeline education', action: () => goSection('experience') },
     { category: 'Navigation', label: 'Go to Contact', keywords: 'email message', action: () => goSection('contact') },
     { category: 'Navigation', label: 'Go to Books', hint: 'Library', keywords: 'books read guides library epub', action: () => go('/books') },
-    { category: 'Navigation', label: 'Go to Videos', hint: 'Channel', keywords: 'videos youtube watch course walkthrough deep dive system design ospf r2dock spoonstill data center', action: () => go('/videos') },
+    { category: 'Navigation', label: 'Go to Videos', hint: 'Channel', keywords: 'videos youtube watch course walkthrough deep dive system design cybersecurity secure coding ospf r2dock spoonstill data center', action: () => go('/videos') },
   ];
 
   const actions: Command[] = [
