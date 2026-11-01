@@ -43,6 +43,41 @@ export const CHANNEL_URL = 'https://www.youtube.com/@vijaysinghpuwar';
 
 export const VIDEOS: Video[] = [
   {
+    slug: 'spoonstill-explained',
+    youtubeId: 'JUPIuJaAxn0',
+    title: 'How a Real Program Works, Line by Line: SpoonStill Explained',
+    kicker: 'Deep dive · Rust + FFmpeg',
+    summary:
+      'A beginner-friendly tour of a real, working program: SpoonStill, a tool that turns photos and narration into a finished video with smooth camera moves, voices and subtitles. It goes through the important parts line by line, covering not just what the code does but why it was written that way: how a big program is split into parts, how video works (frames, timing, picture sizes and a Ken Burns camera move), talking to FFmpeg safely, fingerprints and caches, sound levels, computer voices and polite retries, drawing subtitles fast, hundreds of jobs at once, renames a power cut can never lose, and logs, tests and a notebook of every decision. Every code snippet on screen is shown exactly as it appears in the source.',
+    published: '2026-11-01',
+    duration: 12227,
+    topics: ['Rust', 'FFmpeg', 'Video rendering', 'Hashing & caching', 'Concurrency', 'Testing'],
+    chapters: chapters([
+      ['0:00', 'A program, opened up'],
+      ['4:52', 'Reading code'],
+      ['18:45', 'The shape of the program'],
+      ['28:14', 'Time and frames'],
+      ['38:47', 'Fingerprints'],
+      ['48:41', 'The size of a picture'],
+      ['59:46', 'The camera move'],
+      ['1:17:19', 'Describing a project'],
+      ['1:27:17', 'Talking to FFmpeg'],
+      ['1:38:35', 'Rendering one scene'],
+      ['1:49:53', 'Sound'],
+      ['1:59:31', 'Voices'],
+      ['2:11:08', 'Subtitles'],
+      ['2:30:30', 'Making the whole film'],
+      ['2:48:59', 'Moving scenes safely'],
+      ['2:58:33', 'Two front doors'],
+      ['3:08:42', 'Keeping it honest'],
+      ['3:18:14', 'Build your own'],
+    ]),
+    related: [
+      { label: 'Read the book', href: '/books/spoonstill' },
+      { label: 'Source on GitHub', href: 'https://github.com/VijaysinghPuwar/spoonstill' },
+    ],
+  },
+  {
     slug: 'r2dock-system-design',
     youtubeId: '2JVQNh9Vd-o',
     title: 'R2Dock System Design, Explained Step by Step for Beginners',
