@@ -172,21 +172,6 @@ const rows: Row[] = [
     meta: ['Windows Server', 'Linux', 'Active Directory', 'Splunk', 'AWS / Azure', 'Python / PowerShell', 'GitLab CI'],
   },
   {
-    id: 'lt-sargent-lundy',
-    dates: 'JAN 2023 → APR 2023',
-    place: 'Vadodara, India',
-    kind: 'Internship',
-    title: 'Systems Intern',
-    org: 'L&T-Sargent & Lundy Limited',
-    bullets: [
-      <>Performed HVAC heat load calculations and duct sizing for engineering projects.</>,
-      <>Designed duct layouts and produced technical drawings in AutoCAD.</>,
-      <>Wrote detailed technical reports for stakeholders, turning calculations into clear recommendations.</>,
-    ],
-    metaLabel: 'Working with',
-    meta: ['AutoCAD', 'HVAC design', 'Technical reporting'],
-  },
-  {
     id: 'be-mech',
     dates: 'COMPLETED AUG 2023',
     place: 'Anand, India',
@@ -230,21 +215,6 @@ const rows: Row[] = [
     ],
     metaLabel: 'Working with',
     meta: ['Windows Server', 'Linux', 'Active Directory', 'Splunk', 'DNS / DHCP', 'Python / PowerShell / Bash'],
-  },
-  {
-    id: 'elecon',
-    dates: 'JUN 2022 → JUL 2022',
-    place: 'Anand, India',
-    kind: 'Internship',
-    title: 'Design Intern',
-    org: 'Elecon Engineering Company',
-    bullets: [
-      <>Produced AutoCAD drawings and bills of materials for gear manufacturing.</>,
-      <>Ran quality control checks against drawing specifications and tolerances.</>,
-      <>Wrote technical reports for stakeholders on design and production findings.</>,
-    ],
-    metaLabel: 'Working with',
-    meta: ['AutoCAD', 'Bills of materials', 'Quality control'],
   },
 ];
 
