@@ -5,17 +5,26 @@ import { ProtectedEmail } from '@/components/ProtectedEmail';
 /**
  * Web resume.
  *
- * Content is transcribed from the canonical PDF at /resume.pdf (source:
- * scripts/resume/resume.html, regenerated 2026-11-15) and
- * must not drift from it: a recruiter who reads this page and then downloads
- * the PDF should find the same claims. Nothing here is inferred or generated.
+ * Content is transcribed from the canonical PDF at /resume.pdf and must not
+ * drift from it: a recruiter who reads this page and then downloads the PDF
+ * should find the same claims, in the same order. Nothing here is inferred or
+ * generated. Since 2026-11-16 that PDF is the LaTeX resume supplied as-is;
+ * scripts/resume/resume.html no longer produces it.
  *
  * The phone number is public by decision; the email stays behind sign-in via
  * ProtectedEmail, as everywhere else on the site.
  */
 
 const PROFILE =
-  'Cybersecurity engineer with IT infrastructure experience at the MTA and R.S. Infotech across identity and access, Cisco networking and Windows and Linux operations. Builds and runs production web and AI applications in Python, TypeScript, Java and Go. CompTIA Security+, CySA+ and Cisco CCNA.';
+  'Software and Systems Engineer with 4.5+ years of non-internship experience building backend automation, data pipelines, REST API integrations, and cloud infrastructure across AWS and Azure, alongside production applications in Java, C# (.NET), Python, Go, and Rust. Designed and shipped multi-tiered web services, multi-threaded workload engines, media streaming pipelines, and GPU neural inference software backed by 3,000+ automated tests and 500+ CI/CD deployments. Finishing an M.S. in Cybersecurity at Pace University (Dec 2026, 3.92 GPA).';
+
+const SKILLS: { label: string; items: string }[] = [
+  { label: 'Languages', items: 'Java 21, C# (.NET 10), Python, Go, Rust, TypeScript, SQL, Bash, PowerShell' },
+  { label: 'Architecture & Backend', items: 'Distributed Systems, Multi-Tiered Architecture, Multi-Threaded Concurrency, Spring Boot, FastAPI, REST APIs, React, Tokio' },
+  { label: 'Databases, Caching & Media', items: 'PostgreSQL (RLS), MongoDB, Redis, CDN & Media Streaming, FFmpeg' },
+  { label: 'AWS, Cloud & CI/CD', items: 'AWS (EC2, S3, VPC, CloudWatch), Microsoft Azure, Docker, Terraform, Linux, GitHub Actions, GitLab CI' },
+  { label: 'AI Inference, Testing & Ops', items: 'LLM & ONNX Runtime, NVIDIA CUDA & cuDNN, JUnit 5, Testcontainers, PyTest, Playwright, Splunk' },
+];
 
 interface Role {
   org: string;
@@ -30,149 +39,115 @@ const EXPERIENCE: Role[] = [
     org: 'Metropolitan Transportation Authority (MTA)',
     title: 'IT Network Intern',
     period: 'Jun 2026 – Aug 2026',
-    location: 'New York, NY',
+    location: 'New York, NY, U.S.',
     bullets: [
-      'Resolved incidents and service requests in ServiceNow for a 24/7 rail operation, isolating faults across the application, network path, access policy and host.',
-      'Processed access requests for Active Directory groups, DUO MFA and Zscaler ZPA against policy.',
-      'Supported Cisco Catalyst switching (VLANs, access and trunk ports), verified addressing and port assignments, and installed, cabled and decommissioned servers, thin clients and telephony equipment.',
-      'Built an IT request intake system with Microsoft Forms, Power Automate and SharePoint, and caught a defect writing incorrect values before release; wrote the operator runbook the team now works from.',
-      'Built a Python NTP clock-correction service for a Rail Control Center workstation with dry-run mode, elevation checks and rotating logs.',
+      'Built a Python NTP clock-correction service for a 24/7 Rail Control Center workstation with dry-run mode, privilege checks, and rotating logs.',
+      'Built an automated IT request intake system on Microsoft Forms, Power Automate, and SharePoint (form, workflow, and data layers), caught a defect writing wrong values before release, and wrote the operator runbook.',
+      'Debugged live incidents in ServiceNow for a 24/7 rail operation across the application, network path, access policy, and host, and ran daily System Verification Logs that caught degrading components before outages.',
     ],
   },
   {
-    org: 'R.S. Infotech',
+    org: 'R. S. Infotech',
     title: 'System Engineer II',
     period: 'Feb 2023 – Aug 2024',
-    location: 'Vadodara, India',
+    location: 'Vadodara, India (Hybrid)',
     bullets: [
-      'Ran 150+ Windows and Linux systems on premises and on AWS and Azure.',
-      'Managed Group Policy and privileged group reviews in Active Directory.',
-      'Investigated incidents in Splunk, correlating Windows event logs and network traffic, and tuned IDS/IPS and firewall rules to cut false positives.',
-      'Triaged SonarQube, OWASP ZAP, Burp Suite and Nessus findings and added security checks to GitLab CI.',
-      'Automated compliance checks in Python and PowerShell, and prepared evidence for audits and client security questionnaires.',
+      'Built and maintained SQL data pipelines with reconciliation checks, REST API integrations, and Python and PowerShell automation tools across 150+ Linux and Windows hosts on AWS, Azure, and on-premises.',
+      'Added automated security and build checks to GitLab CI pipelines, triaging and resolving application and infrastructure findings from SonarQube, OWASP ZAP, Burp Suite, and Nessus before release.',
+      'Scoped technical projects and KPIs with operations teams, analyzed large log and uptime datasets in Splunk to isolate production bottlenecks, and tuned IDS/IPS and firewall rules to cut false positives.',
     ],
   },
   {
-    org: 'R.S. Infotech',
+    org: 'R. S. Infotech',
     title: 'System Engineer I',
     period: 'Feb 2020 – Jan 2023',
-    location: 'Vadodara, India',
+    location: 'Vadodara, India (Hybrid)',
     bullets: [
-      'Patched Windows and Linux servers, carried out scheduled changes, and tested backup and disaster recovery.',
-      'Handled MFA enrollment, onboarding and offboarding in Active Directory, plus OS imaging, build baselines, and DNS and DHCP administration.',
-      'Wrote Splunk SPL queries for failed authentication and suspicious activity, and Python, PowerShell and Bash scripts for log review and inventory.',
-    ],
-  },
-  {
-    org: 'L&T-Sargent & Lundy Limited',
-    title: 'Systems Intern',
-    period: 'Jan 2023 – Apr 2023',
-    location: 'Vadodara, India',
-    bullets: [
-      'Performed HVAC heat load calculations and duct sizing, designed duct layouts in AutoCAD, and wrote technical reports turning calculations into clear recommendations.',
-    ],
-  },
-  {
-    org: 'Elecon Engineering Company',
-    title: 'Design Intern',
-    period: 'Jun 2022 – Jul 2022',
-    location: 'Anand, India',
-    bullets: [
-      'Produced AutoCAD drawings and bills of materials for gear manufacturing and ran quality control checks against specifications and tolerances.',
+      'Developed reusable Python, PowerShell, Bash, and SQL scripts for log parsing, system inventory, and operational reporting, and wrote custom Splunk SPL queries to detect failed logins and suspicious activity.',
+      'Maintained Linux and Windows build baselines, administered DNS and DHCP, handled OS imaging and scheduled production changes, and tested backup and disaster recovery.',
     ],
   },
 ];
 
 interface ResumeProject {
   name: string;
-  descriptor?: string;
-  stack: string;
-  href: string;
-  label: string;
+  /** The PDF gives either a stack or a date range on the title row. */
+  stack?: string;
+  period?: string;
+  /** Not in the PDF, which carries no links; taken from src/data/projects.json. */
+  links: { href: string; label: string }[];
   bullets: string[];
 }
 
 const PROJECTS: ResumeProject[] = [
   {
-    name: 'Recap Verse',
-    descriptor: 'AI video SaaS with paying subscribers',
-    stack: 'Python, FastAPI, Next.js, MongoDB, Redis, Google Cloud Run, Anthropic, OpenAI and Gemini APIs',
-    href: 'https://recapverse.com',
-    label: 'recapverse.com',
+    name: 'TrustKart – Multi-Tiered Java Store & Transactional Checkout API',
+    stack: 'Java 21, Spring Boot 4, PostgreSQL 17, Redis, Docker, React',
+    links: [{ href: 'https://github.com/VijaysinghPuwar/TrustKart', label: 'github.com/VijaysinghPuwar/TrustKart' }],
     bullets: [
-      'Built and run it alone: a multi-stage pipeline that combines LLM calls with deterministic stages, covered by 2,100+ automated tests that run in CI on every pull request.',
-      'Provider-abstracted LLM layer across Anthropic, OpenAI and Gemini with schema-validated JSON output and quality-gated retries.',
-      'Encrypt per-user API keys with AES-GCM, enforce resource ownership on every route, and gate CI on gitleaks secret scanning.',
-      'Stripe and PayPal subscriptions through deduplicated webhooks, so a redelivered event is never applied twice.',
+      'Built a modular Spring Boot 4 and React 19 store (101 deployments on Vercel CDN) with single-transaction ACID checkout, one-time order keys, fixed-order stock locking to prevent deadlocks, Argon2id auth, and Redis rate limiting.',
+      'Verified zero overselling and exact wallet ledgers across 100 simultaneous checkouts using Python stress tests, 120+ JUnit 5 and Testcontainers integration tests, and Playwright E2E suites in GitHub Actions.',
     ],
   },
   {
-    name: 'Web Audio TV',
-    descriptor: 'Audiobook streaming platform',
-    stack: 'TypeScript, React, PostgreSQL with row level security (Supabase), Cloudflare Workers and R2',
-    href: 'https://webaudiotv.com',
-    label: 'webaudiotv.com',
+    name: 'TOC Extractor – Multi-Threaded C# .NET Workload Engine',
+    stack: 'C#, .NET 10, Avalonia, Playwright, Python',
+    links: [{ href: 'https://github.com/VijaysinghPuwar/TOC_Extractor', label: 'github.com/VijaysinghPuwar/TOC_Extractor' }],
     bullets: [
-      'Found and fixed three production security flaws: an email queue the public API key could call, a publicly downloadable storage bucket, and a leaderboard farming exploit traced with SQL over raw listening events.',
-      'Serve audio only through a Cloudflare Worker that checks a short-lived signed ticket bound to caller, resource and expiry.',
-      'Verify every database role’s permissions against the real migrations with a 48-check access matrix; 1,059 automated tests.',
+      'Built a multi-threaded C# and .NET 10 desktop and CLI engine on macOS, Windows, and Linux with lock-protected shared progress state, per-site rate limiters, self-healing browser workers, and shared C#/Python conformance tests.',
+      'Profiled and tuned memory-aware worker scaling across 40 concurrent jobs (2,000 chapters), cutting average CPU usage from 272% to 142% and peak memory from 8.2 GB to 7.1 GB without slowing runtime.',
     ],
   },
   {
-    name: 'BreachScope',
-    descriptor: 'Live threat-intelligence map',
-    stack: 'Go (chi, pgx), PostgreSQL, React, TypeScript, MapLibre GL, Vercel',
-    href: 'https://github.com/VijaysinghPuwar/BreachScope',
-    label: 'github.com/VijaysinghPuwar/BreachScope',
+    name: 'Recap Verse & Web Audio TV – Multi-Tiered AI & Streaming Platforms',
+    period: 'Sep 2024 – Present',
+    links: [
+      { href: 'https://recapverse.com', label: 'recapverse.com' },
+      { href: 'https://webaudiotv.com', label: 'webaudiotv.com' },
+    ],
     bullets: [
-      'Ingests public threat feeds including ThreatFox, URLhaus, Feodo Tracker, SANS DShield, CISA KEV and Have I Been Pwned, and records provenance and location precision on every record.',
-      'Resumable SSE stream with Last-Event-ID; load tested locally at 20,000 requests and 200 concurrent with zero errors and zero data races.',
+      'Designed, built, and ran Recap Verse, an AI video and multi-provider LLM platform with paying subscribers in Python, FastAPI, and MongoDB across 17 routers, 28 services, 398 deployments, and 2,019 automated tests.',
+      'Built security controls into the app: AES-GCM encrypted secrets, per-route authorization, PostgreSQL row-level security, short-lived signed media URLs, CI secret scanning, and deduplicated Stripe and PayPal webhooks.',
+      'Operated streaming app Web Audio TV (1,000+ users, 1,671 tracks), moving media delivery off the main host to cut hosting costs by 90% and drop start latency to 0.35s, and tuned an 8.05s PostgreSQL timeout down to 0.49s.',
     ],
   },
   {
-    name: 'TrustKart',
-    descriptor: 'Full-stack online store',
-    stack: 'Java 21, Spring Boot, PostgreSQL, Redis, React',
-    href: 'https://github.com/VijaysinghPuwar/TrustKart',
-    label: 'github.com/VijaysinghPuwar/TrustKart',
+    name: 'SetupTTS – GPU Neural Inference & Streaming Audio Engine',
+    stack: 'Python 3.12, NVIDIA CUDA 13, cuDNN 9, ONNX Runtime',
+    links: [{ href: 'https://github.com/VijaysinghPuwar/setuptts', label: 'github.com/VijaysinghPuwar/setuptts' }],
     bullets: [
-      'Checkout runs as one database transaction: 12 shoppers racing for the last 3 units sell exactly 3 and stock never goes negative; idempotency keys guarantee exactly-once orders.',
+      'Built a neural speech inference engine (935 passing tests) running Kokoro-82M ONNX models on SHA-256-pinned CUDA 13 and cuDNN 9, rendering 29 hours of audio in under 4 hours at flat 2.4 GB RAM.',
+      'Ran GPU speed checks in a child process with mid-job CPU fallback on driver faults, used full-precision weights to fix silent NaN outputs, and streamed sections in parallel with atomic fsync writes to cut batch runtime from 128s to 18s.',
     ],
   },
   {
-    name: 'Dual-ISP Network Assessment',
-    stack: 'Nmap, Wireshark, PowerShell, Bash, Python',
-    href: 'https://github.com/VijaysinghPuwar/Dual-ISP-Network-Assessment-and-Subnet-Remediation',
-    label: 'github.com/VijaysinghPuwar/Dual-ISP-Network-Assessment-and-Subnet-Remediation',
+    name: 'R2Dock, BreachScope & AWS Infrastructure Hardening',
+    stack: 'Rust, Tokio, Go, PostgreSQL, Terraform, AWS',
+    links: [
+      { href: 'https://github.com/VijaysinghPuwar/R2Dock', label: 'github.com/VijaysinghPuwar/R2Dock' },
+      { href: 'https://github.com/VijaysinghPuwar/BreachScope', label: 'github.com/VijaysinghPuwar/BreachScope' },
+    ],
     bullets: [
-      'Traced conflicting device inventories to two ISP routers on the same 192.168.0.0/24 subnet (one gateway IP answering from two MACs), moved one LAN to 192.168.20.0/24 and confirmed one gateway MAC, one DHCP server and no duplicate addresses.',
+      'Built R2Dock, a 6-crate async Rust/Tokio S3 client with parallel checksummed multipart uploads, FFmpeg AV1 compression, and crash-safe journals; load-tested BreachScope (Go/PostgreSQL) at 20,000 requests with zero errors; and hardened AWS EC2 in Terraform (Security Groups, NACLs, VPC Flow Logs, IMDSv2, CloudWatch).',
     ],
   },
 ];
 
 const EDUCATION = [
   {
-    school: 'Pace University, Seidenberg School of CSIS',
-    degree: 'M.S. Cybersecurity | GPA 3.92',
-    detail: 'Coursework: Ethical Hacking, Network Security and Defense, Automating Information Security with Python and PowerShell, Cyber Intelligence Analysis, Algorithms, Object-Oriented Programming',
-    period: 'Jan 2025 – Dec 2026 (expected)',
-  },
-  {
-    school: 'G H Patel College of Engineering and Technology',
-    degree: 'B.E. Mechanical Engineering',
-    detail: null,
-    period: 'Jun 2019 – Aug 2023',
+    school: 'Pace University',
+    degree: 'Master of Science in Cybersecurity (GPA: 3.92)',
+    period: 'Jan 2025 – Dec 2026',
+    location: 'New York, NY, U.S.',
   },
 ];
 
-const SKILLS: { label: string; items: string }[] = [
-  { label: 'Security and Identity', items: 'Splunk (SPL), IDS/IPS, firewalls, Burp Suite, OWASP ZAP, Nessus, Active Directory, Group Policy, DUO MFA, Zscaler ZPA' },
-  { label: 'Networking and Systems', items: 'TCP/IP, DNS, DHCP, VLANs, OSPF, Cisco Catalyst, Linux, Windows Server, ServiceNow' },
-  { label: 'Cloud and DevOps', items: 'AWS, Azure, Google Cloud Run, Cloudflare, Terraform, Docker, GitHub Actions, GitLab CI' },
-  { label: 'Languages and Frameworks', items: 'Python, TypeScript, Java, Go, C#, Rust, SQL, PowerShell, Bash, FastAPI, Spring Boot, React, Next.js' },
-  { label: 'AI', items: 'Anthropic, OpenAI and Gemini APIs, structured-output prompting, schema validation, evaluation harnesses' },
-  { label: 'Databases', items: 'PostgreSQL, MongoDB, Redis' },
-  { label: 'Activities', items: 'Pace University Cybersecurity Club; STEM outreach volunteer mentoring undergraduate and high school students in cybersecurity; TryHackMe top 8%, 217 active days in 2025' },
+const CERTIFICATIONS = [
+  'CompTIA Security+',
+  'CompTIA CySA+',
+  'Cisco CCNA',
+  'Google Cybersecurity Certificate',
+  'Google AI Essentials',
 ];
 
 /** Section heading plus the hairline rule the print layout also uses. */
@@ -217,7 +192,7 @@ export default function Resume() {
         <title>Resume | Vijaysingh Puwar</title>
         <meta
           name="description"
-          content="Resume of Vijaysingh Puwar, cybersecurity engineer in New York. Identity, access and incident work on the MTA rail network, systems and network operations at R.S. Infotech, and production web and AI applications. CompTIA Security+, CySA+, Cisco CCNA."
+          content="Resume of Vijaysingh Puwar, software and systems engineer in New York. Backend automation, data pipelines and cloud infrastructure at R. S. Infotech and the MTA, and production applications in Java, C#, Python, Go and Rust. M.S. Cybersecurity, Pace University. CompTIA Security+, CySA+, Cisco CCNA."
         />
         <link rel="canonical" href="https://vijaysinghpuwar.com/resume" />
       </Helmet>
@@ -229,7 +204,7 @@ export default function Resume() {
             Vijaysingh Puwar
           </h1>
           <p className="mt-1 text-base sm:text-lg text-primary font-medium">
-            Cybersecurity Engineer: IT Infrastructure, Networking and Secure Software
+            Software and Systems Engineer | M.S. Cybersecurity, Pace University
           </p>
 
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
@@ -268,6 +243,24 @@ export default function Resume() {
           </a>
         </header>
 
+        {/* Section order follows the PDF: skills, experience, projects,
+            education, certifications. */}
+
+        {/* ── Technical Skills ── */}
+        <section className="mb-10">
+          <SectionHeading>Technical Skills</SectionHeading>
+          <dl className="space-y-3">
+            {SKILLS.map(s => (
+              <div key={s.label} className="sm:flex sm:gap-4">
+                <dt className="text-sm font-semibold text-foreground sm:w-56 sm:shrink-0">
+                  {s.label}
+                </dt>
+                <dd className="text-sm leading-relaxed text-muted-foreground">{s.items}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+
         {/* ── Experience ── */}
         <section className="mb-10">
           <SectionHeading>Experience</SectionHeading>
@@ -294,75 +287,73 @@ export default function Resume() {
           </div>
         </section>
 
-        {/* ── Education and Certifications ── */}
-        <section className="mb-10">
-          <SectionHeading>Education and Certifications</SectionHeading>
-          <div className="space-y-5">
-            {EDUCATION.map(e => (
-              <EntryHead
-                key={e.school}
-                left={
-                  <>
-                    <h3 className="text-base font-semibold text-foreground">{e.degree}</h3>
-                    <p className="text-sm text-muted-foreground">{e.school}</p>
-                    {e.detail && <p className="mt-0.5 text-xs text-muted-foreground">{e.detail}</p>}
-                  </>
-                }
-                right={<div>{e.period}</div>}
-              />
-            ))}
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              <span className="font-semibold text-foreground">Certifications:</span>{' '}
-              CompTIA Security+, CompTIA CySA+, Cisco CCNA, Google AI Essentials
-            </p>
-          </div>
-        </section>
-
         {/* ── Projects ── */}
         <section className="mb-10">
           <SectionHeading>Projects</SectionHeading>
           <div className="space-y-7">
             {PROJECTS.map(p => (
               <div key={p.name}>
-                <h3 className="text-base font-semibold text-foreground">
-                  {p.name}
-                  {p.descriptor && (
-                    <span className="ml-2 text-sm font-normal text-muted-foreground">
-                      | {p.descriptor}
-                    </span>
-                  )}
-                </h3>
-                {/* The GitHub URLs are too long to share a row with anything:
-                    they squeezed the stack into a narrow column. Each gets its
-                    own line under the stack. */}
-                <p className="text-xs text-muted-foreground font-mono">{p.stack}</p>
-                <a
-                  href={p.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs font-mono text-primary hover:underline underline-offset-4 break-all"
-                >
-                  {p.label}
-                </a>
+                <EntryHead
+                  left={<h3 className="text-base font-semibold text-foreground">{p.name}</h3>}
+                  right={p.period ? <div>{p.period}</div> : null}
+                />
+                {p.stack && <p className="mt-0.5 text-xs text-muted-foreground font-mono">{p.stack}</p>}
+                {/* Links get their own lines: the GitHub URLs are too long to
+                    share a row with the stack without squeezing it. */}
+                <div className="flex flex-wrap gap-x-4">
+                  {p.links.map(l => (
+                    <a
+                      key={l.href}
+                      href={l.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-mono text-primary hover:underline underline-offset-4 break-all"
+                    >
+                      {l.label}
+                    </a>
+                  ))}
+                </div>
                 <Bullets items={p.bullets} />
               </div>
             ))}
           </div>
         </section>
 
-        {/* ── Skills and Activities ── */}
-        <section>
-          <SectionHeading>Skills and Activities</SectionHeading>
-          <dl className="space-y-3">
-            {SKILLS.map(s => (
-              <div key={s.label} className="sm:flex sm:gap-4">
-                <dt className="text-sm font-semibold text-foreground sm:w-48 sm:shrink-0">
-                  {s.label}
-                </dt>
-                <dd className="text-sm leading-relaxed text-muted-foreground">{s.items}</dd>
-              </div>
+        {/* ── Education ── */}
+        <section className="mb-10">
+          <SectionHeading>Education</SectionHeading>
+          <div className="space-y-5">
+            {EDUCATION.map(e => (
+              <EntryHead
+                key={e.school}
+                left={
+                  <>
+                    <h3 className="text-base font-semibold text-foreground">{e.school}</h3>
+                    <p className="text-sm text-muted-foreground">{e.degree}</p>
+                  </>
+                }
+                right={
+                  <>
+                    <div>{e.period}</div>
+                    <div>{e.location}</div>
+                  </>
+                }
+              />
             ))}
-          </dl>
+          </div>
+        </section>
+
+        {/* ── Certifications ── */}
+        <section>
+          <SectionHeading>Certifications</SectionHeading>
+          <ul className="flex flex-wrap gap-x-2 gap-y-1 text-sm text-muted-foreground">
+            {CERTIFICATIONS.map((c, i) => (
+              <li key={c}>
+                <span className="font-semibold text-foreground">{c}</span>
+                {i < CERTIFICATIONS.length - 1 && <span aria-hidden="true" className="ml-2">|</span>}
+              </li>
+            ))}
+          </ul>
         </section>
       </article>
     </div>

@@ -252,6 +252,7 @@ const certifications = [
   { name: 'CompTIA Security+', org: 'CompTIA', earned: true },
   { name: 'CompTIA CySA+', org: 'CompTIA', earned: true },
   { name: 'Cisco CCNA', org: 'Cisco', earned: true },
+  { name: 'Google Cybersecurity Certificate', org: 'Google', earned: true },
   { name: 'Google AI Essentials', org: 'Google', earned: true },
   { name: 'Cisco CCNP Enterprise', org: 'Cisco', earned: false },
 ];
