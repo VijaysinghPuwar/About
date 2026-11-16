@@ -16,14 +16,14 @@ import { ProtectedEmail } from '@/components/ProtectedEmail';
  */
 
 const PROFILE =
-  'Software and Systems Engineer with 4.5+ years of non-internship experience building backend automation, data pipelines, REST API integrations, and cloud infrastructure across AWS and Azure, alongside production applications in Java, C# (.NET), Python, Go, and Rust. Designed and shipped multi-tiered web services, multi-threaded workload engines, media streaming pipelines, and GPU neural inference software backed by 3,000+ automated tests and 500+ CI/CD deployments. Finishing an M.S. in Cybersecurity at Pace University (Dec 2026, 3.92 GPA).';
+  'Software, Systems, and Security Engineer with 4.5+ years of experience running 150+ Windows and Linux servers across AWS, Azure, and on-premises environments, managing Active Directory access, and building live software in Python, Go, Rust, C#/.NET, and Java. Shipped production applications with AES-GCM encrypted secrets, per-route authorization, PostgreSQL row-level security, short-lived signed URLs, CI secret scanning, and 3,000+ automated tests. Finishing an M.S. in Cybersecurity at Pace University (Dec 2026, 3.92 GPA) holding CompTIA Security+, CySA+, and Cisco CCNA certifications.';
 
 const SKILLS: { label: string; items: string }[] = [
-  { label: 'Languages', items: 'Java 21, C# (.NET 10), Python, Go, Rust, TypeScript, SQL, Bash, PowerShell' },
-  { label: 'Architecture & Backend', items: 'Distributed Systems, Multi-Tiered Architecture, Multi-Threaded Concurrency, Spring Boot, FastAPI, REST APIs, React, Tokio' },
-  { label: 'Databases, Caching & Media', items: 'PostgreSQL (RLS), MongoDB, Redis, CDN & Media Streaming, FFmpeg' },
-  { label: 'AWS, Cloud & CI/CD', items: 'AWS (EC2, S3, VPC, CloudWatch), Microsoft Azure, Docker, Terraform, Linux, GitHub Actions, GitLab CI' },
-  { label: 'AI Inference, Testing & Ops', items: 'LLM & ONNX Runtime, NVIDIA CUDA & cuDNN, JUnit 5, Testcontainers, PyTest, Playwright, Splunk' },
+  { label: 'Languages', items: 'Python, Go, Rust, C# (.NET), Java, TypeScript, SQL, Bash, PowerShell' },
+  { label: 'Frameworks & APIs', items: 'FastAPI, Spring Boot, React, Tauri, REST APIs' },
+  { label: 'Databases & Storage', items: 'PostgreSQL, MongoDB, Redis, S3 / Cloudflare R2' },
+  { label: 'Cloud, Systems & CI/CD', items: 'AWS, Microsoft Azure, Linux, Windows Server, Docker, Terraform, GitHub Actions, GitLab CI' },
+  { label: 'Networking, IAM & Security', items: 'Cisco IOS (VLANs, OSPF, BGP), Active Directory, Group Policy (GPO), Duo MFA, Zscaler ZPA, ServiceNow, Splunk (SPL), OWASP ZAP, Nessus' },
 ];
 
 interface Role {
@@ -41,9 +41,10 @@ const EXPERIENCE: Role[] = [
     period: 'Jun 2026 – Aug 2026',
     location: 'New York, NY, U.S.',
     bullets: [
-      'Built a Python NTP clock-correction service for a 24/7 Rail Control Center workstation with dry-run mode, privilege checks, and rotating logs.',
-      'Built an automated IT request intake system on Microsoft Forms, Power Automate, and SharePoint (form, workflow, and data layers), caught a defect writing wrong values before release, and wrote the operator runbook.',
-      'Debugged live incidents in ServiceNow for a 24/7 rail operation across the application, network path, access policy, and host, and ran daily System Verification Logs that caught degrading components before outages.',
+      'Resolved incidents and service requests in ServiceNow for a 24/7 rail operation, isolating faults across the application, network path, access policy, and host, and wrote the operator runbook the team works from.',
+      'Built an IT request intake system with Microsoft Forms, Power Automate, and SharePoint to replace manual triage, and caught a validation defect writing wrong values before release.',
+      'Supported Cisco Catalyst switching across VLANs, access ports, and trunk ports, mapped devices, verified IP addressing and port assignments, and installed and cabled servers and thin clients.',
+      'Wrote a Python NTP clock-correction service for a Rail Control Center workstation with dry-run mode, elevation checks, and rotating logs, and processed access requests for Active Directory groups, Duo MFA, and Zscaler ZPA against policy.',
     ],
   },
   {
@@ -52,9 +53,10 @@ const EXPERIENCE: Role[] = [
     period: 'Feb 2023 – Aug 2024',
     location: 'Vadodara, India (Hybrid)',
     bullets: [
-      'Built and maintained SQL data pipelines with reconciliation checks, REST API integrations, and Python and PowerShell automation tools across 150+ Linux and Windows hosts on AWS, Azure, and on-premises.',
-      'Added automated security and build checks to GitLab CI pipelines, triaging and resolving application and infrastructure findings from SonarQube, OWASP ZAP, Burp Suite, and Nessus before release.',
-      'Scoped technical projects and KPIs with operations teams, analyzed large log and uptime datasets in Splunk to isolate production bottlenecks, and tuned IDS/IPS and firewall rules to cut false positives.',
+      'Ran 150+ Windows and Linux systems on-premises and on AWS and Azure, and wrote Python and PowerShell scripts to automate host compliance checks.',
+      'Managed Group Policy (GPO) and completed privileged group access reviews in Active Directory.',
+      'Investigated incidents in Splunk by correlating Windows event logs and network traffic, and tuned IDS/IPS and firewall rules to cut false positives.',
+      'Triaged SonarQube, OWASP ZAP, Burp Suite, and Nessus findings, added automated security checks to GitLab CI pipelines, and prepared evidence for audits and client security questionnaires.',
     ],
   },
   {
@@ -63,72 +65,51 @@ const EXPERIENCE: Role[] = [
     period: 'Feb 2020 – Jan 2023',
     location: 'Vadodara, India (Hybrid)',
     bullets: [
-      'Developed reusable Python, PowerShell, Bash, and SQL scripts for log parsing, system inventory, and operational reporting, and wrote custom Splunk SPL queries to detect failed logins and suspicious activity.',
-      'Maintained Linux and Windows build baselines, administered DNS and DHCP, handled OS imaging and scheduled production changes, and tested backup and disaster recovery.',
+      'Patched Windows and Linux servers, carried out scheduled changes, handled OS imaging and build baselines, administered DNS and DHCP, and tested backup and disaster recovery.',
+      'Handled MFA enrollment, onboarding, and offboarding in Active Directory, and wrote Splunk SPL queries to track failed authentication and suspicious activity.',
+      'Wrote Python, PowerShell, Bash, and SQL scripts integrated with REST APIs for log review, hardware inventory, and reconciled operational reporting.',
     ],
   },
 ];
 
 interface ResumeProject {
   name: string;
-  /** The PDF gives either a stack or a date range on the title row. */
-  stack?: string;
-  period?: string;
-  /** Not in the PDF, which carries no links; taken from src/data/projects.json. */
+  /** Printed on the PDF's title row; made clickable here. */
   links: { href: string; label: string }[];
   bullets: string[];
 }
 
 const PROJECTS: ResumeProject[] = [
   {
-    name: 'TrustKart – Multi-Tiered Java Store & Transactional Checkout API',
-    stack: 'Java 21, Spring Boot 4, PostgreSQL 17, Redis, Docker, React',
-    links: [{ href: 'https://github.com/VijaysinghPuwar/TrustKart', label: 'github.com/VijaysinghPuwar/TrustKart' }],
-    bullets: [
-      'Built a modular Spring Boot 4 and React 19 store (101 deployments on Vercel CDN) with single-transaction ACID checkout, one-time order keys, fixed-order stock locking to prevent deadlocks, Argon2id auth, and Redis rate limiting.',
-      'Verified zero overselling and exact wallet ledgers across 100 simultaneous checkouts using Python stress tests, 120+ JUnit 5 and Testcontainers integration tests, and Playwright E2E suites in GitHub Actions.',
-    ],
-  },
-  {
-    name: 'TOC Extractor – Multi-Threaded C# .NET Workload Engine',
-    stack: 'C#, .NET 10, Avalonia, Playwright, Python',
-    links: [{ href: 'https://github.com/VijaysinghPuwar/TOC_Extractor', label: 'github.com/VijaysinghPuwar/TOC_Extractor' }],
-    bullets: [
-      'Built a multi-threaded C# and .NET 10 desktop and CLI engine on macOS, Windows, and Linux with lock-protected shared progress state, per-site rate limiters, self-healing browser workers, and shared C#/Python conformance tests.',
-      'Profiled and tuned memory-aware worker scaling across 40 concurrent jobs (2,000 chapters), cutting average CPU usage from 272% to 142% and peak memory from 8.2 GB to 7.1 GB without slowing runtime.',
-    ],
-  },
-  {
-    name: 'Recap Verse & Web Audio TV – Multi-Tiered AI & Streaming Platforms',
-    period: 'Sep 2024 – Present',
+    name: 'Recap Verse & Web Audio TV',
     links: [
       { href: 'https://recapverse.com', label: 'recapverse.com' },
       { href: 'https://webaudiotv.com', label: 'webaudiotv.com' },
     ],
     bullets: [
-      'Designed, built, and ran Recap Verse, an AI video and multi-provider LLM platform with paying subscribers in Python, FastAPI, and MongoDB across 17 routers, 28 services, 398 deployments, and 2,019 automated tests.',
-      'Built security controls into the app: AES-GCM encrypted secrets, per-route authorization, PostgreSQL row-level security, short-lived signed media URLs, CI secret scanning, and deduplicated Stripe and PayPal webhooks.',
-      'Operated streaming app Web Audio TV (1,000+ users, 1,671 tracks), moving media delivery off the main host to cut hosting costs by 90% and drop start latency to 0.35s, and tuned an 8.05s PostgreSQL timeout down to 0.49s.',
+      'Built and ran Recap Verse in Python, FastAPI, and MongoDB, an AI video-recap and multi-provider LLM platform with paying subscribers across 17 routers, 28 services, 398 deployments, and 2,019 automated tests, using AES-GCM encrypted secrets, per-route auth checks, CI secret scanning, and deduplicated Stripe and PayPal webhooks.',
+      'Operated streaming platform Web Audio TV on PostgreSQL, Supabase, and REST APIs (with row-level security) for 1,000+ registered users and 200 daily active users; moved audio delivery off the main host to cut hosting costs by 90% and drop stream start latency to 0.35s, and tuned an 8.05s SQL query timeout down to 0.49s.',
     ],
   },
   {
-    name: 'SetupTTS – GPU Neural Inference & Streaming Audio Engine',
-    stack: 'Python 3.12, NVIDIA CUDA 13, cuDNN 9, ONNX Runtime',
-    links: [{ href: 'https://github.com/VijaysinghPuwar/setuptts', label: 'github.com/VijaysinghPuwar/setuptts' }],
+    name: 'R2Dock – Cloudflare R2 Desktop Client',
+    links: [{ href: 'https://github.com/VijaysinghPuwar/R2Dock', label: 'github.com/VijaysinghPuwar/R2Dock' }],
     bullets: [
-      'Built a neural speech inference engine (935 passing tests) running Kokoro-82M ONNX models on SHA-256-pinned CUDA 13 and cuDNN 9, rendering 29 hours of audio in under 4 hours at flat 2.4 GB RAM.',
-      'Ran GPU speed checks in a child process with mid-job CPU fallback on driver faults, used full-precision weights to fix silent NaN outputs, and streamed sections in parallel with atomic fsync writes to cut batch runtime from 128s to 18s.',
+      'Created a 6-crate async Rust, Tokio, Tauri 2, React, and TypeScript desktop client for Linux, Windows, and macOS with parallel checksummed multipart uploads, disk-journaled crash recovery, local FFmpeg AV1 compression, and OS keychain credential storage behind a strict Content Security Policy.',
     ],
   },
   {
-    name: 'R2Dock, BreachScope & AWS Infrastructure Hardening',
-    stack: 'Rust, Tokio, Go, PostgreSQL, Terraform, AWS',
-    links: [
-      { href: 'https://github.com/VijaysinghPuwar/R2Dock', label: 'github.com/VijaysinghPuwar/R2Dock' },
-      { href: 'https://github.com/VijaysinghPuwar/BreachScope', label: 'github.com/VijaysinghPuwar/BreachScope' },
-    ],
+    name: 'TrustKart – Full-Stack Technology Store',
+    links: [{ href: 'https://trustkart-xi.vercel.app', label: 'trustkart-xi.vercel.app' }],
     bullets: [
-      'Built R2Dock, a 6-crate async Rust/Tokio S3 client with parallel checksummed multipart uploads, FFmpeg AV1 compression, and crash-safe journals; load-tested BreachScope (Go/PostgreSQL) at 20,000 requests with zero errors; and hardened AWS EC2 in Terraform (Security Groups, NACLs, VPC Flow Logs, IMDSv2, CloudWatch).',
+      'Built a Dockerized store in Java 21, Spring Boot 4, PostgreSQL 17, Redis, and React across 1,260+ products (101 deployments) with single-transaction checkout, one-time order keys, and fixed-order stock locks to prevent deadlocks, passing 100 concurrent checkouts with zero overselling and 120+ JUnit 5 and Testcontainers tests.',
+    ],
+  },
+  {
+    name: 'BreachScope & AWS Cloud Hardening',
+    links: [{ href: 'https://github.com/VijaysinghPuwar/BreachScope', label: 'github.com/VijaysinghPuwar/BreachScope' }],
+    bullets: [
+      'Built a live threat-intelligence map in Go, PostgreSQL, React, and TypeScript load-tested locally at 20,000 requests with zero errors, and wrote Terraform modules to harden AWS EC2 with Security Groups, NACLs, VPC Flow Logs, IMDSv2, and CloudWatch monitoring.',
     ],
   },
 ];
@@ -192,7 +173,7 @@ export default function Resume() {
         <title>Resume | Vijaysingh Puwar</title>
         <meta
           name="description"
-          content="Resume of Vijaysingh Puwar, software and systems engineer in New York. Backend automation, data pipelines and cloud infrastructure at R. S. Infotech and the MTA, and production applications in Java, C#, Python, Go and Rust. M.S. Cybersecurity, Pace University. CompTIA Security+, CySA+, Cisco CCNA."
+          content="Resume of Vijaysingh Puwar, software, systems and security engineer in New York. Windows and Linux servers across AWS, Azure and on-premises, Active Directory access, and production software in Python, Go, Rust, C# and Java. M.S. Cybersecurity, Pace University. CompTIA Security+, CySA+, Cisco CCNA."
         />
         <link rel="canonical" href="https://vijaysinghpuwar.com/resume" />
       </Helmet>
@@ -204,7 +185,7 @@ export default function Resume() {
             Vijaysingh Puwar
           </h1>
           <p className="mt-1 text-base sm:text-lg text-primary font-medium">
-            Software and Systems Engineer | M.S. Cybersecurity, Pace University
+            Software, Systems, and Security Engineer | M.S. Cybersecurity, Pace University
           </p>
 
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
@@ -293,26 +274,26 @@ export default function Resume() {
           <div className="space-y-7">
             {PROJECTS.map(p => (
               <div key={p.name}>
+                {/* Name on the left, links on the right, as on the PDF's
+                    title row; the links drop under the name on a phone. */}
                 <EntryHead
                   left={<h3 className="text-base font-semibold text-foreground">{p.name}</h3>}
-                  right={p.period ? <div>{p.period}</div> : null}
+                  right={
+                    <div className="flex flex-wrap gap-x-3 sm:justify-end">
+                      {p.links.map(l => (
+                        <a
+                          key={l.href}
+                          href={l.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline underline-offset-4 break-all"
+                        >
+                          {l.label}
+                        </a>
+                      ))}
+                    </div>
+                  }
                 />
-                {p.stack && <p className="mt-0.5 text-xs text-muted-foreground font-mono">{p.stack}</p>}
-                {/* Links get their own lines: the GitHub URLs are too long to
-                    share a row with the stack without squeezing it. */}
-                <div className="flex flex-wrap gap-x-4">
-                  {p.links.map(l => (
-                    <a
-                      key={l.href}
-                      href={l.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs font-mono text-primary hover:underline underline-offset-4 break-all"
-                    >
-                      {l.label}
-                    </a>
-                  ))}
-                </div>
                 <Bullets items={p.bullets} />
               </div>
             ))}
