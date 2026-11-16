@@ -214,21 +214,6 @@ const rows: Row[] = [
     ),
   },
   {
-    id: 'elecon',
-    dates: 'JUN 2022 → JUL 2022',
-    place: 'Anand, India',
-    kind: 'Internship',
-    title: 'Design Intern',
-    org: 'Elecon Engineering Company',
-    bullets: [
-      <>Produced AutoCAD drawings and bills of materials for gear manufacturing.</>,
-      <>Ran quality control checks against drawing specifications and tolerances.</>,
-      <>Wrote technical reports for stakeholders on design and production findings.</>,
-    ],
-    metaLabel: 'Working with',
-    meta: ['AutoCAD', 'Bills of materials', 'Quality control'],
-  },
-  {
     id: 'rs-infotech-1',
     dates: 'FEB 2020 → JAN 2023',
     place: 'Vadodara, India',
@@ -246,6 +231,21 @@ const rows: Row[] = [
     metaLabel: 'Working with',
     meta: ['Windows Server', 'Linux', 'Active Directory', 'Splunk', 'DNS / DHCP', 'Python / PowerShell / Bash'],
   },
+  {
+    id: 'elecon',
+    dates: 'JUN 2022 → JUL 2022',
+    place: 'Anand, India',
+    kind: 'Internship',
+    title: 'Design Intern',
+    org: 'Elecon Engineering Company',
+    bullets: [
+      <>Produced AutoCAD drawings and bills of materials for gear manufacturing.</>,
+      <>Ran quality control checks against drawing specifications and tolerances.</>,
+      <>Wrote technical reports for stakeholders on design and production findings.</>,
+    ],
+    metaLabel: 'Working with',
+    meta: ['AutoCAD', 'Bills of materials', 'Quality control'],
+  },
 ];
 
 const certifications = [
@@ -257,7 +257,7 @@ const certifications = [
 ];
 
 /* ── One entry ── */
-function TimelineEntry({ row, index }: { row: Row; index: number }) {
+function TimelineEntry({ row, index, last }: { row: Row; index: number; last: boolean }) {
   const [open, setOpen] = useState(false);
   /* Correctness before animation.
 
@@ -378,7 +378,9 @@ function TimelineEntry({ row, index }: { row: Row; index: number }) {
             strokeLinejoin="round"
           />
         </svg>
-        <span className="w-px flex-1 bg-border" aria-hidden="true" />
+        {/* The rule joins this mark to the next one, so the last entry has
+            none: it used to hang on into the gap above the certifications. */}
+        {!last && <span className="w-px flex-1 bg-border" aria-hidden="true" />}
       </div>
 
       {card}
@@ -489,7 +491,7 @@ export function ExperienceTimeline() {
     <div ref={pauseRef} className="mt-10">
       <div className="relative">
         {rows.map((row, i) => (
-          <TimelineEntry key={row.id} row={row} index={i} />
+          <TimelineEntry key={row.id} row={row} index={i} last={i === rows.length - 1} />
         ))}
       </div>
 
