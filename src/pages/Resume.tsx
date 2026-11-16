@@ -6,7 +6,7 @@ import { ProtectedEmail } from '@/components/ProtectedEmail';
  * Web resume.
  *
  * Content is transcribed from the canonical PDF at /resume.pdf (source:
- * scripts/resume/resume.html, regenerated 2026-10-16) and
+ * scripts/resume/resume.html, regenerated 2026-11-15) and
  * must not drift from it: a recruiter who reads this page and then downloads
  * the PDF should find the same claims. Nothing here is inferred or generated.
  *
@@ -28,27 +28,57 @@ interface Role {
 const EXPERIENCE: Role[] = [
   {
     org: 'Metropolitan Transportation Authority (MTA)',
-    title: 'Emerging Talent Intern',
+    title: 'IT Network Intern',
     period: 'Jun 2026 – Aug 2026',
     location: 'New York, NY',
     bullets: [
       'Resolved incidents and service requests in ServiceNow for a 24/7 rail operation, isolating faults across the application, network path, access policy and host.',
       'Processed access requests for Active Directory groups, DUO MFA and Zscaler ZPA against policy.',
-      'Built an IT request intake system with Microsoft Forms, Power Automate and SharePoint, and caught a defect writing incorrect values before release.',
-      'Installed, cabled and decommissioned servers, thin clients and telephony equipment.',
+      'Supported Cisco Catalyst switching (VLANs, access and trunk ports), verified addressing and port assignments, and installed, cabled and decommissioned servers, thin clients and telephony equipment.',
+      'Built an IT request intake system with Microsoft Forms, Power Automate and SharePoint, and caught a defect writing incorrect values before release; wrote the operator runbook the team now works from.',
+      'Built a Python NTP clock-correction service for a Rail Control Center workstation with dry-run mode, elevation checks and rotating logs.',
     ],
   },
   {
     org: 'R.S. Infotech',
-    title: 'System Engineer',
+    title: 'System Engineer II',
     period: 'Feb 2023 – Aug 2024',
     location: 'Vadodara, India',
     bullets: [
-      'Ran 150+ Windows and Linux systems on premises and on AWS and Azure, including patching and scheduled changes.',
-      'Managed Active Directory and Group Policy: MFA enrollment, privileged group reviews, onboarding and offboarding.',
-      'Wrote Splunk SPL queries for failed authentication and suspicious activity, and tuned IDS/IPS and firewall rules to cut false positives.',
+      'Ran 150+ Windows and Linux systems on premises and on AWS and Azure.',
+      'Managed Group Policy and privileged group reviews in Active Directory.',
+      'Investigated incidents in Splunk, correlating Windows event logs and network traffic, and tuned IDS/IPS and firewall rules to cut false positives.',
       'Triaged SonarQube, OWASP ZAP, Burp Suite and Nessus findings and added security checks to GitLab CI.',
-      'Wrote Python, PowerShell and Bash scripts for compliance checks, log review and inventory.',
+      'Automated compliance checks in Python and PowerShell, and prepared evidence for audits and client security questionnaires.',
+    ],
+  },
+  {
+    org: 'R.S. Infotech',
+    title: 'System Engineer I',
+    period: 'Feb 2020 – Jan 2023',
+    location: 'Vadodara, India',
+    bullets: [
+      'Patched Windows and Linux servers, carried out scheduled changes, and tested backup and disaster recovery.',
+      'Handled MFA enrollment, onboarding and offboarding in Active Directory, plus OS imaging, build baselines, and DNS and DHCP administration.',
+      'Wrote Splunk SPL queries for failed authentication and suspicious activity, and Python, PowerShell and Bash scripts for log review and inventory.',
+    ],
+  },
+  {
+    org: 'L&T-Sargent & Lundy Limited',
+    title: 'Systems Intern',
+    period: 'Jan 2023 – Apr 2023',
+    location: 'Vadodara, India',
+    bullets: [
+      'Performed HVAC heat load calculations and duct sizing, designed duct layouts in AutoCAD, and wrote technical reports turning calculations into clear recommendations.',
+    ],
+  },
+  {
+    org: 'Elecon Engineering Company',
+    title: 'Design Intern',
+    period: 'Jun 2022 – Jul 2022',
+    location: 'Anand, India',
+    bullets: [
+      'Produced AutoCAD drawings and bills of materials for gear manufacturing and ran quality control checks against specifications and tolerances.',
     ],
   },
 ];
@@ -131,7 +161,7 @@ const EDUCATION = [
     school: 'G H Patel College of Engineering and Technology',
     degree: 'B.E. Mechanical Engineering',
     detail: null,
-    period: 'Aug 2023',
+    period: 'Jun 2019 – Aug 2023',
   },
 ];
 
@@ -243,7 +273,7 @@ export default function Resume() {
           <SectionHeading>Experience</SectionHeading>
           <div className="space-y-7">
             {EXPERIENCE.map(role => (
-              <div key={role.org}>
+              <div key={`${role.org}-${role.title}`}>
                 <EntryHead
                   left={
                     <>
@@ -261,6 +291,30 @@ export default function Resume() {
                 <Bullets items={role.bullets} />
               </div>
             ))}
+          </div>
+        </section>
+
+        {/* ── Education and Certifications ── */}
+        <section className="mb-10">
+          <SectionHeading>Education and Certifications</SectionHeading>
+          <div className="space-y-5">
+            {EDUCATION.map(e => (
+              <EntryHead
+                key={e.school}
+                left={
+                  <>
+                    <h3 className="text-base font-semibold text-foreground">{e.degree}</h3>
+                    <p className="text-sm text-muted-foreground">{e.school}</p>
+                    {e.detail && <p className="mt-0.5 text-xs text-muted-foreground">{e.detail}</p>}
+                  </>
+                }
+                right={<div>{e.period}</div>}
+              />
+            ))}
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              <span className="font-semibold text-foreground">Certifications:</span>{' '}
+              CompTIA Security+, CompTIA CySA+, Cisco CCNA, Google AI Essentials
+            </p>
           </div>
         </section>
 
@@ -293,30 +347,6 @@ export default function Resume() {
                 <Bullets items={p.bullets} />
               </div>
             ))}
-          </div>
-        </section>
-
-        {/* ── Education and Certifications ── */}
-        <section className="mb-10">
-          <SectionHeading>Education and Certifications</SectionHeading>
-          <div className="space-y-5">
-            {EDUCATION.map(e => (
-              <EntryHead
-                key={e.school}
-                left={
-                  <>
-                    <h3 className="text-base font-semibold text-foreground">{e.degree}</h3>
-                    <p className="text-sm text-muted-foreground">{e.school}</p>
-                    {e.detail && <p className="mt-0.5 text-xs text-muted-foreground">{e.detail}</p>}
-                  </>
-                }
-                right={<div>{e.period}</div>}
-              />
-            ))}
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              <span className="font-semibold text-foreground">Certifications:</span>{' '}
-              CompTIA Security+, CompTIA CySA+, Cisco CCNA, Google AI Essentials
-            </p>
           </div>
         </section>
 

@@ -13,7 +13,7 @@
 <style>
   @page { size: Letter; margin: 0.42in 0.5in; }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 10.6pt; line-height: 1.32; color: #111; }
+  body { margin: 0; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 10.3pt; line-height: 1.3; color: #111; }
   a { color: inherit; text-decoration: none; }
   header { text-align: center; }
   h1 { margin: 0; font-size: 21pt; font-weight: 700; letter-spacing: 0.02em; }
@@ -28,6 +28,7 @@
   p { margin: 0; }
   .line { margin-top: 3pt; }
   .entry { break-inside: avoid; }
+  h2 { break-after: avoid; }
 </style>
 </head>
 <body>
@@ -42,26 +43,51 @@
 
 <h2>Experience</h2>
 <div class="entry">
-  <div class="row"><span><b>Emerging Talent Intern</b>, Metropolitan Transportation Authority (MTA)</span><span class="r">New York, NY | Jun 2026 – Aug 2026</span></div>
+  <div class="row"><span><b>IT Network Intern</b>, Metropolitan Transportation Authority (MTA)</span><span class="r">New York, NY | Jun 2026 – Aug 2026</span></div>
   <ul>
     <li>Resolved incidents and service requests in ServiceNow for a 24/7 rail operation, isolating faults across the application, network path, access policy and host.</li>
     <li>Processed access requests for Active Directory groups, DUO MFA and Zscaler ZPA against policy.</li>
-    <li>Supported Cisco Catalyst switching: VLANs, access and trunk ports; mapped devices and verified addressing and port assignments.</li>
+    <li>Supported Cisco Catalyst switching (VLANs, access and trunk ports), verified addressing and port assignments, and installed, cabled and decommissioned servers, thin clients and telephony equipment.</li>
     <li>Built an IT request intake system with Microsoft Forms, Power Automate and SharePoint, and caught a defect writing incorrect values before release; wrote the operator runbook the team now works from.</li>
     <li>Built a Python NTP clock-correction service for a Rail Control Center workstation with dry-run mode, elevation checks and rotating logs.</li>
-    <li>Installed, cabled and decommissioned servers, thin clients and telephony equipment.</li>
   </ul>
 </div>
 <div class="entry">
-  <div class="row"><span><b>System Engineer</b>, R.S. Infotech</span><span class="r">Vadodara, India | Feb 2023 – Aug 2024</span></div>
+  <div class="row"><span><b>System Engineer II</b>, R.S. Infotech</span><span class="r">Vadodara, India | Feb 2023 – Aug 2024</span></div>
   <ul>
-    <li>Ran 150+ Windows and Linux systems on premises and on AWS and Azure, including patching and scheduled changes.</li>
-    <li>Managed Active Directory and Group Policy: MFA enrollment, privileged group reviews, onboarding and offboarding.</li>
-    <li>Wrote Splunk SPL queries for failed authentication and suspicious activity, and tuned IDS/IPS and firewall rules to cut false positives.</li>
+    <li>Ran 150+ Windows and Linux systems on premises and on AWS and Azure.</li>
+    <li>Managed Group Policy and privileged group reviews in Active Directory.</li>
+    <li>Investigated incidents in Splunk, correlating Windows event logs and network traffic, and tuned IDS/IPS and firewall rules to cut false positives.</li>
     <li>Triaged SonarQube, OWASP ZAP, Burp Suite and Nessus findings and added security checks to GitLab CI.</li>
-    <li>Wrote Python, PowerShell and Bash scripts for compliance checks, log review and inventory.</li>
+    <li>Automated compliance checks in Python and PowerShell, and prepared evidence for audits and client security questionnaires.</li>
   </ul>
 </div>
+<div class="entry">
+  <div class="row"><span><b>System Engineer I</b>, R.S. Infotech</span><span class="r">Vadodara, India | Feb 2020 – Jan 2023</span></div>
+  <ul>
+    <li>Patched Windows and Linux servers, carried out scheduled changes, and tested backup and disaster recovery.</li>
+    <li>Handled MFA enrollment, onboarding and offboarding in Active Directory, plus OS imaging, build baselines, and DNS and DHCP administration.</li>
+    <li>Wrote Splunk SPL queries for failed authentication and suspicious activity, and Python, PowerShell and Bash scripts for log review and inventory.</li>
+  </ul>
+</div>
+<div class="entry">
+  <div class="row"><span><b>Systems Intern</b>, L&amp;T-Sargent &amp; Lundy Limited</span><span class="r">Vadodara, India | Jan 2023 – Apr 2023</span></div>
+  <ul>
+    <li>Performed HVAC heat load calculations and duct sizing, designed duct layouts in AutoCAD, and wrote technical reports turning calculations into clear recommendations.</li>
+  </ul>
+</div>
+<div class="entry">
+  <div class="row"><span><b>Design Intern</b>, Elecon Engineering Company</span><span class="r">Anand, India | Jun 2022 – Jul 2022</span></div>
+  <ul>
+    <li>Produced AutoCAD drawings and bills of materials for gear manufacturing and ran quality control checks against specifications and tolerances.</li>
+  </ul>
+</div>
+
+<h2>Education and Certifications</h2>
+<div class="row"><span><b>M.S. Cybersecurity</b>, Pace University, Seidenberg School of CSIS | GPA 3.92</span><span class="r">Jan 2025 – Dec 2026 (expected)</span></div>
+<p>Coursework: Ethical Hacking, Network Security and Defense, Automating Information Security with Python and PowerShell, Cyber Intelligence Analysis, Algorithms, Object-Oriented Programming</p>
+<div class="row"><span><b>B.E. Mechanical Engineering</b>, G H Patel College of Engineering and Technology</span><span class="r">Jun 2019 – Aug 2023</span></div>
+<p class="line"><b>Certifications:</b> CompTIA Security+, CompTIA CySA+, Cisco CCNA, Google AI Essentials</p>
 
 <h2>Projects</h2>
 <div class="entry">
@@ -105,12 +131,6 @@
     <li>Traced conflicting device inventories to two ISP routers on the same 192.168.0.0/24 subnet (one gateway IP answering from two MACs), moved one LAN to 192.168.20.0/24 and confirmed one gateway MAC, one DHCP server and no duplicate addresses.</li>
   </ul>
 </div>
-
-<h2>Education and Certifications</h2>
-<div class="row"><span><b>M.S. Cybersecurity</b>, Pace University, Seidenberg School of CSIS | GPA 3.92</span><span class="r">Dec 2026 (expected)</span></div>
-<p>Coursework: Ethical Hacking, Network Security and Defense, Automating Information Security with Python and PowerShell, Cyber Intelligence Analysis, Algorithms, Object-Oriented Programming</p>
-<div class="row"><span><b>B.E. Mechanical Engineering</b>, G H Patel College of Engineering and Technology</span><span class="r">Aug 2023</span></div>
-<p class="line"><b>Certifications:</b> CompTIA Security+, CompTIA CySA+, Cisco CCNA, Google AI Essentials</p>
 
 <h2>Skills and Activities</h2>
 <p><b>Security and Identity:</b> Splunk (SPL), IDS/IPS, firewalls, Burp Suite, OWASP ZAP, Nessus, Active Directory, Group Policy, DUO MFA, Zscaler ZPA</p>
