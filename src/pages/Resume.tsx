@@ -8,15 +8,15 @@ import { ProtectedEmail } from '@/components/ProtectedEmail';
  * Content is transcribed from the canonical PDF at /resume.pdf and must not
  * drift from it: a recruiter who reads this page and then downloads the PDF
  * should find the same claims, in the same order. Nothing here is inferred or
- * generated. Since 2026-11-16 that PDF is the LaTeX resume supplied as-is;
- * scripts/resume/resume.html no longer produces it.
+ * generated. The PDF is printed from scripts/resume/resume.html (see the
+ * command there); change both together.
  *
  * The phone number is public by decision; the email stays behind sign-in via
  * ProtectedEmail, as everywhere else on the site.
  */
 
 const PROFILE =
-  'Software, Systems, and Security Engineer with 4.5+ years of experience running 150+ Windows and Linux servers across AWS, Azure, and on-premises environments, managing Active Directory access, and building live software in Python, Go, Rust, C#/.NET, and Java. Shipped production applications with AES-GCM encrypted secrets, per-route authorization, PostgreSQL row-level security, short-lived signed URLs, CI secret scanning, and 3,000+ automated tests. Finishing an M.S. in Cybersecurity at Pace University (Dec 2026, 3.92 GPA) holding CompTIA Security+, CySA+, and Cisco CCNA certifications.';
+  'Software, Systems, and Security Engineer who has run 150+ Windows and Linux servers across AWS, Azure, and on-premises environments, managed Active Directory access at R. S. Infotech and the MTA, and builds live software in Python, Go, Rust, C#/.NET, and Java. Shipped production applications with AES-GCM encrypted secrets, per-route authorization, PostgreSQL row-level security, short-lived signed URLs, CI secret scanning, and 3,000+ automated tests. Finishing an M.S. in Cybersecurity at Pace University (Dec 2026, 3.92 GPA) holding CompTIA Security+, CySA+, and Cisco CCNA certifications.';
 
 const SKILLS: { label: string; items: string }[] = [
   { label: 'Languages', items: 'Python, Go, Rust, C# (.NET), Java, TypeScript, SQL, Bash, PowerShell' },
@@ -43,31 +43,39 @@ const EXPERIENCE: Role[] = [
     bullets: [
       'Resolved incidents and service requests in ServiceNow for a 24/7 rail operation, isolating faults across the application, network path, access policy, and host, and wrote the operator runbook the team works from.',
       'Built an IT request intake system with Microsoft Forms, Power Automate, and SharePoint to replace manual triage, and caught a validation defect writing wrong values before release.',
-      'Supported Cisco Catalyst switching across VLANs, access ports, and trunk ports, mapped devices, verified IP addressing and port assignments, and installed and cabled servers and thin clients.',
+      'Supported Cisco Catalyst switching across VLANs, access ports, and trunk ports, mapped devices, verified IP addressing and port assignments, and installed, cabled, and decommissioned servers, thin clients, and telephony equipment.',
       'Wrote a Python NTP clock-correction service for a Rail Control Center workstation with dry-run mode, elevation checks, and rotating logs, and processed access requests for Active Directory groups, Duo MFA, and Zscaler ZPA against policy.',
     ],
   },
   {
     org: 'R. S. Infotech',
-    title: 'System Engineer II',
+    title: 'System Engineer',
     period: 'Feb 2023 – Aug 2024',
     location: 'Vadodara, India (Hybrid)',
     bullets: [
-      'Ran 150+ Windows and Linux systems on-premises and on AWS and Azure, and wrote Python and PowerShell scripts to automate host compliance checks.',
-      'Managed Group Policy (GPO) and completed privileged group access reviews in Active Directory.',
-      'Investigated incidents in Splunk by correlating Windows event logs and network traffic, and tuned IDS/IPS and firewall rules to cut false positives.',
+      'Ran 150+ Windows and Linux systems on-premises and on AWS and Azure; patched servers, handled OS imaging and build baselines, administered DNS and DHCP, and tested backup and disaster recovery.',
+      'Managed Active Directory: Group Policy (GPO), privileged group access reviews, MFA enrollment, onboarding, and offboarding.',
+      'Investigated incidents in Splunk by correlating Windows event logs and network traffic, wrote SPL queries for failed authentication and suspicious activity, and tuned IDS/IPS and firewall rules to cut false positives.',
+      'Automated compliance checks, log review, and inventory in Python, PowerShell, and Bash.',
       'Triaged SonarQube, OWASP ZAP, Burp Suite, and Nessus findings, added automated security checks to GitLab CI pipelines, and prepared evidence for audits and client security questionnaires.',
     ],
   },
   {
-    org: 'R. S. Infotech',
-    title: 'System Engineer I',
-    period: 'Feb 2020 – Jan 2023',
-    location: 'Vadodara, India (Hybrid)',
+    org: 'L&T-Sargent & Lundy Limited',
+    title: 'Systems Intern',
+    period: 'Jan 2023 – Apr 2023',
+    location: 'Vadodara, India',
     bullets: [
-      'Patched Windows and Linux servers, carried out scheduled changes, handled OS imaging and build baselines, administered DNS and DHCP, and tested backup and disaster recovery.',
-      'Handled MFA enrollment, onboarding, and offboarding in Active Directory, and wrote Splunk SPL queries to track failed authentication and suspicious activity.',
-      'Wrote Python, PowerShell, Bash, and SQL scripts integrated with REST APIs for log review, hardware inventory, and reconciled operational reporting.',
+      'Performed HVAC heat load calculations and duct sizing, designed duct layouts and technical drawings in AutoCAD, and wrote technical reports turning calculations into clear recommendations for stakeholders.',
+    ],
+  },
+  {
+    org: 'Elecon Engineering Company',
+    title: 'Design Intern',
+    period: 'Jun 2022 – Jul 2022',
+    location: 'Anand, India',
+    bullets: [
+      'Produced AutoCAD drawings and bills of materials for gear manufacturing, ran quality control checks against drawing specifications and tolerances, and reported design and production findings to stakeholders.',
     ],
   },
 ];
@@ -120,6 +128,12 @@ const EDUCATION = [
     degree: 'Master of Science in Cybersecurity (GPA: 3.92)',
     period: 'Jan 2025 – Dec 2026',
     location: 'New York, NY, U.S.',
+  },
+  {
+    school: 'G H Patel College of Engineering & Technology',
+    degree: 'Bachelor of Engineering in Mechanical Engineering',
+    period: 'Jun 2019 – Aug 2023',
+    location: 'Anand, India',
   },
 ];
 
