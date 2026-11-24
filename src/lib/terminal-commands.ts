@@ -8,22 +8,21 @@ import {
  * The command set behind the hero terminal.
  *
  * Every command does something the visitor could otherwise only do by
- * scrolling and clicking. There are no jokes or fake shells here. Commands
- * that would need an account say so rather than pretending to work.
+ * scrolling and clicking. There are no jokes or fake shells here.
  *
  * The intro transcript types out `whoami`, `cat role.txt`, `ls defense/` and
  * `./connect.sh`, so those are the first four things a visitor tries. They all
- * work. A shell that demonstrates a command in its own banner and then answers
- * `command not found` reads as broken, which is most of what "the terminal
- * feels unstable" turned out to mean.
+ * resolve, including the last one, which for a long time did not: a shell that
+ * prints a command in its own banner and then answers `command not found` to
+ * it reads as broken.
  *
- * Output is laid out in fixed columns and is never re-wrapped by the renderer,
- * so every row here has to fit the narrowest card the terminal is drawn in.
- * `COLUMNS` is that budget; keep new rows inside it.
+ * Output is structured, not pre-formatted. A command returns lines, key/value
+ * rows and word lists, and the renderer lays them out with CSS. Rows used to
+ * be padded to a 56-character budget with spaces, which is wider than the card
+ * on any phone (about 38 characters), so every table scrolled sideways and a
+ * truncated cell knocked the column after it out of line. Nothing here knows
+ * how wide the terminal is, and nothing has to.
  */
-
-/** Characters a row may use before the log has to scroll sideways. */
-const COLUMNS = 56;
 
 export interface TerminalProject {
   id: string;
@@ -36,29 +35,38 @@ export interface TerminalProject {
 export interface CommandContext {
   projects: TerminalProject[];
   isAuthed: boolean;
-  /** Sends the visitor to sign-in, preserving where they were. */
-  goToLogin: () => void;
   clear: () => void;
   /** Everything entered this session, oldest first. Survives `clear`. */
   history: string[];
   isPentest: boolean;
   setPentest: (on: boolean) => void;
+  /** No Tab, arrows or Ctrl to advertise: the tap row stands in for them. */
+  touch: boolean;
 }
 
 export type OutputTone = 'default' | 'muted' | 'accent' | 'success' | 'error';
 
-export interface OutputLine {
-  text: string;
-  tone?: OutputTone;
-}
+/**
+ * One printed line.
+ *
+ * - text: prose. Wraps to whatever width it is given.
+ * - row:  a key, a value and an optional trailing note. Keys in one block
+ *         share `keyWidth` (in characters) so the values line up; on a card
+ *         too narrow for both, the value drops under its key instead of
+ *         pushing the row sideways.
+ * - list: short words set out in as many columns as fit, the way `ls` does.
+ */
+export type OutputLine =
+  | { kind?: 'text'; text: string; tone?: OutputTone }
+  | { kind: 'row'; cells: [string, string, string?]; keyWidth: number }
+  | { kind: 'list'; items: string[] };
 
 /**
  * What running one line produced.
  *
  * `silent` is how `clear` gets out of the way: it empties the log itself, so
- * the line that ran it must not be appended afterwards. Reading that off the
- * raw input meant `clear` worked and `clear all` left a stray prompt behind.
- * The command now says so itself, and every alias of it inherits that.
+ * the line that ran it must not be appended afterwards. The command says so
+ * itself, and every alias of it inherits that.
  */
 export interface CommandResult {
   output: OutputLine[];
@@ -79,30 +87,27 @@ const muted = (text: string): OutputLine => ({ text, tone: 'muted' });
 const plain = (text: string): OutputLine => ({ text });
 const accent = (text: string): OutputLine => ({ text, tone: 'accent' });
 const error = (text: string): OutputLine => ({ text, tone: 'error' });
+const blank: OutputLine = { text: '' };
+const list = (items: readonly string[]): OutputLine => ({ kind: 'list', items: [...items] });
+
+/** A block of rows whose values start in the same column. */
+function rows(data: [string, string, string?][]): OutputLine[] {
+  // Capped: one very long key should break its own row, not push every other
+  // value in the block across the card.
+  const keyWidth = Math.min(24, Math.max(...data.map(r => r[0].length)));
+  return data.map(cells => ({ kind: 'row', cells, keyWidth }));
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /**
- * Pads to a column width without pulling in a dependency, and marks anything it
- * had to cut, a title that simply stops mid-word reads as a rendering fault
- * rather than as a column doing its job.
+ * What a project is, without repeating what it is called. Titles are written
+ * `Name: what it is`, and the id beside it already carries the name.
  */
-const pad = (text: string, width: number) =>
-  text.length >= width
-    ? text.slice(0, width - 2).trimEnd() + '\u2026 '
-    : text + ' '.repeat(width - text.length);
-
-/** Wraps prose to the column budget so paragraphs never need a sideways scroll. */
-function wrap(text: string, width = COLUMNS, indent = ''): OutputLine[] {
-  const room = width - indent.length;
-  const out: string[] = [];
-  let line = '';
-  for (const word of text.split(/\s+/)) {
-    if (!line.length) line = word;
-    else if (line.length + 1 + word.length <= room) line += ' ' + word;
-    else { out.push(line); line = word; }
-  }
-  if (line) out.push(line);
-  return out.map(l => plain(indent + l));
-}
+const tagline = (title: string) => {
+  const cut = title.indexOf(': ');
+  return cut > 0 ? title.slice(cut + 2) : title;
+};
 
 /** Display names, so `skills aws` reports AWS rather than the typed string. */
 const SKILL_LABELS: Record<string, string> = {
@@ -126,8 +131,8 @@ const SKILL_ALIASES: Record<string, string[]> = {
   oauth: ['oauth', 'nextauth', 'auth.js'],
 };
 
-/* The two toolsets the intro lists, kept here so `ls defense/` answers with
-   exactly what the banner printed rather than a second copy that can drift. */
+/* The two toolsets. The intro prints from this list and `ls defense/` answers
+   from it, so the banner and the command cannot drift apart. */
 export const TOOLSETS = {
   defense: [
     'SIEM-detection', 'Incident-Response', 'Endpoint-Hardening', 'Secure-Coding',
@@ -139,36 +144,27 @@ export const TOOLSETS = {
   ],
 } as const;
 
+export const MISSION =
+  'I secure enterprise infrastructure, automate security operations, and build detection pipelines that catch threats before they escalate.';
+
 /** The readable files, so `cat` and `ls` agree on what exists. */
 const FILES: Record<string, (ctx: CommandContext) => OutputLine[]> = {
   'role.txt': () => [
     plain('Cybersecurity Engineer, New York, NY'),
     muted('M.S. Cybersecurity, Pace University'),
   ],
-  'mission.txt': () =>
-    wrap('I secure enterprise infrastructure, automate security operations, and build detection pipelines that catch threats before they escalate.'),
+  'mission.txt': () => [plain(MISSION)],
   'skills.txt': ctx => [
     muted(ctx.isPentest ? 'offense/' : 'defense/'),
-    ...columns([...(ctx.isPentest ? TOOLSETS.offense : TOOLSETS.defense)]),
+    list(ctx.isPentest ? TOOLSETS.offense : TOOLSETS.defense),
   ],
   'contact.txt': ctx => [
     plain('github.com/vijaysinghpuwar'),
     plain('linkedin.com/in/vijaysinghpuwar'),
-    ctx.isAuthed ? plain('Email unlocked. See the contact section')
-                 : muted('Email unlocks after sign-in. Run: contact'),
+    ctx.isAuthed ? plain('Email is shown in the contact section.')
+                 : muted('Email is shown after sign-in. Run: contact'),
   ],
 };
-
-/** Lays a word list out across the column budget, the way `ls` does. */
-function columns(items: string[]): OutputLine[] {
-  const width = Math.max(...items.map(i => i.length)) + 2;
-  const perRow = Math.max(1, Math.floor(COLUMNS / width));
-  const rows: OutputLine[] = [];
-  for (let i = 0; i < items.length; i += perRow) {
-    rows.push(plain(items.slice(i, i + perRow).map(t => pad(t, width)).join('').trimEnd()));
-  }
-  return rows;
-}
 
 /** The page sections `ls` with no argument reports, and what each one jumps to. */
 const SECTIONS = ['projects/', 'experience/', 'skills/', 'contact/'];
@@ -179,11 +175,15 @@ export const COMMANDS: CommandSpec[] = [
     aliases: ['?', 'man', 'commands'],
     usage: 'help',
     summary: 'List these commands.',
-    run: () => [
-      muted('Available commands:'),
-      ...COMMANDS.map(c => plain(`  ${pad(c.usage, 20)}${c.summary}`)),
-      muted(''),
-      muted('Tab completes  ↑↓ history  Ctrl+C cancel  Ctrl+L clear'),
+    run: (_args, ctx) => [
+      muted('Available commands'),
+      ...rows(COMMANDS.map(c => [c.usage, c.summary])),
+      blank,
+      muted(
+        ctx.touch
+          ? 'Tap a shortcut below, or type a command.'
+          : 'Tab completes · ↑↓ history · Ctrl+C cancel · Ctrl+L clear',
+      ),
     ],
   },
   {
@@ -204,26 +204,31 @@ export const COMMANDS: CommandSpec[] = [
     usage: 'ls [dir]',
     summary: 'List a section, or a toolset.',
     run: (args, ctx) => {
-      const target = (args[0] ?? '').toLowerCase().replace(/\/+$/, '');
+      const target = (args[0] ?? '').toLowerCase().replace(/^\.\//, '').replace(/\/+$/, '');
 
-      if (!target) {
+      if (!target || target === '.') {
         return [
-          ...columns([...SECTIONS, ...Object.keys(FILES)]),
-          muted(''),
-          muted('Try: ls defense/   cat role.txt   projects'),
+          list([...SECTIONS, ...Object.keys(FILES)]),
+          blank,
+          muted('Try: ls defense/ · cat role.txt · projects'),
         ];
       }
-      if (target === 'defense') return columns([...TOOLSETS.defense]);
-      if (target === 'offense') return columns([...TOOLSETS.offense]);
+      if (target === 'defense') return [list(TOOLSETS.defense)];
+      if (target === 'offense') return [list(TOOLSETS.offense)];
       if (target === 'projects') {
         return [
-          ...columns(ctx.projects.slice(0, 12).map(p => p.id)),
-          muted(''),
+          list(ctx.projects.slice(0, 12).map(p => p.id)),
+          blank,
           muted(`${ctx.projects.length} total. Details with: projects`),
         ];
       }
-      const hit = COMMANDS.find(c => c.name === target);
-      if (hit) return [muted(`${target} is a command, not a directory. Run: ${target}`)];
+      // The other three sections are listed by `ls`, so `ls skills/` has to be
+      // an answer rather than "no such directory".
+      const section = SECTIONS.find(s => s.replace('/', '') === target);
+      if (section) return [muted(`${section} is a section of this page. Jump to it with: ${target}`)];
+
+      const hit = BY_NAME.get(target);
+      if (hit) return [muted(`${target} is a command, not a directory. Run: ${hit.name}`)];
       return [error(`ls: ${args[0]}: no such directory`), muted('Run ls for what is here.')];
     },
   },
@@ -232,14 +237,12 @@ export const COMMANDS: CommandSpec[] = [
     usage: 'cat <file>',
     summary: 'Print role, mission or skills.',
     run: (args, ctx) => {
-      const name = (args[0] ?? '').toLowerCase();
-      if (!name) return [error('Usage: cat <file>'), muted(`Files: ${Object.keys(FILES).join('  ')}`)];
+      const name = (args[0] ?? '').toLowerCase().replace(/^\.\//, '');
+      const files = muted(`Files: ${Object.keys(FILES).join('  ')}`);
+      if (!name) return [error('Usage: cat <file>'), files];
       // `cat role` is what people actually type; only the site has extensions.
-      const key = FILES[name] ? name : `${name}.txt`;
-      const file = FILES[key];
-      if (!file) {
-        return [error(`cat: ${args[0]}: no such file`), muted(`Files: ${Object.keys(FILES).join('  ')}`)];
-      }
+      const file = FILES[name] ?? FILES[`${name}.txt`];
+      if (!file) return [error(`cat: ${args[0]}: no such file`), files];
       return file(ctx);
     },
   },
@@ -262,12 +265,12 @@ export const COMMANDS: CommandSpec[] = [
 
       const shown = matches.slice(0, 8);
       return [
-        muted(`${matches.length} project${matches.length === 1 ? '' : 's'}${q ? ` matching "${q}"` : ''}:`),
-        ...shown.map(p => plain(`  ${pad(p.id, 22)}${pad(p.title, 27)}${p.year}`)),
+        muted(`${plural(matches.length, 'project')}${q ? ` matching "${q}"` : ''}`),
+        ...rows(shown.map(p => [p.id, tagline(p.title)])),
         ...(matches.length > shown.length
-          ? [muted(`  ...and ${matches.length - shown.length} more: projects <filter>`)]
+          ? [muted(`and ${matches.length - shown.length} more. Narrow it with: projects <filter>`)]
           : []),
-        muted(''),
+        blank,
         muted('Open one with: open <id>'),
       ];
     },
@@ -279,7 +282,7 @@ export const COMMANDS: CommandSpec[] = [
     summary: 'Open a project and jump to it.',
     run: (args, ctx) => {
       const q = args.join(' ').trim();
-      if (!q) return [error('Usage: open <id>   (try: projects)')];
+      if (!q) return [error('Usage: open <id>'), muted('Run projects for the ids.')];
 
       const needle = q.toLowerCase();
       const hit =
@@ -289,7 +292,7 @@ export const COMMANDS: CommandSpec[] = [
 
       if (!hit) {
         // A miss is nearly always a half-remembered id, so answer with the
-        // closest ones rather than sending the reader back to a list of 25.
+        // closest ones rather than sending the reader back to a list of 30.
         const near = ctx.projects
           .filter(p => needle.split('').every(ch => p.id.includes(ch)))
           .slice(0, 3)
@@ -310,41 +313,38 @@ export const COMMANDS: CommandSpec[] = [
     summary: 'What I use, or filter the work.',
     run: (args, ctx) => {
       const q = args.join(' ').toLowerCase().trim();
+      const uses = (aliases: string[]) =>
+        ctx.projects.filter(p =>
+          p.tech.some(t => aliases.some(a => t.toLowerCase().includes(a))),
+        ).length;
 
       if (!q) {
         const counts = Object.entries(SKILL_ALIASES)
-          .map(([name, aliases]) => {
-            const n = ctx.projects.filter(p =>
-              p.tech.some(t => aliases.some(a => t.toLowerCase().includes(a))),
-            ).length;
-            return { name: SKILL_LABELS[name] ?? name, n };
-          })
+          .map(([name, aliases]) => ({ name: SKILL_LABELS[name] ?? name, n: uses(aliases) }))
           .filter(s => s.n > 0)
           .sort((a, b) => b.n - a.n);
 
         return [
-          muted('Used across shipped projects:'),
-          ...counts.map(s => plain(`  ${pad(s.name, 16)}${s.n} project${s.n === 1 ? '' : 's'}`)),
-          muted(''),
+          muted('Used across shipped projects'),
+          ...rows(counts.map(s => [s.name, plural(s.n, 'project')])),
+          blank,
           muted('Filter the work with: skills <tech>'),
         ];
       }
 
       const aliases = SKILL_ALIASES[q] ?? [q];
       const label = SKILL_LABELS[q] ?? q;
-      const n = ctx.projects.filter(p =>
-        p.tech.some(t => aliases.some(a => t.toLowerCase().includes(a))),
-      ).length;
+      const n = uses(aliases);
 
-      if (!n) return [error(`Nothing here uses "${q}". Run skills for the list.`)];
+      if (!n) return [error(`Nothing here uses "${q}".`), muted('Run skills for the list.')];
 
       emitFilterSkill({ label, aliases });
-      return [accent(`${n} project${n === 1 ? '' : 's'} use ${label}, filtering below`)];
+      return [accent(`${plural(n, 'project')} ${n === 1 ? 'uses' : 'use'} ${label}. Filtering below.`)];
     },
   },
   {
     name: 'experience',
-    aliases: ['exp', 'cv'],
+    aliases: ['exp', 'cv', 'journey'],
     usage: 'experience',
     summary: 'Jump to roles and education.',
     run: () => {
@@ -356,11 +356,10 @@ export const COMMANDS: CommandSpec[] = [
     name: 'resume',
     usage: 'resume',
     summary: 'Download my resume.',
-    run: (_args, ctx) => {
-      if (!ctx.isAuthed) {
-        ctx.goToLogin();
-        return [muted('The resume is gated. Sending you to sign-in.')];
-      }
+    // The PDF is a public file and the button under this prompt downloads it
+    // without an account. This command used to send the same visitor to
+    // sign-in for it.
+    run: () => {
       const a = document.createElement('a');
       a.href = '/resume.pdf';
       a.download = '';
@@ -370,13 +369,16 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: 'contact',
+    // `./connect.sh` is the last line of the banner, so it is the command a
+    // visitor is most likely to copy. It runs this.
+    aliases: ['./connect.sh', 'connect.sh', 'connect', 'email'],
     usage: 'contact',
     summary: 'How to reach me.',
     run: (_args, ctx) => {
       scrollToSection('contact');
       return ctx.isAuthed
-        ? [accent('Contact: email is unlocked below')]
-        : [accent('Contact'), muted('Email unlocks after sign-in; GitHub and LinkedIn are open.')];
+        ? [accent('Contact'), muted('Email, GitHub and LinkedIn are below.')]
+        : [accent('Contact'), muted('GitHub and LinkedIn are open. Email is shown after sign-in.')];
     },
   },
   {
@@ -391,7 +393,7 @@ export const COMMANDS: CommandSpec[] = [
       if (!want) {
         return [
           plain(`mode: ${current}`),
-          muted('Switch with: theme offense   theme defense'),
+          muted('Switch with: theme offense · theme defense'),
         ];
       }
       const on = ['offense', 'pentest', 'red', 'attack'].includes(want);
@@ -414,7 +416,7 @@ export const COMMANDS: CommandSpec[] = [
       // The line running `history` is not in it yet, which is what a real shell
       // shows too. The entry is written when the command returns.
       if (!ctx.history.length) return [muted('No commands yet.')];
-      return ctx.history.map((h, i) => plain(`  ${pad(String(i + 1), 5)}${h}`));
+      return rows(ctx.history.map((h, i) => [String(i + 1), h]));
     },
   },
   {
@@ -435,7 +437,7 @@ for (const cmd of COMMANDS) {
   for (const alias of cmd.aliases ?? []) BY_NAME.set(alias, cmd);
 }
 
-/** Edit distance, capped, only ever used to rank a handful of short names. */
+/** Edit distance, only ever used to rank a handful of short names. */
 function distance(a: string, b: string): number {
   const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
   for (let i = 1; i <= a.length; i++) {
@@ -485,8 +487,8 @@ export function runCommand(input: string, ctx: CommandContext): CommandResult {
     const result = cmd.run(args, ctx);
     return Array.isArray(result) ? { output: result } : result;
   } catch (err) {
-    // A command that throws used to take the whole hero down with it. It now
-    // costs one red line, and the shell is still there afterwards.
+    // A command that throws costs one red line; the shell is still there
+    // afterwards.
     if (import.meta.env.DEV) console.error(`terminal: ${cmd.name} failed`, err);
     return { output: [error(`${cmd.name}: command failed`), muted('Run help for the list.')] };
   }
@@ -515,14 +517,12 @@ function commonPrefix(items: string[]): string {
  * Completions for Tab.
  *
  * A single match is filled in and a space added. Several matches fill in as far
- * as they agree and hand back the list to print, which is what bash does, and
- * what the previous version did not do at all: it returned nothing unless
- * exactly one command matched, so Tab on `c` or `s` looked like a dead key.
+ * as they agree and hand back the list to print, which is what bash does.
  */
 export function complete(input: string, projects: TerminalProject[]): Completion | null {
   // Only the visible command names complete; aliases exist to be forgiving
   // about what is typed, not to double the length of every candidate list.
-  const parts = input.split(/\s+/);
+  const parts = input.trimStart().split(/\s+/);
   const head = parts[0].toLowerCase();
 
   if (parts.length <= 1) {
