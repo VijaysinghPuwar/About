@@ -63,7 +63,7 @@ function VideoList() {
               code panel on screen comes from the real thing.
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-5">
+          <div className="flex shrink-0 items-center justify-between gap-5 sm:justify-start">
             <span className="font-mono text-[12px] tabular-nums text-muted-dim">
               {VIDEOS.length} videos · {formatLength(total)}
             </span>
@@ -80,7 +80,9 @@ function VideoList() {
 
         <ol className="mt-12 border-t border-border sm:mt-14">
           {VIDEOS.map((v, i) => (
-            <li key={v.slug} className="border-b border-border">
+            // No rule under the last one: the footer's own rule follows, and
+            // two hairlines 96px apart read as a mistake.
+            <li key={v.slug} className="border-b border-border last:border-b-0">
               <VideoRow video={v} eager={i < 2} />
             </li>
           ))}
@@ -94,7 +96,7 @@ function VideoRow({ video, eager }: { video: Video; eager: boolean }) {
   return (
     <Link
       to={`/videos/${video.slug}`}
-      className="group grid gap-4 py-6 sm:grid-cols-[minmax(0,320px)_minmax(0,1fr)] sm:gap-7 sm:py-7"
+      className="group grid gap-4 rounded-lg py-6 focus-visible:outline-offset-[-2px] sm:grid-cols-[minmax(0,320px)_minmax(0,1fr)] sm:gap-7 sm:py-7"
     >
       <Thumbnail video={video} size="sm" eager={eager} />
       <div className="min-w-0 self-center">
@@ -102,7 +104,7 @@ function VideoRow({ video, eager }: { video: Video; eager: boolean }) {
         <h2 className="mt-2 text-[19px] font-semibold leading-[1.3] tracking-[-0.015em] text-foreground transition-colors group-hover:text-primary sm:text-[21px]">
           {video.title}
         </h2>
-        <p className="mt-2 line-clamp-2 max-w-[68ch] text-[14.5px] leading-[1.6] text-muted-foreground">
+        <p className="mt-2 line-clamp-3 max-w-[68ch] text-[14.5px] leading-[1.6] text-muted-foreground sm:line-clamp-2">
           {video.summary}
         </p>
         <p className="mt-3 font-mono text-[11.5px] tabular-nums text-muted-dim">
@@ -181,8 +183,6 @@ function VideoPage({ video }: { video: Video }) {
     if (top < 0) playerTop.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }, [start, ready]);
 
-  useEffect(() => { window.scrollTo(0, 0); }, []);
-
   const others = VIDEOS.filter(v => v.slug !== video.slug);
   const src =
     start === null
@@ -210,7 +210,10 @@ function VideoPage({ video }: { video: Video }) {
 
         <div className="mt-4 grid gap-10 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-12">
           <div className="min-w-0">
-            <div ref={playerTop} className="scroll-mt-20">
+            {/* `scroll-padding-top` on the root already clears the fixed bar;
+                a large margin here stacked on top of it and parked the player
+                150px down the screen after a chapter was chosen. */}
+            <div ref={playerTop} className="scroll-mt-3">
               {src ? (
                 <div className="aspect-video overflow-hidden rounded-lg border border-border bg-black">
                   <iframe
@@ -230,7 +233,7 @@ function VideoPage({ video }: { video: Video }) {
                   type="button"
                   onClick={() => play(initialStart)}
                   aria-label={`Play ${video.title}${initialStart ? ` from ${formatDuration(initialStart)}` : ''}`}
-                  className="group relative block w-full text-left"
+                  className="group relative block w-full rounded-lg text-left"
                 >
                   <Thumbnail video={video} size="lg" eager />
                   <span className="absolute inset-0 flex items-center justify-center">
@@ -240,11 +243,14 @@ function VideoPage({ video }: { video: Video }) {
                   </span>
                 </button>
               )}
-              {!src && (
-                <p className="mt-2.5 text-[12.5px] text-muted-dim">
-                  Plays from YouTube. Nothing loads from YouTube until you press play.
-                </p>
-              )}
+              {/* Always there. It used to be removed once the player loaded,
+                  which pulled the title and everything under it up by a line
+                  at the moment the reader pressed play. */}
+              <p className="mt-2.5 text-[12.5px] text-muted-dim">
+                {src
+                  ? 'Playing from YouTube.'
+                  : 'Plays from YouTube. Nothing loads from YouTube until you press play.'}
+              </p>
             </div>
 
             <p className="meta-label mt-8">{video.kicker}</p>
@@ -252,15 +258,19 @@ function VideoPage({ video }: { video: Video }) {
               {video.title}
             </h1>
 
-            <dl className="mt-6 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-border bg-border">
+            {/* Columns sized to what is in them, with the spare width shared
+                out. Three equal columns gave the date the same 68px as the
+                chapter count on a narrow phone, and the date does not fit in
+                68px. */}
+            <dl className="mt-6 grid grid-cols-[repeat(3,auto)] gap-px overflow-hidden rounded-lg border border-border bg-border">
               {[
-                { label: 'Published', value: formatPublished(video.published) },
+                { label: 'Published', value: formatPublished(video.published, 'short') },
                 { label: 'Length', value: formatLength(video.duration) },
                 { label: 'Chapters', value: String(video.chapters.length) },
               ].map(f => (
-                <div key={f.label} className="bg-background px-4 py-3">
+                <div key={f.label} className="bg-background px-3 py-3 sm:px-4">
                   <dt className="meta-label">{f.label}</dt>
-                  <dd className="mt-1 text-[14px] font-medium tabular-nums text-foreground">{f.value}</dd>
+                  <dd className="mt-1 whitespace-nowrap text-[14px] font-medium tabular-nums text-foreground">{f.value}</dd>
                 </div>
               ))}
             </dl>
@@ -275,18 +285,21 @@ function VideoPage({ video }: { video: Video }) {
               ))}
             </ul>
 
-            <div className="mt-7 flex flex-wrap gap-2.5">
+            {/* Two columns on a phone, with the primary across both. As a
+                wrapping row the five buttons fell into four ragged lines,
+                each a different width. */}
+            <div className="mt-7 grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap">
               <a
                 href={`https://www.youtube.com/watch?v=${video.youtubeId}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="gradient-btn inline-flex h-10 items-center gap-1.5 rounded-md px-4 text-[13.5px]"
+                className="gradient-btn col-span-2 inline-flex h-10 items-center justify-center gap-1.5 rounded-md px-4 text-[13.5px]"
               >
                 Watch on YouTube <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
               </a>
               {video.related.map(r =>
                 r.href.startsWith('/') ? (
-                  <Link key={r.href} to={r.href} className="btn-outline inline-flex h-10 items-center rounded-md px-4 text-[13.5px] font-medium">
+                  <Link key={r.href} to={r.href} className="btn-outline inline-flex min-h-10 items-center justify-center rounded-md px-3 py-2 text-center text-[13.5px] font-medium leading-tight sm:px-4">
                     {r.label}
                   </Link>
                 ) : (
@@ -295,9 +308,9 @@ function VideoPage({ video }: { video: Video }) {
                     href={r.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="btn-outline inline-flex h-10 items-center gap-1.5 rounded-md px-4 text-[13.5px] font-medium"
+                    className="btn-outline inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-center text-[13.5px] font-medium leading-tight sm:px-4"
                   >
-                    {r.label} <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                    {r.label} <ArrowUpRight className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
                   </a>
                 ),
               )}
@@ -362,7 +375,7 @@ function VideoPage({ video }: { video: Video }) {
 
 function VideoNotFound() {
   return (
-    <div className="page-gutter container mx-auto flex min-h-[70dvh] max-w-[640px] flex-col items-start justify-center pt-24">
+    <div className="page-gutter container mx-auto flex min-h-[100dvh] max-w-[640px] flex-col items-start justify-center pt-24">
       <Helmet>
         <title>Video not found | Vijaysingh Puwar</title>
         <meta name="robots" content="noindex" />

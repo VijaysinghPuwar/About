@@ -102,22 +102,43 @@ html {
   text-size-adjust: 100%;
 }
 
+/* `clip`, not `hidden`.
+
+   The root already hides sideways overflow. Repeating `hidden` here turned
+   <body> into a scroll container of its own (its other axis computes to
+   `auto`), one that never scrolls because the root does. Two things broke on
+   that, silently: every `position: sticky` on the site stuck to a box that
+   does not move, so the chapter list beside a video and the cover beside a
+   book scrolled away with the page; and locking <body> to hold the page
+   behind a dialog locked nothing (see src/lib/scroll-lock.ts). `clip` cuts the
+   overflow without making a scroller. The first line is for a browser too old
+   to know `clip`, which keeps what it had. */
 body {
   overflow-x: hidden;
+  overflow-x: clip;
 }
 
-/* Theme swap: colours cross-fade, nothing else moves. */
+/* Hover and focus feedback, for every control on the site.
+
+   This rule is unlayered, and unlayered declarations beat anything in a
+   Tailwind layer, so it is the one place these durations are set: a
+   `duration-200` on a link or a button does nothing. That is why `transform`
+   and `opacity` are in the list. A control that wants to move or fade on hover
+   cannot add its own transition; this shorthand replaces it every time.
+
+   It ran at 250ms for colour and 300ms for movement, on the theory that it was
+   the theme cross-fade. It never was: the theme swap happens behind the
+   shutter with transitions switched off (`data-theme-sweep`, below). What it
+   actually timed was every hover on the site, and a quarter of a second is
+   long enough that the highlight is still arriving as the pointer leaves.
+   120ms reads as a response. */
 a, button, input, .panel, .glass-card, .gradient-btn, .section-heading {
-  /* `transform` is in the list because this rule is unlayered, and unlayered
-     declarations beat anything in `@layer components`. A card that wanted to
-     lift on hover could not add its own transition from a utility or a
-     component class: this shorthand replaced it every time. */
-  transition: color 0.25s ease, background-color 0.25s ease, border-color 0.25s ease,
-    transform 0.3s ease;
+  transition: color 0.12s ease, background-color 0.12s ease, border-color 0.12s ease,
+    opacity 0.12s ease, transform 0.16s ease;
 }
 
 svg [stroke], svg [fill] {
-  transition: stroke 0.25s ease, fill 0.25s ease;
+  transition: stroke 0.12s ease, fill 0.12s ease;
 }
 
 /* Keyboard focus, visible on every interactive element.
@@ -270,9 +291,7 @@ svg [stroke], svg [fill] {
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
-    transition:
-      background-position 0.9s cubic-bezier(0.22, 0.8, 0.28, 1),
-      transform 0.9s cubic-bezier(0.22, 0.8, 0.28, 1);
+    transition: background-position 0.35s cubic-bezier(0.22, 0.8, 0.28, 1);
   }
 
   .group:hover .cert-wipe,
@@ -469,12 +488,6 @@ svg [stroke], svg [fill] {
   }
 }
 
-/* The hero's dot matrix is gone; the page-wide rule grid in CyberGrid replaced
-   it. The class is retained because Login still composes with it. */
-.hero-grid-bg {
-  background-image: none;
-}
-
 /*
   Theme switch shutter. See `src/lib/theme-transition.ts` for the geometry and
   the timings that hang off it.
@@ -566,6 +579,65 @@ html[data-theme-sweep] * {
 .term-scroll::-webkit-scrollbar-thumb {
   background: hsl(var(--border-strong));
   border-radius: 3px;
+}
+
+/*
+  The terminal's screen is a size container. Its output is laid out against the
+  width of the card it is in, which on a phone is nothing like the viewport's,
+  so the two places that care how wide it is ask the screen and not the window.
+  Both the visible layer and the hidden copy that sizes it carry this class;
+  they have to wrap identically.
+*/
+.term-screen {
+  container-type: inline-size;
+}
+
+/*
+  The screen's scroll edges. An edge with more transcript beyond it fades out
+  over its last 22px (one row); an edge at the end of the transcript is cut
+  clean. `TerminalHero` sets the two attributes as the screen scrolls.
+
+  A mask, so it is the text that thins and not a colour laid over it: there is
+  no second surface here and nothing tinted. It is static between scrolls, so
+  it costs one composited layer the size of the screen and no repaint.
+*/
+.term-screen[data-above],
+.term-screen[data-below] {
+  --edge-above: 0px;
+  --edge-below: 0px;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--edge-above),
+    #000 calc(100% - var(--edge-below)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--edge-above),
+    #000 calc(100% - var(--edge-below)),
+    transparent 100%
+  );
+}
+
+.term-screen[data-above] {
+  --edge-above: 22px;
+}
+
+.term-screen[data-below] {
+  --edge-below: 22px;
+}
+
+/* The dot between the role and the city, drawn only when they fit on a line. */
+.term-sep {
+  display: none;
+}
+
+@container (min-width: 22rem) {
+  .term-sep {
+    display: inline;
+  }
 }
 
 /* Terminal caret */

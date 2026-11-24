@@ -11,7 +11,7 @@ import { Helmet } from 'react-helmet-async';
 */
 export default function NotFound() {
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center px-4 hero-grid-bg">
+    <div className="page-gutter flex min-h-[100dvh] items-center justify-center">
       <Helmet>
         <title>Page Not Found | Vijaysingh Puwar</title>
         <meta name="robots" content="noindex, nofollow" />
@@ -26,9 +26,9 @@ export default function NotFound() {
         </p>
         <Link
           to="/"
-          className="btn-outline mt-7 inline-flex h-10 items-center rounded-md px-5 text-[13.5px] font-medium"
+          className="btn-outline mt-7 inline-flex h-11 items-center rounded-md px-5 text-[13.5px] font-medium"
         >
-          ← Back Home
+          ← Back home
         </Link>
       </div>
     </div>

@@ -1,17 +1,23 @@
-// The address is assembled at call time, never written as one literal.
+// The contact address, kept out of plain sight.
 //
-// This matters at BUILD time, not just in the DOM: esbuild constant-folds an
-// inline template like `${'contact'}@${'example.com'}` into a single plaintext
-// string, which is how the Command Palette chunk previously shipped the real
-// address to logged-out visitors. Joining an array is not folded, so the two
-// halves stay separate in the bundle.
+// What this does: the address is never written out, whole or in halves, in
+// this file, in the built bundle, or in the page of a signed-out visitor. It is
+// stored reversed and put back together at call time, so a scraper reading the
+// HTML or grepping the JavaScript for something shaped like an address finds
+// nothing, and neither does a code search of the repository.
+//
+// What this does not do: it is not access control. The code that rebuilds the
+// address ships to every visitor, signed in or not, so anyone who reads it can
+// run it. Hiding it from them would take a server that hands the address over
+// only after checking a session, which this site does not have for this.
+//
+// The signed-out UI therefore shows no part of the address at all. It used to
+// show the first four letters and the domain with dots in between, which is a
+// crossword clue, not a mask.
 
-const LOCAL = 'contact';
-const DOMAIN = 'vijaysinghpuwar.com';
+const REVERSED = ['moc.rawuphgnisyajiv', 'tcatnoc'];
+
+const unreverse = (s: string) => Array.from(s).reverse().join('');
 
 /** Real address. Only call this behind an authentication check. */
-export const contactEmail = (): string => [LOCAL, DOMAIN].join('@');
-
-/** `cont••••@domain`, safe to render for logged-out visitors. */
-export const maskedContactEmail = (): string =>
-  [LOCAL.slice(0, 4) + '••••', DOMAIN].join('@');
+export const contactEmail = (): string => REVERSED.map(unreverse).reverse().join('@');

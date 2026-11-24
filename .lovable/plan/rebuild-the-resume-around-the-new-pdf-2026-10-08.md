@@ -10,7 +10,7 @@ The uploaded `VijaysinghPuwar_Resume.pdf` (2 pages, parsed and verified against 
 
 Keep the existing page structure (one column, `SectionHeading`, `EntryHead`, `Bullets`, `ProtectedEmail`). Change the content:
 
-- **Header** — keep name, add the phone number `929-400-2052` as plain text; keep the gated email via `ProtectedEmail` (phone public, email behind sign-in, per the user's choice); GitHub and LinkedIn links stay. Update the `Helmet` description if the summary changes it.
+- **Header** — keep name, add the phone number as plain text; keep the gated email via `ProtectedEmail` (phone public, email behind sign-in, per the user's choice); GitHub and LinkedIn links stay. Update the `Helmet` description if the summary changes it.
 - **Summary** — replace the current PROFILE with the PDF's three-sentence summary ("Cybersecurity engineer with three years in systems and network operations. At the MTA, handles access requests and incidents on a 24/7 rail network. Outside work, builds and runs two production web platforms and fixes their security issues. CompTIA Security+, CompTIA CySA+, and Cisco CCNA certified.")
 - **Experience**
   - *Emerging Talent Intern | Metropolitan Transportation Authority (MTA), New York, NY, Jun 2026 – Present* — the PDF's six bullets (AD/DUO MFA/Zscaler ZPA access reviews; ServiceNow incidents escalating to Dell, HP, Solari; railway device inventory traced to switch ports; Cisco Catalyst and OSPF/BGP troubleshooting; SIR IT request intake in Power Automate/SharePoint with runbook; Python NTP clock-correction service for a Rail Control Center workstation).

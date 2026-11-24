@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { INITIALS } from '@/components/LogoIcon';
+import { LogoIcon } from '@/components/LogoIcon';
 import { Helmet } from 'react-helmet-async';
 import { Loader2, CheckCircle2, Mail } from 'lucide-react';
 import { z } from 'zod';
@@ -103,25 +103,31 @@ export default function Login() {
     );
   }
 
+  // What signing in is for, said in terms of why this visitor is here. The
+  // only two things behind an account are the reader and the contact address.
+  const reading = /^\/books\/[^/]+\/read/.test(searchParams.get('next') ?? '');
+
   return (
-    <div className="min-h-[100dvh] flex items-center justify-center px-4 hero-grid-bg">
+    <div className="page-gutter flex min-h-[100dvh] items-center justify-center py-24">
       <Helmet>
-        <title>Sign In | Vijaysingh Puwar</title>
+        <title>Sign in | Vijaysingh Puwar</title>
       </Helmet>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative w-full max-w-md">
         <div className="glass-card rounded-lg p-8 space-y-6">
-          {/* Logo */}
-          <div className="text-center space-y-3">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-lg gradient-border">
-              <span className="text-2xl font-bold gradient-text">{INITIALS}</span>
-            </div>
+          {/* The site's own mark and a heading that says what the page is. It
+              read SECURE ACCESS, letter-spaced in the accent colour, over a
+              boxed pair of initials: a login screen dressed as a vault door,
+              which told the visitor nothing about what they were signing in
+              to or why. */}
+          <div className="space-y-4 text-center">
+            <LogoIcon size={40} className="justify-center" />
             <div>
-              <h1 className="text-2xl font-bold font-mono tracking-[0.18em] uppercase gradient-text">
-                Secure Access
-              </h1>
-              <p className="text-muted-foreground text-sm mt-2">
-                Continue with Google, or have a one-time sign-in link emailed to you.
+              <h1 className="text-[26px] font-semibold tracking-[-0.022em] text-foreground">Sign in</h1>
+              <p className="mx-auto mt-2 max-w-[34ch] text-sm leading-relaxed text-muted-foreground">
+                {reading
+                  ? 'The reader keeps your place and carries it between devices, which is what the account is for.'
+                  : 'An account shows the contact email and opens the book reader.'}
               </p>
             </div>
           </div>
@@ -201,13 +207,16 @@ export default function Login() {
                 aria-invalid={!!emailError}
                 aria-describedby={emailError ? 'email-error' : undefined}
                 disabled={emailLoading}
-                className="h-12"
+                // An invalid address turns the field's own edge and focus ring
+                // red. The message used to appear in red under a field still
+                // ringed in the accent green, two signals disagreeing.
+                className="h-12 aria-[invalid=true]:border-destructive aria-[invalid=true]:outline-destructive"
               />
-              {emailError && (
-                <p id="email-error" role="alert" className="text-destructive text-xs">
-                  {emailError}
-                </p>
-              )}
+              {/* The line is always in the layout. Mounted only on an error, it
+                  made the card taller, and the card is centred, so it jumped. */}
+              <p id="email-error" role="alert" className="min-h-4 text-xs text-destructive">
+                {emailError}
+              </p>
               <button
                 type="submit"
                 disabled={emailLoading || googleLoading}
@@ -227,8 +236,7 @@ export default function Login() {
               portfolio and resume". Both are public: every project, every
               repository link and /resume need no account. */}
           <p className="text-center text-xs text-muted-foreground">
-            The projects and the résumé are public. Signing in is only for
-            account and admin access.
+            The projects and the résumé are public and need no account.
           </p>
         </div>
       </motion.div>

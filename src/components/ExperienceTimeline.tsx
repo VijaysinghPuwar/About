@@ -77,7 +77,7 @@ const rows: Row[] = [
     bullets: [
       <>Resolved incidents and service requests in ServiceNow for a 24/7 rail operation, isolating faults across the application, network path, access policy and host.</>,
       <>Built an IT request intake system with Microsoft Forms, Power Automate and SharePoint, and caught a defect writing incorrect values before release.</>,
-      <>Processed access requests for Active Directory groups, DUO MFA and Zscaler ZPA against policy.</>,
+      <>Processed access requests for Active Directory groups, Duo MFA and Zscaler ZPA against policy.</>,
       <>Supported Cisco Catalyst switching: VLANs, access and trunk ports; mapped devices and verified addressing and port assignments.</>,
       <>Built a Python NTP clock-correction service for a Rail Control Center workstation with dry-run mode, elevation checks and rotating logs.</>,
       <>Wrote the operator runbook the team now works from.</>,
@@ -93,7 +93,7 @@ const rows: Row[] = [
         </p>
         {[
           { label: 'Networking', items: ['Cisco Catalyst', 'VLANs', 'Access & trunk ports', 'IP addressing'] },
-          { label: 'Identity & access', items: ['Active Directory', 'DUO MFA', 'Zscaler ZPA'] },
+          { label: 'Identity & access', items: ['Active Directory', 'Duo MFA', 'Zscaler ZPA'] },
           { label: 'Tools', items: ['ServiceNow', 'Microsoft Forms', 'Power Automate', 'SharePoint', 'Python'] },
         ].map(group => (
           <div key={group.label}>
@@ -281,15 +281,23 @@ function TimelineEntry({ row, index, last }: { row: Row; index: number; last: bo
         className="w-full rounded-[10px] border border-border bg-card px-5 py-[18px] text-left transition-colors [text-align:inherit] hover:border-border-strong"
       >
         <div className={cn('flex gap-3.5', onLeft && 'wide:flex-row-reverse')}>
-          <span
+          {/* Drawn, and boxed to one line of the title.
+
+              This was the `⌄` character in a span with no size of its own. As
+              a flex item it stretched to the full height of the card, so
+              "rotate 180 degrees" turned it about the middle of the card: the
+              mark left the title and reappeared at the bottom corner whenever
+              an entry was opened. A fixed box turns about its own centre. */}
+          <svg
             aria-hidden="true"
+            viewBox="0 0 12 12"
             className={cn(
-              'mt-0.5 shrink-0 text-[14px] text-muted-dim transition-transform duration-500 ease-out reduced:transition-none',
+              'mt-[5px] h-3 w-3 shrink-0 self-start text-muted-dim transition-transform duration-150 ease-out',
               open && 'rotate-180',
             )}
           >
-            ⌄
-          </span>
+            <path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
           <div className="min-w-0 flex-1">
             <div className={cn('flex flex-wrap items-baseline gap-x-3 gap-y-1', onLeft && 'wide:justify-end')}>
               <h3 className="text-[17px] font-semibold tracking-[-0.014em] text-foreground">
@@ -303,8 +311,28 @@ function TimelineEntry({ row, index, last }: { row: Row; index: number; last: bo
               )}
             </div>
             <div className="mt-1 text-[14px] leading-[1.5] text-muted-foreground">{row.org}</div>
-            <div className="mt-2 font-mono text-[11.5px] tracking-[0.04em] text-muted-dim">
-              {[row.dates, row.place, row.kind].filter(Boolean).join('  ·  ')}
+            {/* Each part is unbreakable and the line breaks between them. Set
+                as one string it broke wherever it ran out of room, which on a
+                phone was inside the place name: "Vadodara," on one line and
+                "India" on the next.
+
+                The dot belongs to the part that follows it. Below the desktop
+                breakpoint the row is pulled left by the width of one dot and
+                clipped, so a part that starts a line leaves its dot outside
+                the box instead of opening the line with a stray separator. On
+                desktop the line never wraps and can be right-aligned, so the
+                first part simply has none. */}
+            <div className="mt-2 overflow-hidden font-mono text-[11.5px] tracking-[0.04em] text-muted-dim">
+              <div className={cn('-ml-[4ch] flex flex-wrap gap-y-0.5 wide:ml-0', onLeft && 'wide:justify-end')}>
+                {[row.dates, row.place, row.kind].filter(Boolean).map(part => (
+                  <span
+                    key={part}
+                    className="whitespace-nowrap before:inline-block before:w-[4ch] before:text-center before:content-['·'] wide:first:before:hidden"
+                  >
+                    {part}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -326,10 +354,12 @@ function TimelineEntry({ row, index, last }: { row: Row; index: number; last: bo
                   >
                     {i === row.bullets.length - 1 ? '└─' : '├─'}
                   </span>
-                  {/* Justified, with hyphenation on. Justification without it
-                      opens rivers of white space in a measure this narrow,
-                      because the browser can only stretch the spaces it has. */}
-                  <span className="hyphens-auto text-justify">{bullet}</span>
+                  {/* Ragged right. These were justified with hyphenation on,
+                      which holds up in a wide column and falls apart in a
+                      narrow one: on a phone the measure is about thirty
+                      characters, and a line of four long words was stretched
+                      edge to edge with gaps wider than the words. */}
+                  <span>{bullet}</span>
                 </li>
               ))}
             </ul>
@@ -399,7 +429,7 @@ function CertRow({ name, org, earned }: { name: string; org: string; earned: boo
       {/* Scaled rather than sized, so the wipe costs no layout. */}
       <span
         aria-hidden="true"
-        className="absolute left-0 top-0 h-full w-[2px] origin-top scale-y-0 bg-primary transition-transform duration-[220ms] ease-[cubic-bezier(.2,.8,.3,1)] group-hover:scale-y-100 reduced:transition-none"
+        className="absolute left-0 top-0 h-full w-[2px] origin-top scale-y-0 bg-primary transition-transform duration-200 ease-out group-hover:scale-y-100"
       />
       {/* Stacked on a phone, one line from `sm` up. It used to `flex-wrap`,
           which put the issuer beside a short name and under a long one, so the
@@ -410,7 +440,10 @@ function CertRow({ name, org, earned }: { name: string; org: string; earned: boo
               edge whether or not there is a mark to put in front of them. */}
           <span className="flex w-6 shrink-0 translate-y-[5px] justify-center" aria-hidden="true">
             {!earned && (
-              <svg viewBox="0 0 14 14" className="h-6 w-6 animate-spin [animation-duration:2.2s] reduced:animate-none">
+              /* A part-drawn ring, standing still. It used to spin, and a
+                 spinner means "wait, this is loading": on a line of a résumé
+                 it said the page was stuck. */
+              <svg viewBox="0 0 14 14" className="h-6 w-6 -rotate-90">
                 <circle cx="7" cy="7" r="5.6" fill="none" stroke="hsl(var(--border-strong))" strokeWidth="1.5" />
                 <circle
                   cx="7"
@@ -429,26 +462,15 @@ function CertRow({ name, org, earned }: { name: string; org: string; earned: boo
           className={cn(
             /* The colour change is the wipe; see `.cert-wipe` in index.css.
 
-               Grown with a transform rather than a larger font size, so the
-               row height stays put and sweeping down the list does not shunt
-               the rows below the cursor around. `origin-left` grows the name
-               into the empty measure on its right instead of off the page. At
-               this magnification it necessarily crosses its neighbours, which
-               is why the row lifts above them while hovered. */
-            /* No `transition-*` utility here. That utility is a `transition:`
-               shorthand too, and being a utility it beat `.cert-wipe` in the
-               cascade: it replaced the background-position transition with a
-               transform one at the default 150ms, so the wipe never animated
-               and the zoom ran six times too fast. Both timings live together
-               in the one rule in index.css now. */
-            'cert-wipe origin-left text-[clamp(20px,2.4vw,28px)] font-semibold leading-[1.25] tracking-[-0.02em]',
-            /* Hover variants only fire where there is a real hover
-               (`hoverOnlyWhenSupported` in tailwind.config.ts): a tap on a
-               phone used to leave the row in :hover and run the 2x name off
-               the screen. Below `wide` there is no empty measure to grow
-               into, so it grows less. */
-            'group-hover:scale-[1.25] wide:group-hover:scale-[2]',
-            'reduced:group-hover:scale-100',
+               That is the whole hover, with the rule and the lifted surface.
+               The name also used to grow to twice its size, across the rows
+               above and below it and past the section heading in scale. It
+               was the loudest thing on the page and it was a list item.
+
+               No `transition-*` utility here: that utility is a `transition:`
+               shorthand, and being a utility it would replace the one
+               `.cert-wipe` declares. */
+            'cert-wipe text-[clamp(20px,2.4vw,28px)] font-semibold leading-[1.25] tracking-[-0.02em]',
           )}
           >
             {name}

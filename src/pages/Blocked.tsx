@@ -18,7 +18,7 @@ export default function Blocked() {
   }, [user, profile, loading, navigate]);
 
   return (
-    <div className="min-h-[100dvh] flex items-center justify-center px-4 hero-grid-bg">
+    <div className="page-gutter flex min-h-[100dvh] items-center justify-center py-24">
       <Helmet>
         <title>Access Denied | Vijaysingh Puwar</title>
       </Helmet>

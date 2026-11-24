@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Github, X, ExternalLink, ArrowRight, Columns2, Search, Play } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { onOpenProject, scrollToSection } from '@/lib/portfolio-events';
+import { lockScroll } from '@/lib/scroll-lock';
 import { cn } from '@/lib/utils';
 
 const IMPACT_DIFFS: Record<string, { before: string[]; after: string[] }> = {
@@ -296,11 +297,10 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
       else closeIndex();
     };
     window.addEventListener('keydown', handler);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock = lockScroll();
     return () => {
       window.removeEventListener('keydown', handler);
-      document.body.style.overflow = previousOverflow;
+      unlock();
     };
   }, [selectedProject, indexOpen, closeModal, closeIndex]);
 
@@ -708,11 +708,20 @@ const FeaturedCard = forwardRef<HTMLElement, { project: Project; onClick: () => 
        `initial` styles and never ran the animation, so the third card sat at
        `opacity: 0` and simply did not appear. Content should not be invisible
        because an animation failed to start. */
+    /* The whole card opens the project, and the thing that does it is a real
+       button: "View details" below, stretched over the card with a
+       pseudo-element. The card used to carry the click on the <article>
+       itself, which a mouse could reach and nothing else could. There was no
+       tab stop and no role, so the four projects the page leads with could
+       not be opened from a keyboard or announced as openable. The GitHub link
+       sits above the stretched area so it stays its own target. */
     return (
       <article
         ref={ref}
-        onClick={onClick}
-        className={cn('panel panel-hover flex h-full cursor-pointer flex-col rounded-lg p-5', className)}
+        className={cn(
+          'panel panel-hover relative flex h-full flex-col rounded-lg p-5 focus-within:border-border-strong',
+          className,
+        )}
       >
         <div className="flex items-baseline justify-between gap-3">
           <span className="meta-label truncate">{normalizeCategory(project.category)}</span>
@@ -735,22 +744,29 @@ const FeaturedCard = forwardRef<HTMLElement, { project: Project; onClick: () => 
           </p>
         )}
 
-        <p className="mt-3.5 truncate font-mono text-[11px] text-muted-dim">
+        {/* The bottom padding is the gap to the rule below. `mt-auto` on the
+            footer collapses to nothing in the tallest card of a row, which
+            left the stack sitting on the hairline. */}
+        <p className="mt-3.5 truncate pb-4 font-mono text-[11px] text-muted-dim">
           {project.tech.slice(0, 4).join(' · ')}
         </p>
 
         <div className="mt-auto flex items-center justify-between gap-4 border-t border-border pt-3.5 text-[13.5px] font-medium">
-          <span className="flex items-center gap-2 text-primary">
+          <button
+            type="button"
+            onClick={onClick}
+            aria-label={`View details: ${project.title}`}
+            className="flex items-center gap-2 text-primary after:absolute after:inset-0 after:rounded-lg"
+          >
             View details <span className="font-mono" aria-hidden="true">&#8594;</span>
-          </span>
+          </button>
           {project.links.github && (
             <a
               href={project.links.github}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={e => e.stopPropagation()}
               aria-label={`${project.title} source on GitHub`}
-              className="tap-44 text-muted-dim transition-colors hover:text-primary"
+              className="tap-44 relative z-[1] text-muted-dim transition-colors hover:text-primary"
             >
               <Github className="h-4 w-4" aria-hidden="true" />
             </a>
