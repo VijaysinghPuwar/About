@@ -11,8 +11,11 @@ import { ProtectedEmail } from '@/components/ProtectedEmail';
  * generated. The PDF is printed from scripts/resume/resume.html (see the
  * command there); change both together.
  *
- * The phone number is public by decision; the email stays behind sign-in via
- * ProtectedEmail, as everywhere else on the site.
+ * One deliberate difference: neither this page nor the PDF carries a phone
+ * number or a personal email address. Both are public documents, and anything
+ * printed on them is collected by scrapers within days. The header points at
+ * the site, LinkedIn and GitHub instead; the contact address stays behind
+ * sign-in via ProtectedEmail, as everywhere else on the site.
  */
 
 const PROFILE =
@@ -184,7 +187,7 @@ export default function Resume() {
        top of the page, so the two simply overlapped. */
     <div className="pb-14 pt-24 sm:pb-20 sm:pt-28">
       <Helmet>
-        <title>Resume | Vijaysingh Puwar</title>
+        <title>Résumé | Vijaysingh Puwar</title>
         <meta
           name="description"
           content="Resume of Vijaysingh Puwar, software, systems and security engineer in New York. Windows and Linux servers across AWS, Azure and on-premises, Active Directory access, and production software in Python, Go, Rust, C# and Java. M.S. Cybersecurity, Pace University. CompTIA Security+, CySA+, Cisco CCNA."
@@ -192,25 +195,33 @@ export default function Resume() {
         <link rel="canonical" href="https://vijaysinghpuwar.com/resume" />
       </Helmet>
 
-      <article className="container max-w-3xl mx-auto px-4 sm:px-6">
+      {/* The site's gutter, so this page's left edge is the bar's and the
+          footer's. It had its own 16px padding and sat 4px left of both. */}
+      <article className="page-gutter container mx-auto max-w-3xl">
         {/* ── Header ── */}
         <header className="mb-10">
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
             Vijaysingh Puwar
           </h1>
-          <p className="mt-1 text-base sm:text-lg text-primary font-medium">
-            Software, Systems, and Security Engineer | M.S. Cybersecurity, Pace University
+          {/* Two statements, on two lines where they do not fit on one. As a
+              single string joined by a bar it broke after the bar on a phone,
+              leaving the separator hanging at the end of the first line. */}
+          <p className="mt-1 text-base font-medium text-primary sm:text-lg">
+            <span className="block sm:inline">Software, Systems, and Security Engineer</span>
+            <span className="hidden sm:inline" aria-hidden="true"> | </span>
+            <span className="block sm:inline">M.S. Cybersecurity, Pace University</span>
           </p>
 
-          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
-            <span>New York, NY</span>
-            <span>929-400-2052</span>
-            <ProtectedEmail variant="row" compactHint />
+          {/* Each item is 36px tall, so on a phone the three links are
+              targets and not 20px lines of text. */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-5 text-sm text-muted-foreground">
+            <span className="inline-flex h-9 items-center">New York, NY</span>
+            <ProtectedEmail className="h-9" />
             <a
               href="https://github.com/VijaysinghPuwar"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-foreground transition-colors underline-offset-4 hover:underline"
+              className="inline-flex h-9 items-center underline-offset-4 hover:text-foreground hover:underline"
             >
               GitHub
             </a>
@@ -218,13 +229,13 @@ export default function Resume() {
               href="https://linkedin.com/in/vijaysinghpuwar"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-foreground transition-colors underline-offset-4 hover:underline"
+              className="inline-flex h-9 items-center underline-offset-4 hover:text-foreground hover:underline"
             >
               LinkedIn
             </a>
           </div>
 
-          <p className="mt-5 text-sm sm:text-base leading-relaxed text-muted-foreground">
+          <p className="mt-4 text-sm sm:text-base leading-relaxed text-muted-foreground">
             {PROFILE}
           </p>
 
@@ -300,7 +311,7 @@ export default function Resume() {
                           href={l.href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-primary hover:underline underline-offset-4 break-all"
+                          className="inline-flex min-h-8 items-center break-all text-primary underline-offset-4 hover:underline"
                         >
                           {l.label}
                         </a>
@@ -341,12 +352,11 @@ export default function Resume() {
         {/* ── Certifications ── */}
         <section>
           <SectionHeading>Certifications</SectionHeading>
-          <ul className="flex flex-wrap gap-x-2 gap-y-1 text-sm text-muted-foreground">
-            {CERTIFICATIONS.map((c, i) => (
-              <li key={c}>
-                <span className="font-semibold text-foreground">{c}</span>
-                {i < CERTIFICATIONS.length - 1 && <span aria-hidden="true" className="ml-2">|</span>}
-              </li>
+          {/* Spaced, not separated. Each item used to carry a trailing bar,
+              so every line of the wrap ended on one. */}
+          <ul className="flex flex-wrap gap-x-6 gap-y-1.5 text-sm">
+            {CERTIFICATIONS.map(c => (
+              <li key={c} className="font-semibold text-foreground">{c}</li>
             ))}
           </ul>
         </section>

@@ -42,8 +42,8 @@ authenticated access immediately.
 
 | Tier          | Sees                                                                   |
 | ------------- | ---------------------------------------------------------------------- |
-| Anonymous     | The whole public portfolio: hero, skills, **all projects**, experience, contact card. Email stays masked; repository links and the resume are locked. |
-| Authenticated | The above plus the real email address, project source repositories, and the resume download. |
+| Anonymous     | The whole public portfolio: hero, skills, **all projects** with their public repository links, experience, the resume page and PDF, and the contact card. No part of the email address is shown. |
+| Authenticated | The above plus the contact email address and the book reader. |
 | Administrator | The above plus `/admin`. Admin comes from a row in `user_roles`, never from signing in. |
 
 The contact section is a centered contact card and availability list. The

@@ -40,7 +40,12 @@ build is needed. Adjust the revision if the cache updates.)
 
 - Responsive sweep at 360/390/393/402/430/440/1280/2560 px: no horizontal overflow,
   hero text `vijaysingh@security` visible, no blank first screen, zero console errors.
-- Protected email: logged out, `document.documentElement.outerHTML` must NOT contain
-  `contact@vijaysinghpuwar.com` (only the masked `cont••••@…`).
+- Protected email: logged out, `document.documentElement.outerHTML` must contain no
+  `@` followed by the site's domain and no fragment of the address; the contact card
+  reads `Sign in to view`. The built bundle must not contain the address either
+  (`src/lib/contact-email.ts` stores it reversed; grep `dist/assets` for the plain form).
+- Public documents: `/resume`, `public/resume.pdf` and `scripts/resume/resume.html` carry
+  no phone number and no personal email address. `pdftotext public/resume.pdf - | grep -E "@|[0-9]{10}"`
+  must print nothing.
 - Skills radar hover: tooltips are `<foreignObject>` inside the SVG.
 - Experience timeline cards: `[role="button"][aria-expanded]`, toggle with Enter.
