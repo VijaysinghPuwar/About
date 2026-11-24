@@ -3,6 +3,7 @@ import { Helmet } from 'react-helmet-async';
 import { GitHubMark, LinkedInMark } from '@/components/BrandMarks';
 import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
+import { GitHubActivity } from '@/components/GitHubActivity';
 import { SecurityDiagram } from '@/components/SecurityDiagram';
 import { SectionReveal, SectionRule } from '@/components/SectionReveal';
 import { ProtectedEmail } from '@/components/ProtectedEmail';
@@ -12,7 +13,6 @@ import { mergeProjects } from '@/lib/merge-projects';
 const SkillMatrix = lazy(() => import('@/components/SkillMatrix').then(m => ({ default: m.SkillMatrix })));
 const ExperienceTimeline = lazy(() => import('@/components/ExperienceTimeline').then(m => ({ default: m.ExperienceTimeline })));
 const ProjectShowcase = lazy(() => import('@/components/ProjectShowcase').then(m => ({ default: m.ProjectShowcase })));
-const GitHubActivity = lazy(() => import('@/components/GitHubActivity').then(m => ({ default: m.GitHubActivity })));
 
 /**
  * Section header.
@@ -180,12 +180,10 @@ export default function Index() {
       </section>
 
       {/* ═══════ ACTIVITY ═══════ */}
-      {/* One line, between the introduction and the evidence. It renders
-          nothing at all until GitHub answers, so a rate-limited or offline
-          visitor sees the page close up rather than an empty frame. */}
-      <Suspense fallback={null}>
-        <GitHubActivity />
-      </Suspense>
+      {/* One line, between the introduction and the evidence. Not lazy: it
+          holds its place from the first frame, so the page below it does not
+          jump when GitHub answers. See the component for the failure case. */}
+      <GitHubActivity />
 
       {/* ═══════ WORK ═══════ */}
       <section id="projects" aria-label="Selected work" className="relative py-[clamp(52px,7vw,88px)]">

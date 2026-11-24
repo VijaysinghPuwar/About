@@ -5,7 +5,9 @@ import { Search, Compass, Zap, Code, Folder, FileQuestion } from 'lucide-react';
 import { useProjects } from '@/hooks/useProjects';
 import { mergeProjects, type PortfolioProject } from '@/lib/merge-projects';
 import { findSkill, countProjectsUsing } from '@/lib/skills';
-import { emitFilterSkill, emitOpenProject, scrollToSection } from '@/lib/portfolio-events';
+import { emitFilterSkill, emitOpenProject, onOpenPalette, scrollToSection } from '@/lib/portfolio-events';
+import { lockScroll } from '@/lib/scroll-lock';
+import { useTheme } from '@/hooks/useTheme';
 import { loginHref } from '@/lib/auth-redirect';
 import { useAuth } from '@/hooks/useAuth';
 import { contactEmail } from '@/lib/contact-email';
@@ -37,18 +39,27 @@ interface BuildContext {
   /** True on the home page, where the sections (and their listeners) are mounted. */
   onHome: boolean;
   projects: PortfolioProject[];
+  isPentest: boolean;
+  toggleTheme: () => void;
 }
 
 /* Skills the palette offers. Their aliases come from the shared catalogue in
    src/lib/skills.ts, so the count and the filter match the skills section. */
 const TRACKED_SKILLS = ['Python', 'PowerShell', 'AWS', 'Docker', 'Linux', 'Nmap'];
 
-function buildCommands({ isAuthed, goLogin, go, goSection, onHome, projects }: BuildContext): Command[] {
+function buildCommands({ isAuthed, goLogin, go, goSection, onHome, projects, isPentest, toggleTheme }: BuildContext): Command[] {
   const nav: Command[] = [
-    { category: 'Navigation', label: 'Go to Home', keywords: 'hero top', action: () => goSection('home') },
-    { category: 'Navigation', label: 'Go to Projects', keywords: 'work portfolio', action: () => goSection('projects') },
-    { category: 'Navigation', label: 'Go to Experience', keywords: 'timeline education', action: () => goSection('experience') },
-    { category: 'Navigation', label: 'Go to Contact', keywords: 'email message', action: () => goSection('contact') },
+    // Named as the navigation bar names them. They used to read "Projects" and
+    // "Experience" for the sections the bar calls Work and Journey, and
+    // Capabilities was not here at all, so typing any of the three words on the
+    // bar found nothing.
+    { category: 'Navigation', label: 'Go to Home', keywords: 'hero top terminal', action: () => goSection('home') },
+    { category: 'Navigation', label: 'Go to Work', keywords: 'projects portfolio selected', action: () => goSection('projects') },
+    { category: 'Navigation', label: 'Go to Journey', keywords: 'experience timeline education certifications', action: () => goSection('experience') },
+    { category: 'Navigation', label: 'Go to Capabilities', keywords: 'skills tools stack what i work with', action: () => goSection('skills') },
+    { category: 'Navigation', label: 'Go to Contact', keywords: 'email message linkedin github', action: () => goSection('contact') },
+    { category: 'Navigation', label: 'Go to Résumé', hint: 'Web page', keywords: 'resume cv', action: () => go('/resume') },
+    { category: 'Navigation', label: 'Go to Environment', hint: 'The hero schematic, explained', keywords: 'schematic diagram network splunk active directory firewall', action: () => go('/environment') },
     { category: 'Navigation', label: 'Go to Books', hint: 'Library', keywords: 'books read guides library epub', action: () => go('/books') },
     { category: 'Navigation', label: 'Go to Videos', hint: 'Channel', keywords: 'videos youtube watch course walkthrough deep dive system design cybersecurity secure coding ospf r2dock spoonstill data center', action: () => go('/videos') },
   ];
@@ -59,7 +70,8 @@ function buildCommands({ isAuthed, goLogin, go, goSection, onHome, projects }: B
     // not evaluation friction.
     {
       category: 'Actions',
-      label: 'Download Resume',
+      label: 'Download résumé',
+      hint: 'PDF',
       keywords: 'cv pdf resume',
       action: () => {
         const a = document.createElement('a');
@@ -67,6 +79,13 @@ function buildCommands({ isAuthed, goLogin, go, goSection, onHome, projects }: B
         a.download = '';
         a.click();
       },
+    },
+    {
+      category: 'Actions',
+      label: isPentest ? 'Switch to security mode' : 'Switch to pentest mode',
+      hint: isPentest ? 'Defensive view' : 'Offensive view',
+      keywords: 'theme mode security pentest defense offense red green',
+      action: toggleTheme,
     },
     // The theme switch is the only thing on the site that makes a sound, and a
     // portfolio that cannot be silenced is a portfolio nobody opens twice. The
@@ -160,6 +179,7 @@ export function CommandPalette() {
 
   const { pathname } = useLocation();
   const onHome = pathname === '/';
+  const { isPentest, toggleTheme } = useTheme();
 
   // Database-only projects are merged in the same way the home page does it.
   // The request waits for the first open: the palette is mounted on every route.
@@ -180,8 +200,10 @@ export function CommandPalette() {
       },
       onHome,
       projects,
+      isPentest,
+      toggleTheme,
     }),
-    [isAuthed, navigate, onHome, projects],
+    [isAuthed, navigate, onHome, projects, isPentest, toggleTheme],
   );
 
   const filtered = useMemo(() => {
@@ -223,6 +245,15 @@ export function CommandPalette() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+
+  // The other way in, for a device with no key chord: the mobile menu asks.
+  useEffect(() => onOpenPalette(() => setIsOpen(true)), []);
+
+  // The page stays put behind the palette; the wheel used to scroll it.
+  useEffect(() => {
+    if (!isOpen) return;
+    return lockScroll();
+  }, [isOpen]);
 
   // Focus management
   useEffect(() => {
@@ -310,7 +341,11 @@ export function CommandPalette() {
                 onChange={e => setQuery(e.target.value)}
                 placeholder="Type a command or search..."
                 aria-label="Search commands"
-                className="flex-1 bg-transparent text-[15px] text-foreground placeholder:text-muted-foreground outline-none"
+                // The site-wide focus ring is suppressed here and only here:
+                // the field is the whole top of the dialog and always has
+                // focus while it is open, so the ring was a permanent green
+                // box drawn around a borderless input.
+                className="min-w-0 flex-1 bg-transparent text-[15px] text-foreground placeholder:text-muted-foreground focus-visible:!outline-none"
               />
               <span
                 className="ml-3 shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
@@ -342,15 +377,23 @@ export function CommandPalette() {
                             data-idx={item.globalIdx}
                             onClick={() => execute(item)}
                             onMouseEnter={() => setSelectedIndex(item.globalIdx)}
+                            // Tabbing to a row selects it, so the ring and the
+                            // highlight are never on two different rows. The
+                            // ring is drawn inside the row: the dialog clips
+                            // its overflow, and an outset ring lost both sides.
+                            onFocus={() => setSelectedIndex(item.globalIdx)}
                             className={
-                              'w-full flex items-center gap-3 border-l-2 px-5 py-2.5 text-left transition-colors ' +
+                              'w-full flex items-center gap-3 border-l-2 px-5 py-2.5 text-left transition-colors focus-visible:outline-offset-[-2px] ' +
                               (isSelected ? 'border-primary bg-primary/[0.06]' : 'border-transparent')
                             }
                           >
                             <Icon className={'w-[18px] h-[18px] shrink-0 ' + (isSelected ? 'text-primary' : 'text-muted-foreground')} />
                             <span className="flex-1 text-[13px] md:text-sm text-foreground truncate">{item.label}</span>
                             {item.hint && (
-                              <span className="text-[11px] text-muted-foreground shrink-0">{item.hint}</span>
+                              // Dropped on a phone, where it was taking the
+                              // width the label needed and the label was
+                              // the half being cut off.
+                              <span className="hidden shrink-0 text-[11px] text-muted-foreground sm:inline">{item.hint}</span>
                             )}
                           </button>
                         );

@@ -32,34 +32,32 @@ export function Footer() {
 
   if (isReaderPath(pathname)) return null;
 
-  /* The back-to-top button is fixed 20-24px from the right edge and is always
-     showing by the time the footer is on screen. Below ~1240px the footer's
-     column reaches under it, and it sat on the last link: at 854px "Contact"
-     read as "Co". The right padding reserves the button's width there. */
+  /* Each link is its own 40px row of the wrap.
+
+     They used to be bare 22px text with the `.tap-44` helper growing an
+     invisible 44px hit area around each. On a phone the six links wrap onto
+     two lines 22px apart, so the hit areas of the second line covered the
+     lower half of the first and, painting later, won: a tap on "Work" opened
+     Books, and "Journey" opened Videos. A link that is as tall as its target
+     cannot be overlapped by the one beneath it. */
+  const link = 'inline-flex h-10 items-center text-muted-foreground transition-colors hover:text-primary';
+
   return (
     <footer className="relative z-[1] border-t border-border">
-      <div className="page-gutter container mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-6 gap-y-4 py-6 max-[1239px]:!pr-[76px]">
+      <div className="page-gutter container mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-6 gap-y-2 py-4">
         <LogoIcon size={22} />
         <span className="font-mono text-[11.5px] text-muted-dim">
           © {new Date().getFullYear()} Vijaysingh Puwar
         </span>
 
-        <nav className="ml-auto flex flex-wrap gap-x-[18px] text-[13.5px]">
-          {navLinks.map(link => (
-            <button
-              key={link.id}
-              onClick={() => scrollTo(link.id)}
-              className="tap-44 text-muted-foreground transition-colors hover:text-primary"
-            >
-              {link.label}
+        <nav aria-label="Footer" className="flex w-full flex-wrap gap-x-[18px] text-[13.5px] sm:ml-auto sm:w-auto">
+          {navLinks.map(l => (
+            <button key={l.id} type="button" onClick={() => scrollTo(l.id)} className={link}>
+              {l.label}
             </button>
           ))}
-          <Link to="/books" className="tap-44 text-muted-foreground transition-colors hover:text-primary">
-            Books
-          </Link>
-          <Link to="/videos" className="tap-44 text-muted-foreground transition-colors hover:text-primary">
-            Videos
-          </Link>
+          <Link to="/books" className={link}>Books</Link>
+          <Link to="/videos" className={link}>Videos</Link>
         </nav>
       </div>
     </footer>

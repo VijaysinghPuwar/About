@@ -245,9 +245,16 @@ export function SecurityDiagram() {
           9px labels land near 12px. Only under 640px does it stop being
           readable, which is where it now stops being drawn. */}
       <div className="hidden sm:block">
+        {/* The viewBox is cropped to the ink. It was `0 0 600 420` around a
+            drawing that only occupies 96..576 by 18..400, so a sixth of the
+            width went to empty margin and the whole thing rendered at 0.83
+            scale in the desktop column: 9.5px labels came out under 8px. Cut
+            to the drawing, the same column shows them at their written size. */}
         <svg
-          viewBox="0 0 600 420"
-          className="block h-auto w-full"
+          viewBox="88 10 496 396"
+          // Capped for the tablet layout, where the hero is one column and an
+          // uncapped drawing took the full 700px measure and a screen of height.
+          className="block h-auto w-full max-w-[540px]"
           role="img"
           aria-label={
             isPentest
@@ -396,10 +403,10 @@ export function SecurityDiagram() {
             {/* The ink. Inert, so the boxes above own every pixel of a
                 node including the one under the mark itself. */}
             <g style={{ pointerEvents: 'none' }}>
-              <circle style={{ transformOrigin: '544px 48px', transform: node === 'internet' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="544" cy="48" r="4.5" fill="hsl(var(--background))" stroke={node === 'internet' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground-dim))'} strokeWidth="1.3" />
+              <circle style={{ transformOrigin: '544px 48px', transform: node === 'internet' ? 'scale(1.5)' : undefined, transition: 'transform .15s ease' }} cx="544" cy="48" r="4.5" fill="hsl(var(--background))" stroke={node === 'internet' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground-dim))'} strokeWidth="1.3" />
               <text x="544" y="30" textAnchor="middle" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>INTERNET</text>
 
-              <circle style={{ transformOrigin: '393px 120px', transform: node === 'firewall' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="393" cy="120" r="6" fill="hsl(var(--background))" stroke="hsl(var(--primary))" strokeWidth="1.5" />
+              <circle style={{ transformOrigin: '393px 120px', transform: node === 'firewall' ? 'scale(1.5)' : undefined, transition: 'transform .15s ease' }} cx="393" cy="120" r="6" fill="hsl(var(--background))" stroke="hsl(var(--primary))" strokeWidth="1.5" />
               <text x="408" y="140" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground))' }}>FIREWALL</text>
 
               <path
@@ -410,7 +417,7 @@ export function SecurityDiagram() {
                 style={{
                   transformOrigin: '300px 218px',
                   transform: node === 'ad' ? 'scale(1.5)' : undefined,
-                  transition: 'transform .3s ease',
+                  transition: 'transform .15s ease',
                 }}
               />
               <text x="300" y="180" textAnchor="middle" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--foreground))' }}>ACTIVE DIRECTORY</text>
@@ -420,21 +427,21 @@ export function SecurityDiagram() {
                 cy="164"
                 r="3.5"
                 fill={node === 'endpoints' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'}
-                style={{ transformOrigin: '206px 164px', transform: node === 'endpoints' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }}
+                style={{ transformOrigin: '206px 164px', transform: node === 'endpoints' ? 'scale(1.5)' : undefined, transition: 'transform .15s ease' }}
               />
               <circle
                 cx="206"
                 cy="272"
                 r="3.5"
                 fill={node === 'endpoints' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'}
-                style={{ transformOrigin: '206px 272px', transform: node === 'endpoints' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }}
+                style={{ transformOrigin: '206px 272px', transform: node === 'endpoints' ? 'scale(1.5)' : undefined, transition: 'transform .15s ease' }}
               />
               <text x="176" y="222" textAnchor="end" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>ENDPOINTS</text>
 
-              <circle style={{ transformOrigin: '388px 292px', transform: node === 'm365' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="388" cy="292" r="4.5" fill="hsl(var(--background))" stroke={node === 'm365' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'} strokeWidth="1.3" />
+              <circle style={{ transformOrigin: '388px 292px', transform: node === 'm365' ? 'scale(1.5)' : undefined, transition: 'transform .15s ease' }} cx="388" cy="292" r="4.5" fill="hsl(var(--background))" stroke={node === 'm365' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'} strokeWidth="1.3" />
               <text x="398" y="308" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>MICROSOFT 365</text>
 
-              <circle style={{ transformOrigin: '300px 368px', transform: node === 'splunk' ? 'scale(1.5)' : undefined, transition: 'transform .3s ease' }} cx="300" cy="368" r="4.5" fill="hsl(var(--background))" stroke={node === 'splunk' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'} strokeWidth="1.3" />
+              <circle style={{ transformOrigin: '300px 368px', transform: node === 'splunk' ? 'scale(1.5)' : undefined, transition: 'transform .15s ease' }} cx="300" cy="368" r="4.5" fill="hsl(var(--background))" stroke={node === 'splunk' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'} strokeWidth="1.3" />
               <text x="314" y="372" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>SPLUNK</text>
 
               <text x="96" y="104" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>ENTERPRISE NETWORK</text>
@@ -442,8 +449,20 @@ export function SecurityDiagram() {
           </g>
         </svg>
 
-        <div className="mt-0.5 font-mono text-[10px] tracking-[0.16em] text-muted-dim">
-          {node ? NODE_NOTES[node] : isPentest ? 'How an intrusion moves' : 'How an alert is handled'}
+        {/* The readout. Two lines are held open at every width, because the
+            longest note needs two in the desktop column: sized to its content,
+            the line grew when a node was hovered and pushed the facts below it
+            down, then let them back up as the pointer moved on. A note is a
+            sentence, so it is set to be read; only the resting label keeps the
+            wide caption tracking. */}
+        <div className="mt-1 flex min-h-[2.25rem] items-start font-mono" aria-live="polite">
+          {node ? (
+            <span className="text-[11.5px] leading-[1.55] text-muted-foreground">{NODE_NOTES[node]}</span>
+          ) : (
+            <span className="text-[11px] leading-[1.55] tracking-[0.16em] text-muted-dim">
+              {isPentest ? 'How an intrusion moves' : 'How an alert is handled'}
+            </span>
+          )}
         </div>
       </div>
 
@@ -457,7 +476,7 @@ export function SecurityDiagram() {
 
           Availability is the only line that breathes, because it is the only
           one of the three that can change while someone is reading it. */}
-      <dl className="mt-6 border-t border-border font-mono sm:mt-7">
+      <dl className="mt-6 border-t border-border font-mono sm:mt-4">
         <div className="flex items-center gap-2.5 border-b border-border py-2.5 text-[11px] tracking-[0.16em] text-muted-dim">
           <span className="text-primary" aria-hidden="true">$</span>
           <span>cat status</span>
@@ -469,14 +488,15 @@ export function SecurityDiagram() {
         ].map(({ key, value, live }) => (
           <div
             key={key}
-            className="group flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-border py-[9px]"
+            className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-border py-[9px]"
           >
-            <dt className="w-[92px] shrink-0 text-[11px] tracking-[0.1em] text-muted-dim transition-colors duration-300 group-hover:text-primary">
+            {/* No hover state. These rows used to recolour their key and grow
+                their value under the pointer, which is what a control does,
+                and there is nothing here to press. */}
+            <dt className="w-[92px] shrink-0 text-[11px] tracking-[0.1em] text-muted-dim">
               {key}
             </dt>
-            {/* Grown from the left so the value stays anchored to its key, and
-                by a transform so no row moves under the cursor. */}
-            <dd className="flex min-w-0 flex-1 origin-left items-baseline gap-2 text-[12.5px] leading-[1.5] text-foreground transition-transform duration-300 ease-out group-hover:scale-[1.06] reduced:transition-none reduced:group-hover:scale-100">
+            <dd className="min-w-0 flex-1 text-[12.5px] leading-[1.5] text-foreground">
               <span className={live ? 'live-glow' : undefined} data-text={live ? value : undefined}>{value}</span>
             </dd>
           </div>

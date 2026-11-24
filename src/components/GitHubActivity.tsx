@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { usePauseOffscreen } from '@/hooks/usePauseOffscreen';
 
 /*
   A one-line proof that the work is ongoing.
@@ -168,39 +167,72 @@ async function load(): Promise<Activity | null> {
   return { repos, days, total, unit: 'pushes' };
 }
 
+/** A fresh answer from an earlier visit, read before the first render. */
+function readCache(): Activity | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    const v = cached?.v;
+    const usable =
+      v &&
+      Array.isArray(v.repos) &&
+      Array.isArray(v.days) &&
+      typeof v.total === 'number' &&
+      (v.days.length === 0 || typeof v.days[0] === 'object') &&
+      (v.unit === 'pushes' || v.unit === 'contributions');
+    return usable && Date.now() - cached.t < TTL ? v : null;
+  } catch {
+    // A locked-down profile throws on read; the network answers instead.
+    return null;
+  }
+}
+
+/** Holds the rows open while the first answer is on its way. */
+const PENDING: Repo[] = [
+  { name: ' ', when: '', url: '' },
+  { name: ' ', when: '', url: '' },
+  { name: ' ', when: '', url: '' },
+];
+
+/*
+  The strip has a fixed shape at every width, and takes its place in the page
+  before GitHub has answered.
+
+  It used to render nothing until the data arrived and then appear, which on a
+  first visit pushed everything below the hero down by 95px on a desktop and
+  150px on a phone, a second or two after the page had settled. It also wrapped
+  however the three repository names happened to fall, which left the total and
+  the GitHub link stranded on a second row under nothing in particular.
+
+  So the layout no longer depends on the data:
+
+    - phone: the label and the total share a row; the repositories are a list
+      beneath, one to a row, each name truncated if it has to be.
+    - tablet: the same two rows, with the repositories set along the second.
+    - desktop: one row. Names shrink before anything wraps, and the third
+      repository waits for a wider screen.
+
+  Until the answer lands the rows are held open by blanks and the data fades
+  in over them. If GitHub never answers (rate limit, offline), the strip folds
+  down to its label and a plain link: that is a small shift, but only for the
+  visitor it failed for, and it makes no claim about activity it did not check.
+*/
 export function GitHubActivity() {
-  const pauseRef = usePauseOffscreen<HTMLDivElement>();
-  const [data, setData] = useState<Activity | null>(null);
+  // Read synchronously, so a returning visitor's first frame already has it.
+  const [data, setData] = useState<Activity | null>(readCache);
+  const [failed, setFailed] = useState(false);
   /** Index of the day under the cursor or keyboard focus, if any. */
   const [active, setActive] = useState<number | null>(null);
 
   useEffect(() => {
+    if (data) return;
     let live = true;
-
-    try {
-      const raw = localStorage.getItem(CACHE_KEY);
-      if (raw) {
-        const cached = JSON.parse(raw);
-        const v = cached?.v;
-        const usable =
-          v &&
-          Array.isArray(v.repos) &&
-          Array.isArray(v.days) &&
-          typeof v.total === 'number' &&
-          (v.days.length === 0 || typeof v.days[0] === 'object') &&
-          (v.unit === 'pushes' || v.unit === 'contributions');
-        if (usable && Date.now() - cached.t < TTL) {
-          setData(v);
-          return;
-        }
-      }
-    } catch {
-      /* A locked-down profile throws on read; fall through to the network. */
-    }
 
     load()
       .then(result => {
-        if (!live || !result) return;
+        if (!live) return;
+        if (!result) { setFailed(true); return; }
         setData(result);
         try {
           localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), v: result }));
@@ -209,137 +241,156 @@ export function GitHubActivity() {
         }
       })
       .catch(() => {
-        /* Offline, rate limited, or blocked. The strip stays absent. */
+        /* Offline, rate limited, or blocked. */
+        if (live) setFailed(true);
       });
 
     return () => {
       live = false;
     };
+    // Runs once: the cache either answered at mount or it did not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Nothing to say yet, or nothing verifiable to say. Either way, say nothing:
-  // a placeholder here would be a claim about activity that was never checked.
-  if (!data) return null;
+  const profile = `https://github.com/${USER}`;
+  const label = (
+    <div className="flex min-w-0 items-center gap-2.5">
+      {/* Still, not pulsing. The label says the work is current; a blinking
+          light beside it was a second thing saying the same. */}
+      <span aria-hidden="true" className="h-[7px] w-[7px] flex-none rounded-full bg-primary" />
+      <span className="whitespace-nowrap font-mono text-[11px] tracking-[0.1em] text-muted-dim sm:text-[11.5px] sm:tracking-[0.14em]">
+        CURRENTLY BUILDING
+      </span>
+    </div>
+  );
 
-  const peak = Math.max(1, ...data.days.map(d => d.count));
-  const shown = active === null ? null : data.days[active];
+  if (failed) {
+    return (
+      <div className="page-gutter container mx-auto max-w-[1180px]">
+        <div className="flex items-center justify-between gap-6 border-y border-border py-[18px]">
+          {label}
+          <a
+            href={profile}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="tap-44 whitespace-nowrap font-mono text-[12.5px] text-muted-foreground transition-colors hover:text-primary"
+          >
+            github.com/{USER} ↗
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  const ready = data !== null;
+  const repos = data?.repos ?? PENDING;
+  const days = data?.days ?? [];
+  const unit = data?.unit ?? 'pushes';
+  const peak = Math.max(1, ...days.map(d => d.count));
+  const shown = active === null ? null : days[active];
+  const reveal = cn('transition-opacity duration-300', ready ? 'opacity-100' : 'opacity-0');
 
   /** "25 Aug", in the reader's locale rather than an ISO string. */
   const dayLabel = (iso: string) =>
     new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
   return (
-    <div ref={pauseRef} className="page-gutter container mx-auto max-w-[1180px]">
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2.5 border-y border-border py-[18px]">
-        <div className="flex flex-none items-center gap-2.5">
-          <span
-            aria-hidden="true"
-            className="h-[7px] w-[7px] animate-pulse rounded-full bg-primary reduced:animate-none"
-          />
-          <span className="font-mono text-[11.5px] tracking-[0.14em] text-muted-dim">
-            CURRENTLY BUILDING
-          </span>
+    <div className="page-gutter container mx-auto max-w-[1180px]">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-1 border-y border-border py-[18px] sm:gap-y-2 wide:flex">
+        <div className="col-start-1 row-start-1">{label}</div>
+
+        <ul
+          className={cn(
+            'col-span-2 row-start-2 flex min-w-0 flex-col sm:flex-row sm:gap-6 wide:flex-1',
+            reveal,
+          )}
+        >
+          {repos.map((repo, i) => (
+            <li
+              key={ready ? repo.name : i}
+              // Three fit beside the chart from 1280px; between there and the
+              // desktop breakpoint the row has room for two.
+              className={cn('min-w-0', i === 2 && 'wide:max-xl:hidden')}
+            >
+              <a
+                href={repo.url || profile}
+                target="_blank"
+                rel="noopener noreferrer"
+                tabIndex={ready ? undefined : -1}
+                className="flex items-baseline justify-between gap-2 py-1.5 font-mono text-[13px] text-foreground transition-colors hover:text-primary sm:justify-start sm:py-2 wide:py-0"
+              >
+                <span className="truncate">{repo.name}</span>
+                <span className="flex-none text-[12px] text-muted-dim">{repo.when}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+
+        {/* Thirty days, each one a link into that date on GitHub.
+
+            Hovering or tabbing to a bar lifts it, dims its neighbours, and
+            prints the day in the total's place beside the chart, so nothing
+            is covered while you read across. The hit area is the full height
+            of the row, because 4px of ink is not a target.
+
+            Desktop only: on a phone the count beside it carries the same fact
+            in a tenth of the width. */}
+        <div
+          className={cn('hidden h-6 flex-none items-end gap-[2px] wide:flex', reveal)}
+          onMouseLeave={() => setActive(null)}
+        >
+          {days.map((day, i) => (
+            <a
+              key={day.date}
+              href={`${profile}?tab=overview&from=${day.date}&to=${day.date}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onMouseEnter={() => setActive(i)}
+              onFocus={() => setActive(i)}
+              onBlur={() => setActive(null)}
+              aria-label={`${day.count} ${day.count === 1 ? UNIT_ONE[unit] : unit} on ${day.date}`}
+              className="flex h-6 items-end outline-offset-4"
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  'block w-[4px] origin-bottom rounded-[1px] transition-[transform,opacity] duration-100 ease-out',
+                  day.count ? 'bg-primary' : 'bg-border-strong',
+                  /* The hovered bar grows from its base; the rest step back
+                     so the one being read is the one that reads. */
+                  active === i ? 'scale-x-150 scale-y-125' : active !== null && 'opacity-40',
+                )}
+                style={{ height: day.count ? `${Math.max(4, Math.round((day.count / peak) * 19))}px` : '2px' }}
+              />
+            </a>
+          ))}
         </div>
 
-        {/* The links sit directly in the strip rather than inside a nested
-            flex-1 box. That wrapper was allowed to shrink below its own
-            content (`min-w-0`) while its children refused to shrink, so on a
-            narrow screen the links spilled out of it and were drawn straight
-            over the push total. With one wrapping row there is nothing to
-            spill out of: a link that does not fit moves to the next line. */}
-        {data.repos.map(repo => (
-          <a
-            key={repo.name}
-            href={repo.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex flex-none items-baseline gap-2 whitespace-nowrap font-mono text-[13px] text-foreground transition-colors hover:text-primary"
-          >
-            {repo.name}
-            <span className="text-[12px] text-muted-dim">{repo.when}</span>
-          </a>
-        ))}
-
-        {data.total > 0 && (
-          <>
-            {/* The chart is the widest thing in the row at roughly 240px, and
-                below the two-column breakpoint it is what turns a one-line
-                strip into a five-line block. The count beside it carries the
-                same fact in a tenth of the width, so the bars are what goes. */}
-            {/* Thirty days, each one a link into that date on GitHub.
-
-                The bars used to carry a native `title` and nothing else, which
-                is a tooltip you have to wait for and cannot read on a phone.
-                Each bar is now a real destination: GitHub's own contribution
-                view accepts a from/to range, so a click lands on that exact
-                day. Hovering or tabbing to one lifts it, dims its neighbours,
-                and prints the day beside the chart rather than over it, so
-                nothing is covered while you read across.
-
-                The hit area is padded well beyond the 5px of ink, because a
-                5px target with a 3px gap is not a target. */}
-            <div
-              className="group/chart hidden h-6 flex-none items-end gap-[3px] wide:flex"
-              onMouseLeave={() => setActive(null)}
-            >
-              {data.days.map((day, i) => (
-                <a
-                  key={day.date}
-                  href={`https://github.com/${USER}?tab=overview&from=${day.date}&to=${day.date}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onMouseEnter={() => setActive(i)}
-                  onFocus={() => setActive(i)}
-                  onBlur={() => setActive(null)}
-                  aria-label={`${day.count} ${day.count === 1 ? UNIT_ONE[data.unit] : data.unit} on ${day.date}`}
-                  className="flex h-6 items-end px-px py-1 -my-1 outline-offset-4"
-                >
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      'block w-[5px] rounded-[1.5px] transition-[transform,opacity,background-color] duration-150 ease-out reduced:transition-none',
-                      day.count ? 'bg-primary' : 'bg-border-strong',
-                      /* The hovered bar grows from its base; the rest step
-                         back so the one being read is the one that reads. */
-                      active === i
-                        ? 'origin-bottom scale-x-[1.6] scale-y-125 opacity-100'
-                        : active !== null && 'opacity-40',
-                    )}
-                    style={{ height: day.count ? `${Math.max(4, Math.round((day.count / peak) * 22))}px` : '2px' }}
-                  />
-                </a>
-              ))}
-            </div>
-            {/* One line, two jobs: the thirty-day total at rest, and the day
-                under the cursor while there is one. Reserving the width stops
-                the row reflowing as you sweep across the chart. */}
-            <span
-              className="flex-none whitespace-nowrap font-mono text-[11.5px] text-muted-dim wide:min-w-[17rem]"
-              aria-live="polite"
-            >
-              {shown ? (
-                <>
-                  <span className="text-foreground">{dayLabel(shown.date)}</span>
-                  {' · '}
-                  <span className={shown.count ? 'text-primary' : undefined}>
-                    {shown.count} {shown.count === 1 ? UNIT_ONE[data.unit] : data.unit}
-                  </span>
-                  {shown.repos.length > 0 && ` · ${shown.repos.join(', ')}`}
-                </>
-              ) : (
-                `${data.total} ${data.unit}, ${DAYS}d`
-              )}
-            </span>
-          </>
-        )}
-
+        {/* One slot, two jobs: the thirty-day total at rest, and the day under
+            the cursor while there is one. The width is reserved on a desktop
+            so the row does not reflow as you sweep across the chart. */}
         <a
-          href={`https://github.com/${USER}`}
+          href={profile}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex-none whitespace-nowrap border-b border-border-strong font-mono text-[12.5px] text-muted-dim transition-colors hover:text-primary"
+          tabIndex={ready ? undefined : -1}
+          aria-live="polite"
+          className={cn(
+            'tap-44 col-start-2 row-start-1 flex-none whitespace-nowrap text-right font-mono text-[11.5px] text-muted-dim transition-colors hover:text-primary wide:min-w-[21ch]',
+            reveal,
+          )}
         >
-          github ↗
+          {shown ? (
+            <>
+              <span className="text-foreground">{dayLabel(shown.date)}</span>
+              {' · '}
+              <span className={shown.count ? 'text-primary' : undefined}>
+                {shown.count} {shown.count === 1 ? UNIT_ONE[unit] : unit}
+              </span>
+            </>
+          ) : (
+            <>{ready ? `${data.total} ${unit}, ${DAYS}d` : ' '} ↗</>
+          )}
         </a>
       </div>
     </div>

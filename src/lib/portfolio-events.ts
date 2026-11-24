@@ -10,6 +10,7 @@
 
 const OPEN_PROJECT = 'portfolio:open-project';
 const FILTER_SKILL = 'portfolio:filter-skill';
+const OPEN_PALETTE = 'portfolio:open-palette';
 
 export interface OpenProjectDetail {
   /** Project id, matched case-insensitively against id and title. */
@@ -85,6 +86,13 @@ export const emitFilterSkill = (detail: FilterSkillDetail) =>
 
 export const onFilterSkill = (handler: (detail: FilterSkillDetail) => void) =>
   listen<FilterSkillDetail>(FILTER_SKILL, handler);
+
+/* The command palette opens on Ctrl/Cmd+K, which a phone does not have. The
+   menu asks for it by name instead. Held like the others if the palette's
+   chunk has not arrived yet. */
+export const emitOpenPalette = () => emit<null>(OPEN_PALETTE, null);
+
+export const onOpenPalette = (handler: () => void) => listen<null>(OPEN_PALETTE, handler);
 
 /** Scrolls a section into view allowing for the fixed navigation bar. */
 export function scrollToSection(id: string) {

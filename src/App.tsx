@@ -1,9 +1,9 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useLayoutEffect } from "react";
 import { HelmetProvider } from "react-helmet-async";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, useNavigationType } from "react-router-dom";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { BackToTop } from "@/components/BackToTop";
@@ -55,6 +55,33 @@ const Videos = lazy(() => import("./pages/Videos"));
 
 const queryClient = new QueryClient();
 
+/*
+  A new page opens at its top.
+
+  The router does not do this by itself, and nothing here did it either: follow
+  a link from the bottom of one page and the next one mounted at the same
+  offset, which usually meant its footer. One page worked around it with a
+  `scrollTo(0, 0)` of its own, which the stylesheet's smooth scrolling turned
+  into a half-second glide up from the bottom of a page the reader had not seen
+  yet.
+
+  Back and forward are left to the browser, which restores where the reader
+  was. So is a link that names a section (`/#contact`): the home page holds
+  that target under the bar itself. Layout effect, so the first frame of the
+  new page is already at the top.
+*/
+function ScrollReset() {
+  const { pathname, hash } = useLocation();
+  const type = useNavigationType();
+  useLayoutEffect(() => {
+    if (type === "POP" || hash) return;
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+    // Keyed to the page changing; `hash` and `type` are read as they are then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+  return null;
+}
+
 const App = () => (
   <HelmetProvider>
     <QueryClientProvider client={queryClient}>
@@ -65,6 +92,7 @@ const App = () => (
           <Sonner />
           <div className="min-h-[100dvh] bg-background">
             <BrowserRouter>
+              <ScrollReset />
               <Suspense fallback={null}>
                 <CommandPalette />
               </Suspense>

@@ -32,7 +32,7 @@ const NODES: NodeDoc[] = [
     what: 'Everything outside the perimeter. Untrusted by default, including traffic that claims to come from a partner or a managed device.',
     work: [
       'Remote access is brokered rather than routed: Zscaler ZPA publishes an application to a user, not a network to a device.',
-      'Every remote session is bound to an identity that has already passed multi-factor enrollment in DUO.',
+      'Every remote session is bound to an identity that has already passed multi-factor enrollment in Duo.',
     ],
     risk: 'The only place an unauthenticated attacker starts. Everything after this point assumes they got through something.',
   },
@@ -48,11 +48,11 @@ const NODES: NodeDoc[] = [
   {
     id: 'ad',
     name: 'Active Directory',
-    what: 'The centre of the diagram because it is the centre of the estate. Accounts, groups, and what each of them is allowed to reach.',
+    what: 'The center of the diagram because it is the center of the estate. Accounts, groups, and what each of them is allowed to reach.',
     work: [
       'Identity and account lifecycle: provisioning and revocation as staff join, move and leave, which is where most stale access comes from.',
       'Group membership and Group Policy administration across Windows Server environments.',
-      'Multi-factor enrollment in DUO and application groups in Zscaler ZPA kept in step with those groups.',
+      'Multi-factor enrollment in Duo and application groups in Zscaler ZPA kept in step with those groups.',
     ],
     risk: 'The objective. Access here is access to everything downstream, which is why the containment step in the loop ends by revoking it.',
   },
@@ -173,9 +173,11 @@ export default function Environment() {
         <Section title="The nodes">
           <div className="flex flex-col gap-10">
             {NODES.map(n => (
-              /* `scroll-mt` clears the fixed bar, so a link from a node on the
-                 home page lands on the heading and not under it. */
-              <article key={n.id} id={n.id} className="scroll-mt-24">
+              /* A small margin only. `scroll-padding-top` on the root already
+                 clears the fixed bar; a second 96px here stacked on it, and a
+                 link from a node on the home page landed with the end of the
+                 previous node filling the top of the screen. */
+              <article key={n.id} id={n.id} className="scroll-mt-4">
                 <h3 className="font-mono text-[13px] uppercase tracking-[0.1em] text-primary">
                   {n.name}
                 </h3>
@@ -190,7 +192,8 @@ export default function Environment() {
                       >
                         {i === n.work.length - 1 ? '└─' : '├─'}
                       </span>
-                      <span className="hyphens-auto text-justify">{w}</span>
+                      {/* Ragged right; see the same list in ExperienceTimeline. */}
+                      <span>{w}</span>
                     </li>
                   ))}
                 </ul>
@@ -210,7 +213,7 @@ export default function Environment() {
         <div className="mt-16 border-t border-border pt-6">
           <Link
             to="/"
-            className="font-mono text-[13px] text-muted-foreground transition-colors hover:text-primary"
+            className="inline-flex h-11 items-center font-mono text-[13px] text-muted-foreground transition-colors hover:text-primary"
           >
             ← Back home
           </Link>

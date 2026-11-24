@@ -287,10 +287,15 @@ export function formatLength(seconds: number): string {
   return h ? `${h} h ${m} min` : `${m} min`;
 }
 
-export function formatPublished(iso: string): string {
+/**
+ * `short` is for the three-up fact panel, where the column is about a hundred
+ * pixels on a phone: "1 November 2026" broke across two lines there and three
+ * on the narrowest screens, and "1 Nov 2026" does not.
+ */
+export function formatPublished(iso: string, month: 'long' | 'short' = 'long'): string {
   const [y, mo, d] = iso.split('-').map(Number);
   return new Date(Date.UTC(y, mo - 1, d, 12)).toLocaleDateString('en-GB', {
-    day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
+    day: 'numeric', month, year: 'numeric', timeZone: 'UTC',
   });
 }
 

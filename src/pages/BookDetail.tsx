@@ -81,14 +81,20 @@ export default function BookDetail() {
               <p className="mt-3 text-[17px] leading-snug text-muted-foreground">{book.subtitle}</p>
             )}
             {book.description && (
-              <p className="mt-5 max-w-[62ch] text-[15.5px] leading-relaxed text-muted-foreground">{book.description}</p>
+              // Allowed to break inside a word. Two of the descriptions end
+              // on a full commit hash, forty characters with nowhere to
+              // break, which ran past the edge of a phone screen.
+              <p className="mt-5 max-w-[62ch] text-[15.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{book.description}</p>
             )}
 
-            <dl className={cn('mt-7 grid gap-px overflow-hidden rounded-lg border border-border bg-border', facts.length === 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4')}>
+            {/* Four across only where the column can hold four. `sm` was the
+                wrong test: beside the cover at tablet width this column is
+                about 400px, and a date in a quarter of that took three lines. */}
+            <dl className={cn('mt-7 grid gap-px overflow-hidden rounded-lg border border-border bg-border', facts.length === 3 ? 'grid-cols-[repeat(3,auto)]' : 'grid-cols-2 lg:grid-cols-4')}>
               {facts.map(f => (
-                <div key={f.label} className="bg-background px-4 py-3">
+                <div key={f.label} className="bg-background px-3 py-3 sm:px-4">
                   <dt className="meta-label">{f.label}</dt>
-                  <dd className="mt-1 text-[14.5px] font-medium tabular-nums text-foreground">{f.value}</dd>
+                  <dd className="mt-1 whitespace-nowrap text-[14.5px] font-medium tabular-nums text-foreground">{f.value}</dd>
                 </div>
               ))}
             </dl>
@@ -159,12 +165,12 @@ function formatPublished(date: string | null): string | null {
   const [, y, mo, d] = m;
   if (!mo) return y;
   const at = new Date(Date.UTC(+y, +mo - 1, d ? +d : 1, 12));
-  return at.toLocaleDateString('en-GB', { ...(d ? { day: 'numeric' } : {}), month: 'long', year: 'numeric', timeZone: 'UTC' });
+  return at.toLocaleDateString('en-GB', { ...(d ? { day: 'numeric' } : {}), month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
 export function BookNotFound() {
   return (
-    <div className="page-gutter container mx-auto flex min-h-[70dvh] max-w-[640px] flex-col items-start justify-center pt-24">
+    <div className="page-gutter container mx-auto flex min-h-[100dvh] max-w-[640px] flex-col items-start justify-center pt-24">
       <Helmet>
         <title>Book not found | Vijaysingh Puwar</title>
         <meta name="robots" content="noindex" />

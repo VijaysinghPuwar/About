@@ -15,6 +15,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { LogoIcon } from '@/components/LogoIcon';
 import { isReaderPath } from '@/lib/routes';
+import { lockScroll } from '@/lib/scroll-lock';
+import { emitOpenPalette } from '@/lib/portfolio-events';
 
 // Order mirrors the page: work first, then the record, then supporting detail.
 const sections = [
@@ -44,11 +46,15 @@ export function Navigation() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  // IntersectionObserver for active section detection
+  // Which section sits in the band just above the middle of the viewport.
+  //
+  // The hero is watched too, though it has no link of its own. Without it
+  // nothing ever cleared the highlight: scroll down to Capabilities and back to
+  // the top, and the bar went on underlining Capabilities over the hero.
   useEffect(() => {
     if (!isHomePage) return;
     const observers: IntersectionObserver[] = [];
-    sections.forEach(({ id }) => {
+    [{ id: 'home' }, ...sections].forEach(({ id }) => {
       const el = document.getElementById(id);
       if (!el) return;
       const obs = new IntersectionObserver(
@@ -66,10 +72,9 @@ export function Navigation() {
   /**
    * The open menu holds the page still and closes on Escape.
    *
-   * Locking `body` used to shift the layout sideways on Windows, where Chrome
-   * draws a scrollbar that occupies width. `scrollbar-gutter: stable` in
-   * `index.css` reserves that space on both platforms, so the lock is now
-   * invisible on either.
+   * `scrollbar-gutter: stable` in `index.css` reserves the scrollbar's width,
+   * so the lock does not shift the layout on a platform whose scrollbars take
+   * up room. See `lockScroll` for why the lock is not on `body`.
    */
   useEffect(() => {
     if (!menuOpen) return;
@@ -77,11 +82,10 @@ export function Navigation() {
       if (e.key === 'Escape') setMenuOpen(false);
     };
     window.addEventListener('keydown', onKey);
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock = lockScroll();
     return () => {
       window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = previous;
+      unlock();
     };
   }, [menuOpen]);
 
@@ -237,9 +241,9 @@ export function Navigation() {
           )}
         </div>
 
-        {/* Mobile */}
+        {/* Mobile. The mode switch is in the menu, where there is room to
+            name both modes; see ThemeToggle. */}
         <div className="ml-auto flex items-center gap-2 wide:hidden">
-          <ThemeToggle compact />
           <button
             type="button"
             onClick={() => setMenuOpen(o => !o)}
@@ -263,10 +267,26 @@ export function Navigation() {
           right. A slide-in sheet is a second surface with its own scroll and
           its own close affordance; this is the same bar, longer, and the
           résumé download the old mobile menu never offered at all. */}
+      {/* Everything under the open menu. It dims the page, takes the taps that
+          would otherwise have gone through to it (one below the panel used to
+          open whatever card was there, with the menu still showing), and
+          closes the menu, which is what a tap outside a menu is for. Behind
+          the panel in the bar's own stacking context, so the panel is not
+          dimmed with the page. */}
+      {menuOpen && (
+        <div
+          aria-hidden="true"
+          onClick={() => setMenuOpen(false)}
+          className="fixed inset-0 top-16 -z-10 bg-background/70 wide:hidden"
+        />
+      )}
+
       {menuOpen && (
         <div
           id="mobile-menu"
-          className="page-gutter flex flex-col border-y border-border bg-background pb-4 pt-1.5 wide:hidden"
+          // One rule above. The bar's own bottom border closes the panel; a
+          // second one here drew a doubled line under it.
+          className="page-gutter flex max-h-[calc(100dvh-4rem)] flex-col overflow-y-auto border-t border-border bg-background pb-4 pt-1.5 wide:hidden"
         >
           {isHomePage ? (
             sections.map((item, i) => (
@@ -311,11 +331,28 @@ export function Navigation() {
             Videos
           </Link>
 
+          <div className="flex h-14 items-center justify-between gap-4 border-t border-border">
+            <span className="text-[15px] text-foreground">Mode</span>
+            <ThemeToggle className="h-10 w-[200px]" onToggle={() => setMenuOpen(false)} />
+          </div>
+
+          {/* The command palette opens on a key chord, so on a phone this row
+              is the only way in. It is also where the sound and motion
+              settings live. */}
+          <button
+            type="button"
+            onClick={() => { setMenuOpen(false); emitOpenPalette(); }}
+            className="flex h-12 items-center justify-between gap-4 border-t border-border text-left text-[15px] text-foreground"
+          >
+            Search
+            <span className="font-mono text-[11px] text-muted-dim">projects · sound · motion</span>
+          </button>
+
           <a
             href="/resume.pdf"
             download
             onClick={() => setMenuOpen(false)}
-            className="mt-3.5 flex h-[46px] items-center justify-center rounded-md bg-primary text-[15px] font-semibold text-primary-foreground"
+            className="mt-3.5 flex h-[46px] flex-none items-center justify-center rounded-md bg-primary text-[15px] font-semibold text-primary-foreground"
           >
             Download résumé
           </a>

@@ -149,7 +149,7 @@ function ShelfItem({
         <BookCover book={book} eager={eager} />
       </Link>
 
-      <div className="mt-3 flex h-8 items-center justify-between gap-2">
+      <div className="mt-2 flex h-11 items-center justify-between gap-2">
         {progress?.finishedAt ? (
           <span className="inline-flex items-center gap-1.5 font-mono text-[13px] tabular-nums text-primary">
             100% <Check className="h-3.5 w-3.5" aria-hidden="true" />
@@ -161,11 +161,13 @@ function ShelfItem({
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label={`More options for ${book.title}`}
-            className="-mr-2 flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-card hover:text-foreground data-[state=open]:bg-card data-[state=open]:text-foreground"
+            className="-mr-3 flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-card hover:text-foreground data-[state=open]:bg-card data-[state=open]:text-foreground"
           >
             <MoreHorizontal className="h-5 w-5" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52 border-border bg-card">
+          {/* Kept a gutter's width off the screen edge. Under the left-hand
+              book on a phone the menu opened flush against the glass. */}
+          <DropdownMenuContent align="end" collisionPadding={16} className="w-52 border-border bg-card [&_[role=menuitem]]:min-h-10">
             <DropdownMenuItem
               className="cursor-pointer"
               onSelect={() => navigate(signedIn ? readHref : loginHref(readHref))}
