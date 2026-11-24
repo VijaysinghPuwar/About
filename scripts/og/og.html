@@ -1,0 +1,100 @@
+<!doctype html>
+<!--
+  Source of public/og.png, the card shown when the site is shared (LinkedIn,
+  Slack, iMessage). 1200x630, the size index.html declares.
+
+  It is a page rather than a drawing so it can use the site's own faces and
+  tokens: the colours below are the resolved defensive palette from
+  src/index.css, the same values public/favicon.svg uses.
+
+  Regenerate from the repo root with:
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless \
+      --hide-scrollbars --window-size=1200,630 --force-device-scale-factor=1 \
+      --virtual-time-budget=4000 --screenshot=public/og.png \
+      "file://$PWD/scripts/og/og.html"
+
+  Nothing personal goes on it beyond name, role and city.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vijaysingh Puwar | Cybersecurity Engineer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=block">
+<style>
+  :root {
+    --bg: #09090b;
+    --grid: #131316;
+    --rule: #1d1d21;
+    --fg: #f1f1f3;
+    --muted: #a2a2a9;
+    --dim: #828289;
+    --accent: #3ea86c;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    position: relative;
+    background-color: var(--bg);
+    /* The rule grid behind the hero, at the hero's own 60px pitch. */
+    background-image:
+      linear-gradient(to right, var(--grid) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+    background-size: 60px 60px;
+    background-position: -1px -1px;
+    color: var(--fg);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: 'IBM Plex Mono', Menlo, monospace; }
+  .frame {
+    position: absolute;
+    inset: 0;
+    padding: 64px 80px 60px;
+    display: flex;
+    flex-direction: column;
+  }
+  .top { display: flex; align-items: center; gap: 16px; font-size: 21px; color: var(--muted); }
+  .top svg { width: 44px; height: 44px; flex: none; }
+  .body { margin-top: auto; }
+  .cmd { font-size: 23px; color: var(--dim); }
+  .cmd b { font-weight: 400; color: var(--accent); }
+  h1 { margin-top: 14px; font-size: 104px; font-weight: 600; line-height: 1; letter-spacing: -0.038em; }
+  .role { margin-top: 26px; font-size: 36px; font-weight: 500; letter-spacing: -0.015em; }
+  .role span { font-weight: 400; color: var(--dim); }
+  .foot {
+    margin-top: 52px;
+    padding-top: 26px;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    font-size: 21px;
+    color: var(--muted);
+  }
+  .foot i { font-style: normal; color: var(--dim); margin: 0 10px; }
+</style>
+</head>
+<body>
+  <div class="frame">
+    <div class="top mono">
+      <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M20 3.6 L34.2 11.8 L34.2 28.2 L20 36.4 L5.8 28.2 L5.8 11.8 Z" stroke="#3ea86c" stroke-width="2" stroke-linejoin="round"/>
+        <text x="20" y="25.4" text-anchor="middle" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="13.5" font-weight="600" letter-spacing="-0.4" fill="#f1f1f3">VP</text>
+      </svg>
+      vijaysinghpuwar.com
+    </div>
+
+    <div class="body">
+      <div class="cmd mono"><b>$</b> whoami</div>
+      <h1>Vijaysingh Puwar</h1>
+      <div class="role">Cybersecurity Engineer <span>· New York, NY</span></div>
+
+      <div class="foot mono">
+        <span>Security+<i>·</i>CySA+<i>·</i>CCNA</span>
+        <span>M.S. Cybersecurity, Pace University</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
