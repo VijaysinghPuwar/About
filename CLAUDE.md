@@ -180,9 +180,13 @@ things that cannot be pressed.
 
 ## What a visit costs
 
-The backend is Lovable Cloud (Supabase underneath), and every request to it is
-usage on that account. Almost every visitor is a recruiter who will never sign
-in, so the site is built to ask the backend for nothing on their behalf:
+The backend is Lovable Cloud (Supabase underneath). Its usage page (project →
+More → Usage) splits "Run" credits into Database, Compute and Network, and in
+November 2026 Database was over 99% of Run. The database is billed for the
+hours it is active, and it is active when something queries it: a page that
+reads one row on load keeps it awake for every visitor, crawler and link
+preview. Almost every visitor is a recruiter who will never sign in, so the
+site is built to ask the backend for nothing on their behalf:
 
 - A signed-out visitor on a public route makes **no request to the backend**
   and does not download the Supabase client. `useAuth` imports the client
