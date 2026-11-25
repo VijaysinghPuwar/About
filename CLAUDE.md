@@ -16,14 +16,43 @@ common tasks (survey gaps, add an entry, audit the existing ones).
 
 ## Project data
 
-`src/data/projects.json` drives the projects section, rendered by
-`src/components/ProjectShowcase.tsx` (featured cards, project index and the
-detail modal all live in that one file). The entry schema is documented in
-`../reference/CLAUDE.md`.
+`src/data/projects.json` is the only source of the projects section, rendered
+by `src/components/ProjectShowcase.tsx` (featured cards, project index and the
+detail modal all live in that one file) and imported through
+`src/lib/projects.ts`. The entry schema is documented in
+`../reference/CLAUDE.md`. The `projects` table in the database is not read by
+the site; see "What a visit costs" below.
 
 Each featured card leads with `keyResults[0]`, so the first entry in that array
 should be the project's strongest verifiable outcome — not a restatement of the
 title.
+
+What may be listed (the owner's rule, 2026-11-24): a project goes on the site
+only if its GitHub repository is public. The two exceptions are Recap Verse and
+WebAudioTV, which are private repositories behind live public products; they
+carry a live-site link and no repository link. Check visibility with
+`gh repo list VijaysinghPuwar --json name,visibility` before adding or keeping
+an entry: repositories have been made private after their entry was written.
+Removing an entry from `projects.json` takes it off the site. It does not take
+it out of the database: the `projects` table is still served by the public REST
+API and by the `mcp` function, so a project that must not be public also has to
+be deleted there (Admin → Projects).
+
+What may be claimed: only what the linked repository's README, its CI or its
+release list shows, or what the owner has published himself on LinkedIn or the
+résumé. Entries go stale in both directions, so re-read the README before
+editing one: in November 2026 several described first versions of projects
+that had since been rebuilt (the Nmap auditor was listed as a 179-line script
+when it had 321 tests), and others carried figures nothing supported. There is
+no "impact" or before/after view and there must not be one; the one that
+existed listed controls the projects did not contain. The four cards are the
+four projects the résumé names, set in `FEATURED_ORDER` in
+`ProjectShowcase.tsx`.
+
+The self-description in the hero (`MISSION` in `src/lib/terminal-commands.ts`),
+the page metadata in `index.html` and the `focus` row follow the LinkedIn About
+section. The experience, education and certification rows follow the LinkedIn
+profile line for line. Change LinkedIn first, then the site.
 
 ## Design system
 
@@ -131,8 +160,14 @@ otherwise Windows animates, because Chrome there reports `reduce` whenever the
 OS "Animation effects" switch is off, which it is on plenty of fast machines;
 everyone else follows the OS. Write CSS against `:root[data-motion="reduce"]`,
 Tailwind against `reduced:`, and React against `useReducedMotion` from
-`@/lib/motion` — never `@media (prefers-reduced-motion)`, `motion-reduce:` or
-framer-motion's hook, or Windows visitors get the static site again.
+`@/lib/motion` — never `@media (prefers-reduced-motion)` or `motion-reduce:`,
+or Windows visitors get the static site again.
+
+There is no animation library. Entrances are `tailwindcss-animate` classes
+(`animate-in fade-in …`), which the global `data-motion="reduce"` rule in
+`src/index.css` already switches off. framer-motion was removed in November
+2026: it cost every visitor 38 kB to fade two dialogs in. Do not add it back
+for an entrance.
 
 `hover:` and `group-hover:` only apply on devices with a real hover
 (`hoverOnlyWhenSupported`), so a tap on a phone cannot leave something zoomed.
@@ -143,12 +178,64 @@ Unlayered beats every Tailwind layer, so a `duration-*` utility on a control
 does nothing; change the rule, not the element. Do not add hover effects to
 things that cannot be pressed.
 
+## What a visit costs
+
+The backend is Lovable Cloud (Supabase underneath), and every request to it is
+usage on that account. Almost every visitor is a recruiter who will never sign
+in, so the site is built to ask the backend for nothing on their behalf:
+
+- A signed-out visitor on a public route makes **no request to the backend**
+  and does not download the Supabase client. `useAuth` imports the client
+  dynamically, and only when `sessionMayExist()` says there is something to
+  restore: a stored session, an auth redirect in the URL, one of the sign-in
+  routes, or the Lovable editor's frame. Anything that needs the backend for a
+  signed-in reader (`reading-progress.ts`) imports it the same way. A static
+  `import { supabase }` in a component that a public route renders undoes all
+  of this at once; the only files allowed one are the pages behind sign-in
+  (`Login`, `AuthCallback`, `OAuthConsent`, `Admin`).
+- A signed-in page load reads the profile once and the role once, and writes
+  nothing. `last_login_at` and the `log-auth-event` function run once per
+  sign-in, keyed on the `last_sign_in_at` the auth server stamps. They used to
+  run twice on every page load and again on every token refresh.
+- Content is static. Projects, books and videos are JSON in `src/data/`; the
+  home page used to fetch the `projects` table on every visit and throw the
+  rows away. The GitHub strip calls GitHub's public API from the browser and
+  caches the answer; there is no `github-activity` edge function (the client
+  called one that was never deployed, a 404 and a preflight per visit).
+- The edge functions that exist are `auth-email-hook`, `log-auth-event`, `mcp`
+  and `send-contact-email`. None is called by a signed-out page.
+
+`scripts/verify/auth-test.mjs` holds all of this to account: it blocks the
+backend host in the browser and counts the attempts.
+
+## Before pushing
+
+`npm run verify`. It builds, serves the build, and drives it in headless Chrome
+(no packages to install; it needs Node 22+ and Chrome): every terminal command
+and key at five sizes, navigation, dialogs, the palette and the mobile menu,
+the hero figure at each breakpoint, the backend-request budget above, and a
+sweep of every route at every width for overflow, text spilling its box,
+clipping and console errors. `main` is what vijaysinghpuwar.com serves about a
+minute after a merge, and Vercel previews are behind a login, so this local run
+against the production build is the test. When something visual breaks, fix it
+and add the measurement to `scripts/verify/site-test.mjs` so it cannot come
+back unnoticed.
+
 ## Layout and scrolling
 
 Nothing below the hero moves after first paint. The GitHub strip
 (`GitHubActivity`) is not lazy and has a fixed shape at every width: it holds
 its rows open with blanks until GitHub answers and fades the data in over them.
 Anything that loads late has to reserve its space the same way.
+
+The hero schematic (`SecurityDiagram`) has three layouts and the site test
+checks each: from 980px it fills the column beside the terminal; from 640px to
+979px the hero is one column, and the figure is capped and centred under the
+terminal with its caption centred beneath; below 640px it is not drawn. On a
+tablet it is the network's hexagon that sits on the page's axis, not the
+drawing's box (the Internet node makes the box lopsided); the padding that does
+this is derived in a comment in the component. It shipped left-aligned on
+tablets once and looked broken.
 
 `<body>` uses `overflow-x: clip`, not `hidden`. `hidden` made it a scroll
 container that never scrolls, which silently killed every `position: sticky` on

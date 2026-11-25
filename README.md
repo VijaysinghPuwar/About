@@ -13,8 +13,8 @@ showcase and an admin console behind Google sign-in.
 | Layer      | Tech                                                        |
 | ---------- | ----------------------------------------------------------- |
 | Build      | Vite 5, TypeScript 5.8, SWC                                  |
-| UI         | React 18, Tailwind CSS 3, shadcn/ui (Radix), Framer Motion   |
-| Data/state | TanStack Query, React Hook Form + Zod                        |
+| UI         | React 18, Tailwind CSS 3, shadcn/ui (Radix), CSS animation   |
+| Data/state | Static JSON for content, React Hook Form + Zod               |
 | Backend    | Supabase (Postgres, Auth, Edge Functions)                    |
 | Auth       | Supabase Auth — Google (primary), GitHub, magic link          |
 
@@ -55,9 +55,9 @@ homepage contact form was removed deliberately — do not restore it.
 src/
   components/      Site components + shadcn/ui primitives in ui/
   pages/           Route components
-  hooks/           useAuth, useTheme, useProjects, use-mobile, use-toast
+  hooks/           useAuth, useTheme, use-mobile, use-toast
   lib/             Utilities, auth redirect, MCP tool definitions
-  data/            Static project seed data (projects.json)
+  data/            The site's content: projects.json, books.json, videos
   integrations/    Supabase and Lovable clients
 supabase/
   functions/       Edge functions (see below)
@@ -72,8 +72,13 @@ supabase/
 | `log-auth-event`     | Audit logging for auth events                 |
 | `mcp`                | MCP server exposing portfolio data as tools   |
 
-Projects merge two sources: rows from Supabase take precedence, and entries in
-`src/data/projects.json` fill in anything not yet in the database.
+Projects come from `src/data/projects.json` and nowhere else. The `projects`
+table still exists and the `mcp` function reads it, but the website does not.
+
+A signed-out visitor makes no request to the backend and does not download the
+Supabase client: `useAuth` loads it only on the sign-in routes or when the
+browser already holds a session. `npm run verify` fails if that stops being
+true.
 
 ## Local development
 
@@ -102,8 +107,9 @@ variables reach the browser, so keep service-role keys out of this file entirely
 > **Vite inlines these at build time.** A wrong `VITE_SUPABASE_URL` is baked
 > into the bundle and cannot be corrected at runtime — this is how production
 > once shipped pointing at a retired Supabase project. `src/integrations/supabase/client.ts`
-> now throws at startup if the configured URL matches a retired project ref, so
-> a bad value fails loudly instead of silently reaching a dead backend.
+> now throws when it loads (on the sign-in routes, or for a returning session)
+> if the configured URL matches a retired project ref, so a bad value fails
+> loudly instead of silently reaching a dead backend.
 > The active project is `xyhyqukvfcshqwengxth`.
 
 ### Scripts
@@ -115,6 +121,7 @@ variables reach the browser, so keep service-role keys out of this file entirely
 | `npm run build:dev` | Development-mode build                 |
 | `npm run preview`   | Serve the built `dist/` locally        |
 | `npm run lint`      | ESLint over the repo                   |
+| `npm run verify`    | Build, then test the build in headless Chrome: the terminal, navigation, layout at every width, and what a visit costs the backend. Run before every push. Needs Node 22+ and Chrome. |
 
 ## Deployment
 

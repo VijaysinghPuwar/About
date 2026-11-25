@@ -235,219 +235,230 @@ export function SecurityDiagram() {
 
   return (
     <div ref={pauseRef}>
-      {/* The schematic needs width to stay legible, so on a phone it is dropped
-          rather than shrunk. The three facts underneath are the part a phone
-          reader actually needs, and they stay at every width.
+      {/* The schematic and its caption are one figure.
 
-          The cut used to happen at `lg`, which took the schematic away from
-          tablets too. It has room there: the hero is a single column below
-          980px, so at 834px the drawing gets the full ~774px measure and its
-          9px labels land near 12px. Only under 640px does it stop being
-          readable, which is where it now stops being drawn. */}
-      <div className="hidden sm:block">
-        {/* The viewBox is cropped to the ink. It was `0 0 600 420` around a
-            drawing that only occupies 96..576 by 18..400, so a sixth of the
-            width went to empty margin and the whole thing rendered at 0.83
-            scale in the desktop column: 9.5px labels came out under 8px. Cut
-            to the drawing, the same column shows them at their written size. */}
-        <svg
-          viewBox="88 10 496 396"
-          // Capped for the tablet layout, where the hero is one column and an
-          // uncapped drawing took the full 700px measure and a screen of height.
-          className="block h-auto w-full max-w-[540px]"
-          role="img"
-          aria-label={
-            isPentest
-              ? 'Schematic: an intrusion path from an untrusted network through the edge device, into published services, then laterally toward identity and endpoints inside the trust boundary'
-              : 'Schematic: telemetry from endpoints and services flows to a collector, feeds detection and triage at the identity core, and ends in containment at the edge device'
-          }
-        >
-          {/* trust boundary */}
-          <path
-            d="M486 218 L393 62 L207 62 L114 218 L207 374 L393 374 Z"
-            fill="none"
-            stroke="hsl(var(--border-strong))"
-            strokeWidth="1"
-            strokeDasharray="4 6"
-          />
-          {/* inner segment */}
-          <path
-            d="M414 218 L356 120 L244 120 L186 218 L244 316 L356 316 Z"
-            fill="none"
-            stroke="hsl(var(--border))"
-            strokeWidth="1"
-          />
+          On a desktop the figure fills its column beside the terminal. Below
+          980px the hero is one column about 700px wide, and there the figure
+          is capped and centred under the terminal: uncapped it took a screen
+          of height, and capped without centring (which is how it shipped) it
+          sat against the left edge with a strip of nothing beside it.
 
-          {/* idle topology */}
-          <g stroke="hsl(var(--border-strong))" strokeWidth="1" fill="none">
-            <path d="M300 218 L206 164" />
-            <path d="M300 218 L206 272" />
-            <path d="M300 218 L388 292" />
-            <path d="M300 218 L300 368" />
-            <path d="M206 164 L206 272" />
-          </g>
+          What is centred is the network, not the drawing's box. The Internet
+          node hangs off the top right, so the hexagon's middle is at 42.7% of
+          the drawing's width, and a centred box left the part the eye reads as
+          "the diagram" 39px left of everything above and below it. The inner
+          padding is that difference: (0.5 − 0.4274) ÷ (1 − 0.4274) of the box.
+          It is a percentage of the wrapper, so it holds as the wrapper shrinks.
+          If the viewBox or the boundary's position changes, redo the sum; the
+          site test measures the result and fails when the two drift apart.
 
-          {/* The traced chain. Keyed by mode so a switch remounts it and the
-              draw runs again from step one. */}
-          <g key={isPentest ? 'attack' : 'detection'}>
-            <g fill="none" stroke="hsl(var(--primary))" strokeWidth={chain.width}>
-              {chain.legs.map((leg) => (
-                <path key={leg.d} d={leg.d} pathLength={1} style={drawStyle(leg.at, leg.dur)} />
-              ))}
+          A phone has no room for it at a legible size, so under 640px it is
+          not drawn. The three facts underneath stay at every width. */}
+      <div data-hero-figure className="mx-auto hidden max-w-[620px] sm:block wide:max-w-none">
+        <div className="pl-[12.68%] wide:pl-0">
+          {/* The viewBox is cropped to the ink. It was `0 0 600 420` around a
+              drawing that only occupies 96..576 by 18..400, so a sixth of the
+              width went to empty margin and the whole thing rendered at 0.83
+              scale in the desktop column: 9.5px labels came out under 8px. Cut
+              to the drawing, the same column shows them at their written size. */}
+          <svg
+            viewBox="88 10 496 396"
+            className="block h-auto w-full"
+            role="img"
+            aria-label={
+              isPentest
+                ? 'Schematic: an intrusion path from an untrusted network through the edge device, into published services, then laterally toward identity and endpoints inside the trust boundary'
+                : 'Schematic: telemetry from endpoints and services flows to a collector, feeds detection and triage at the identity core, and ends in containment at the edge device'
+            }
+          >
+            {/* trust boundary */}
+            <path
+              data-trust-boundary
+              d="M486 218 L393 62 L207 62 L114 218 L207 374 L393 374 Z"
+              fill="none"
+              stroke="hsl(var(--border-strong))"
+              strokeWidth="1"
+              strokeDasharray="4 6"
+            />
+            {/* inner segment */}
+            <path
+              d="M414 218 L356 120 L244 120 L186 218 L244 316 L356 316 Z"
+              fill="none"
+              stroke="hsl(var(--border))"
+              strokeWidth="1"
+            />
+
+            {/* idle topology */}
+            <g stroke="hsl(var(--border-strong))" strokeWidth="1" fill="none">
+              <path d="M300 218 L206 164" />
+              <path d="M300 218 L206 272" />
+              <path d="M300 218 L388 292" />
+              <path d="M300 218 L300 368" />
+              <path d="M206 164 L206 272" />
             </g>
-            <g style={STEP_LABEL}>
-              {chain.steps.map((step) => (
-                <text
-                  key={step.text}
-                  x={step.x}
-                  y={step.y}
-                  textAnchor={step.anchor}
-                  style={
-                    animate
-                      ? {
-                          opacity: 0,
-                          /* Scale about the label's own box, not the SVG origin,
-                             so the overshoot happens where the label sits. */
-                          transformBox: 'fill-box',
-                          transformOrigin: 'center',
-                          animation: `diagram-step-in ${LABEL_IN}s cubic-bezier(.2,.9,.3,1.2) ${(
-                            delay + chain.legs[step.leg].end
-                          ).toFixed(2)}s forwards`,
-                        }
-                      : undefined
-                  }
+
+            {/* The traced chain. Keyed by mode so a switch remounts it and the
+                draw runs again from step one. */}
+            <g key={isPentest ? 'attack' : 'detection'}>
+              <g fill="none" stroke="hsl(var(--primary))" strokeWidth={chain.width}>
+                {chain.legs.map((leg) => (
+                  <path key={leg.d} d={leg.d} pathLength={1} style={drawStyle(leg.at, leg.dur)} />
+                ))}
+              </g>
+              <g style={STEP_LABEL}>
+                {chain.steps.map((step) => (
+                  <text
+                    key={step.text}
+                    x={step.x}
+                    y={step.y}
+                    textAnchor={step.anchor}
+                    style={
+                      animate
+                        ? {
+                            opacity: 0,
+                            /* Scale about the label's own box, not the SVG origin,
+                               so the overshoot happens where the label sits. */
+                            transformBox: 'fill-box',
+                            transformOrigin: 'center',
+                            animation: `diagram-step-in ${LABEL_IN}s cubic-bezier(.2,.9,.3,1.2) ${(
+                              delay + chain.legs[step.leg].end
+                            ).toFixed(2)}s forwards`,
+                          }
+                        : undefined
+                    }
+                  >
+                    {step.text}
+                  </text>
+                ))}
+              </g>
+
+              {animate && routeDrawn && (
+                isPentest ? (
+                  <circle r="2.8" fill="hsl(var(--primary))">
+                    <animateMotion
+                      dur="8s"
+                      repeatCount="indefinite"
+                      path="M544 48 L393 120 L388 292 L319 229"
+                    />
+                  </circle>
+                ) : (
+                  <>
+                    <circle r="2.8" fill="hsl(var(--primary))">
+                      <animateMotion dur="6s" repeatCount="indefinite" path="M393 120 L300 368" />
+                    </circle>
+                    <circle r="2.8" fill="hsl(var(--primary))">
+                      <animateMotion dur="6s" begin="1.4s" repeatCount="indefinite" path="M206 272 L300 368" />
+                    </circle>
+                  </>
+                )
+              )}
+            </g>
+
+            {/* nodes
+
+                `LABEL_KNOCKOUT` is spread onto each label rather than set on
+                this group: the group holds the marks as well as the names, and
+                a stroke set here would be inherited by every child that does not
+                declare one of its own. The endpoint dots declare only a fill, so
+                they would each pick up a 2.6-wide ring of background colour and
+                punch a hole in the topology around themselves, and the invisible
+                hit boxes would do the same along their edges. */}
+            <g style={NODE_LABEL}>
+              {/* Hit targets.
+
+                  A box per node rather than a disc on the dot, because the dot
+                  is not what anyone aims at: the label beside it is the part
+                  that reads as the node, and a target that stops at the ink
+                  leaves the name inert. Each box covers the mark and its label
+                  together.
+
+                  They are drawn before the ink and the ink is inert, so the
+                  whole box answers including its exact centre. As discs behind
+                  live ink, the one pixel a reader actually points at, the dot,
+                  was the one pixel that did nothing.
+
+                  `Link`, not `<a href>`: an href inside the SVG reloaded the
+                  whole document, which re-ran the theme boot and redrew this
+                  diagram from step one just to move down the page.
+
+                  Each is focusable, so the notes are reachable from the
+                  keyboard. */}
+              {[
+                { id: 'internet', name: 'Internet', x: 512, y: 18, w: 64, h: 42 },
+                { id: 'firewall', name: 'Firewall', x: 382, y: 110, w: 82, h: 36 },
+                { id: 'ad', name: 'Active Directory', x: 247, y: 170, w: 106, h: 74 },
+                { id: 'endpoints', name: 'Endpoints', x: 117, y: 156, w: 97, h: 124 },
+                { id: 'm365', name: 'Microsoft 365', x: 380, y: 284, w: 106, h: 28 },
+                { id: 'splunk', name: 'Splunk', x: 292, y: 358, w: 64, h: 20 },
+              ].map(hit => (
+                <Link
+                  key={hit.id}
+                  to={`/environment#${hit.id}`}
+                  aria-label={`${hit.name}: ${NODE_NOTES[hit.id]}`}
+                  onMouseEnter={() => setNode(hit.id)}
+                  onMouseLeave={() => setNode(null)}
+                  onFocus={() => setNode(hit.id)}
+                  onBlur={() => setNode(null)}
                 >
-                  {step.text}
-                </text>
-              ))}
-            </g>
-
-            {animate && routeDrawn && (
-              isPentest ? (
-                <circle r="2.8" fill="hsl(var(--primary))">
-                  <animateMotion
-                    dur="8s"
-                    repeatCount="indefinite"
-                    path="M544 48 L393 120 L388 292 L319 229"
+                  <rect
+                    x={hit.x}
+                    y={hit.y}
+                    width={hit.w}
+                    height={hit.h}
+                    fill="transparent"
+                    style={{ cursor: 'pointer', outlineOffset: '2px' }}
                   />
-                </circle>
-              ) : (
-                <>
-                  <circle r="2.8" fill="hsl(var(--primary))">
-                    <animateMotion dur="6s" repeatCount="indefinite" path="M393 120 L300 368" />
-                  </circle>
-                  <circle r="2.8" fill="hsl(var(--primary))">
-                    <animateMotion dur="6s" begin="1.4s" repeatCount="indefinite" path="M206 272 L300 368" />
-                  </circle>
-                </>
-              )
-            )}
-          </g>
+                </Link>
+              ))}
+              {/* The ink. Inert, so the boxes above own every pixel of a
+                  node including the one under the mark itself. */}
+              <g style={{ pointerEvents: 'none' }}>
+                <circle style={{ transformOrigin: '544px 48px', transform: node === 'internet' ? 'scale(1.5)' : undefined, transition: 'transform .15s ease' }} cx="544" cy="48" r="4.5" fill="hsl(var(--background))" stroke={node === 'internet' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground-dim))'} strokeWidth="1.3" />
+                <text x="544" y="30" textAnchor="middle" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>INTERNET</text>
 
-          {/* nodes
+                <circle style={{ transformOrigin: '393px 120px', transform: node === 'firewall' ? 'scale(1.5)' : undefined, transition: 'transform .15s ease' }} cx="393" cy="120" r="6" fill="hsl(var(--background))" stroke="hsl(var(--primary))" strokeWidth="1.5" />
+                <text x="408" y="140" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground))' }}>FIREWALL</text>
 
-              `LABEL_KNOCKOUT` is spread onto each label rather than set on
-              this group: the group holds the marks as well as the names, and
-              a stroke set here would be inherited by every child that does not
-              declare one of its own. The endpoint dots declare only a fill, so
-              they would each pick up a 2.6-wide ring of background colour and
-              punch a hole in the topology around themselves, and the invisible
-              hit boxes would do the same along their edges. */}
-          <g style={NODE_LABEL}>
-            {/* Hit targets.
-
-                A box per node rather than a disc on the dot, because the dot
-                is not what anyone aims at: the label beside it is the part
-                that reads as the node, and a target that stops at the ink
-                leaves the name inert. Each box covers the mark and its label
-                together.
-
-                They are drawn before the ink and the ink is inert, so the
-                whole box answers including its exact centre. As discs behind
-                live ink, the one pixel a reader actually points at, the dot,
-                was the one pixel that did nothing.
-
-                `Link`, not `<a href>`: an href inside the SVG reloaded the
-                whole document, which re-ran the theme boot and redrew this
-                diagram from step one just to move down the page.
-
-                Each is focusable, so the notes are reachable from the
-                keyboard. */}
-            {[
-              { id: 'internet', name: 'Internet', x: 512, y: 18, w: 64, h: 42 },
-              { id: 'firewall', name: 'Firewall', x: 382, y: 110, w: 82, h: 36 },
-              { id: 'ad', name: 'Active Directory', x: 247, y: 170, w: 106, h: 74 },
-              { id: 'endpoints', name: 'Endpoints', x: 117, y: 156, w: 97, h: 124 },
-              { id: 'm365', name: 'Microsoft 365', x: 380, y: 284, w: 106, h: 28 },
-              { id: 'splunk', name: 'Splunk', x: 292, y: 358, w: 64, h: 20 },
-            ].map(hit => (
-              <Link
-                key={hit.id}
-                to={`/environment#${hit.id}`}
-                aria-label={`${hit.name}: ${NODE_NOTES[hit.id]}`}
-                onMouseEnter={() => setNode(hit.id)}
-                onMouseLeave={() => setNode(null)}
-                onFocus={() => setNode(hit.id)}
-                onBlur={() => setNode(null)}
-              >
-                <rect
-                  x={hit.x}
-                  y={hit.y}
-                  width={hit.w}
-                  height={hit.h}
-                  fill="transparent"
-                  style={{ cursor: 'pointer', outlineOffset: '2px' }}
+                <path
+                  d="M300 196 L319 207 L319 229 L300 240 L281 229 L281 207 Z"
+                  fill="hsl(var(--card-elevated))"
+                  stroke={node === 'ad' ? 'hsl(var(--primary))' : 'hsl(var(--foreground))'}
+                  strokeWidth="1.4"
+                  style={{
+                    transformOrigin: '300px 218px',
+                    transform: node === 'ad' ? 'scale(1.5)' : undefined,
+                    transition: 'transform .15s ease',
+                  }}
                 />
-              </Link>
-            ))}
-            {/* The ink. Inert, so the boxes above own every pixel of a
-                node including the one under the mark itself. */}
-            <g style={{ pointerEvents: 'none' }}>
-              <circle style={{ transformOrigin: '544px 48px', transform: node === 'internet' ? 'scale(1.5)' : undefined, transition: 'transform .15s ease' }} cx="544" cy="48" r="4.5" fill="hsl(var(--background))" stroke={node === 'internet' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground-dim))'} strokeWidth="1.3" />
-              <text x="544" y="30" textAnchor="middle" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>INTERNET</text>
+                <text x="300" y="180" textAnchor="middle" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--foreground))' }}>ACTIVE DIRECTORY</text>
 
-              <circle style={{ transformOrigin: '393px 120px', transform: node === 'firewall' ? 'scale(1.5)' : undefined, transition: 'transform .15s ease' }} cx="393" cy="120" r="6" fill="hsl(var(--background))" stroke="hsl(var(--primary))" strokeWidth="1.5" />
-              <text x="408" y="140" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground))' }}>FIREWALL</text>
+                <circle
+                  cx="206"
+                  cy="164"
+                  r="3.5"
+                  fill={node === 'endpoints' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'}
+                  style={{ transformOrigin: '206px 164px', transform: node === 'endpoints' ? 'scale(1.5)' : undefined, transition: 'transform .15s ease' }}
+                />
+                <circle
+                  cx="206"
+                  cy="272"
+                  r="3.5"
+                  fill={node === 'endpoints' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'}
+                  style={{ transformOrigin: '206px 272px', transform: node === 'endpoints' ? 'scale(1.5)' : undefined, transition: 'transform .15s ease' }}
+                />
+                <text x="176" y="222" textAnchor="end" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>ENDPOINTS</text>
 
-              <path
-                d="M300 196 L319 207 L319 229 L300 240 L281 229 L281 207 Z"
-                fill="hsl(var(--card-elevated))"
-                stroke={node === 'ad' ? 'hsl(var(--primary))' : 'hsl(var(--foreground))'}
-                strokeWidth="1.4"
-                style={{
-                  transformOrigin: '300px 218px',
-                  transform: node === 'ad' ? 'scale(1.5)' : undefined,
-                  transition: 'transform .15s ease',
-                }}
-              />
-              <text x="300" y="180" textAnchor="middle" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--foreground))' }}>ACTIVE DIRECTORY</text>
+                <circle style={{ transformOrigin: '388px 292px', transform: node === 'm365' ? 'scale(1.5)' : undefined, transition: 'transform .15s ease' }} cx="388" cy="292" r="4.5" fill="hsl(var(--background))" stroke={node === 'm365' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'} strokeWidth="1.3" />
+                <text x="398" y="308" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>MICROSOFT 365</text>
 
-              <circle
-                cx="206"
-                cy="164"
-                r="3.5"
-                fill={node === 'endpoints' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'}
-                style={{ transformOrigin: '206px 164px', transform: node === 'endpoints' ? 'scale(1.5)' : undefined, transition: 'transform .15s ease' }}
-              />
-              <circle
-                cx="206"
-                cy="272"
-                r="3.5"
-                fill={node === 'endpoints' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'}
-                style={{ transformOrigin: '206px 272px', transform: node === 'endpoints' ? 'scale(1.5)' : undefined, transition: 'transform .15s ease' }}
-              />
-              <text x="176" y="222" textAnchor="end" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>ENDPOINTS</text>
+                <circle style={{ transformOrigin: '300px 368px', transform: node === 'splunk' ? 'scale(1.5)' : undefined, transition: 'transform .15s ease' }} cx="300" cy="368" r="4.5" fill="hsl(var(--background))" stroke={node === 'splunk' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'} strokeWidth="1.3" />
+                <text x="314" y="372" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>SPLUNK</text>
 
-              <circle style={{ transformOrigin: '388px 292px', transform: node === 'm365' ? 'scale(1.5)' : undefined, transition: 'transform .15s ease' }} cx="388" cy="292" r="4.5" fill="hsl(var(--background))" stroke={node === 'm365' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'} strokeWidth="1.3" />
-              <text x="398" y="308" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>MICROSOFT 365</text>
-
-              <circle style={{ transformOrigin: '300px 368px', transform: node === 'splunk' ? 'scale(1.5)' : undefined, transition: 'transform .15s ease' }} cx="300" cy="368" r="4.5" fill="hsl(var(--background))" stroke={node === 'splunk' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))'} strokeWidth="1.3" />
-              <text x="314" y="372" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>SPLUNK</text>
-
-              <text x="96" y="104" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>ENTERPRISE NETWORK</text>
+                <text x="96" y="104" style={{ ...LABEL_KNOCKOUT, fill: 'hsl(var(--muted-foreground-dim))' }}>ENTERPRISE NETWORK</text>
+              </g>
             </g>
-          </g>
-        </svg>
+          </svg>
+        </div>
 
         {/* The readout. Two lines are held open at every width, because the
             longest note needs two in the desktop column: sized to its content,
@@ -455,7 +466,7 @@ export function SecurityDiagram() {
             down, then let them back up as the pointer moved on. A note is a
             sentence, so it is set to be read; only the resting label keeps the
             wide caption tracking. */}
-        <div className="mt-1 flex min-h-[2.25rem] items-start font-mono" aria-live="polite">
+        <div className="mt-1 flex min-h-[2.25rem] items-start justify-center text-center font-mono wide:justify-start wide:text-left" aria-live="polite">
           {node ? (
             <span className="text-[11.5px] leading-[1.55] text-muted-foreground">{NODE_NOTES[node]}</span>
           ) : (
@@ -476,13 +487,13 @@ export function SecurityDiagram() {
 
           Availability is the only line that breathes, because it is the only
           one of the three that can change while someone is reading it. */}
-      <dl className="mt-6 border-t border-border font-mono sm:mt-4">
+      <dl className="border-t border-border font-mono sm:mt-4">
         <div className="flex items-center gap-2.5 border-b border-border py-2.5 text-[11px] tracking-[0.16em] text-muted-dim">
           <span className="text-primary" aria-hidden="true">$</span>
           <span>cat status</span>
         </div>
         {[
-          { key: 'focus', value: 'Infrastructure · Network · Application security' },
+          { key: 'focus', value: 'Identity · Infrastructure · Application security' },
           { key: 'current', value: 'M.S. Cybersecurity, Pace University' },
           { key: 'availability', value: 'Open to security engineering roles', live: true },
         ].map(({ key, value, live }) => (
