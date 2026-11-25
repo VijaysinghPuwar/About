@@ -34,24 +34,19 @@ export function SkillMatrix({ projects, onSelectSkill, activeSkill }: SkillMatri
     return out;
   }, [projects]);
 
-  // Five cards never divide evenly, so the last row used to leave a hole. The
-  // grid is sized in six tracks and each card is told how many to take:
-  //   two columns  → 2 + 2 + 1-wide-as-2   (the fifth spans the row)
-  //   six columns  → 3 + 2                 (last two take three tracks each)
+  // Six groups: three across on a wide screen, two from `md`, one on a phone.
+  // There were five, which never divided evenly, so the grid was sized in six
+  // tracks and each card told how many to span to hide the hole in the last
+  // row. With six there is no hole to hide.
   //
   // These break at `md` rather than at the 980px the nav, hero and timeline
   // share. That breakpoint is structural: it is where the page stops being two
-  // columns of layout. A card holding a title, a line of prose and a dozen
-  // chips has its own answer, and at 834px two of them read better than one
-  // card stretched across the full measure with its chips adrift in it.
-  const spanFor = (i: number) =>
-    [i === GROUPS.length - 1 ? 'md:col-span-2' : '', i < 3 ? 'xl:col-span-2' : 'xl:col-span-3']
-      .filter(Boolean)
-      .join(' ');
-
+  // columns of layout. A card holding a title and a dozen chips has its own
+  // answer, and at 834px two of them read better than one card stretched
+  // across the full measure with its chips adrift in it.
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
-      {GROUPS.map((group, i) => {
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {GROUPS.map(group => {
         return (
           <div
             key={group.key}
@@ -60,11 +55,11 @@ export function SkillMatrix({ projects, onSelectSkill, activeSkill }: SkillMatri
                beside the heading brightens with it, so the card reads as one
                object responding rather than four parts each doing something.
                Transform only, so the grid never reflows. */
-            className={`panel group/card flex flex-col rounded-lg p-[22px] hover:-translate-y-0.5 hover:border-primary hover:bg-card-elevated reduced:transition-none reduced:hover:translate-y-0 ${spanFor(i)}`}
+            className={`panel group/card flex flex-col rounded-lg p-[22px] hover:-translate-y-0.5 hover:border-primary hover:bg-card-elevated reduced:transition-none reduced:hover:translate-y-0`}
           >
             <div className="flex items-center gap-2.5">
-              {/* One mark for all five groups. Five different lucide glyphs
-                  implied five different kinds of thing; they are all just
+              {/* One mark for every group. A different lucide glyph on each
+                  implied different kinds of thing; they are all just
                   groupings of skills. */}
               <svg
                 width="14"

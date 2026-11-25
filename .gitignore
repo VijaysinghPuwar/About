@@ -42,3 +42,6 @@ supabase/.temp/
 
 # Python bytecode from running scripts/import-epub.py
 __pycache__/
+
+# Screenshots, reports and the throwaway browser profile from `npm run verify`
+scripts/verify/.out/

@@ -2,7 +2,7 @@
   {
     "id": "recap-verse",
     "title": "Recap Verse: Production Multi-LLM AI Platform",
-    "description": "A production AI platform routing three LLM providers through a deterministic 5-stage pipeline, secure by default.",
+    "description": "An AI video platform that turns comic and webtoon chapters into narrated recap videos. It routes three LLM providers by task and decides who is speaking with a deterministic five-stage resolver instead of trusting the model's answer.",
     "category": "Application Security",
     "tech": [
       "Python",
@@ -22,11 +22,12 @@
     "featured": true,
     "keyResults": [
       "Built and run alone, with paying subscribers and 2,100+ automated tests that run in CI on every pull request",
-      "Integrates three LLM providers (Anthropic Claude, OpenAI GPT, Google Gemini) behind a deterministic 5-stage pipeline",
-      "AES-GCM encrypted BYOK (bring-your-own-key) credentials, encrypted per user",
+      "Routes Anthropic Claude, OpenAI GPT and Google Gemini by task, falling back to the next connected provider on provider errors and never on configuration errors",
+      "A deterministic five-stage cast resolver, with no model call, replaced trusting the model's own claims about identity and who is speaking",
+      "Writes are compare-and-set, so an edit a user makes during a slow model call is never overwritten",
+      "Bring-your-own-key provider credentials are encrypted at rest with AES-GCM, and uploads are checked by file signature, type allow-list and size",
       "JWT authentication with per-user ownership scoping enforced on every route, not trusted at the gateway",
-      "Upload hardening: MIME allow-list, magic-byte validation, and size caps",
-      "Rate-limited endpoints and a self-run OWASP audit with the findings remediated"
+      "Five self-run stress-test rounds found and fixed an open redirect, rate limits bypassed by a spoofed X-Forwarded-For header, a missing request-body cap and HTML served from the app origin"
     ],
     "links": {
       "github": null,
@@ -42,55 +43,7 @@
       "Ownership scoping",
       "Upload hardening",
       "Rate limiting",
-      "OWASP"
-    ]
-  },
-  {
-    "id": "vaultsnake-platform",
-    "title": "VAULTSNAKE: Secure Vault & Access Monitoring Platform",
-    "description": "A full-stack security platform with Google OAuth, Fernet-encrypted vaults, RBAC, audit logging, and automated threat detection.",
-    "category": "Application Security",
-    "tech": [
-      "Next.js 15",
-      "NextAuth/Auth.js",
-      "TypeScript",
-      "Tailwind",
-      "SWR",
-      "FastAPI",
-      "Python 3.11",
-      "SQLAlchemy 2.0",
-      "PostgreSQL",
-      "Pydantic",
-      "python-jose (JWT)",
-      "cryptography (Fernet)",
-      "Vercel",
-      "Railway"
-    ],
-    "year": "2026",
-    "status": "completed",
-    "featured": true,
-    "keyResults": [
-      "Server-side JWT validation enforced on every API endpoint",
-      "Fernet (AES-128-CBC + HMAC-SHA256) encryption for vault data at rest",
-      "Role-enforced backend middleware separating user and admin dashboards",
-      "Automated threat engine flags brute-force, rapid vault ops, and escalation attempts",
-      "Dynamic 24h risk score derived from detected security events"
-    ],
-    "links": {
-      "github": null,
-      "writeup": null,
-      "demo": "https://vaultsnake.vercel.app"
-    },
-    "image": "",
-    "tags": [
-      "OAuth 2.0",
-      "JWT",
-      "RBAC",
-      "Encryption at rest",
-      "Audit trail",
-      "Threat detection",
-      "Risk scoring",
-      "Defense in depth"
+      "Stress testing"
     ]
   },
   {
@@ -100,7 +53,6 @@
     "category": "Threat Intelligence",
     "tech": [
       "Go",
-      "PostgreSQL",
       "React",
       "TypeScript",
       "MapLibre GL",
@@ -112,6 +64,7 @@
     "keyResults": [
       "Load tested locally at 20,000 requests and 200 concurrent with zero errors and zero data races",
       "Pulls C2 servers, malware hosts, scanners, exploited CVEs and breaches from ThreatFox, URLhaus, Feodo Tracker, SANS DShield, CISA KEV and Have I Been Pwned",
+      "The API serialises and compresses its snapshot once per refresh (1.4 MB to 175 KB) and the CDN serves it, so a spike in visitors is never a spike in requests to the feeds",
       "Runs at $0 a month"
     ],
     "links": {
@@ -123,7 +76,6 @@
     "tags": [
       "threat intelligence",
       "go",
-      "postgres",
       "react"
     ]
   },
@@ -147,12 +99,12 @@
     "status": "completed",
     "featured": true,
     "keyResults": [
-      "Stress-tested before release with 3,000 uploads and downloads totaling 1.3 GB and 160,000 activity-log rows written from 32 threads",
-      "Roughly 550 automated tests (406 Rust, 142 Vitest), run in CI on Windows, macOS and Linux against an in-process S3-compatible server, so no test touches a real bucket",
+      "Stress-tested before release against a local S3-compatible server: 3,000 uploads and downloads totaling 1.3 GB, and 160,000 activity-log rows written from 32 threads",
+      "About 600 automated tests in Rust and Vitest, run in CI on Windows, macOS and Linux against an in-process S3-compatible server, so no CI run touches a real bucket",
       "Multipart uploads run up to 4 parts in parallel with per-part checksums and an on-disk journal, so a pause, dropped connection or restart resumes where it stopped",
       "Secrets go to macOS Keychain, Windows Credential Manager or Linux Secret Service with a session-only fallback, never a plaintext file, and are never returned to the interface",
       "Downloads treat object names as untrusted: they cannot leave the chosen folder, never follow symlinks and never overwrite without an explicit Replace",
-      "Nine tagged releases from v0.1.0 to v0.5.1; v0.5.0 closed every finding of an independent audit of v0.4.1, and v0.5.1 patched RUSTSEC-2026-0382 and -0383"
+      "Nine releases from v0.1.1 to v0.5.2; v0.5.0 answered an outside audit of v0.4.1, and v0.5.1 patched RUSTSEC-2026-0382 and -0383"
     ],
     "links": {
       "github": "https://github.com/VijaysinghPuwar/R2Dock",
@@ -191,7 +143,7 @@
       "4K caption rendering cut from 604 ms to 62 ms per cue by rewriting dilate as a sliding-window max and blur as a running sum, with byte-identical output",
       "Validating a 200-scene project dropped from 11.82 s to 1.31 s (9x) after replacing a flat 20 ms poll with proportional backoff and concurrent probes",
       "About 51,700 lines of Rust across 6 crates with 826 test functions and 39 shell exit gates that render real media through real FFmpeg",
-      "179 numbered entries in a decision log; architecture, no-shell-string and cited-decision rules are enforced by tests that fail the build",
+      "180 numbered entries in a decision log; architecture, no-shell-string and cited-decision rules are enforced by tests that fail the build",
       "Every push runs 6 CI jobs, including cargo audit, full test suites on macOS and Windows, and both installers executed end to end",
       "Measured the free voice service failing after 335 to 390 lines regardless of request rate, so renders wait out the limit instead of failing"
     ],
@@ -337,42 +289,6 @@
     ]
   },
   {
-    "id": "cutmox",
-    "title": "cutmox",
-    "description": "A browser-based audio tool built on WebAssembly for fast, fully client-side processing.",
-    "category": "Application Development",
-    "tech": [
-      "TypeScript",
-      "TanStack Start",
-      "Vite",
-      "WebAssembly",
-      "Cloudflare Workers",
-      "Bun",
-      "Tailwind"
-    ],
-    "year": "2026",
-    "status": "in-progress",
-    "featured": false,
-    "keyResults": [
-      "Phase 1: WebAssembly viability proof completed",
-      "Phase 2: settings and upload flow in active development",
-      "All audio processing runs in-browser, with no server upload of user audio",
-      "Built on the TanStack Start template, deployed via Cloudflare Workers (wrangler)"
-    ],
-    "links": {
-      "github": null,
-      "writeup": null,
-      "demo": null
-    },
-    "image": "",
-    "tags": [
-      "WebAssembly",
-      "Audio",
-      "Client-side",
-      "Cloudflare Workers"
-    ]
-  },
-  {
     "id": "trustkart",
     "title": "TrustKart: Full-Stack Store with a Virtual Wallet",
     "description": "An online electronics store with 1,260+ real products from 128 brands, where every visitor shops with $100,000 of virtual money. React on Vercel in front of a Spring Boot API and PostgreSQL on Render.",
@@ -390,11 +306,11 @@
     ],
     "year": "2026",
     "status": "completed",
-    "featured": false,
+    "featured": true,
     "keyResults": [
+      "Race-tested with 12 shoppers buying the last 3 units at once: exactly 3 sold, 9 rejected, stock never negative",
       "Checkout is one database transaction that locks the wallet, re-prices every item server side and reserves stock in a fixed order, so orders never deadlock",
       "One-time order keys make a double click or a retried request return the existing order instead of creating a second one",
-      "Race-tested with 12 shoppers buying the last 3 units at once: exactly 3 sold, 9 rejected, stock never negative",
       "120+ server tests on real PostgreSQL and Redis via Testcontainers, plus Playwright shopping journeys on desktop and mobile in CI",
       "Argon2id passwords, rotating refresh tokens in HttpOnly cookies, CSRF protection, a strict Content Security Policy and Bucket4j rate limiting"
     ],
@@ -415,7 +331,7 @@
   {
     "id": "iptables-hardening",
     "title": "Hardening Linux Servers with iptables: Rate Limiting & NAT",
-    "description": "A reproducible defense lab using iptables to neutralize SSH brute-force, ICMP/SYN floods, and expose internal services via DNAT.",
+    "description": "A group term project for CYB623 that defends an Ubuntu host against attacks launched from a Kali VM using only iptables: a rate limiter for SSH brute force, limits on ICMP and SYN floods, and a DNAT redirect from port 80 to an Apache instance on 8080.",
     "category": "Network Security",
     "tech": [
       "Linux",
@@ -431,12 +347,13 @@
     ],
     "year": "2026",
     "status": "completed",
-    "featured": true,
+    "featured": false,
     "keyResults": [
-      "94,671 flood packets absorbed; CPU returned to idle",
-      "SSH brute-force attack rate collapsed 6.00 → 1.00 attempts/min (6×)",
-      "SYN half-open connections capped at 3 concurrent",
-      "Hydra recovered the password in ~5s pre-defense, then stalled after"
+      "SSH brute force: a source that makes 2 or more new connections in 120 seconds is dropped, using the recent module",
+      "ICMP and SYN floods are rate-limited with the limit module",
+      "Port 80 is redirected to Apache on 8080 with DNAT",
+      "The rules are applied by Bash scripts that CI checks with ShellCheck",
+      "Attacks were launched from the Kali VM with hydra and hping3"
     ],
     "links": {
       "github": "https://github.com/VijaysinghPuwar/hardening-linux-servers-with-iptables",
@@ -452,203 +369,153 @@
     ]
   },
   {
-    "id": "secure-ubuntu-fleet",
-    "title": "Secure Ubuntu Fleet Hardening",
-    "description": "Automated Ubuntu server hardening toolkit for fleet-wide security baseline enforcement. Covers SSH hardening, firewall configuration, user access controls, and system auditing.",
-    "category": "Security Automation",
-    "tech": [
-      "Bash",
-      "Linux",
-      "SSH",
-      "UFW",
-      "Ansible"
-    ],
-    "year": "2024",
-    "status": "completed",
-    "featured": true,
-    "keyResults": [
-      "Automated hardening across multiple Ubuntu servers",
-      "Standardized security baselines for production environments",
-      "Reduced manual configuration time by 80%"
-    ],
-    "links": {
-      "github": null,
-      "writeup": null,
-      "demo": null
-    },
-    "image": "",
-    "tags": [
-      "Linux",
-      "Hardening",
-      "Automation",
-      "Fleet Security"
-    ]
-  },
-  {
     "id": "http-hardening-nmap-nse",
-    "title": "HTTP Hardening with Nmap NSE",
-    "description": "Custom Nmap NSE scripts for automated HTTP security header analysis and hardening verification. Checks for missing security headers, weak configurations, and compliance gaps.",
+    "title": "http-hardening-check: HTTP Hardening Auditor for Nmap",
+    "description": "An Nmap script that audits HTTP security headers, cookies and CORS against a policy you control, scores each service from 0 to 100, and writes reports that can pass or fail a CI build.",
     "category": "Security Automation",
     "tech": [
+      "Lua",
       "Nmap",
       "NSE",
-      "Lua",
-      "HTTP",
-      "Linux"
+      "Python",
+      "Docker",
+      "GitHub Actions"
     ],
-    "year": "2024",
+    "year": "2026",
     "status": "completed",
-    "featured": true,
+    "featured": false,
     "keyResults": [
-      "Automated HTTP security header verification",
-      "Custom NSE scripts for compliance checking",
-      "Identified misconfigurations across web infrastructure"
+      "321 tests: 94 Lua unit, 84 stress, 75 for the Python reporter, 36 for the GitHub Action and policies, and 32 integration tests against real Nmap",
+      "48 checks graded against three policy presets: baseline, strict and OWASP ASVS L1",
+      "Reports in JSON, CSV, Markdown, HTML and SARIF 2.1.0, the last validated against the official schema",
+      "A typo in a policy is an error, not a quietly weaker scan: unknown keys, unknown finding IDs and wrong types are rejected",
+      "The GitHub Action refuses targets that resolve to public addresses unless that is explicitly allowed"
     ],
     "links": {
-      "github": "https://github.com/vijaysinghpuwar/http-hardening-nmap-nse",
+      "github": "https://github.com/VijaysinghPuwar/http-hardening-nmap-nse",
       "writeup": null,
       "demo": null
     },
     "image": "",
     "tags": [
       "Nmap",
-      "HTTP",
-      "Security Headers",
-      "Automation"
+      "Security headers",
+      "CORS",
+      "SARIF",
+      "CI gate"
     ]
   },
   {
     "id": "win-dev-sec-bootstrap",
-    "title": "Windows Dev + Cybersecurity Bootstrap",
-    "description": "Idempotent PowerShell bootstrap for setting up a complete Windows development and cybersecurity stack including winget, WSL2, Docker, pipx, and VS Code.",
+    "title": "win-dev-sec-bootstrap: Windows Workstation Setup and Security Assessment",
+    "description": "PowerShell tooling that sets up a Windows 10 or 11 workstation for development and security work, then checks how well it is protected: a read-only assessment of 27 Windows security controls with JSON and HTML evidence reports.",
     "category": "Security Automation",
     "tech": [
       "PowerShell",
-      "WSL2",
-      "Docker",
-      "Windows"
+      "Pester",
+      "PSScriptAnalyzer",
+      "Windows",
+      "GitHub Actions"
     ],
-    "year": "2024",
+    "year": "2026",
     "status": "completed",
-    "featured": true,
+    "featured": false,
     "keyResults": [
-      "Automated installation of 15+ security and development tools",
-      "Idempotent design allows safe re-runs without conflicts",
-      "Streamlined onboarding process for new security workstations"
+      "Assesses 27 Windows security controls read-only and writes JSON and HTML evidence reports",
+      "Opt-in remediation for 13 controls with -WhatIf and -Confirm, the previous value backed up before each change and verified afterwards",
+      "Over 200 Pester tests and PSScriptAnalyzer, run in GitHub Actions on both PowerShell 7 and Windows PowerShell 5.1",
+      "Controls cite NIST SP 800-53 Rev. 5, MITRE ATT&CK or Microsoft Learn only where the relationship was checked against the source"
     ],
     "links": {
-      "github": "https://github.com/vijaysinghpuwar/win-dev-sec-bootstrap",
+      "github": "https://github.com/VijaysinghPuwar/win-dev-sec-bootstrap",
       "writeup": null,
       "demo": null
     },
     "image": "",
     "tags": [
       "PowerShell",
-      "Automation",
+      "Endpoint security",
       "Windows",
-      "DevOps"
+      "Remediation"
     ]
   },
   {
     "id": "automating-infosec",
-    "title": "Automating Information Security",
-    "description": "Comprehensive Python and PowerShell projects covering security automation, log analysis, and system hardening for CYB 631 coursework.",
+    "title": "Automating InfoSec: WinSecKit PowerShell Module",
+    "description": "WinSecKit, a PowerShell module that detects attacker activity in Windows event logs, audits and hardens hosts, and turns the results into a shareable HTML report. It grew out of the CYB 631 coursework kept in the same repository.",
     "category": "Security Automation",
     "tech": [
-      "Python",
       "PowerShell",
-      "Shell Scripting"
+      "Pester",
+      "Windows",
+      "GitHub Actions",
+      "gitleaks"
     ],
-    "year": "2024",
+    "year": "2026",
     "status": "completed",
     "featured": false,
     "keyResults": [
-      "Automated security assessment workflows reducing manual effort by 70%",
-      "Implemented log analysis scripts for threat detection",
-      "Created system hardening automation for Windows and Linux"
+      "Run on a real Windows 11 machine and on CI runners: 10 bugs found and fixed",
+      "6 event-log detections, each mapped to a MITRE ATT&CK technique, with the rules kept as data rather than code",
+      "6 declarative host controls that can be audited, then remediated with -WhatIf support",
+      "103 Pester tests on both Windows PowerShell 5.1 and PowerShell 7, with PSScriptAnalyzer at zero suppressions",
+      "Found, purged and documented a leaked credential in the repository's own history, then added controls so it cannot recur"
     ],
     "links": {
-      "github": "https://github.com/vijaysinghpuwar/Automating-InfoSec",
+      "github": "https://github.com/VijaysinghPuwar/Automating-InfoSec",
       "writeup": null,
       "demo": null
     },
     "image": "",
     "tags": [
-      "Python",
       "PowerShell",
-      "Automation",
-      "Security"
+      "Detection",
+      "MITRE ATT&CK",
+      "Hardening"
     ]
   },
   {
     "id": "aws-cloud-security",
-    "title": "Configuring Cloud Security in AWS",
-    "description": "Hands-on cloud security project configuring Amazon EC2 instances with layered network protection using Security Groups and NACLs, integrated with CloudWatch and SNS.",
+    "title": "AWS EC2 Network Security Lab in Terraform",
+    "description": "Terraform for a small EC2 environment with layered network controls: Security Groups, Network ACLs, IMDSv2, VPC Flow Logs, CloudWatch and SNS. CI checks it for misconfiguration before anything is deployed. It began as a 2025 console lab.",
     "category": "Cloud Security",
     "tech": [
+      "Terraform",
       "AWS",
       "EC2",
-      "CloudWatch",
       "Security Groups",
-      "NACLs"
+      "NACLs",
+      "CloudWatch",
+      "Checkov",
+      "TFLint",
+      "GitHub Actions"
     ],
-    "year": "2024",
+    "year": "2026",
     "status": "completed",
     "featured": false,
     "keyResults": [
-      "Implemented defense-in-depth using Security Groups and NACLs",
-      "Configured real-time threat monitoring with CloudWatch",
-      "Automated security alerts using Amazon SNS"
+      "No inbound management port: the instance is administered through Systems Manager Session Manager, so it has no SSH rule and no key pair",
+      "terraform test, TFLint and Checkov run on every push without AWS credentials: 10 plan-time assertions pass, and Checkov reports 121 passed, 0 failed and 7 documented skips",
+      "IMDSv2 is required, the EBS volume is encrypted, and VPC Flow Logs go to a KMS-encrypted CloudWatch Logs group",
+      "A mutation check confirms the tests fail when a deny rule is moved or IMDS is made optional"
     ],
     "links": {
-      "github": "https://github.com/vijaysinghpuwar/Configuring-Cloud-Security-in-Amazon-Web-Services",
+      "github": "https://github.com/VijaysinghPuwar/Configuring-Cloud-Security-in-Amazon-Web-Services",
       "writeup": null,
       "demo": null
     },
     "image": "",
     "tags": [
       "AWS",
-      "Cloud Security",
-      "Monitoring",
-      "Network Security"
-    ]
-  },
-  {
-    "id": "cs601c-capstone",
-    "title": "Cybersecurity Cost Modeling Analytics",
-    "description": "Reproducible analytics pipeline for graduate capstone covering cybersecurity cost modeling, statistical analysis, and predictive modeling.",
-    "category": "Research",
-    "tech": [
-      "Python",
-      "R",
-      "Statistics",
-      "Data Analysis"
-    ],
-    "year": "2024",
-    "status": "completed",
-    "featured": false,
-    "keyResults": [
-      "Built reproducible statistical analysis pipeline",
-      "Analyzed cybersecurity cost patterns and trends",
-      "Created predictive models for security budget forecasting"
-    ],
-    "links": {
-      "github": null,
-      "writeup": null,
-      "demo": null
-    },
-    "image": "",
-    "tags": [
-      "Data Science",
-      "Statistics",
-      "Python",
-      "Research"
+      "Terraform",
+      "IaC scanning",
+      "Network security"
     ]
   },
   {
     "id": "rapid-pvst-campus-lab",
     "title": "Cisco Rapid-PVST Campus Network Lab",
-    "description": "Advanced Cisco Packet Tracer lab implementing Rapid-PVST with dual-homed access, per-VLAN root load-balancing, PortFast, BPDU Guard, and Root Guard.",
+    "description": "A Cisco Packet Tracer campus lab: two distribution switches each root for one VLAN, two dual-homed access switches, and edge ports protected by BPDU Guard. The repository is archived.",
     "category": "Network Security",
     "tech": [
       "Cisco",
@@ -656,16 +523,15 @@
       "VLANs",
       "Spanning Tree"
     ],
-    "year": "2024",
-    "status": "completed",
+    "year": "2025",
+    "status": "archived",
     "featured": false,
     "keyResults": [
-      "Designed secure multi-switch campus topology",
-      "Implemented per-VLAN root bridge load balancing",
-      "Configured Layer 2 security features (BPDU Guard, Root Guard)"
+      "Per-VLAN roots: one distribution switch is root for VLAN 10 and the other for VLAN 20, so each access switch forwards on one uplink and blocks the other per VLAN",
+      "BPDU Guard err-disables the access port when a rogue switch is plugged in"
     ],
     "links": {
-      "github": "https://github.com/vijaysinghpuwar/rapid-pvst-campus-lab",
+      "github": "https://github.com/VijaysinghPuwar/rapid-pvst-campus-lab",
       "writeup": null,
       "demo": null
     },
@@ -678,122 +544,91 @@
     ]
   },
   {
-    "id": "inter-vlan-roas-lab",
-    "title": "Inter-VLAN Routing with ROAS",
-    "description": "Packet Tracer exercise demonstrating Router-on-a-Stick configuration for inter-VLAN routing and network segmentation.",
-    "category": "Network Security",
-    "tech": [
-      "Cisco",
-      "Packet Tracer",
-      "VLANs",
-      "Routing"
-    ],
-    "year": "2024",
-    "status": "completed",
-    "featured": false,
-    "keyResults": [
-      "Configured trunk links and subinterfaces",
-      "Implemented inter-VLAN routing with single router",
-      "Validated network segmentation and routing policies"
-    ],
-    "links": {
-      "github": null,
-      "writeup": null,
-      "demo": null
-    },
-    "image": "",
-    "tags": [
-      "Cisco",
-      "VLANs",
-      "Routing",
-      "Network Design"
-    ]
-  },
-  {
     "id": "x86-64-assembly-lab",
-    "title": "x86-64 Assembly Programming Lab",
-    "description": "Hands-on lab for NASM on Ubuntu 24.04 containing three beginner x86-64 programs with detailed documentation and Makefile.",
+    "title": "x86-64 Assembly and Binary Hardening Lab",
+    "description": "A beginner x86-64 assembly lab rebuilt as a binary-hardening project: it finds the security bugs in the original programs, fixes them, and checks in CI that they stay fixed. Includes asm-hexdump, a hexdump -C compatible tool written with raw syscalls.",
     "category": "Research",
     "tech": [
       "Assembly",
       "NASM",
       "Linux",
-      "WSL2"
+      "GitHub Actions"
     ],
-    "year": "2024",
+    "year": "2026",
     "status": "completed",
     "featured": false,
     "keyResults": [
-      "Developed three x86-64 assembly programs from scratch",
-      "Documented assembly fundamentals for security research",
-      "Created reusable Makefile for assembly workflows"
+      "Found and fixed five bugs in the original programs: an executable stack, a misaligned printf call, an 8-byte load of a 4-byte value, a -no-pie workaround and exit status 0 on failed writes",
+      "An ELF hardening gate checks PIE, NX, RWX segments, text relocations and RELRO for each binary type, and is itself tested against known-bad binaries",
+      "57 tests cover exact stdout, stderr and exit status, with deterministic stress tests against independent references",
+      "asm-hexdump: about 300 lines of assembly with 4 KiB buffered I/O, correct across short reads",
+      "CI builds on native x86-64 with warnings as errors and requires byte-identical rebuilds"
     ],
     "links": {
-      "github": "https://github.com/vijaysinghpuwar/x86-64-assembly-intro-lab",
+      "github": "https://github.com/VijaysinghPuwar/x86-64-assembly-intro-lab",
       "writeup": null,
       "demo": null
     },
     "image": "",
     "tags": [
       "Assembly",
-      "Low-Level",
+      "ELF hardening",
       "Linux",
-      "Security Research"
+      "Reproducible builds"
     ]
   },
   {
-    "id": "vaultsnake",
-    "title": "VaultSnake - Secure Login with Game",
-    "description": "Secure login GUI using Tkinter with encrypted credentials storage and a classic Snake game reward for authenticated users.",
-    "category": "Python Tools",
+    "id": "cs601c-computational-statistics",
+    "title": "Regression Analysis of the College, Auto and Boston Datasets",
+    "description": "A reproducible R analysis that compares linear, lasso and tree models on three ISLR datasets, with a held-out test set, a mean-only baseline, residual diagnostics, automated tests and CI. It began as a CS601C midterm at Pace University and was reworked with proper model evaluation.",
+    "category": "Research",
     "tech": [
-      "Python",
-      "Tkinter",
-      "Encryption",
-      "Authentication"
+      "R",
+      "R Markdown",
+      "renv",
+      "testthat",
+      "GitHub Actions",
+      "GitHub Pages"
     ],
-    "year": "2024",
+    "year": "2026",
     "status": "completed",
     "featured": false,
     "keyResults": [
-      "Implemented secure credential storage with encryption",
-      "Built user authentication system from scratch",
-      "Created gamified security training tool"
+      "Fuel efficiency: log(mpg) on weight, year and origin reached a test RMSE of 3.04 mpg against 8.09 for a mean-only baseline (test R squared 0.86)",
+      "Every model is fitted on an 80% split, compared by 10-fold cross-validation on that split, and scored once on the remaining 20%",
+      "Data checks found two impossible values, percentages above 100, which are excluded in code while the raw CSV is left unchanged",
+      "The report is rendered and published by GitHub Actions on every push, with dependencies pinned by renv and unit tests in testthat"
     ],
     "links": {
-      "github": null,
+      "github": "https://github.com/VijaysinghPuwar/CS601C-Computational-Statistics-Project",
       "writeup": null,
-      "demo": null
+      "demo": "https://vijaysinghpuwar.github.io/CS601C-Computational-Statistics-Project/"
     },
     "image": "",
     "tags": [
-      "Python",
-      "Security",
-      "Encryption",
-      "GUI"
+      "R",
+      "Regression",
+      "Model evaluation",
+      "Reproducible research"
     ]
   },
   {
     "id": "kokorotts",
-    "title": "KokoroTTS - Offline Text-to-Speech",
-    "description": "Desktop app for offline Kokoro TTS (ONNX) with 4 voices, speed control, play/stop, and WAV export. Windows-ready with one-click installers.",
+    "title": "KokoroTTS: Offline Text-to-Speech Prototype",
+    "description": "An early desktop wrapper around the Kokoro-82M ONNX voice model. It was replaced by SetupTTS, which now ships the Kokoro voices alongside online and built-in ones. The repository is archived.",
     "category": "Python Tools",
     "tech": [
       "Python",
-      "ONNX",
-      "TTS",
-      "Windows"
+      "ONNX"
     ],
-    "year": "2024",
-    "status": "completed",
+    "year": "2025",
+    "status": "archived",
     "featured": false,
     "keyResults": [
-      "Built offline TTS application with 4 voice options",
-      "Implemented speed control and audio export features",
-      "Created user-friendly Windows installation workflow"
+      "Superseded by SetupTTS and kept as a record of where that work started"
     ],
     "links": {
-      "github": "https://github.com/vijaysinghpuwar/KokoroTTS",
+      "github": "https://github.com/VijaysinghPuwar/KokoroTTS",
       "writeup": null,
       "demo": null
     },
@@ -801,8 +636,7 @@
     "tags": [
       "Python",
       "TTS",
-      "Desktop App",
-      "Windows"
+      "Desktop App"
     ]
   },
   {
@@ -825,7 +659,7 @@
       "Against version 2.2.1 on the same 40 books, average CPU fell from 272% to 142% and peak memory from 8.2 GB to 7.1 GB in the same time",
       "Follows robots.txt (RFC 9309) and Crawl-delay; the C# and Python code decide robots.txt identically on a shared conformance corpus",
       "Refuses redirects to private network addresses mid-chain, and never solves or works around a human-verification check",
-      "CI on Linux, Windows and macOS with warnings as errors; tagged releases build and self-test the Mac and Windows packages (v2.6.7, MIT)"
+      "CI on Linux, Windows and macOS with warnings as errors; tagged releases build and self-test the Mac and Windows packages (v2.6.11, MIT)"
     ],
     "links": {
       "github": "https://github.com/VijaysinghPuwar/TOC_Extractor",
@@ -863,12 +697,12 @@
     "status": "completed",
     "featured": false,
     "keyResults": [
-      "979 commits; roughly 35,000 lines across 33 routes, 24 Deno edge functions and 93 migrations",
+      "1,000+ commits, with 1,059 automated tests in 98 files, 100 versioned migrations and 25 Supabase edge functions (counted October 2026)",
       "192 Row-Level Security policies over 40 tables, with roles kept in a separate user_roles table so a self-service profile edit can never grant admin",
-      "Audio never streams from a URL carrying a Supabase JWT: an HMAC token bound to (user_id, track_id, exp) is issued from an Authorization header, re-verified at the second hop, then SigV4-signed against a private Cloudflare R2 bucket",
+      "Audio never streams from a URL carrying a Supabase JWT: an HMAC token bound to (user_id, track_id, exp) is issued from an Authorization header, re-verified at the second hop, then SigV4-signed against Cloudflare R2",
       "tracks.drive_file_url revoked at the column level from anon and authenticated, handed back only through a SECURITY DEFINER function that checks ownership in SQL",
       "Non-R2 media fetches revalidate every redirect hop against an SSRF blocklist covering loopback, private ranges, link-local and cloud metadata addresses",
-      "389 tests across 39 files, including guard tests that read deployed edge-function source and assert the removed ?token= JWT parameter has not reappeared"
+      "A 48-check SQL access matrix runs as seven roles against the real migrations"
     ],
     "links": {
       "github": null,
@@ -890,14 +724,16 @@
   {
     "id": "setuptts",
     "title": "SetupTTS: Cross-Platform Text-to-Speech Desktop App",
-    "description": "Desktop app that converts text to MP3 using Microsoft's Neural voices: 300+ voices across 70+ languages, no API key required. Most of its code exists to make silent truncation of a long export impossible.",
+    "description": "Desktop app for macOS and Windows that turns text into MP3 with Microsoft's online neural voices (300+ in 70+ languages), offline Kokoro and Piper voices, or the computer's built-in voices. No API key. Built so a long export cannot silently lose a section.",
     "category": "Python Tools",
     "tech": [
       "Python",
       "PySide6",
       "Qt 6",
       "edge-tts",
-      "platformdirs",
+      "ONNX Runtime",
+      "Piper",
+      "lameenc",
       "SQLite",
       "PyInstaller",
       "GitHub Actions"
@@ -906,12 +742,12 @@
     "status": "completed",
     "featured": false,
     "keyResults": [
-      "61 tracked files and roughly 10,300 LOC at version 1.5.6, with 42 tests running in CI and four verified installers produced per release",
-      "About 4,400 of those 10,300 lines exist to prevent a finished export from silently missing a chapter: chunk planning, a warm-up ramp, preflight, retry classification, staging and a coverage proof",
-      "Chunk limits tuned per writing system across 14 scripts. Han caps at 3,100 characters where Latin gets 10,500, because a CJK character is three UTF-8 bytes",
-      "Eight independent coverage checks before assembly (contiguity, gaps, overlaps, duplicate indexes, missing files, byte counts, per-chunk and source text hashes); anything short of a contiguous 0 to total raises CoverageError and preserves the staging directory",
+      "Assembly fails closed: before the MP3 is written the chunk ranges must tile the text exactly, every chunk must exist at its recorded size, and the audio length must be plausible for the text",
+      "25 releases up to v2.2.1, each packaged build launched with a self-test before it is published",
+      "Chunk limits are tuned per writing system. Han caps at 3,100 characters where Latin gets 10,500, because a CJK character is three UTF-8 bytes",
       "Two no_audio failures stop retrying and subdivide the request instead of re-sending it; transient errors back off 2, 4, 8 and 16 seconds",
-      "Three runtime dependencies and no ffmpeg. MP3 duration is read by a 123-line MPEG frame parser written for the purpose"
+      "The offline HD voices run as ONNX on the same runtime Piper uses, so they add no dependencies and behave the same on macOS and Windows",
+      "Truncation detection: the streaming client can end quietly when the connection closes mid-response, so each section is checked against the service's own sentence timing before it is accepted"
     ],
     "links": {
       "github": "https://github.com/VijaysinghPuwar/setuptts",
@@ -930,61 +766,15 @@
     ]
   },
   {
-    "id": "txttranslation",
-    "title": "txttranslation: BYOK Translation & Narration Workspace",
-    "description": "Next.js workspace where each user supplies their own Google Cloud service-account credential. The credential is validated with a live API call before it is ever stored, encrypted at rest, and used server-side for both Cloud Translation and Cloud Text-to-Speech.",
-    "category": "Application Security",
-    "tech": [
-      "Next.js 16",
-      "React 19",
-      "NextAuth",
-      "Prisma 7",
-      "PostgreSQL",
-      "Google Cloud Translation",
-      "Google Cloud TTS",
-      "msedge-tts",
-      "Stripe",
-      "PayPal REST",
-      "zod",
-      "Tailwind 4"
-    ],
-    "year": "2026",
-    "status": "in-progress",
-    "featured": false,
-    "keyResults": [
-      "86 tracked files and roughly 10,100 source lines over 30 commits from March to August 2026; no test runner yet",
-      "Per-user service-account JSON encrypted with AES-256-GCM from node:crypto, with only projectId and clientEmail retained in clear for display",
-      "The only project here shipping a full security-header set including a real Content-Security-Policy, plus HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy and Permissions-Policy on every response",
-      "PayPal subscription ids are re-fetched from PayPal server-side, checked for plan match and active status, and refused if already linked to another account",
-      "Every environment misconfiguration produces two messages side by side: a precise technical fault for the log and a plain-language instruction for the settings page",
-      "Translates up to 1,000,000 characters per request through backend-only routes; narration offers 25 Google Neural2 voices or 21 keyless Edge TTS voices",
-      "Currently deployed with ADMIN_ONLY_MODE enabled, billing disabled and access limited to a two-address allowlist"
-    ],
-    "links": {
-      "github": null,
-      "writeup": null,
-      "demo": null
-    },
-    "image": "",
-    "tags": [
-      "BYOK",
-      "AES-256-GCM",
-      "CSP",
-      "Security headers",
-      "Payment verification",
-      "Encryption at rest"
-    ]
-  },
-  {
     "id": "dual-isp-subnet-remediation",
     "title": "Dual-ISP Network Assessment & Subnet Remediation",
-    "description": "Assessment of a home network running two independent routers on two separate internet plans with a Synology NAS bridging both, where both routers were configured on the same LAN subnet with the same gateway IP. Documents the discovery, the diagnosis and the remediation.",
+    "description": "Assessment of a home network running two independent routers on two separate internet plans with a NAS cabled to both, where both routers were configured on the same LAN subnet with the same gateway IP. Documents the discovery, the diagnosis and the remediation.",
     "category": "Network Security",
     "tech": [
       "PowerShell",
       "Bash",
       "nmap",
-      "Synology DSM",
+      "NAS",
       "TP-Link",
       "RFC1918 subnetting",
       "Network diagnostics"
@@ -995,9 +785,9 @@
     "keyResults": [
       "Both routers were running 192.168.0.0/24 with the same gateway IP 192.168.0.1, leaving two physically separate LANs distinguishable only by router MAC address",
       "Diagnosis required three separate scanning vantage points, because no single host could see both LANs: two machines behind Router A and one behind Router B",
-      "Mapped a dual-homed Synology DS423+ present on both LANs at 192.168.0.2 and 192.168.0.242, exposing SSH 22, HTTP 80, NetBIOS 139, HTTPS 443, SMB 445, DSM 5000/5001 and Synology Drive 6690",
-      "Remediated by moving Router B to 192.168.20.1/24 and its NAS interface to 192.168.20.2, separating the collision domains and disambiguating the gateway",
-      "Deliverables include two inventory scanners (PowerShell and macOS shell), per-machine scan output, five topology diagrams, an IEEE-style PDF report and a slide deck",
+      "Mapped a dual-homed NAS present on both LANs and inventoried the services it exposed on each",
+      "Remediated by moving Router B and its NAS interface to a separate /24, which removed the duplicate subnet and gateway address",
+      "Deliverables include two inventory scanners (PowerShell and macOS shell), per-machine scan output, topology diagrams, an IEEE-style PDF report and a slide deck",
       "Scope was limited to inventory and connectivity on an authorized private network. The tooling performs no exploits and makes no configuration changes"
     ],
     "links": {
@@ -1036,12 +826,12 @@
     "status": "completed",
     "featured": false,
     "keyResults": [
-      "49 tracked files and roughly 4,240 source lines across 10 commits, all landed on 2026-06-17",
       "BYOK credential encrypted with AES-256-GCM using the user id as additional authenticated data, so a cookie lifted from one account and replayed into another fails the tag check and returns null",
       "No database at all: sessions are JWTs, the provider key is an httpOnly cookie, the live exam is Zustand backed by sessionStorage, saved papers are localStorage, and rate-limit buckets are an in-memory Map. Five environment variables and nothing to provision",
       "Counts Private Use Area glyphs to decide a page needs rasterising (a Symbol-typeface pi extracts as U+F070, an integral as U+F0F2) and names the nine specific code points in the prompt so the model reads the image instead",
       "Quality gate beyond schema validation: isWeakQuestion rejects plausible-but-useless parses, the route demands 25 questions per subject with at most 2 weak, and saving refuses to persist fewer than 75",
-      "Seven of the ten commits are attempts to fit vision transcription of a 75-question paper inside Vercel's 60-second function ceiling, resolved by issuing three separate per-subject requests of about 55 seconds each"
+      "Seven of the ten commits are attempts to fit vision transcription of a 75-question paper inside Vercel's 60-second function ceiling, resolved by issuing three separate per-subject requests of about 55 seconds each",
+      "50 tracked files and about 4,000 lines of TypeScript across 10 commits"
     ],
     "links": {
       "github": "https://github.com/VijaysinghPuwar/jee-test-simulator",
@@ -1056,168 +846,6 @@
       "Stateless design",
       "Vision LLM",
       "PDF extraction"
-    ]
-  },
-  {
-    "id": "novelsin",
-    "title": "Novelsin: Serialized Fiction Platform",
-    "description": "A platform for reading and writing serialized fiction. Readers follow novels chapter by chapter, authors publish and schedule them, admins moderate. It is built so that Postgres row-level security, not application code, is the real authorization boundary.",
-    "category": "Application Security",
-    "tech": [
-      "Next.js 16",
-      "React",
-      "TypeScript",
-      "Supabase",
-      "PostgreSQL",
-      "Row-Level Security",
-      "Server Actions",
-      "zod",
-      "Tailwind",
-      "Vercel"
-    ],
-    "year": "2026",
-    "status": "completed",
-    "featured": false,
-    "keyResults": [
-      "182 tracked files and roughly 20,950 source LOC over 19 tables, 72 idempotent RLS policies and 13 migrations",
-      "server-only acts as a compiler fence: importing data-access code into a Client Component is a build error rather than a runtime leak",
-      "createAdmin() is never called anywhere in the app. Admin power comes from policies, not from a privileged client that bypasses RLS",
-      "XSS is designed out rather than sanitized: the rich-text component emits React children and anchors whose href is regex-constrained to http(s), and no dangerouslySetInnerHTML exists in the repo",
-      "The is_admin() helper is SECURITY DEFINER and pins search_path, avoiding both RLS recursion and search-path hijacking",
-      "Admin routes return 404 rather than 403 to non-admins, so their existence is never disclosed; roles are derived from behaviour rather than assigned through an upgrade flow"
-    ],
-    "links": {
-      "github": null,
-      "writeup": null,
-      "demo": null
-    },
-    "image": "",
-    "tags": [
-      "Row-Level Security",
-      "Authorization",
-      "XSS prevention",
-      "Server Actions",
-      "Least privilege",
-      "Postgres"
-    ]
-  },
-  {
-    "id": "splitforge-local",
-    "title": "SplitForge Local: Browser Text Chunker",
-    "description": "Paste a large text file, split it into numbered chunks under a character limit, and save them to a real folder or a ZIP, entirely in the browser, with a Web Worker doing the work and splitting that is safe across Unicode code points.",
-    "category": "Application Development",
-    "tech": [
-      "Next.js",
-      "React",
-      "TypeScript",
-      "Web Workers",
-      "File System Access API",
-      "fflate",
-      "Vitest"
-    ],
-    "year": "2026",
-    "status": "completed",
-    "featured": false,
-    "keyResults": [
-      "30 tracked files, roughly 1,615 lines of source plus 167 lines of tests; 41 tests across 3 suites pass in 0.4 seconds",
-      "Every operation runs on an array of code points rather than the raw string, so an emoji is never left as a lone surrogate across two files, asserted directly in the suite",
-      "Tests assert invariants rather than outputs: rejoined chunks equal the input across five tests including a 65,000-character case, and every chunk stays under the limit across four more",
-      "Smart mode searches backwards for a paragraph break, then a newline, then a space, but never past a 60 percent floor, without which a stray early newline produces a 40-character file and wrecks the packing",
-      "The live preview truncates its input rather than its output, so typing into a 10 MB paste stays responsive",
-      "Four runtime dependencies, no server, no database and no telemetry. Nothing leaves the browser"
-    ],
-    "links": {
-      "github": null,
-      "writeup": null,
-      "demo": "https://splitforge-local-desktop.vercel.app"
-    },
-    "image": "",
-    "tags": [
-      "Web Workers",
-      "Unicode",
-      "Client-side only",
-      "Testing",
-      "File System Access API"
-    ]
-  },
-  {
-    "id": "resghost-jobradar",
-    "title": "ResGhost JobRadar: AI Job Discovery Pipeline",
-    "description": "A single-user AI job finder: upload a resume, search five job sources plus an OpenAI web-search path in parallel, dedupe and rank the results, tailor a resume variant per job, and track which exact resume went where.",
-    "category": "Application Development",
-    "tech": [
-      "Next.js 16",
-      "TypeScript",
-      "NextAuth v5",
-      "OpenAI",
-      "Vercel KV",
-      "Vercel Blob",
-      "Web Crypto",
-      "SerpAPI"
-    ],
-    "year": "2026",
-    "status": "in-progress",
-    "featured": false,
-    "keyResults": [
-      "91 tracked files and roughly 11,150 source LOC over 17 commits, with a 4,420-line lib layer across six modules",
-      "All 18 API routes re-check authorization independently instead of trusting middleware, which has historically been bypassable in Next.js",
-      "Ranking combines nine weighted factors summing to exactly 1.00: match 0.50, freshness 0.12, source quality 0.10, domain relevance 0.10, location 0.08, type 0.04, work mode 0.02, salary 0.02, duplicate confidence 0.02",
-      "The source-quality table scores the app's own AI web-search path at 68, below every named ATS, an honest self-assessment encoded inside the ranking function",
-      "The zero-result diagnostic reports which filter eliminated everything, with counts and samples, turning the least debuggable complaint in a search product into a one-line answer",
-      "Sources are fetched under Promise.allSettled so one dead API degrades the search rather than failing it, and the SerpAPI budget is capped in code at six calls per run",
-      "PBKDF2-SHA256 through Web Crypto at 100,000 iterations with a per-user salt; the base resume is never overwritten and each application records the variant id that was sent"
-    ],
-    "links": {
-      "github": null,
-      "writeup": null,
-      "demo": null
-    },
-    "image": "",
-    "tags": [
-      "Defense in depth",
-      "Ranking",
-      "Deduplication",
-      "PBKDF2",
-      "Serverless KV",
-      "OpenAI"
-    ]
-  },
-  {
-    "id": "zelqorix-corporate-showcase",
-    "title": "Zelqorix Corporate Showcase: Hardened Static Site",
-    "description": "Static corporate website for an AI product and software engineering company, with a frontend security-hardening pass written specifically for static hosting.",
-    "category": "Application Development",
-    "tech": [
-      "Vite",
-      "React",
-      "TypeScript",
-      "Tailwind CSS",
-      "Vitest",
-      "Vercel"
-    ],
-    "year": "2026",
-    "status": "completed",
-    "featured": false,
-    "keyResults": [
-      "65 commits, with the hero and company positioning reworked in July 2026",
-      "Strict Content-Security-Policy with a static-host-compatible meta fallback, plus a generated deployment header file for hosts that support custom headers",
-      "Referrer, framing, permissions, MIME-type and cross-origin hardening headers shipped in vercel.json alongside an SPA fallback route",
-      "The external Google Fonts dependency was removed, so no third-party origin is contacted at runtime",
-      "The CSP hash dependency for JSON-LD blocks is documented, so SEO structured data does not force unsafe-inline back into the policy",
-      "Five-breakpoint responsive layout, SEO metadata with canonical, robots, sitemap and JSON-LD, and a production-safe error fallback instead of client-visible failures"
-    ],
-    "links": {
-      "github": null,
-      "writeup": null,
-      "demo": "https://zelqorix.com"
-    },
-    "image": "",
-    "tags": [
-      "CSP",
-      "Security headers",
-      "Static hosting",
-      "SEO",
-      "Responsive design"
     ]
   }
 ]

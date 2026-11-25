@@ -41,13 +41,11 @@ export default defineConfig(({ mode }) => ({
           }
           if (
             id.includes("@supabase") ||
-            id.includes("@tanstack/react-query") ||
             id.includes("@lovable.dev")
           ) {
             return "supabase-vendor";
           }
           if (id.includes("/recharts/") || id.includes("/d3-")) return "charts-vendor";
-          if (id.includes("/framer-motion/")) return "motion-vendor";
         },
       },
     },

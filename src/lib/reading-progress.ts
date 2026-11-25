@@ -1,5 +1,4 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { bookPercent, clamp01, getBook } from '@/lib/books';
 import type { Json } from '@/integrations/supabase/types';
@@ -175,7 +174,16 @@ function merge(local: BookProgress | undefined, remote: BookProgress | undefined
 
 /* ---------- remote ---------- */
 
-function fetchRows(userId: string) {
+/*
+  The backend client, fetched the first time something needs the server. Every
+  function below is only reached for a signed-in reader, so a signed-out
+  visitor browsing the shelf no longer downloads the client to look at covers:
+  as a static import of this file it came along with every /books page.
+*/
+const backend = () => import('@/integrations/supabase/client').then(m => m.supabase);
+
+async function fetchRows(userId: string) {
+  const supabase = await backend();
   return supabase.from('reading_progress').select('*').eq('user_id', userId);
 }
 
@@ -256,6 +264,7 @@ async function pushRemote(): Promise<void> {
 
   inflight = (async () => {
     try {
+      const supabase = await backend();
       const { error } = await supabase
         .from('reading_progress')
         .upsert(rows, { onConflict: 'user_id,book_slug' });
@@ -357,6 +366,7 @@ export async function resetBookProgress(slug: string) {
   emit({ books });
   writeLocal();
   if (state.remote === 'unavailable') return;
+  const supabase = await backend();
   const { error } = await supabase.from('reading_progress').delete().eq('user_id', userId).eq('book_slug', slug);
   if (error && isMissingTable(error)) emit({ remote: 'unavailable' });
 }
