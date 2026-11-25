@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { LogoIcon } from '@/components/LogoIcon';
 import { Helmet } from 'react-helmet-async';
 import { Loader2, CheckCircle2, Mail } from 'lucide-react';
@@ -26,9 +25,14 @@ export default function Login() {
   const [emailSent, setEmailSent] = useState(false);
   const [sentToAddress, setSentToAddress] = useState('');
 
-  const { user, profile, loading: authLoading, signInWithGoogle } = useAuth();
+  const { user, profile, loading: authLoading, signInWithGoogle, connect } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
+  // The auth client is not loaded for a signed-out visitor until it is
+  // needed. This page needs it: a sign-in finished in another tab (the magic
+  // link opens one) should be noticed here too.
+  useEffect(() => { void connect(); }, [connect]);
 
   // Remember where the visitor was headed; /auth/callback consumes it.
   useEffect(() => {
@@ -113,7 +117,7 @@ export default function Login() {
         <title>Sign in | Vijaysingh Puwar</title>
       </Helmet>
 
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative w-full max-w-md">
+      <div className="relative w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-300">
         <div className="glass-card rounded-lg p-8 space-y-6">
           {/* The site's own mark and a heading that says what the page is. It
               read SECURE ACCESS, letter-spaced in the accent colour, over a
@@ -239,7 +243,7 @@ export default function Login() {
             The projects and the résumé are public and need no account.
           </p>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }

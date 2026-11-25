@@ -15,21 +15,17 @@ import { cn } from '@/lib/utils';
   the rate limit of sixty requests an hour, which is why the answer is cached
   for six hours rather than fetched on every page view.
 
-  The chart has two sources and prefers the better one.
+  The chart counts pushes, because that is what the public feed knows. The
+  obvious thing to count would be commits, and the design this came from tried
+  to take them from `payload.commits`, but the public events feed for this
+  account returns PushEvent payloads carrying only `before`, `head`, `push_id`,
+  `ref` and `repository_id`. There is no commit count in there to read.
 
-  When the `github-activity` edge function is deployed, it answers with real
-  daily contribution counts from GitHub's GraphQL API, private repositories
-  included, and the label reads "contributions". That function holds the token
-  server-side; see `supabase/functions/github-activity/index.ts`.
-
-  Without it, the component falls back to the public REST feed and counts
-  pushes instead. The obvious thing to count would be commits, and the design
-  this came from tried to take them from `payload.commits`, but the public
-  events feed for this account returns PushEvent payloads carrying only
-  `before`, `head`, `push_id`, `ref` and `repository_id`. There is no commit
-  count in there to read, under that key or under `size`, so a commit chart
-  built on it would have been thirty empty bars and a total of zero. A push is
-  what that feed actually knows, so a push is what the label says.
+  It used to ask a `github-activity` edge function first, for contribution
+  counts that include private work. That function was never deployed, so every
+  visit sent it a request and a preflight and got a 404 back before falling
+  through to the feed. The site only shows public work now, and the public
+  feed is the right source for it. Nothing here touches the site's own backend.
 */
 
 const USER = 'VijaysinghPuwar';
@@ -37,8 +33,6 @@ const CACHE_KEY = 'vj-gh-activity-v3';
 const TTL = 6 * 60 * 60 * 1000;
 const DAYS = 30;
 
-/** Singular forms, so a bar title never does string surgery mid-render. */
-const UNIT_ONE = { pushes: 'push', contributions: 'contribution' } as const;
 
 interface Repo {
   name: string;
@@ -58,10 +52,6 @@ interface Activity {
   /** Oldest first. */
   days: Day[];
   total: number;
-  /** What a bar represents, which depends on which source answered. */
-  unit: 'contributions' | 'pushes';
-  /** Only known from the authenticated source. */
-  privateCount?: number;
 }
 
 /**
@@ -86,37 +76,6 @@ function dayKeys(): string[] {
     out.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10));
   }
   return out;
-}
-
-/**
- * Real contribution counts, private work included, when the edge function is
- * deployed. Returns null on any failure so the caller falls back quietly.
- */
-async function loadAuthenticated(): Promise<Omit<Activity, 'repos'> | null> {
-  const base = import.meta.env.VITE_SUPABASE_URL;
-  if (!base) return null;
-  try {
-    const res = await fetch(`${base}/functions/v1/github-activity`, {
-      headers: { apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '' },
-    });
-    if (!res.ok) return null;
-    const body = await res.json();
-    if (!Array.isArray(body?.days) || body.days.length === 0) return null;
-    return {
-      days: body.days.map((d: { date: string; count: number }) => ({
-        date: d.date,
-        count: d.count ?? 0,
-        // The authenticated source counts contributions, not pushes, so it
-        // cannot attribute them to a repository. The readout says so.
-        repos: [],
-      })),
-      total: body.total ?? 0,
-      unit: 'contributions',
-      privateCount: body.privateCount ?? 0,
-    };
-  } catch {
-    return null;
-  }
 }
 
 async function load(): Promise<Activity | null> {
@@ -159,12 +118,7 @@ async function load(): Promise<Activity | null> {
     }
   }
 
-  // The authenticated source is strictly better when it is available: it sees
-  // private work, and it counts contributions rather than pushes.
-  const authed = await loadAuthenticated();
-  if (authed) return { repos, ...authed };
-
-  return { repos, days, total, unit: 'pushes' };
+  return { repos, days, total };
 }
 
 /** A fresh answer from an earlier visit, read before the first render. */
@@ -179,8 +133,7 @@ function readCache(): Activity | null {
       Array.isArray(v.repos) &&
       Array.isArray(v.days) &&
       typeof v.total === 'number' &&
-      (v.days.length === 0 || typeof v.days[0] === 'object') &&
-      (v.unit === 'pushes' || v.unit === 'contributions');
+      (v.days.length === 0 || typeof v.days[0] === 'object');
     return usable && Date.now() - cached.t < TTL ? v : null;
   } catch {
     // A locked-down profile throws on read; the network answers instead.
@@ -285,7 +238,6 @@ export function GitHubActivity() {
   const ready = data !== null;
   const repos = data?.repos ?? PENDING;
   const days = data?.days ?? [];
-  const unit = data?.unit ?? 'pushes';
   const peak = Math.max(1, ...days.map(d => d.count));
   const shown = active === null ? null : days[active];
   const reveal = cn('transition-opacity duration-300', ready ? 'opacity-100' : 'opacity-0');
@@ -348,7 +300,7 @@ export function GitHubActivity() {
               onMouseEnter={() => setActive(i)}
               onFocus={() => setActive(i)}
               onBlur={() => setActive(null)}
-              aria-label={`${day.count} ${day.count === 1 ? UNIT_ONE[unit] : unit} on ${day.date}`}
+              aria-label={`${day.count} ${day.count === 1 ? 'push' : 'pushes'} on ${day.date}`}
               className="flex h-6 items-end outline-offset-4"
             >
               <span
@@ -385,11 +337,11 @@ export function GitHubActivity() {
               <span className="text-foreground">{dayLabel(shown.date)}</span>
               {' · '}
               <span className={shown.count ? 'text-primary' : undefined}>
-                {shown.count} {shown.count === 1 ? UNIT_ONE[unit] : unit}
+                {shown.count} {shown.count === 1 ? 'push' : 'pushes'}
               </span>
             </>
           ) : (
-            <>{ready ? `${data.total} ${unit}, ${DAYS}d` : ' '} ↗</>
+            <>{ready ? `${data.total} pushes, ${DAYS}d` : ' '} ↗</>
           )}
         </a>
       </div>

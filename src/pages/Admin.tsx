@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -364,7 +363,7 @@ export default function Admin() {
       <div className="absolute inset-0 cyber-grid opacity-20" />
 
       <div className="container relative max-w-6xl">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 mb-8">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
               <Settings className="w-5 h-5 text-primary" />
@@ -372,7 +371,7 @@ export default function Admin() {
             <h1 className="text-3xl font-bold text-foreground">Admin Dashboard</h1>
           </div>
           <p className="text-muted-foreground">Manage users, projects, messages, and security</p>
-        </motion.div>
+        </div>
 
         <Tabs defaultValue="users" className="space-y-6">
           <TabsList className="bg-card border border-border">
@@ -415,7 +414,7 @@ export default function Admin() {
 
           {/* Users Tab */}
           <TabsContent value="users">
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
               {pendingUsers.length > 0 && (
                 <div className="rounded-lg border border-warning/30 bg-card overflow-hidden">
                   <div className="p-4 border-b border-warning/20 bg-warning/5">
@@ -457,18 +456,29 @@ export default function Admin() {
                   </div>
                 </div>
               )}
-            </motion.div>
+            </div>
           </TabsContent>
 
           {/* Projects Tab */}
           <TabsContent value="projects">
             <div className="grid lg:grid-cols-3 gap-8">
               <div className="lg:col-span-2 space-y-6">
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="rounded-lg border border-border bg-card overflow-hidden">
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 rounded-lg border border-border bg-card overflow-hidden">
                   <div className="p-6 border-b border-border flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <FolderLock className="w-5 h-5 text-primary" />
-                      <h2 className="text-xl font-semibold">Projects ({projects.length})</h2>
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <FolderLock className="w-5 h-5 text-primary" />
+                        <h2 className="text-xl font-semibold">Projects ({projects.length})</h2>
+                      </div>
+                      {/* Said here because it is where someone would otherwise
+                          add a project and wonder why it never appears, or
+                          leave one here believing it had been taken down. */}
+                      <p className="mt-1.5 max-w-prose text-xs text-muted-foreground">
+                        The website does not read this table: it lists the projects in
+                        <code className="mx-1 font-mono">src/data/projects.json</code>.
+                        These rows are still served by the public API and the MCP endpoint, so
+                        delete any project here that should not be public.
+                      </p>
                     </div>
                     <Dialog>
                       <DialogTrigger asChild>
@@ -578,11 +588,10 @@ export default function Admin() {
                       </div>
                     ))}
                   </div>
-                </motion.div>
+                </div>
               </div>
 
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-                className="rounded-lg border border-border bg-card overflow-hidden">
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 rounded-lg border border-border bg-card overflow-hidden">
                 <div className="p-6 border-b border-border">
                   <div className="flex items-center gap-3">
                     <Users className="w-5 h-5 text-secondary" />
@@ -606,14 +615,13 @@ export default function Admin() {
                     </div>
                   ))}
                 </div>
-              </motion.div>
+              </div>
             </div>
           </TabsContent>
 
           {/* Contact Messages Tab */}
           <TabsContent value="messages">
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-              className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 rounded-lg border border-border bg-card overflow-hidden">
               <div className="p-4 border-b border-border flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-primary" />
@@ -646,13 +654,12 @@ export default function Admin() {
                   </div>
                 ))}
               </div>
-            </motion.div>
+            </div>
           </TabsContent>
 
           {/* Security / Auth Events Tab */}
           <TabsContent value="notifications">
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-              className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 rounded-lg border border-border bg-card overflow-hidden">
               <div className="p-4 border-b border-border flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
                   <Bell className="w-5 h-5 text-primary" />
@@ -689,12 +696,11 @@ export default function Admin() {
                   </div>
                 ))}
               </div>
-            </motion.div>
+            </div>
           </TabsContent>
 
           <TabsContent value="security">
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-              className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 rounded-lg border border-border bg-card overflow-hidden">
               <div className="p-4 border-b border-border flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="w-5 h-5 text-primary" />
@@ -737,7 +743,7 @@ export default function Admin() {
                   </div>
                 ))}
               </div>
-            </motion.div>
+            </div>
           </TabsContent>
         </Tabs>
       </div>

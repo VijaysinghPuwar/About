@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 import { ShieldX, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -23,11 +22,7 @@ export default function Blocked() {
         <title>Access Denied | Vijaysingh Puwar</title>
       </Helmet>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative w-full max-w-md text-center"
-      >
+      <div className="relative w-full max-w-md text-center animate-in fade-in slide-in-from-bottom-4 duration-300">
         <div className="rounded-lg border border-destructive/20 bg-card p-8 space-y-6">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-lg bg-destructive/10 border border-destructive/20">
             <ShieldX className="w-8 h-8 text-destructive" />
@@ -49,7 +44,7 @@ export default function Blocked() {
             Sign Out
           </Button>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }
