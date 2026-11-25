@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Compass, Zap, Code, Folder, FileQuestion } from 'lucide-react';
-import { useProjects } from '@/hooks/useProjects';
-import { mergeProjects, type PortfolioProject } from '@/lib/merge-projects';
+import { PROJECTS as projects, type PortfolioProject } from '@/lib/projects';
 import { findSkill, countProjectsUsing } from '@/lib/skills';
 import { emitFilterSkill, emitOpenProject, onOpenPalette, scrollToSection } from '@/lib/portfolio-events';
 import { lockScroll } from '@/lib/scroll-lock';
@@ -45,7 +43,7 @@ interface BuildContext {
 
 /* Skills the palette offers. Their aliases come from the shared catalogue in
    src/lib/skills.ts, so the count and the filter match the skills section. */
-const TRACKED_SKILLS = ['Python', 'PowerShell', 'AWS', 'Docker', 'Linux', 'Nmap'];
+const TRACKED_SKILLS = ['Python', 'PowerShell', 'TypeScript', 'Rust', 'Go', 'C# / .NET', 'Java / Spring Boot', 'AWS', 'Linux', 'Nmap'];
 
 function buildCommands({ isAuthed, goLogin, go, goSection, onHome, projects, isPentest, toggleTheme }: BuildContext): Command[] {
   const nav: Command[] = [
@@ -181,13 +179,6 @@ export function CommandPalette() {
   const onHome = pathname === '/';
   const { isPentest, toggleTheme } = useTheme();
 
-  // Database-only projects are merged in the same way the home page does it.
-  // The request waits for the first open: the palette is mounted on every route.
-  const [hasOpened, setHasOpened] = useState(false);
-  useEffect(() => { if (isOpen) setHasOpened(true); }, [isOpen]);
-  const { projects: dbProjects } = useProjects({ enabled: hasOpened });
-  const projects = useMemo(() => mergeProjects(dbProjects), [dbProjects]);
-
   const isAuthed = !!user;
   const commands = useMemo(
     () => buildCommands({
@@ -300,17 +291,16 @@ export function CommandPalette() {
     el?.scrollIntoView({ block: 'nearest' });
   }, [selectedIndex]);
 
+  // Nothing is rendered while it is closed, and it opens with a CSS animation.
+  // This component is mounted on every route, so anything it imports is
+  // downloaded on every page: it used to bring framer-motion with it.
+  if (!isOpen) return null;
+
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          className="fixed inset-0 z-[100] flex justify-center"
-          style={{ paddingTop: '20vh' }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
-        >
+    <div
+      className="fixed inset-0 z-[100] flex justify-center animate-in fade-in duration-150"
+      style={{ paddingTop: '20vh' }}
+    >
           {/* Overlay */}
           <div
             className="absolute inset-0 bg-background/80"
@@ -318,7 +308,7 @@ export function CommandPalette() {
           />
 
           {/* Modal */}
-          <motion.div
+          <div
             role="dialog"
             aria-modal="true"
             aria-label="Command palette"
@@ -326,11 +316,7 @@ export function CommandPalette() {
             // navy panel with a 24px backdrop blur and a cyan glow: the one part
             // of the site that ignored pentest mode, and on an integrated GPU the
             // blur re-sampled the whole page behind it every frame it was open.
-            className="relative w-[95vw] md:w-[90vw] max-w-[560px] h-fit rounded-lg overflow-hidden border border-border-strong bg-card"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.15 }}
+            className="relative w-[95vw] md:w-[90vw] max-w-[560px] h-fit rounded-lg overflow-hidden border border-border-strong bg-card animate-in fade-in zoom-in-95 duration-150"
           >
             {/* Search input */}
             <div className="flex items-center border-b border-border px-5 py-4">
@@ -414,9 +400,7 @@ export function CommandPalette() {
               <span>·</span>
               <span>esc Close</span>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+          </div>
+    </div>
   );
 }

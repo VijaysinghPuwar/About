@@ -1,86 +1,11 @@
 import { useState, useEffect, useCallback, forwardRef } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Github, X, ExternalLink, ArrowRight, Columns2, Search, Play } from 'lucide-react';
+import { Github, X, ExternalLink, ArrowRight, Search, Play } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { onOpenProject, scrollToSection } from '@/lib/portfolio-events';
 import { lockScroll } from '@/lib/scroll-lock';
+import { usesSkill } from '@/lib/skills';
 import { cn } from '@/lib/utils';
-
-const IMPACT_DIFFS: Record<string, { before: string[]; after: string[] }> = {
-  'secure-ubuntu-fleet': {
-    before: [
-      'SSH: default port 22 exposed',
-      'Root login: enabled via password',
-      'Firewall: UFW inactive, all ports open',
-      'System updates: manual, months behind',
-      'File permissions: world-readable defaults',
-      'Logging: minimal syslog only',
-    ],
-    after: [
-      'SSH: custom port, key-only authentication',
-      'Root login: disabled, sudo with audit trail',
-      'Firewall: UFW active, deny-by-default policy',
-      'System updates: automated unattended-upgrades',
-      'File permissions: CIS benchmark hardened',
-      'Logging: centralized with rsyslog forwarding',
-    ],
-  },
-  'http-hardening-nmap-nse': {
-    before: [
-      'X-Frame-Options: missing',
-      'Content-Security-Policy: not set',
-      'HSTS: not enforced',
-      'Server header: version exposed',
-      'X-Content-Type-Options: missing',
-      'Cookies: no Secure/HttpOnly flags',
-    ],
-    after: [
-      'X-Frame-Options: DENY enforced',
-      'Content-Security-Policy: strict policy applied',
-      'HSTS: max-age=31536000 with preload',
-      'Server header: stripped/generic',
-      'X-Content-Type-Options: nosniff set',
-      'Cookies: Secure, HttpOnly, SameSite=Strict',
-    ],
-  },
-  'win-dev-sec-bootstrap': {
-    before: [
-      'Setup time: 4-6 hours manual config',
-      'Environment: inconsistent across machines',
-      'Security tools: manually downloaded',
-      'WSL2: requires multi-step install',
-      'Docker: separate installer needed',
-      'Reproducibility: none, tribal knowledge',
-    ],
-    after: [
-      'Setup time: single command, under 30 min',
-      'Environment: identical on every machine',
-      'Security tools: auto-installed and configured',
-      'WSL2: provisioned automatically',
-      'Docker: installed and integrated with WSL2',
-      'Reproducibility: idempotent, version-controlled',
-    ],
-  },
-  'aws-cloud-security': {
-    before: [
-      'Security groups: allow all inbound (0.0.0.0/0)',
-      'IAM: root account used for daily operations',
-      'Monitoring: no CloudWatch alarms set',
-      'VPC: default VPC, no subnet isolation',
-      'Encryption: EBS volumes unencrypted',
-      'Logging: CloudTrail not enabled',
-    ],
-    after: [
-      'Security groups: least-privilege, port-specific rules',
-      'IAM: role-based access, MFA enforced, no root usage',
-      'Monitoring: CloudWatch alarms on all critical metrics',
-      'VPC: custom VPC with public/private subnet isolation',
-      'Encryption: EBS encryption enabled by default',
-      'Logging: CloudTrail enabled with S3 log archival',
-    ],
-  },
-};
 
 interface Project {
   id: string;
@@ -106,21 +31,18 @@ interface ProjectShowcaseProps {
 }
 
 
-/**
- * Longer modal copy for the few projects whose card description cannot carry
- * the whole story. Everything else reads from projects.json, which is the
- * source of truth: this table used to shadow fifteen entries and kept serving
- * descriptions the JSON had long since corrected (TOC Extractor was still
- * "Playwright + Tkinter" here after its rewrite in C#).
- */
-const enrichedData: Record<string, { description: string }> = {
-  'vaultsnake-platform': {
-    description: 'Cybersecurity Master’s final project. A full-stack security platform where users authenticate via Google OAuth, store Fernet-encrypted secrets in a personal vault, and monitor account security events, while admins get platform-wide visibility. Implements defense-in-depth: server-side JWT validation on every endpoint, encryption at rest, role-enforced backend middleware, and an automated threat engine that derives a dynamic 24h risk score.',
-  },
-  'iptables-hardening': {
-    description: 'CYB623 Network Security term project (Pace University, Spring 2026). A two-VM VirtualBox host-only lab (Kali attacker vs Ubuntu defender) building and quantitatively measuring three defensive layers: SSH brute-force defense with the recent module, ICMP/SYN flood mitigation with the limit module, and DNAT port forwarding for service hiding. All steps scripted, idempotent, and shellcheck-linted in CI.',
-  },
-};
+/*
+  Everything a project page says comes from src/data/projects.json.
+
+  Two things used to sit beside it in this file and are gone. One was a table
+  of longer descriptions that shadowed the JSON for a few entries and went on
+  serving text the JSON had since corrected. The other was a "Show impact"
+  toggle with a before/after list for four projects. Those lists were not
+  measurements of anything: the cloud lab's "after" column listed MFA,
+  CloudTrail and a custom VPC that the project does not contain, and the HTTP
+  auditor's showed headers being enforced by a tool that only reports on them.
+  A claim on this page has to be something the linked repository shows.
+*/
 
 // Database rows and projects.json label the same kind of work differently
 // ('Automation' vs 'Security Automation', 'Python Tools' as its own bucket),
@@ -175,11 +97,16 @@ const FEATURED_LIMIT = 4;
 
 // Declaration order is the display order of the featured grid, so the headline
 // project leads regardless of where it came from (database rows or projects.json).
+//
+// The first four are the cards, and they are the four the résumé names. The
+// rest are case studies in order of how much checkable evidence each repo
+// holds; they lead the index and fill the cards when a skill filter leaves
+// fewer than four of the first group.
 const FEATURED_ORDER = [
-  'recap-verse', 'r2dock', 'breachscope',
-  'vaultsnake-platform', 'iptables-hardening',
-  'win-dev-sec-bootstrap', 'automating-infosec', 'aws-cloud-security',
-  'cs601c-capstone', 'secure-ubuntu-fleet', 'http-hardening-nmap-nse',
+  'recap-verse', 'r2dock', 'breachscope', 'trustkart',
+  'http-hardening-nmap-nse', 'automating-infosec', 'toc-extractor', 'spoonstill',
+  'win-dev-sec-bootstrap', 'x86-64-assembly-lab', 'aws-cloud-security',
+  'dual-isp-subnet-remediation', 'web-audio-tv',
 ];
 const featuredIds = new Set(FEATURED_ORDER);
 const featuredRank = (id: string) => {
@@ -206,19 +133,11 @@ function MetaRow({ label, value }: { label: string; value: string }) {
 
 export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: ProjectShowcaseProps) {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [showDiff, setShowDiff] = useState(false);
   const [indexOpen, setIndexOpen] = useState(false);
   const [indexQuery, setIndexQuery] = useState('');
 
-  // Reset diff view when project changes
-  useEffect(() => { setShowDiff(false); }, [selectedProject]);
-
   const bySkill = skillFilter
-    ? projects.filter(p =>
-        (p.tech || []).some(t =>
-          skillFilter.aliases.some(a => t.toLowerCase().includes(a)),
-        ),
-      )
+    ? projects.filter(p => usesSkill(p.tech, skillFilter.aliases))
     : projects;
 
   /* The category chips that used to narrow this are gone. Seven of them sat
@@ -304,11 +223,6 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
     };
   }, [selectedProject, indexOpen, closeModal, closeIndex]);
 
-  const getEnriched = (id: string) => enrichedData[id];
-
-  const hasDiff = selectedProject ? selectedProject.id in IMPACT_DIFFS : false;
-  const diffData = selectedProject ? IMPACT_DIFFS[selectedProject.id] : null;
-
   return (
     <div>
       {/* Skill cross-link state, stated plainly. This is the site's best
@@ -387,6 +301,11 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
         </a>
       </div>
 
+      {/* The two dialogs fade and rise with a CSS animation as they mount, and
+          close at once. They used to be animated by framer-motion, which is
+          what put that library (38 kB compressed) on the home page: nothing
+          else there used it. */}
+
       {/* Index modal, the full set, searchable, one row per project.
 
           Portalled to <body>. The router's <main> carries `relative z-[1]`,
@@ -395,24 +314,16 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
           top of the dialog, undimmed and clickable. Escaping to the body puts
           both layers back in the same stacking context. */}
       {createPortal(
-        <AnimatePresence>
-          {indexOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 p-4"
+        indexOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 p-4 animate-in fade-in duration-150"
             onClick={closeIndex}
           >
-            <motion.div
+            <div
               role="dialog"
               aria-modal="true"
               aria-label="All projects"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
-              transition={{ duration: 0.16, ease: 'easeOut' }}
-              className="panel relative flex h-full w-full flex-col rounded-none md:h-auto md:max-h-[80vh] md:w-full md:max-w-3xl md:rounded-lg"
+              className="panel relative flex h-full w-full flex-col rounded-none animate-in fade-in slide-in-from-bottom-2 duration-150 md:h-auto md:max-h-[80vh] md:w-full md:max-w-3xl md:rounded-lg"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-start justify-between gap-4 border-b border-border p-5 sm:px-7">
@@ -431,8 +342,12 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
                 </button>
               </div>
 
-              <div className="flex items-center gap-2.5 border-b border-border px-5 py-3 sm:px-7">
-                <Search className="h-4 w-4 shrink-0 text-muted-dim" aria-hidden="true" />
+              {/* The row shows focus, not the field. The field has no edge of
+                  its own, so the site-wide focus ring drew a box in the middle
+                  of the row around nothing. With focus inside, the rule under
+                  the row and the icon take the accent instead. */}
+              <div className="group/filter flex items-center gap-2.5 border-b border-border px-5 py-3 focus-within:border-primary sm:px-7">
+                <Search className="h-4 w-4 shrink-0 text-muted-dim group-focus-within/filter:text-primary" aria-hidden="true" />
                 <input
                   /* Focus the filter on a mouse, never on a finger. On a phone
                      autoFocus threw the software keyboard up the instant the
@@ -443,7 +358,7 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
                   onChange={e => setIndexQuery(e.target.value)}
                   placeholder="Filter by name, category or tech…"
                   aria-label="Filter projects"
-                  className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[14px] text-foreground outline-none placeholder:text-muted-dim focus:ring-0"
+                  className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[14px] text-foreground placeholder:text-muted-dim focus:ring-0 focus-visible:!outline-none"
                 />
                 <span className="shrink-0 font-mono text-[11px] text-muted-dim">
                   {indexRows.length}/{indexAll.length}
@@ -472,39 +387,30 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
                   </p>
                 )}
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-        </AnimatePresence>,
+            </div>
+          </div>
+        ),
         document.body,
       )}
 
       {/* Detail modal, portalled for the same reason as the index above. */}
       {createPortal(
-        <AnimatePresence>
-          {selectedProject && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 p-4"
+        selectedProject && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 p-4 animate-in fade-in duration-150"
             onClick={closeModal}
           >
-            <motion.div
+            <div
               role="dialog"
               aria-modal="true"
               aria-label={selectedProject.title}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
-              transition={{ duration: 0.16, ease: 'easeOut' }}
               /* `h-full w-full`, not `h-screen w-screen`. The overlay is a
                  padded flex box, so a 100vh child did not fit its 100vh−32px
                  content box: measured on a 390px phone the dialog ran to 708px
                  against a 700px viewport, hanging 8px off the bottom and
                  leaving no backdrop above or below to tap the dialog shut. The
                  index dialog above always sized itself this way; this matches. */
-              className="panel relative flex h-full w-full flex-col overflow-hidden rounded-none md:h-auto md:max-h-[85vh] md:w-full md:max-w-2xl md:rounded-lg"
+              className="panel relative flex h-full w-full flex-col overflow-hidden rounded-none animate-in fade-in slide-in-from-bottom-2 duration-150 md:h-auto md:max-h-[85vh] md:w-full md:max-w-2xl md:rounded-lg"
               onClick={e => e.stopPropagation()}
             >
               {/* Header in flow, with the body scrolling under it, so the close
@@ -536,28 +442,9 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto p-6 pt-6 sm:p-8">
-                {/* The impact toggle switches what the body says, so it reads
-                    with the body rather than from the corner of the header. It
-                    also scrolled away with the close button it sat beside. */}
-                {hasDiff && (
-                  <button
-                    onClick={() => setShowDiff(!showDiff)}
-                    aria-pressed={showDiff}
-                    className={
-                      'tap-44 mb-6 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-[11.5px] transition-colors ' +
-                      (showDiff
-                        ? 'border-primary bg-primary-bg text-primary'
-                        : 'border-border text-muted-foreground hover:border-border-strong hover:text-foreground')
-                    }
-                  >
-                    <Columns2 className="h-3.5 w-3.5" aria-hidden="true" />
-                    {showDiff ? 'Show details' : 'Show impact'}
-                  </button>
-                )}
-                {!showDiff ? (
                   <div>
                     <p className="text-[14.5px] leading-[1.65] text-muted-foreground">
-                      {getEnriched(selectedProject.id)?.description || selectedProject.description}
+                      {selectedProject.description}
                     </p>
 
                     {selectedProject.keyResults?.length > 0 && (
@@ -632,46 +519,12 @@ export function ProjectShowcase({ projects, skillFilter, onClearSkillFilter }: P
                       )}
                     </div>
                   </div>
-                ) : diffData ? (
-                  <DiffView before={diffData.before} after={diffData.after} />
-                ) : null}
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-        </AnimatePresence>,
+            </div>
+          </div>
+        ),
         document.body,
       )}
-    </div>
-  );
-}
-
-/* ── Diff View ── */
-
-/**
- * Before/after, in the theme's own colours. It previously hardcoded #f43f5e and
- * #22c55e, so the "after" column stayed green even in pentest mode where green
- * means nothing, and both columns ignored the token layer entirely.
- */
-function DiffView({ before, after }: { before: string[]; after: string[] }) {
-  const column = (title: string, rows: string[], sign: string, good: boolean) => (
-    <div className="overflow-x-auto rounded-md border border-border bg-card-elevated p-4">
-      <span className={`meta-label ${good ? 'text-primary' : 'text-destructive'}`}>{title}</span>
-      <div className="mt-3 flex flex-col gap-1.5">
-        {rows.map(line => (
-          <div key={line} className="flex items-start gap-2 font-mono text-[11.5px] leading-[1.5]">
-            <span className={`shrink-0 ${good ? 'text-primary' : 'text-destructive'}`}>{sign}</span>
-            <span className="text-muted-foreground">{line}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="grid gap-3 md:grid-cols-2">
-      {column('Before', before, '−', false)}
-      {column('After', after, '+', true)}
     </div>
   );
 }

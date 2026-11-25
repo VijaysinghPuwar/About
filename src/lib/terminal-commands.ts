@@ -3,6 +3,7 @@ import {
   emitOpenProject,
   scrollToSection,
 } from '@/lib/portfolio-events';
+import { usesSkill } from '@/lib/skills';
 
 /**
  * The command set behind the hero terminal.
@@ -111,14 +112,21 @@ const tagline = (title: string) => {
 
 /** Display names, so `skills aws` reports AWS rather than the typed string. */
 const SKILL_LABELS: Record<string, string> = {
-  python: 'Python', typescript: 'TypeScript', aws: 'AWS', docker: 'Docker',
+  python: 'Python', typescript: 'TypeScript', rust: 'Rust', go: 'Go',
+  csharp: 'C# / .NET', java: 'Java / Spring Boot', aws: 'AWS', docker: 'Docker',
   linux: 'Linux', cisco: 'Cisco', nmap: 'Nmap', powershell: 'PowerShell',
   fastapi: 'FastAPI', react: 'React / Next.js', jwt: 'JWT', oauth: 'OAuth 2.0',
 };
 
+/* What counts as each skill, in the form `usesSkill` reads: a leading `=`
+   means a whole word, so `go` is not found in "Google" or "MongoDB". */
 const SKILL_ALIASES: Record<string, string[]> = {
   python: ['python'],
   typescript: ['typescript'],
+  rust: ['=rust', 'tauri'],
+  go: ['=go'],
+  csharp: ['c#', '.net'],
+  java: ['=java', 'spring'],
   aws: ['aws', 'ec2', 'vpc'],
   docker: ['docker'],
   linux: ['linux', 'ubuntu', 'wsl'],
@@ -129,6 +137,12 @@ const SKILL_ALIASES: Record<string, string[]> = {
   react: ['react', 'next.js'],
   jwt: ['jwt', 'jose'],
   oauth: ['oauth', 'nextauth', 'auth.js'],
+};
+
+/** Other things people type for the same skill. */
+const SKILL_SYNONYMS: Record<string, string> = {
+  'c#': 'csharp', '.net': 'csharp', dotnet: 'csharp', golang: 'go', spring: 'java',
+  ts: 'typescript', 'next.js': 'react', nextjs: 'react',
 };
 
 /* The two toolsets. The intro prints from this list and `ls defense/` answers
@@ -144,8 +158,12 @@ export const TOOLSETS = {
   ],
 } as const;
 
+/* His own summary, from the profile recruiters read, cut to its first claim.
+   It used to promise "detection pipelines that catch threats before they
+   escalate", which describes nobody in particular and none of the work below.
+   Keep this in step with the LinkedIn About section, not ahead of it. */
 export const MISSION =
-  'I secure enterprise infrastructure, automate security operations, and build detection pipelines that catch threats before they escalate.';
+  'I focus on identity, infrastructure, and code: Active Directory and enterprise access, Windows and Linux hardening, and software in Python, C#/.NET, Go, and Rust.';
 
 /** The readable files, so `cat` and `ls` agree on what exists. */
 const FILES: Record<string, (ctx: CommandContext) => OutputLine[]> = {
@@ -193,6 +211,7 @@ export const COMMANDS: CommandSpec[] = [
     summary: 'Who I am and what I do.',
     run: () => [
       plain('Vijaysingh Puwar, Cybersecurity Engineer, New York'),
+      muted('Focus: identity, infrastructure and code.'),
       muted('IT Network Intern at the MTA, Jun to Aug 2026.'),
       muted('M.S. Cybersecurity at Pace (GPA 3.92).'),
       muted('Security+, CySA+, CCNA.'),
@@ -312,11 +331,10 @@ export const COMMANDS: CommandSpec[] = [
     usage: 'skills [tech]',
     summary: 'What I use, or filter the work.',
     run: (args, ctx) => {
-      const q = args.join(' ').toLowerCase().trim();
+      const typed = args.join(' ').toLowerCase().trim();
+      const q = SKILL_SYNONYMS[typed] ?? typed;
       const uses = (aliases: string[]) =>
-        ctx.projects.filter(p =>
-          p.tech.some(t => aliases.some(a => t.toLowerCase().includes(a))),
-        ).length;
+        ctx.projects.filter(p => usesSkill(p.tech, aliases)).length;
 
       if (!q) {
         const counts = Object.entries(SKILL_ALIASES)
@@ -336,7 +354,7 @@ export const COMMANDS: CommandSpec[] = [
       const label = SKILL_LABELS[q] ?? q;
       const n = uses(aliases);
 
-      if (!n) return [error(`Nothing here uses "${q}".`), muted('Run skills for the list.')];
+      if (!n) return [error(`Nothing here uses "${typed}".`), muted('Run skills for the list.')];
 
       emitFilterSkill({ label, aliases });
       return [accent(`${plural(n, 'project')} ${n === 1 ? 'uses' : 'use'} ${label}. Filtering below.`)];

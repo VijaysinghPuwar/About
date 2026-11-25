@@ -1,14 +1,13 @@
-import { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
+import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { GitHubMark, LinkedInMark } from '@/components/BrandMarks';
-import { useProjects } from '@/hooks/useProjects';
 import { TerminalHero } from '@/components/TerminalHero';
 import { GitHubActivity } from '@/components/GitHubActivity';
 import { SecurityDiagram } from '@/components/SecurityDiagram';
 import { SectionReveal, SectionRule } from '@/components/SectionReveal';
 import { ProtectedEmail } from '@/components/ProtectedEmail';
 import { onFilterSkill } from '@/lib/portfolio-events';
-import { mergeProjects } from '@/lib/merge-projects';
+import { PROJECTS as allProjects } from '@/lib/projects';
 
 const SkillMatrix = lazy(() => import('@/components/SkillMatrix').then(m => ({ default: m.SkillMatrix })));
 const ExperienceTimeline = lazy(() => import('@/components/ExperienceTimeline').then(m => ({ default: m.ExperienceTimeline })));
@@ -94,11 +93,6 @@ function useScrollToHashOnArrival() {
 
 export default function Index() {
   useScrollToHashOnArrival();
-  /* projects */
-  const { projects: dbProjects } = useProjects();
-  /* projects.json wins on a shared id; see mergeProjects. */
-  const allProjects = useMemo(() => mergeProjects(dbProjects), [dbProjects]);
-
   /* Selecting a skill filters the projects section to the work that uses it. */
   const [skillFilter, setSkillFilter] = useState<{ label: string; aliases: string[] } | null>(null);
 
@@ -115,7 +109,7 @@ export default function Index() {
     <div className="min-h-[100dvh]">
       <Helmet>
         <title>Vijaysingh Puwar | Cybersecurity Engineer</title>
-        <meta name="description" content="Cybersecurity engineer specializing in identity security, security automation, cloud defense, and detection engineering. M.S. Cybersecurity at Pace University, New York." />
+        <meta name="description" content="Cybersecurity engineer focused on identity, infrastructure and code: Active Directory and enterprise access, Windows and Linux hardening, and software in Python, C#/.NET, Go and Rust. M.S. Cybersecurity, Pace University, New York." />
         <link rel="canonical" href="https://vijaysinghpuwar.com/" />
       </Helmet>
       {/* sr-only h1 establishes the page heading for SEO and screen readers; the visual hero is the terminal card */}

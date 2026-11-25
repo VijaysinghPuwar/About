@@ -2,7 +2,6 @@ import { lazy, Suspense, useLayoutEffect } from "react";
 import { HelmetProvider } from "react-helmet-async";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation, useNavigationType } from "react-router-dom";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
@@ -53,7 +52,6 @@ const BookDetail = lazy(() => import("./pages/BookDetail"));
 const BookReader = lazy(() => import("./pages/BookReader"));
 const Videos = lazy(() => import("./pages/Videos"));
 
-const queryClient = new QueryClient();
 
 /*
   A new page opens at its top.
@@ -84,7 +82,6 @@ function ScrollReset() {
 
 const App = () => (
   <HelmetProvider>
-    <QueryClientProvider client={queryClient}>
       <TooltipProvider>
       <ThemeProvider>
         <AuthProvider>
@@ -133,7 +130,6 @@ const App = () => (
         </AuthProvider>
       </ThemeProvider>
       </TooltipProvider>
-    </QueryClientProvider>
   </HelmetProvider>
 );
 
